@@ -88,7 +88,7 @@ export default function SavedProvidersPage() {
       if (!userId || !token) return;
       const res = await fetch(
         `${
-          process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000"
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"
         }/providers/${providerId}/save?userId=${encodeURIComponent(userId)}`,
         {
           method: "DELETE",
