@@ -5,7 +5,8 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Eye, MapPin, MessageSquare, Star, Heart, Building2, Sparkles, ChevronRight } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Eye, MapPin, MessageSquare, Star, Heart, Building2, Sparkles, ChevronRight, AlertTriangle } from "lucide-react";
 import type { Company } from "../types";
 import { useRouter } from "next/navigation";
 import { getProfileImageUrl } from "@/lib/api";
@@ -52,7 +53,7 @@ export default function CompanyCard({ company }: { company: Company }) {
       const method = saved ? "DELETE" : "POST";
       const response = await fetch(
         `${
-          process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"
+          process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000"
         }/companies/${company.id}/save?userId=${encodeURIComponent(userId)}`,
         {
           method,
@@ -76,22 +77,22 @@ export default function CompanyCard({ company }: { company: Company }) {
   };
 
   return (
-    <Card className="group relative hover:shadow-lg transition-shadow">
-      <CardHeader className="pb-4">
-        <div className="flex items-start space-x-4">
-          <div className="relative">
-            <Avatar className="w-16 h-16">
+    <Card className="group relative active:shadow-md sm:hover:shadow-lg transition-shadow">
+      <CardHeader className="pb-3 sm:pb-4 p-4 sm:p-6">
+        <div className="flex items-start space-x-3 sm:space-x-4">
+          <div className="relative flex-shrink-0">
+            <Avatar className="w-12 h-12 sm:w-16 sm:h-16">
               <AvatarImage
                 src={getProfileImageUrl(company.avatar)}
               />
               <AvatarFallback>
-                <Building2 className="w-8 h-8" />
+                <Building2 className="w-6 h-6 sm:w-8 sm:h-8" />
               </AvatarFallback>
             </Avatar>
             {company.verified && (
-              <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+              <div className="absolute -bottom-1 -right-1 w-5 h-5 sm:w-6 sm:h-6 bg-green-500 rounded-full flex items-center justify-center">
                 <svg
-                  className="w-3 h-3 text-white"
+                  className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white"
                   fill="currentColor"
                   viewBox="0 0 20 20"
                 >
@@ -105,21 +106,26 @@ export default function CompanyCard({ company }: { company: Company }) {
             )}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <h3 className="font-semibold text-gray-900 truncate">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <h3 className="font-semibold text-sm sm:text-base text-gray-900 break-words">
                 {company.name}
               </h3>
+              {!company.verified && (
+                <Badge className="bg-gray-100 text-gray-700 border-gray-300 text-xs shrink-0">
+                  <AlertTriangle className="w-3 h-3 mr-1" />
+                  Not Verified
+                </Badge>
+              )}
             </div>
-            <p className="text-sm text-gray-600 mb-1">{company.industry}</p>
-            <p className="text-xs text-gray-500">{company.companySize}</p>
+            <p className="text-xs sm:text-sm text-gray-600 mb-1 break-words">{company.industry}</p>
           </div>
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-3 sm:space-y-4 p-4 sm:p-6">
         {/* AI Badge Indicator */}
         {company.aiExplanation && (
-          <div className="absolute top-3 right-3 opacity-0 lg:group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
+          <div className="absolute top-2 right-2 sm:top-3 sm:right-3 opacity-0 lg:group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
             <div className="flex items-center gap-1.5 px-2 py-1 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-full text-xs font-medium shadow-md">
               <Sparkles className="w-3 h-3" />
               <span className="hidden sm:inline">AI Insights</span>
@@ -127,34 +133,28 @@ export default function CompanyCard({ company }: { company: Company }) {
           </div>
         )}
 
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0">
           <div className="flex items-center gap-1">
-            <Star className="w-4 h-4 text-yellow-400 fill-current" />
-            <span className="font-medium">{company.rating}</span>
-            <span className="text-sm text-gray-500">
+            <Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-yellow-400 fill-current flex-shrink-0" />
+            <span className="font-medium text-sm sm:text-base">{company.rating}</span>
+            <span className="text-xs sm:text-sm text-gray-500">
               ({company.reviewCount})
             </span>
           </div>
-          <div className="flex items-center gap-1 text-sm text-gray-500">
-            <MapPin className="w-3 h-3" />
-            {company.location}
+          <div className="flex items-center gap-1 text-xs sm:text-sm text-gray-500">
+            <MapPin className="w-3 h-3 flex-shrink-0" />
+            <span className="break-words">{company.location}</span>
           </div>
         </div>
 
-        <p className="text-sm text-gray-600 line-clamp-3">
+        <p className="text-xs sm:text-sm text-gray-600 line-clamp-3 break-words">
           {company.description}
         </p>
 
-        <div className="grid grid-cols-2 gap-4 text-sm">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 text-xs sm:text-sm">
           <div>
             <p className="text-gray-500">Projects Posted</p>
             <p className="font-semibold">{company.projectsPosted}</p>
-          </div>
-          <div>
-            <p className="text-gray-500">Total Spent</p>
-            <p className="font-semibold">
-              RM{company.totalSpend.toLocaleString()}
-            </p>
           </div>
           {company.establishedYear && (
             <div>
@@ -170,8 +170,8 @@ export default function CompanyCard({ company }: { company: Company }) {
           )}
         </div>
 
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-gray-500">
+        <div className="flex items-center justify-between text-xs sm:text-sm">
+          <span className="text-gray-500 break-words">
             Member since {company.memberSince}
           </span>
         </div>
@@ -186,7 +186,7 @@ export default function CompanyCard({ company }: { company: Company }) {
             >
               <button
                 onClick={() => setExpanded(expanded ? false : true)}
-                className="flex items-center gap-2 text-xs text-blue-600 hover:text-blue-700 active:text-blue-800 font-medium touch-manipulation"
+                className="flex items-center gap-2 text-xs text-blue-600 active:text-blue-800 sm:hover:text-blue-700 font-medium touch-manipulation"
               >
                 <Sparkles className="w-3.5 h-3.5 shrink-0" />
                 <span className="hidden sm:inline">
@@ -216,7 +216,7 @@ export default function CompanyCard({ company }: { company: Company }) {
                   </p>
                   <button
                     onClick={() => setExpanded(false)}
-                    className="ml-auto lg:hidden text-blue-600 hover:text-blue-800 p-1"
+                    className="ml-auto lg:hidden text-blue-600 active:text-blue-800 sm:hover:text-blue-800 p-1"
                   >
                     ×
                   </button>
@@ -262,10 +262,10 @@ export default function CompanyCard({ company }: { company: Company }) {
           </div>
         )}
 
-        <div className="flex gap-2 pt-2">
+        <div className="flex flex-col sm:flex-row gap-2 pt-2">
           {company.allowMessages !== false && (
-            <Button size="sm" className="flex-1" onClick={handleContact}>
-              <MessageSquare className="w-4 h-4 mr-2" />
+            <Button size="sm" className="flex-1 w-full sm:w-auto text-xs sm:text-sm" onClick={handleContact}>
+              <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
               Contact
             </Button>
           )}
@@ -273,13 +273,13 @@ export default function CompanyCard({ company }: { company: Company }) {
             size="sm"
             variant={saved ? "default" : "outline"}
             onClick={handleSaveToggle}
-            className={saved ? "bg-red-600 hover:bg-red-700 text-white" : ""}
+            className={`${saved ? "bg-red-600 active:bg-red-700 sm:hover:bg-red-700 text-white" : ""} text-xs sm:text-sm`}
           >
-            <Heart className={`w-4 h-4 ${saved ? "fill-current" : ""}`} />
+            <Heart className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${saved ? "fill-current" : ""}`} />
           </Button>
-          <Link href={`/provider/companies/${company.id}`} className="flex-1">
-            <Button size="sm" variant="outline" className="w-full">
-              <Eye className="w-4 h-4 mr-2" />
+          <Link href={`/provider/companies/${company.id}`} className="flex-1 w-full sm:w-auto">
+            <Button size="sm" variant="outline" className="w-full text-xs sm:text-sm">
+              <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
               View Profile
             </Button>
           </Link>

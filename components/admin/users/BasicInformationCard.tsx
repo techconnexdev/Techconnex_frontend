@@ -35,38 +35,40 @@ export function BasicInformationCard({
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Basic Information</CardTitle>
+      <CardHeader className="p-4 sm:p-6">
+        <CardTitle className="text-lg sm:text-xl">Basic Information</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <CardContent className="p-4 sm:p-6 space-y-3 sm:space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
           <div className="space-y-2">
-            <Label htmlFor="name">Name</Label>
+            <Label htmlFor="name" className="text-xs sm:text-sm">Name</Label>
             {isEditing ? (
               <Input
                 id="name"
                 value={formData.name}
                 onChange={(e) => onFieldChange("name", e.target.value)}
+                className="text-sm sm:text-base"
               />
             ) : (
-              <p className="font-medium">{userInfo.name}</p>
+              <p className="font-medium text-sm sm:text-base break-words">{userInfo.name}</p>
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email" className="text-xs sm:text-sm">Email</Label>
             {isEditing ? (
               <Input
                 id="email"
                 type="email"
                 value={formData.email}
                 onChange={(e) => onFieldChange("email", e.target.value)}
+                className="text-sm sm:text-base"
               />
             ) : (
-              <p className="font-medium">{userInfo.email}</p>
+              <p className="font-medium text-sm sm:text-base break-words">{userInfo.email}</p>
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="phone">Phone</Label>
+            <Label htmlFor="phone" className="text-xs sm:text-sm">Phone</Label>
             {isEditing ? (
               <Input
                 id="phone"
@@ -74,34 +76,17 @@ export function BasicInformationCard({
                 value={formData.phone}
                 onChange={(e) => onFieldChange("phone", e.target.value)}
                 placeholder="Optional"
+                className="text-sm sm:text-base"
               />
             ) : (
-              <p className="font-medium">{userInfo.phone || "—"}</p>
+              <p className="font-medium text-sm sm:text-base break-words">{userInfo.phone || "—"}</p>
             )}
           </div>
           <div className="space-y-2">
-            <Label>KYC Status</Label>
-            {isEditing ? (
-              <Select value={formData.kycStatus} onValueChange={(value) => onFieldChange("kycStatus", value)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pending_verification">Pending Verification</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="inactive">Inactive</SelectItem>
-                  <SelectItem value="suspended">Suspended</SelectItem>
-                </SelectContent>
-              </Select>
-            ) : (
-              <Badge variant="outline">{userInfo.kycStatus}</Badge>
-            )}
-          </div>
-          <div className="space-y-2">
-            <Label>Status</Label>
+            <Label className="text-xs sm:text-sm">Status</Label>
             {isEditing ? (
               <Select value={formData.status} onValueChange={(value) => onFieldChange("status", value)}>
-                <SelectTrigger>
+                <SelectTrigger className="text-sm sm:text-base">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -110,11 +95,11 @@ export function BasicInformationCard({
                 </SelectContent>
               </Select>
             ) : (
-              <Badge className={getStatusColor(userInfo.status)}>{userInfo.status}</Badge>
+              <Badge className={`${getStatusColor(userInfo.status)} text-xs`}>{userInfo.status}</Badge>
             )}
           </div>
           <div className="space-y-2">
-            <Label>Verified</Label>
+            <Label className="text-xs sm:text-sm">Verified</Label>
             {isEditing ? (
               <div className="flex items-center space-x-2 pt-2">
                 <Checkbox
@@ -122,26 +107,26 @@ export function BasicInformationCard({
                   checked={formData.isVerified}
                   onCheckedChange={(checked) => onFieldChange("isVerified", checked)}
                 />
-                <Label htmlFor="isVerified" className="font-normal">
+                <Label htmlFor="isVerified" className="font-normal text-xs sm:text-sm">
                   Verified Account
                 </Label>
               </div>
             ) : (
               <div>
                 {userInfo.isVerified ? (
-                  <Badge className="bg-green-100 text-green-800">
+                  <Badge className="bg-green-100 text-green-800 text-xs">
                     <CheckCircle className="w-3 h-3 mr-1" />
                     Verified
                   </Badge>
                 ) : (
-                  <Badge variant="outline">Not Verified</Badge>
+                  <Badge variant="outline" className="text-xs">Not Verified</Badge>
                 )}
               </div>
             )}
           </div>
           <div className="space-y-2">
-            <Label>Joined</Label>
-            <p className="font-medium">
+            <Label className="text-xs sm:text-sm">Joined</Label>
+            <p className="font-medium text-sm sm:text-base">
               {userInfo.createdAt ? new Date(userInfo.createdAt).toLocaleDateString() : "—"}
             </p>
           </div>

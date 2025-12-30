@@ -156,81 +156,81 @@ export default function AdminProjectsPage() {
 
   return (
     <AdminLayout>
-      <div className="space-y-8">
+      <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Project Management</h1>
-            <p className="text-gray-600">Monitor and manage all platform projects</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Project Management</h1>
+            <p className="text-sm sm:text-base text-gray-600 mt-1">Monitor and manage all platform projects</p>
           </div>
         </div>
 
         {/* Stats Cards */}
         {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6">
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Total Projects</p>
-                    <p className="text-2xl font-bold text-gray-900">{typeof stats.totalProjects === "number" ? stats.totalProjects : 0}</p>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">Total Projects</p>
+                    <p className="text-xl sm:text-2xl font-bold text-gray-900 truncate">{typeof stats.totalProjects === "number" ? stats.totalProjects : 0}</p>
                     {typeof stats.openOpportunities === "number" && stats.openOpportunities > 0 && (
                       <p className="text-xs text-gray-500 mt-1">
                         {stats.openOpportunities} open opportunities
                       </p>
                     )}
                 </div>
-                <Briefcase className="w-8 h-8 text-blue-600" />
+                <Briefcase className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600 flex-shrink-0 ml-2" />
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Active</p>
-                    <p className="text-2xl font-bold text-blue-600">{typeof stats.activeProjects === "number" ? stats.activeProjects : 0}</p>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">Active</p>
+                    <p className="text-xl sm:text-2xl font-bold text-blue-600 truncate">{typeof stats.activeProjects === "number" ? stats.activeProjects : 0}</p>
                 </div>
-                <Clock className="w-8 h-8 text-blue-600" />
+                <Clock className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600 flex-shrink-0 ml-2" />
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Completed</p>
-                    <p className="text-2xl font-bold text-green-600">{typeof stats.completedProjects === "number" ? stats.completedProjects : 0}</p>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">Completed</p>
+                    <p className="text-xl sm:text-2xl font-bold text-green-600 truncate">{typeof stats.completedProjects === "number" ? stats.completedProjects : 0}</p>
                 </div>
-                <CheckCircle className="w-8 h-8 text-green-600" />
+                <CheckCircle className="w-6 h-6 sm:w-8 sm:h-8 text-green-600 flex-shrink-0 ml-2" />
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Disputed</p>
-                    <p className="text-2xl font-bold text-red-600">{typeof stats.disputedProjects === "number" ? stats.disputedProjects : 0}</p>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">Disputed</p>
+                    <p className="text-xl sm:text-2xl font-bold text-red-600 truncate">{typeof stats.disputedProjects === "number" ? stats.disputedProjects : 0}</p>
                 </div>
-                <AlertTriangle className="w-8 h-8 text-red-600" />
+                <AlertTriangle className="w-6 h-6 sm:w-8 sm:h-8 text-red-600 flex-shrink-0 ml-2" />
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Total Value</p>
-                    <p className="text-2xl font-bold text-purple-600">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">Total Value</p>
+                    <p className="text-xl sm:text-2xl font-bold text-purple-600 truncate">
                       RM{((typeof stats.totalValue === "number" ? stats.totalValue : 0) / 1000).toFixed(0)}K
                     </p>
                 </div>
-                <DollarSign className="w-8 h-8 text-purple-600" />
+                <DollarSign className="w-6 h-6 sm:w-8 sm:h-8 text-purple-600 flex-shrink-0 ml-2" />
               </div>
             </CardContent>
           </Card>
@@ -239,14 +239,14 @@ export default function AdminProjectsPage() {
 
         {/* Filters */}
         <Card>
-          <CardContent className="p-6">
-            <div className="flex flex-col sm:flex-row gap-4">
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
               <div className="flex-1">
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   <Input
                     placeholder="Search projects, customers, or providers..."
-                    className="pl-10"
+                    className="pl-9 sm:pl-10 text-sm sm:text-base"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     onKeyDown={(e) => {
@@ -258,7 +258,7 @@ export default function AdminProjectsPage() {
                 </div>
               </div>
               <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger className="w-full sm:w-48">
+                <SelectTrigger className="w-full sm:w-48 text-sm sm:text-base">
                   <SelectValue placeholder="All Categories" />
                 </SelectTrigger>
                 <SelectContent>
@@ -271,7 +271,7 @@ export default function AdminProjectsPage() {
                 </SelectContent>
               </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full sm:w-48">
+                <SelectTrigger className="w-full sm:w-48 text-sm sm:text-base">
                   <SelectValue placeholder="All Status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -282,8 +282,8 @@ export default function AdminProjectsPage() {
                   <SelectItem value="DISPUTED">Disputed</SelectItem>
                 </SelectContent>
               </Select>
-              <Button variant="outline" onClick={loadProjects}>
-                <RefreshCw className="w-4 h-4 mr-2" />
+              <Button variant="outline" onClick={loadProjects} className="w-full sm:w-auto text-xs sm:text-sm">
+                <RefreshCw className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                 Refresh
               </Button>
             </div>
@@ -292,32 +292,33 @@ export default function AdminProjectsPage() {
 
         {/* Projects Table */}
         <Card>
-          <CardHeader>
-            <CardTitle>Projects ({filteredProjects.length})</CardTitle>
-            <CardDescription>Monitor project progress and resolve issues</CardDescription>
+          <CardHeader className="p-4 sm:p-6">
+            <CardTitle className="text-lg sm:text-xl">Projects ({filteredProjects.length})</CardTitle>
+            <CardDescription className="text-xs sm:text-sm">Monitor project progress and resolve issues</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-0 sm:p-4 sm:p-6">
             {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin" />
+              <div className="flex items-center justify-center py-8 sm:py-12 px-4 sm:px-0">
+                <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin" />
               </div>
             ) : (
+            <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Project</TableHead>
-                  <TableHead>Participants</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Progress</TableHead>
-                  <TableHead>Budget</TableHead>
-                  <TableHead>Timeline</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead className="text-xs sm:text-sm">Project</TableHead>
+                  <TableHead className="text-xs sm:text-sm">Participants</TableHead>
+                  <TableHead className="text-xs sm:text-sm">Status</TableHead>
+                  <TableHead className="text-xs sm:text-sm">Progress</TableHead>
+                  <TableHead className="text-xs sm:text-sm">Budget</TableHead>
+                  <TableHead className="text-xs sm:text-sm">Timeline</TableHead>
+                  <TableHead className="text-right text-xs sm:text-sm">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                   {filteredProjects.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-12 text-gray-500">
+                      <TableCell colSpan={7} className="text-center py-8 sm:py-12 text-sm sm:text-base text-gray-500">
                         No projects found
                       </TableCell>
                     </TableRow>
@@ -390,50 +391,50 @@ export default function AdminProjectsPage() {
 
                       return (
                   <TableRow key={projectId}>
-                    <TableCell>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="font-medium">{projectTitle}</p>
+                    <TableCell className="p-3 sm:p-4">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-medium text-sm sm:text-base break-words">{projectTitle}</p>
                           {isServiceRequest && (
-                            <Badge className="bg-yellow-100 text-yellow-800 text-xs">
+                            <Badge className="bg-yellow-100 text-yellow-800 text-xs flex-shrink-0">
                               Opportunity
                             </Badge>
                           )}
                         </div>
                         {projectCategory && (
-                          <p className="text-sm text-gray-500">{projectCategory}</p>
+                          <p className="text-xs sm:text-sm text-gray-500 break-words">{projectCategory}</p>
                         )}
                               {disputesCount > 0 && !isServiceRequest && (
-                          <Badge className="bg-red-100 text-red-800 mt-1">
+                          <Badge className="bg-red-100 text-red-800 mt-1 text-xs">
                             <AlertTriangle className="w-3 h-3 mr-1" />
                                   {disputesCount} dispute(s)
                           </Badge>
                         )}
                         {isServiceRequest && proposalsCount > 0 && (
-                          <Badge className="bg-blue-100 text-blue-800 mt-1">
+                          <Badge className="bg-blue-100 text-blue-800 mt-1 text-xs">
                             {proposalsCount} {proposalsCount === 1 ? "proposal" : "proposals"}
                           </Badge>
                         )}
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="p-3 sm:p-4">
                       <div className="space-y-2">
                         <div className="flex items-center space-x-2">
-                          <Avatar className="w-6 h-6">
-                                  <AvatarFallback>
+                          <Avatar className="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0">
+                                  <AvatarFallback className="text-xs">
                                     {customerInitial}
                                   </AvatarFallback>
                           </Avatar>
-                                <span className="text-sm">{customerName}</span>
+                                <span className="text-xs sm:text-sm break-words">{customerName}</span>
                         </div>
                         {!isServiceRequest && (
                           <div className="flex items-center space-x-2">
-                            <Avatar className="w-6 h-6">
-                                    <AvatarFallback>
+                            <Avatar className="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0">
+                                    <AvatarFallback className="text-xs">
                                       {providerInitial}
                                     </AvatarFallback>
                             </Avatar>
-                                  <span className="text-sm">{providerName}</span>
+                                  <span className="text-xs sm:text-sm break-words">{providerName}</span>
                           </div>
                         )}
                         {isServiceRequest && (
@@ -443,38 +444,38 @@ export default function AdminProjectsPage() {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell>
-                            <Badge className={getStatusColor(projectStatus, projectType)}>
+                    <TableCell className="p-3 sm:p-4">
+                            <Badge className={`${getStatusColor(projectStatus, projectType)} text-xs`}>
                               {getStatusText(projectStatus, projectType)}
                             </Badge>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="p-3 sm:p-4">
                       {isServiceRequest ? (
-                        <div className="text-sm text-gray-500">
+                        <div className="text-xs sm:text-sm text-gray-500">
                           N/A
                         </div>
                       ) : (
-                        <div className="space-y-1">
-                          <div className="flex justify-between text-sm">
+                        <div className="space-y-1 min-w-[80px]">
+                          <div className="flex justify-between text-xs sm:text-sm">
                                   <span>{progress}%</span>
                             <span>
                                     {completedMilestones}/{totalMilestones}
                             </span>
                           </div>
-                                <Progress value={progress} className="h-2" />
+                                <Progress value={progress} className="h-1.5 sm:h-2" />
                         </div>
                       )}
                     </TableCell>
-                    <TableCell>
-                      <div>
-                              <p className="font-medium">
+                    <TableCell className="p-3 sm:p-4">
+                      <div className="min-w-0">
+                              <p className="font-medium text-xs sm:text-sm break-words">
                                 RM{budgetMin.toLocaleString()} - RM{budgetMax.toLocaleString()}
                               </p>
                       </div>
                     </TableCell>
-                    <TableCell>
-                      <div>
-                              <p className="text-sm">
+                    <TableCell className="p-3 sm:p-4">
+                      <div className="min-w-0">
+                              <p className="text-xs sm:text-sm break-words">
                                 {projectTimeline}
                               </p>
                               <p className="text-xs text-gray-500">
@@ -482,18 +483,18 @@ export default function AdminProjectsPage() {
                               </p>
                       </div>
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right p-3 sm:p-4">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" className="h-8 w-8 p-0">
-                            <MoreHorizontal className="h-4 w-4" />
+                          <Button variant="ghost" className="h-7 w-7 sm:h-8 sm:w-8 p-0">
+                            <MoreHorizontal className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                        <DropdownMenuContent align="end" className="text-xs sm:text-sm">
+                          <DropdownMenuLabel className="text-xs sm:text-sm">Actions</DropdownMenuLabel>
                                 <DropdownMenuItem asChild>
-                                  <Link href={`/admin/projects/${projectId}`}>
-                            <Eye className="mr-2 h-4 w-4" />
+                                  <Link href={`/admin/projects/${projectId}`} className="text-xs sm:text-sm">
+                            <Eye className="mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
                             View Details
                                   </Link>
                           </DropdownMenuItem>
@@ -501,8 +502,8 @@ export default function AdminProjectsPage() {
                                   <>
                           <DropdownMenuSeparator />
                                     <DropdownMenuItem asChild>
-                                      <Link href={`/admin/disputes`}>
-                              <AlertTriangle className="mr-2 h-4 w-4" />
+                                      <Link href={`/admin/disputes`} className="text-xs sm:text-sm">
+                              <AlertTriangle className="mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
                                         View Disputes ({disputesCount})
                                       </Link>
                             </DropdownMenuItem>
@@ -517,6 +518,7 @@ export default function AdminProjectsPage() {
                   )}
               </TableBody>
             </Table>
+            </div>
             )}
           </CardContent>
         </Card>

@@ -196,18 +196,19 @@ export default function ProviderProjectsPage() {
 
   return (
     <ProviderLayout>
-      <div className="space-y-8">
+      <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">My Projects</h1>
-            <p className="text-gray-600">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">My Projects</h1>
+            <p className="text-sm sm:text-base text-gray-600">
               Manage and track all your active and completed projects
             </p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
             <Button
               variant="outline"
+              className="w-full sm:w-auto text-xs sm:text-sm"
               onClick={async () => {
                 try {
                   const blob = await exportProviderProjects({
@@ -241,93 +242,93 @@ export default function ProviderProjectsPage() {
                 }
               }}
             >
-              <Filter className="w-4 h-4 mr-2" />
+              <Filter className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
               Export Report
             </Button>
           </div>
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6">
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">
                     Total Projects
                   </p>
-                  <p className="text-2xl font-bold text-gray-900">
+                  <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">
                     {stats.totalProjects}
                   </p>
                 </div>
-                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <Calendar className="w-6 h-6 text-blue-600" />
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
+                  <Calendar className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
                 </div>
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Active</p>
-                  <p className="text-2xl font-bold text-blue-600">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">Active</p>
+                  <p className="text-xl sm:text-2xl font-bold text-blue-600 mt-1">
                     {stats.activeProjects}
                   </p>
                 </div>
-                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <Clock className="w-6 h-6 text-blue-600" />
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
+                  <Clock className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
                 </div>
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Completed</p>
-                  <p className="text-2xl font-bold text-green-600">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">Completed</p>
+                  <p className="text-xl sm:text-2xl font-bold text-green-600 mt-1">
                     {stats.completedProjects}
                   </p>
                 </div>
-                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                  <Calendar className="w-6 h-6 text-green-600" />
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
+                  <Calendar className="w-5 h-5 sm:w-6 sm:h-6 text-green-600" />
                 </div>
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Disputed</p>
-                  <p className="text-2xl font-bold text-red-600">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">Disputed</p>
+                  <p className="text-xl sm:text-2xl font-bold text-red-600 mt-1">
                     {stats.disputedProjects}
                   </p>
                 </div>
-                <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
-                  <AlertTriangle className="w-6 h-6 text-red-600" />
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-red-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
+                  <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6 text-red-600" />
                 </div>
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">
                     Total Earnings
                   </p>
-                  <p className="text-2xl font-bold text-green-600">
+                  <p className="text-xl sm:text-2xl font-bold text-green-600 mt-1 break-words">
                     {formatCurrency(stats.totalEarnings)}
                   </p>
                 </div>
-                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                  <DollarSign className="w-6 h-6 text-green-600" />
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
+                  <DollarSign className="w-5 h-5 sm:w-6 sm:h-6 text-green-600" />
                 </div>
               </div>
             </CardContent>
@@ -336,21 +337,21 @@ export default function ProviderProjectsPage() {
 
         {/* Filters */}
         <Card>
-          <CardContent className="p-6">
-            <div className="flex flex-col sm:flex-row gap-4">
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
               <div className="flex-1">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                   <Input
                     placeholder="Search projects..."
-                    className="pl-10"
+                    className="pl-10 text-sm sm:text-base"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
                 </div>
               </div>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full sm:w-48">
+                <SelectTrigger className="w-full sm:w-48 text-sm sm:text-base">
                   <SelectValue placeholder="All Status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -367,55 +368,56 @@ export default function ProviderProjectsPage() {
         {/* Projects */}
         {loading ? (
           <Card>
-            <CardContent className="p-12 text-center">
-              <Loader2 className="w-12 h-12 text-gray-400 mx-auto mb-4 animate-spin" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            <CardContent className="p-8 sm:p-12 text-center">
+              <Loader2 className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-4 animate-spin" />
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
                 Loading projects...
               </h3>
-              <p className="text-gray-600">
+              <p className="text-sm sm:text-base text-gray-600">
                 Please wait while we fetch your projects.
               </p>
             </CardContent>
           </Card>
         ) : error ? (
           <Card>
-            <CardContent className="p-12 text-center">
-              <div className="w-12 h-12 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
-                <span className="text-red-600 text-xl">⚠️</span>
+            <CardContent className="p-8 sm:p-12 text-center">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
+                <span className="text-red-600 text-lg sm:text-xl">⚠️</span>
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
                 Error loading projects
               </h3>
-              <p className="text-gray-600 mb-4">{error}</p>
+              <p className="text-sm sm:text-base text-gray-600 mb-4">{error}</p>
               <Button
                 onClick={() => window.location.reload()}
                 variant="outline"
+                className="text-xs sm:text-sm"
               >
                 Try Again
               </Button>
             </CardContent>
           </Card>
         ) : (
-          <Tabs defaultValue="all" className="space-y-6">
-            <TabsList>
-              <TabsTrigger value="all">All Projects</TabsTrigger>
-              <TabsTrigger value="active">Active Projects</TabsTrigger>
-              <TabsTrigger value="completed">Completed</TabsTrigger>
-              <TabsTrigger value="disputed">Disputed</TabsTrigger>
+          <Tabs defaultValue="all" className="space-y-4 sm:space-y-6">
+            <TabsList className="grid w-full grid-cols-4 h-auto">
+              <TabsTrigger value="all" className="text-xs sm:text-sm px-2 sm:px-4">All Projects</TabsTrigger>
+              <TabsTrigger value="active" className="text-xs sm:text-sm px-2 sm:px-4">Active Projects</TabsTrigger>
+              <TabsTrigger value="completed" className="text-xs sm:text-sm px-2 sm:px-4">Completed</TabsTrigger>
+              <TabsTrigger value="disputed" className="text-xs sm:text-sm px-2 sm:px-4">Disputed</TabsTrigger>
             </TabsList>
 
             <TabsContent value="all">
-              <div className="grid gap-6">
+              <div className="grid gap-4 sm:gap-6">
                 {filteredProjects.length === 0 ? (
                   <Card>
-                    <CardContent className="p-12 text-center">
-                      <div className="w-16 h-16 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
-                        <Calendar className="w-8 h-8 text-gray-400" />
+                    <CardContent className="p-8 sm:p-12 text-center">
+                      <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
+                        <Calendar className="w-6 h-6 sm:w-8 sm:h-8 text-gray-400" />
                       </div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                      <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
                         No projects found
                       </h3>
-                      <p className="text-gray-600">
+                      <p className="text-sm sm:text-base text-gray-600">
                         {searchQuery || statusFilter !== "all"
                           ? "Try adjusting your search or filter criteria."
                           : "You don't have any projects yet."}
@@ -426,29 +428,29 @@ export default function ProviderProjectsPage() {
                   filteredProjects.map((project) => (
                     <Card
                       key={project.id}
-                      className="hover:shadow-lg transition-shadow"
+                      className="sm:hover:shadow-lg transition-shadow"
                     >
-                      <CardHeader>
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-2">
-                              <CardTitle className="text-xl">
+                      <CardHeader className="p-4 sm:p-6">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
+                              <CardTitle className="text-lg sm:text-xl break-words">
                                 {project.title}
                               </CardTitle>
-                              <Badge className={getStatusColor(project.status)}>
+                              <Badge className={`${getStatusColor(project.status)} text-xs shrink-0`}>
                                 {getStatusText(project.status)}
                               </Badge>
                             </div>
-                            <CardDescription className="text-base line-clamp-3">
+                            <CardDescription className="text-sm sm:text-base line-clamp-2 sm:line-clamp-3">
                               {project.description}
                             </CardDescription>
                           </div>
                         </div>
                       </CardHeader>
-                      <CardContent className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-4">
-                            <Avatar>
+                      <CardContent className="p-4 sm:p-6 space-y-3 sm:space-y-4">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+                          <div className="flex items-center space-x-3 sm:space-x-4 flex-1 min-w-0">
+                            <Avatar className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0">
                               <AvatarImage
                                 src={getProfileImageUrl(
                                   project.customer?.customerProfile
@@ -459,20 +461,20 @@ export default function ProviderProjectsPage() {
                                 {project.customer?.name?.charAt(0) || "C"}
                               </AvatarFallback>
                             </Avatar>
-                            <div>
+                            <div className="min-w-0">
                               <Link
                                 href={`/provider/companies/${project.customer?.id}`}
-                                className="font-medium text-blue-600 hover:text-blue-800 hover:underline"
+                                className="font-medium text-sm sm:text-base text-blue-600 active:text-blue-800 sm:hover:text-blue-800 sm:hover:underline break-words"
                               >
                                 {project.customer?.name || "Unknown Client"}
                               </Link>
-                              <p className="text-sm text-gray-500">
+                              <p className="text-xs sm:text-sm text-gray-500">
                                 {project.category}
                               </p>
                             </div>
                           </div>
-                          <div className="text-right">
-                            <p className="font-semibold text-green-600">
+                          <div className="text-left sm:text-right w-full sm:w-auto">
+                            <p className="font-semibold text-sm sm:text-base text-green-600 break-words">
                               {project.approvedPrice
                                 ? formatCurrency(project.approvedPrice)
                                 : `${formatCurrency(
@@ -481,7 +483,7 @@ export default function ProviderProjectsPage() {
                                     project.budgetMax ?? 0
                                   )}`}
                             </p>
-                            <p className="text-sm text-gray-500">
+                            <p className="text-xs sm:text-sm text-gray-500">
                               Created: {formatDate(project.createdAt)}
                             </p>
                           </div>
@@ -489,7 +491,7 @@ export default function ProviderProjectsPage() {
 
                         {project.status === "IN_PROGRESS" && (
                           <div>
-                            <div className="flex justify-between text-sm mb-2">
+                            <div className="flex flex-col sm:flex-row justify-between text-xs sm:text-sm mb-2 gap-1 sm:gap-0">
                               <span>Progress: {project.progress || 0}%</span>
                               <span>
                                 {project.completedMilestones || 0}/
@@ -501,19 +503,19 @@ export default function ProviderProjectsPage() {
                               className="h-2"
                             />
                             {project.nextMilestone ? (
-                              <p className="text-sm text-blue-600 mt-2">
+                              <p className="text-xs sm:text-sm text-blue-600 mt-2">
                                 Next: {project.nextMilestone.title}
                               </p>
                             ) : (
-                              <p className="text-sm text-gray-500 mt-2">
+                              <p className="text-xs sm:text-sm text-gray-500 mt-2">
                                 No pending milestones
                               </p>
                             )}
                           </div>
                         )}
 
-                        <div className="flex items-center justify-between pt-4 border-t">
-                          <div className="flex items-center gap-4 text-sm text-gray-500">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 pt-3 sm:pt-4 border-t">
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-500">
                             <span>
                               Started: {formatDate(project.createdAt)}
                             </span>
@@ -521,10 +523,11 @@ export default function ProviderProjectsPage() {
                               Timeline: {project.timeline || "Not specified"}
                             </span>
                           </div>
-                          <div className="flex gap-2">
+                          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                             <Button
                               size="sm"
                               variant="outline"
+                              className="w-full sm:w-auto text-xs sm:text-sm"
                               onClick={() =>
                                 handleContact(
                                   project.customer?.id,
@@ -533,12 +536,12 @@ export default function ProviderProjectsPage() {
                                 )
                               }
                             >
-                              <MessageSquare className="w-4 h-4 mr-2" />
+                              <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                               Message
                             </Button>
-                            <Link href={`/provider/projects/${project.id}`}>
-                              <Button size="sm">
-                                <Eye className="w-4 h-4 mr-2" />
+                            <Link href={`/provider/projects/${project.id}`} className="w-full sm:w-auto">
+                              <Button size="sm" className="w-full sm:w-auto text-xs sm:text-sm">
+                                <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                                 View Details
                               </Button>
                             </Link>
@@ -552,35 +555,35 @@ export default function ProviderProjectsPage() {
             </TabsContent>
 
             <TabsContent value="active">
-              <div className="grid gap-6">
+              <div className="grid gap-4 sm:gap-6">
                 {filteredProjects
                   .filter((p) => p.status === "IN_PROGRESS")
                   .map((project) => (
                     <Card
                       key={project.id}
-                      className="hover:shadow-lg transition-shadow"
+                      className="sm:hover:shadow-lg transition-shadow"
                     >
-                      <CardHeader>
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-2">
-                              <CardTitle className="text-xl">
+                      <CardHeader className="p-4 sm:p-6">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
+                              <CardTitle className="text-lg sm:text-xl break-words">
                                 {project.title}
                               </CardTitle>
-                              <Badge className={getStatusColor(project.status)}>
+                              <Badge className={`${getStatusColor(project.status)} text-xs shrink-0`}>
                                 {getStatusText(project.status)}
                               </Badge>
                             </div>
-                            <CardDescription className="text-base">
+                            <CardDescription className="text-sm sm:text-base line-clamp-2 sm:line-clamp-3">
                               {project.description}
                             </CardDescription>
                           </div>
                         </div>
                       </CardHeader>
-                      <CardContent className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-4">
-                            <Avatar>
+                      <CardContent className="p-4 sm:p-6 space-y-3 sm:space-y-4">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+                          <div className="flex items-center space-x-3 sm:space-x-4 flex-1 min-w-0">
+                            <Avatar className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0">
                               <AvatarImage
                                 src={getProfileImageUrl(
                                   project.customer?.customerProfile
@@ -591,20 +594,20 @@ export default function ProviderProjectsPage() {
                                 {project.customer?.name?.charAt(0) || "C"}
                               </AvatarFallback>
                             </Avatar>
-                            <div>
+                            <div className="min-w-0">
                               <Link
                                 href={`/provider/companies/${project.customer?.id}`}
-                                className="font-medium text-blue-600 hover:text-blue-800 hover:underline"
+                                className="font-medium text-sm sm:text-base text-blue-600 active:text-blue-800 sm:hover:text-blue-800 sm:hover:underline break-words"
                               >
                                 {project.customer?.name || "Unknown Client"}
                               </Link>
-                              <p className="text-sm text-gray-500">
+                              <p className="text-xs sm:text-sm text-gray-500">
                                 {project.category}
                               </p>
                             </div>
                           </div>
-                          <div className="text-right">
-                            <p className="font-semibold text-green-600">
+                          <div className="text-left sm:text-right w-full sm:w-auto">
+                            <p className="font-semibold text-sm sm:text-base text-green-600 break-words">
                               {project.approvedPrice
                                 ? formatCurrency(project.approvedPrice)
                                 : `${formatCurrency(
@@ -613,7 +616,7 @@ export default function ProviderProjectsPage() {
                                     project.budgetMax ?? 0
                                   )}`}
                             </p>
-                            <p className="text-sm text-gray-500">
+                            <p className="text-xs sm:text-sm text-gray-500">
                               Created: {formatDate(project.createdAt)}
                             </p>
                           </div>
@@ -621,7 +624,7 @@ export default function ProviderProjectsPage() {
 
                         {project.status === "IN_PROGRESS" && (
                           <div>
-                            <div className="flex justify-between text-sm mb-2">
+                            <div className="flex flex-col sm:flex-row justify-between text-xs sm:text-sm mb-2 gap-1 sm:gap-0">
                               <span>Progress: {project.progress || 0}%</span>
                               <span>
                                 {project.completedMilestones || 0}/
@@ -633,19 +636,19 @@ export default function ProviderProjectsPage() {
                               className="h-2"
                             />
                             {project.nextMilestone ? (
-                              <p className="text-sm text-blue-600 mt-2">
+                              <p className="text-xs sm:text-sm text-blue-600 mt-2">
                                 Next: {project.nextMilestone.title}
                               </p>
                             ) : (
-                              <p className="text-sm text-gray-500 mt-2">
+                              <p className="text-xs sm:text-sm text-gray-500 mt-2">
                                 No pending milestones
                               </p>
                             )}
                           </div>
                         )}
 
-                        <div className="flex items-center justify-between pt-4 border-t">
-                          <div className="flex items-center gap-4 text-sm text-gray-500">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 pt-3 sm:pt-4 border-t">
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-500">
                             <span>
                               Started: {formatDate(project.createdAt)}
                             </span>
@@ -653,10 +656,11 @@ export default function ProviderProjectsPage() {
                               Timeline: {project.timeline || "Not specified"}
                             </span>
                           </div>
-                          <div className="flex gap-2">
+                          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                             <Button
                               size="sm"
                               variant="outline"
+                              className="w-full sm:w-auto text-xs sm:text-sm"
                               onClick={() =>
                                 handleContact(
                                   project.customer?.id,
@@ -665,12 +669,12 @@ export default function ProviderProjectsPage() {
                                 )
                               }
                             >
-                              <MessageSquare className="w-4 h-4 mr-2" />
+                              <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                               Message
                             </Button>
-                            <Link href={`/provider/projects/${project.id}`}>
-                              <Button size="sm">
-                                <Eye className="w-4 h-4 mr-2" />
+                            <Link href={`/provider/projects/${project.id}`} className="w-full sm:w-auto">
+                              <Button size="sm" className="w-full sm:w-auto text-xs sm:text-sm">
+                                <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                                 View Details
                               </Button>
                             </Link>
@@ -683,35 +687,35 @@ export default function ProviderProjectsPage() {
             </TabsContent>
 
             <TabsContent value="completed">
-              <div className="grid gap-6">
+              <div className="grid gap-4 sm:gap-6">
                 {filteredProjects
                   .filter((p) => p.status === "COMPLETED")
                   .map((project) => (
                     <Card
                       key={project.id}
-                      className="hover:shadow-lg transition-shadow"
+                      className="sm:hover:shadow-lg transition-shadow"
                     >
-                      <CardHeader>
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-2">
-                              <CardTitle className="text-xl">
+                      <CardHeader className="p-4 sm:p-6">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
+                              <CardTitle className="text-lg sm:text-xl break-words">
                                 {project.title}
                               </CardTitle>
-                              <Badge className={getStatusColor(project.status)}>
+                              <Badge className={`${getStatusColor(project.status)} text-xs shrink-0`}>
                                 {getStatusText(project.status)}
                               </Badge>
                             </div>
-                            <CardDescription className="text-base">
+                            <CardDescription className="text-sm sm:text-base line-clamp-2 sm:line-clamp-3">
                               {project.description}
                             </CardDescription>
                           </div>
                         </div>
                       </CardHeader>
-                      <CardContent className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-4">
-                            <Avatar>
+                      <CardContent className="p-4 sm:p-6 space-y-3 sm:space-y-4">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+                          <div className="flex items-center space-x-3 sm:space-x-4 flex-1 min-w-0">
+                            <Avatar className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0">
                               <AvatarImage
                                 src={getProfileImageUrl(
                                   project.customer?.customerProfile
@@ -722,20 +726,20 @@ export default function ProviderProjectsPage() {
                                 {project.customer?.name?.charAt(0) || "C"}
                               </AvatarFallback>
                             </Avatar>
-                            <div>
+                            <div className="min-w-0">
                               <Link
                                 href={`/provider/companies/${project.customer?.id}`}
-                                className="font-medium text-blue-600 hover:text-blue-800 hover:underline"
+                                className="font-medium text-sm sm:text-base text-blue-600 active:text-blue-800 sm:hover:text-blue-800 sm:hover:underline break-words"
                               >
                                 {project.customer?.name || "Unknown Client"}
                               </Link>
-                              <p className="text-sm text-gray-500">
+                              <p className="text-xs sm:text-sm text-gray-500">
                                 {project.category}
                               </p>
                             </div>
                           </div>
-                          <div className="text-right">
-                            <p className="font-semibold text-green-600">
+                          <div className="text-left sm:text-right w-full sm:w-auto">
+                            <p className="font-semibold text-sm sm:text-base text-green-600 break-words">
                               {project.approvedPrice
                                 ? formatCurrency(project.approvedPrice)
                                 : `${formatCurrency(
@@ -744,14 +748,14 @@ export default function ProviderProjectsPage() {
                                     project.budgetMax ?? 0
                                   )}`}
                             </p>
-                            <p className="text-sm text-gray-500">
+                            <p className="text-xs sm:text-sm text-gray-500">
                               Completed: {formatDate(project.createdAt)}
                             </p>
                           </div>
                         </div>
 
-                        <div className="flex items-center justify-between pt-4 border-t">
-                          <div className="flex items-center gap-4 text-sm text-gray-500">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 pt-3 sm:pt-4 border-t">
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-500">
                             <span>
                               Timeline: {project.timeline || "Not specified"}
                             </span>
@@ -760,10 +764,10 @@ export default function ProviderProjectsPage() {
                               completed
                             </span>
                           </div>
-                          <div className="flex gap-2">
-                            <Link href={`/provider/projects/${project.id}`}>
-                              <Button size="sm" variant="outline">
-                                <Eye className="w-4 h-4 mr-2" />
+                          <div className="flex gap-2 w-full sm:w-auto">
+                            <Link href={`/provider/projects/${project.id}`} className="w-full sm:w-auto">
+                              <Button size="sm" variant="outline" className="w-full sm:w-auto text-xs sm:text-sm">
+                                <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                                 View Details
                               </Button>
                             </Link>
@@ -776,35 +780,35 @@ export default function ProviderProjectsPage() {
             </TabsContent>
 
             <TabsContent value="disputed">
-              <div className="grid gap-6">
+              <div className="grid gap-4 sm:gap-6">
                 {filteredProjects
                   .filter((p) => p.status === "DISPUTED")
                   .map((project) => (
                     <Card
                       key={project.id}
-                      className="hover:shadow-lg transition-shadow"
+                      className="sm:hover:shadow-lg transition-shadow"
                     >
-                      <CardHeader>
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-2">
-                              <CardTitle className="text-xl">
+                      <CardHeader className="p-4 sm:p-6">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
+                              <CardTitle className="text-lg sm:text-xl break-words">
                                 {project.title}
                               </CardTitle>
-                              <Badge className={getStatusColor(project.status)}>
+                              <Badge className={`${getStatusColor(project.status)} text-xs shrink-0`}>
                                 {getStatusText(project.status)}
                               </Badge>
                             </div>
-                            <CardDescription className="text-base">
+                            <CardDescription className="text-sm sm:text-base line-clamp-2 sm:line-clamp-3">
                               {project.description}
                             </CardDescription>
                           </div>
                         </div>
                       </CardHeader>
-                      <CardContent className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-4">
-                            <Avatar>
+                      <CardContent className="p-4 sm:p-6 space-y-3 sm:space-y-4">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+                          <div className="flex items-center space-x-3 sm:space-x-4 flex-1 min-w-0">
+                            <Avatar className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0">
                               <AvatarImage
                                 src={getProfileImageUrl(
                                   project.customer?.customerProfile
@@ -815,20 +819,20 @@ export default function ProviderProjectsPage() {
                                 {project.customer?.name?.charAt(0) || "C"}
                               </AvatarFallback>
                             </Avatar>
-                            <div>
+                            <div className="min-w-0">
                               <Link
                                 href={`/provider/companies/${project.customer?.id}`}
-                                className="font-medium text-blue-600 hover:text-blue-800 hover:underline"
+                                className="font-medium text-sm sm:text-base text-blue-600 active:text-blue-800 sm:hover:text-blue-800 sm:hover:underline break-words"
                               >
                                 {project.customer?.name || "Unknown Client"}
                               </Link>
-                              <p className="text-sm text-gray-500">
+                              <p className="text-xs sm:text-sm text-gray-500">
                                 {project.category}
                               </p>
                             </div>
                           </div>
-                          <div className="text-right">
-                            <p className="font-semibold text-green-600">
+                          <div className="text-left sm:text-right w-full sm:w-auto">
+                            <p className="font-semibold text-sm sm:text-base text-green-600 break-words">
                               {project.approvedPrice
                                 ? formatCurrency(project.approvedPrice)
                                 : `${formatCurrency(
@@ -837,14 +841,14 @@ export default function ProviderProjectsPage() {
                                     project.budgetMax ?? 0
                                   )}`}
                             </p>
-                            <p className="text-sm text-gray-500">
+                            <p className="text-xs sm:text-sm text-gray-500">
                               Created: {formatDate(project.createdAt)}
                             </p>
                           </div>
                         </div>
 
-                        <div className="flex items-center justify-between pt-4 border-t">
-                          <div className="flex items-center gap-4 text-sm text-gray-500">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 pt-3 sm:pt-4 border-t">
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-500">
                             <span>
                               Started: {formatDate(project.createdAt)}
                             </span>
@@ -852,10 +856,11 @@ export default function ProviderProjectsPage() {
                               Timeline: {project.timeline || "Not specified"}
                             </span>
                           </div>
-                          <div className="flex gap-2">
+                          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                             <Button
                               size="sm"
                               variant="outline"
+                              className="w-full sm:w-auto text-xs sm:text-sm"
                               onClick={() =>
                                 handleContact(
                                   project.customer?.id,
@@ -864,12 +869,12 @@ export default function ProviderProjectsPage() {
                                 )
                               }
                             >
-                              <MessageSquare className="w-4 h-4 mr-2" />
+                              <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                               Message
                             </Button>
-                            <Link href={`/provider/projects/${project.id}`}>
-                              <Button size="sm">
-                                <Eye className="w-4 h-4 mr-2" />
+                            <Link href={`/provider/projects/${project.id}`} className="w-full sm:w-auto">
+                              <Button size="sm" className="w-full sm:w-auto text-xs sm:text-sm">
+                                <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                                 View Details
                               </Button>
                             </Link>

@@ -29,15 +29,15 @@ export function StatusBadges({ status, roles, isVerified }: StatusBadgesProps) {
   }
 
   return (
-    <div className="flex gap-4">
-      <Badge className={getStatusColor(status)}>{status}</Badge>
+    <div className="flex flex-wrap gap-2 sm:gap-4">
+      <Badge className={`${getStatusColor(status)} text-xs`}>{status}</Badge>
       {roles.map((role) => (
-        <Badge key={role} className={getRoleColor(role)}>
+        <Badge key={role} className={`${getRoleColor(role)} text-xs`}>
           {role}
         </Badge>
       ))}
       {isVerified && (
-        <Badge className="bg-green-100 text-green-800">
+        <Badge className="bg-green-100 text-green-800 text-xs">
           <CheckCircle className="w-3 h-3 mr-1" />
           Verified
         </Badge>

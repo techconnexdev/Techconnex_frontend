@@ -32,8 +32,6 @@ import {
 import ProviderCard from "./sections/ProviderCard";
 import type { Provider, Option } from "./types";
 import {
-  getRecommendedProviders,
-  searchProviders,
   getProviderAiDrafts,
   getProfileImageUrl,
 } from "@/lib/api";
@@ -79,15 +77,40 @@ export default function FindProvidersClient({
     const fetchProviders = async () => {
       try {
         setLoading(true);
-        const response = await searchProviders({
-          search: searchQuery || undefined,
-          rating: ratingFilter !== "all" ? ratingFilter : undefined,
-          page: 1,
-          limit: 100,
-        });
+        
+        // Get userId from localStorage to include in API call for saved status
+        const userJson =
+          typeof window !== "undefined" ? localStorage.getItem("user") : null;
+        const userId = (() => {
+          try {
+            return userJson ? JSON.parse(userJson)?.id || "" : "";
+          } catch {
+            return "";
+          }
+        })();
 
-        if (response.success) {
-          let filtered = response.providers || [];
+        const params = new URLSearchParams();
+        if (userId) params.append("userId", userId);
+        if (searchQuery) params.append("search", searchQuery);
+        if (ratingFilter !== "all") params.append("rating", ratingFilter);
+        params.append("page", "1");
+        params.append("limit", "100");
+
+        const token =
+          typeof window !== "undefined" ? localStorage.getItem("token") : null;
+
+        const res = await fetch(
+          `${
+            process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"
+          }/providers?${params.toString()}`,
+          {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          }
+        );
+        const data = await res.json();
+
+        if (data.success) {
+          let filtered = data.providers || [];
 
           // Apply verified filter on frontend since API might not support it
           if (verifiedFilter === "verified") {
@@ -143,7 +166,33 @@ export default function FindProvidersClient({
         setLoadingRecommended(true);
         setErrorRecommended(null);
 
-        const response = await getRecommendedProviders();
+        // Get userId from localStorage to include in API call for saved status
+        const userJson =
+          typeof window !== "undefined" ? localStorage.getItem("user") : null;
+        const userId = (() => {
+          try {
+            return userJson ? JSON.parse(userJson)?.id || "" : "";
+          } catch {
+            return "";
+          }
+        })();
+
+        const params = new URLSearchParams();
+        if (userId) params.append("userId", userId);
+
+        const token =
+          typeof window !== "undefined" ? localStorage.getItem("token") : null;
+
+        const res = await fetch(
+          `${
+            process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"
+          }/providers/recommended?${params.toString()}`,
+          {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          }
+        );
+        const response = await res.json();
+
         if (response.success) {
           // Map recommended providers and include profileId if present
           const raw = response.recommendations || [];
@@ -159,6 +208,7 @@ export default function FindProvidersClient({
             avatar: getProfileImageUrl(provider.avatar as string | undefined),
             skills: Array.isArray(provider.skills) ? (provider.skills as string[]) : [],
             verified: (provider.isVerified as boolean | undefined) || false,
+            saved: (provider.saved as boolean | undefined) || false,
             matchScore: provider.matchScore as number | undefined,
             recommendedFor: provider.recommendedForServiceRequest as { title: string } | undefined,
             // For "AI Recommended" tab: Use the aiExplanation from recommendation API, don't fetch drafts
@@ -440,7 +490,7 @@ export default function FindProvidersClient({
                               </Badge>
                             )}
                             {!provider.verified && (
-                              <Badge className="text-xs bg-red-100 text-red-700 border-red-300 shrink-0">
+                              <Badge className="text-xs bg-gray-100 text-gray-700 border-gray-300 shrink-0">
                                 <AlertTriangle className="w-3 h-3 mr-1" />
                                 Not Verified
                               </Badge>

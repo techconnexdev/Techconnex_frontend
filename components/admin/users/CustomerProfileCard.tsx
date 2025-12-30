@@ -37,12 +37,12 @@ export function CustomerProfileCard({
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Company Profile</CardTitle>
+      <CardHeader className="p-4 sm:p-6">
+        <CardTitle className="text-lg sm:text-xl">Company Profile</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="p-4 sm:p-6 space-y-3 sm:space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="description">Description</Label>
+          <Label htmlFor="description" className="text-xs sm:text-sm">Description</Label>
           {isEditing ? (
             <Textarea
               id="description"
@@ -50,50 +50,54 @@ export function CustomerProfileCard({
               onChange={(e) => onFieldChange("description", e.target.value)}
               placeholder="Enter company description"
               rows={4}
+              className="text-sm sm:text-base"
             />
           ) : (
-            <p>{getStringValue(profile.description) || "—"}</p>
+            <p className="text-sm sm:text-base break-words">{getStringValue(profile.description) || "—"}</p>
           )}
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
           <div className="space-y-2">
-            <Label htmlFor="industry">Industry</Label>
+            <Label htmlFor="industry" className="text-xs sm:text-sm">Industry</Label>
             {isEditing ? (
               <Input
                 id="industry"
                 value={getStringValue(formData.industry)}
                 onChange={(e) => onFieldChange("industry", e.target.value)}
+                className="text-sm sm:text-base"
               />
             ) : (
-              <p>{getStringValue(profile.industry) || "—"}</p>
+              <p className="text-sm sm:text-base break-words">{getStringValue(profile.industry) || "—"}</p>
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="location">Location</Label>
+            <Label htmlFor="location" className="text-xs sm:text-sm">Location</Label>
             {isEditing ? (
               <Input
                 id="location"
                 value={getStringValue(formData.location)}
                 onChange={(e) => onFieldChange("location", e.target.value)}
+                className="text-sm sm:text-base"
               />
             ) : (
-              <p>{getStringValue(profile.location) || "—"}</p>
+              <p className="text-sm sm:text-base break-words">{getStringValue(profile.location) || "—"}</p>
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="companySize">Company Size</Label>
+            <Label htmlFor="companySize" className="text-xs sm:text-sm">Company Size</Label>
             {isEditing ? (
               <Input
                 id="companySize"
                 value={getStringValue(formData.companySize)}
                 onChange={(e) => onFieldChange("companySize", e.target.value)}
+                className="text-sm sm:text-base"
               />
             ) : (
-              <p>{getStringValue(profile.companySize) || "—"}</p>
+              <p className="text-sm sm:text-base break-words">{getStringValue(profile.companySize) || "—"}</p>
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="employeeCount">Employee Count</Label>
+            <Label htmlFor="employeeCount" className="text-xs sm:text-sm">Employee Count</Label>
             {isEditing ? (
               <Input
                 id="employeeCount"
@@ -102,13 +106,14 @@ export function CustomerProfileCard({
                 onChange={(e) =>
                   onFieldChange("employeeCount", e.target.value ? Number.parseInt(e.target.value) : null)
                 }
+                className="text-sm sm:text-base"
               />
             ) : (
-              <p>{getStringValue(profile.employeeCount) || "—"}</p>
+              <p className="text-sm sm:text-base">{getStringValue(profile.employeeCount) || "—"}</p>
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="website">Website</Label>
+            <Label htmlFor="website" className="text-xs sm:text-sm">Website</Label>
             {isEditing ? (
               <Input
                 id="website"
@@ -116,9 +121,10 @@ export function CustomerProfileCard({
                 value={getStringValue(formData.website)}
                 onChange={(e) => onFieldChange("website", e.target.value)}
                 placeholder="https://..."
+                className="text-sm sm:text-base"
               />
             ) : (
-              <p>
+              <p className="text-sm sm:text-base break-words">
                 {getStringValue(profile.website) ? (
                   <a
                     href={getStringValue(profile.website)}
@@ -135,34 +141,36 @@ export function CustomerProfileCard({
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="annualRevenue">Annual Revenue</Label>
+            <Label htmlFor="annualRevenue" className="text-xs sm:text-sm">Annual Revenue</Label>
             {isEditing ? (
               <Input
                 id="annualRevenue"
                 value={getStringValue(formData.annualRevenue)}
                 onChange={(e) => onFieldChange("annualRevenue", e.target.value)}
                 placeholder="e.g. 500000"
+                className="text-sm sm:text-base"
               />
             ) : (
-              <p>{getStringValue(profile.annualRevenue) || "—"}</p>
+              <p className="text-sm sm:text-base break-words">{getStringValue(profile.annualRevenue) || "—"}</p>
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="averageBudgetRange">Average Budget Range</Label>
+            <Label htmlFor="averageBudgetRange" className="text-xs sm:text-sm">Average Budget Range</Label>
             {isEditing ? (
               <Input
                 id="averageBudgetRange"
                 value={getStringValue(formData.averageBudgetRange)}
                 onChange={(e) => onFieldChange("averageBudgetRange", e.target.value)}
                 placeholder="e.g. 20000"
+                className="text-sm sm:text-base"
               />
             ) : (
-              <p>{getStringValue(profile.averageBudgetRange) || "—"}</p>
+              <p className="text-sm sm:text-base break-words">{getStringValue(profile.averageBudgetRange) || "—"}</p>
             )}
           </div>
         </div>
         <div className="space-y-2">
-          <Label>Preferred Contract Types</Label>
+          <Label className="text-xs sm:text-sm">Preferred Contract Types</Label>
           {isEditing ? (
             <div className="space-y-2">
               <div className="flex gap-2">
@@ -178,6 +186,7 @@ export function CustomerProfileCard({
                       }
                     }
                   }}
+                  className="text-sm sm:text-base"
                 />
               </div>
               <div className="flex flex-wrap gap-2">
@@ -185,7 +194,7 @@ export function CustomerProfileCard({
                   <Badge
                     key={index}
                     variant="secondary"
-                    className="cursor-pointer"
+                    className="cursor-pointer text-xs"
                     onClick={() => onArrayFieldChange("preferredContractTypes", type, "remove")}
                   >
                     {type} ×
@@ -197,18 +206,18 @@ export function CustomerProfileCard({
             <div className="flex flex-wrap gap-2">
               {getArrayValue(profile.preferredContractTypes).length > 0 ? (
                 getArrayValue(profile.preferredContractTypes).map((type, index) => (
-                  <Badge key={index} variant="secondary">
+                  <Badge key={index} variant="secondary" className="text-xs">
                     {type}
                   </Badge>
                 ))
               ) : (
-                <span className="text-gray-400">No contract types</span>
+                <span className="text-xs sm:text-sm text-gray-400">No contract types</span>
               )}
             </div>
           )}
         </div>
         <div className="space-y-2">
-          <Label>Social Links</Label>
+          <Label className="text-xs sm:text-sm">Social Links</Label>
           {isEditing ? (
             <div className="space-y-2">
               <div className="flex gap-2">
@@ -224,6 +233,7 @@ export function CustomerProfileCard({
                       }
                     }
                   }}
+                  className="text-sm sm:text-base"
                 />
               </div>
               <div className="flex flex-wrap gap-2">
@@ -231,10 +241,10 @@ export function CustomerProfileCard({
                   <Badge
                     key={index}
                     variant="secondary"
-                    className="cursor-pointer"
+                    className="cursor-pointer text-xs"
                     onClick={() => onArrayFieldChange("socialLinks", link, "remove")}
                   >
-                    <a href={link} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                    <a href={link} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline break-all">
                       {link}
                     </a>{" "}
                     ×
@@ -246,20 +256,20 @@ export function CustomerProfileCard({
             <div className="flex flex-wrap gap-2">
               {getArrayValue(profile.socialLinks).length > 0 ? (
                 getArrayValue(profile.socialLinks).map((link, index) => (
-                  <Badge key={index} variant="secondary">
-                    <a href={link} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                  <Badge key={index} variant="secondary" className="text-xs">
+                    <a href={link} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline break-all">
                       {link}
                     </a>
                   </Badge>
                 ))
               ) : (
-                <span className="text-gray-400">No social links</span>
+                <span className="text-xs sm:text-sm text-gray-400">No social links</span>
               )}
             </div>
           )}
         </div>
         <div className="space-y-2">
-          <Label htmlFor="benefits">Benefits</Label>
+          <Label htmlFor="benefits" className="text-xs sm:text-sm">Benefits</Label>
           {isEditing ? (
             <Textarea
               id="benefits"
@@ -267,13 +277,14 @@ export function CustomerProfileCard({
               onChange={(e) => onFieldChange("benefits", e.target.value)}
               placeholder="Enter company benefits"
               rows={3}
+              className="text-sm sm:text-base"
             />
           ) : (
-            <p>{getStringValue(profile.benefits) || "—"}</p>
+            <p className="text-sm sm:text-base break-words">{getStringValue(profile.benefits) || "—"}</p>
           )}
         </div>
         <div className="space-y-2">
-          <Label>Languages</Label>
+          <Label className="text-xs sm:text-sm">Languages</Label>
           {isEditing ? (
             <div className="space-y-2">
               <div className="flex gap-2">
@@ -289,6 +300,7 @@ export function CustomerProfileCard({
                       }
                     }
                   }}
+                  className="text-sm sm:text-base"
                 />
               </div>
               <div className="flex flex-wrap gap-2">
@@ -296,7 +308,7 @@ export function CustomerProfileCard({
                   <Badge
                     key={index}
                     variant="secondary"
-                    className="cursor-pointer"
+                    className="cursor-pointer text-xs"
                     onClick={() => onArrayFieldChange("languages", lang, "remove")}
                   >
                     {lang} ×
@@ -308,18 +320,18 @@ export function CustomerProfileCard({
             <div className="flex flex-wrap gap-2">
               {getArrayValue(profile.languages).length > 0 ? (
                 getArrayValue(profile.languages).map((lang, index) => (
-                  <Badge key={index} variant="secondary">
+                  <Badge key={index} variant="secondary" className="text-xs">
                     {lang}
                   </Badge>
                 ))
               ) : (
-                <span className="text-gray-400">No languages</span>
+                <span className="text-xs sm:text-sm text-gray-400">No languages</span>
               )}
             </div>
           )}
         </div>
         <div className="space-y-2">
-          <Label htmlFor="mission">Mission</Label>
+          <Label htmlFor="mission" className="text-xs sm:text-sm">Mission</Label>
           {isEditing ? (
             <Textarea
               id="mission"
@@ -327,13 +339,14 @@ export function CustomerProfileCard({
               onChange={(e) => onFieldChange("mission", e.target.value)}
               placeholder="Enter company mission"
               rows={3}
+              className="text-sm sm:text-base"
             />
           ) : (
-            <p>{getStringValue(profile.mission) || "—"}</p>
+            <p className="text-sm sm:text-base break-words">{getStringValue(profile.mission) || "—"}</p>
           )}
         </div>
         <div className="space-y-2">
-          <Label>Company Values</Label>
+          <Label className="text-xs sm:text-sm">Company Values</Label>
           {isEditing ? (
             <div className="space-y-2">
               <div className="flex gap-2">
@@ -349,6 +362,7 @@ export function CustomerProfileCard({
                       }
                     }
                   }}
+                  className="text-sm sm:text-base"
                 />
               </div>
               <div className="flex flex-wrap gap-2">
@@ -356,7 +370,7 @@ export function CustomerProfileCard({
                   <Badge
                     key={index}
                     variant="secondary"
-                    className="cursor-pointer"
+                    className="cursor-pointer text-xs"
                     onClick={() => onArrayFieldChange("values", value, "remove")}
                   >
                     {value} ×
@@ -368,19 +382,19 @@ export function CustomerProfileCard({
             <div className="flex flex-wrap gap-2">
               {getArrayValue(profile.values).length > 0 ? (
                 getArrayValue(profile.values).map((value, index) => (
-                  <Badge key={index} variant="secondary">
+                  <Badge key={index} variant="secondary" className="text-xs">
                     {value}
                   </Badge>
                 ))
               ) : (
-                <span className="text-gray-400">No values</span>
+                <span className="text-xs sm:text-sm text-gray-400">No values</span>
               )}
             </div>
           )}
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
           <div className="space-y-2">
-            <Label htmlFor="establishedYear">Established Year</Label>
+            <Label htmlFor="establishedYear" className="text-xs sm:text-sm">Established Year</Label>
             {isEditing ? (
               <Input
                 id="establishedYear"
@@ -389,53 +403,57 @@ export function CustomerProfileCard({
                 onChange={(e) =>
                   onFieldChange("establishedYear", e.target.value ? Number.parseInt(e.target.value) : null)
                 }
+                className="text-sm sm:text-base"
               />
             ) : (
-              <p>{getStringValue(profile.establishedYear) || "—"}</p>
+              <p className="text-sm sm:text-base">{getStringValue(profile.establishedYear) || "—"}</p>
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="fundingStage">Funding Stage</Label>
+            <Label htmlFor="fundingStage" className="text-xs sm:text-sm">Funding Stage</Label>
             {isEditing ? (
               <Input
                 id="fundingStage"
                 value={getStringValue(formData.fundingStage)}
                 onChange={(e) => onFieldChange("fundingStage", e.target.value)}
                 placeholder="e.g. Bootstrap, Seed, Series A"
+                className="text-sm sm:text-base"
               />
             ) : (
-              <p>{getStringValue(profile.fundingStage) || "—"}</p>
+              <p className="text-sm sm:text-base break-words">{getStringValue(profile.fundingStage) || "—"}</p>
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="remotePolicy">Remote Policy</Label>
+            <Label htmlFor="remotePolicy" className="text-xs sm:text-sm">Remote Policy</Label>
             {isEditing ? (
               <Input
                 id="remotePolicy"
                 value={getStringValue(formData.remotePolicy)}
                 onChange={(e) => onFieldChange("remotePolicy", e.target.value)}
                 placeholder="On-site, Remote, Hybrid"
+                className="text-sm sm:text-base"
               />
             ) : (
-              <p>{getStringValue(profile.remotePolicy) || "—"}</p>
+              <p className="text-sm sm:text-base break-words">{getStringValue(profile.remotePolicy) || "—"}</p>
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="hiringFrequency">Hiring Frequency</Label>
+            <Label htmlFor="hiringFrequency" className="text-xs sm:text-sm">Hiring Frequency</Label>
             {isEditing ? (
               <Input
                 id="hiringFrequency"
                 value={getStringValue(formData.hiringFrequency)}
                 onChange={(e) => onFieldChange("hiringFrequency", e.target.value)}
                 placeholder="occasional, regular, enterprise"
+                className="text-sm sm:text-base"
               />
             ) : (
-              <p>{getStringValue(profile.hiringFrequency) || "—"}</p>
+              <p className="text-sm sm:text-base break-words">{getStringValue(profile.hiringFrequency) || "—"}</p>
             )}
           </div>
         </div>
         <div className="space-y-2">
-          <Label>Categories Hiring For</Label>
+          <Label className="text-xs sm:text-sm">Categories Hiring For</Label>
           {isEditing ? (
             <div className="space-y-2">
               <div className="flex gap-2">
@@ -451,6 +469,7 @@ export function CustomerProfileCard({
                       }
                     }
                   }}
+                  className="text-sm sm:text-base"
                 />
               </div>
               <div className="flex flex-wrap gap-2">
@@ -458,7 +477,7 @@ export function CustomerProfileCard({
                   <Badge
                     key={index}
                     variant="secondary"
-                    className="cursor-pointer"
+                    className="cursor-pointer text-xs"
                     onClick={() => onArrayFieldChange("categoriesHiringFor", category, "remove")}
                   >
                     {category} ×
@@ -470,12 +489,12 @@ export function CustomerProfileCard({
             <div className="flex flex-wrap gap-2">
               {getArrayValue(profile.categoriesHiringFor).length > 0 ? (
                 getArrayValue(profile.categoriesHiringFor).map((category, index) => (
-                  <Badge key={index} variant="secondary">
+                  <Badge key={index} variant="secondary" className="text-xs">
                     {category}
                   </Badge>
                 ))
               ) : (
-                <span className="text-gray-400">No categories</span>
+                <span className="text-xs sm:text-sm text-gray-400">No categories</span>
               )}
             </div>
           )}

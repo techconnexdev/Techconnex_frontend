@@ -7,7 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { Eye, MapPin, Star, Trash2 } from "lucide-react";
+import { Eye, MapPin, Star, Trash2, AlertTriangle } from "lucide-react";
 import { getProfileImageUrl } from "@/lib/api";
 
 type SavedProvider = {
@@ -88,7 +88,7 @@ export default function SavedProvidersPage() {
       if (!userId || !token) return;
       const res = await fetch(
         `${
-          process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"
+          process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000"
         }/providers/${providerId}/save?userId=${encodeURIComponent(userId)}`,
         {
           method: "DELETE",
@@ -151,6 +151,12 @@ export default function SavedProvidersPage() {
                         {provider.topRated && (
                           <Badge className="bg-yellow-100 text-yellow-800 text-[10px] sm:text-xs">
                             Top Rated
+                          </Badge>
+                        )}
+                        {!provider.verified && (
+                          <Badge className="bg-gray-100 text-gray-700 border-gray-300 text-[10px] sm:text-xs">
+                            <AlertTriangle className="w-3 h-3 mr-1" />
+                            Not Verified
                           </Badge>
                         )}
                       </div>

@@ -295,7 +295,6 @@ export default function ProjectDetailsPage({
     providerAvatar: string;
     providerRating: number;
     providerLocation: string;
-    providerResponseTime: string;
     projectId: string | undefined;
     projectTitle: string;
     bidAmount: number;
@@ -323,7 +322,6 @@ export default function ProjectDetailsPage({
       avatar?: string;
       rating?: number;
       location?: string;
-      responseTime?: string;
       providerProfile?: {
         profileImageUrl?: string;
       };
@@ -507,10 +505,6 @@ export default function ProjectDetailsPage({
           providerLocation:
             (profile.location as string | undefined) ??
             (provider.location as string | undefined) ??
-            "",
-          providerResponseTime:
-            (profile.responseTime as string | undefined) ??
-            (provider.responseTime as string | undefined) ??
             "",
           projectId: (p.serviceRequest as Record<string, unknown> | undefined)
             ?.id as string | undefined,
@@ -1022,41 +1016,16 @@ export default function ProjectDetailsPage({
   const msgsToRender =
     projectMessages && projectMessages.length > 0 ? projectMessages : messages;
 
-  const provider =
-    project?.provider ??
-    ({
-      id: project?.providerId,
-      name:
-        (typeof project?.providerName === "string"
-          ? project.providerName
-          : undefined) ??
-        (project?.provider as { name?: string } | undefined)?.name,
-      avatar:
-        (project?.provider as { avatarUrl?: string } | undefined)?.avatarUrl ??
-        project?.providerAvatar,
-    } as Record<string, unknown>);
-
-  const handleContact = () => {
-    const providerId = (provider as { id?: string } | undefined)?.id;
-    const providerAvatar = (provider as { avatar?: string } | undefined)
-      ?.avatar;
-    if (!provider || !providerId) return;
-
-    const avatarUrl =
-      providerAvatar &&
-      providerAvatar !== "/placeholder.svg" &&
-      !providerAvatar.includes("/placeholder.svg")
-        ? `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}${
-            providerAvatar.startsWith("/") ? "" : "/"
-          }${providerAvatar}`
-        : "";
-
-    const providerName =
-      (provider as { name?: string } | undefined)?.name || "";
+  const handleContact = (
+    providerId?: string,
+    providerName?: string,
+    providerAvatar?: string
+  ) => {
+    if (!providerId || !providerName) return;
     router.push(
       `/customer/messages?userId=${providerId}&name=${encodeURIComponent(
         providerName
-      )}&avatar=${encodeURIComponent(avatarUrl)}`
+      )}&avatar=${encodeURIComponent(providerAvatar || "")}`
     );
   };
   // ⬇️ ADD THIS just after you define `project` (and `proposals` if present)
@@ -1813,6 +1782,21 @@ export default function ProjectDetailsPage({
       return;
     }
 
+    // Validate that selected milestone is not approved or paid
+    if (selectedMilestoneForDispute) {
+      const selectedMilestone = projectMilestones.find(
+        (m: Milestone) => m.id === selectedMilestoneForDispute
+      );
+      if (selectedMilestone && (selectedMilestone.status === "APPROVED" || selectedMilestone.status === "PAID")) {
+        toast({
+          title: "Validation Error",
+          description: `Cannot create a dispute for milestone "${selectedMilestone.title}" as it has already been approved or paid.`,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     try {
       setCreatingDispute(true);
       await createDispute({
@@ -2040,6 +2024,7 @@ export default function ProjectDetailsPage({
             </div>
           </div>
           <div className="flex flex-wrap gap-2 sm:gap-3 w-full lg:w-auto">
+            {/* 
             <Button
               variant="outline"
               onClick={() => setIsEditOpen(true)}
@@ -2049,10 +2034,19 @@ export default function ProjectDetailsPage({
               <span className="hidden sm:inline">Edit Project</span>
               <span className="sm:hidden">Edit</span>
             </Button>
+            */}
 
             <Button
               variant="outline"
               className="flex-1 sm:flex-initial text-xs sm:text-sm"
+              onClick={() =>
+                handleContact(
+                  project.provider?.id,
+                  project.provider?.name,
+                  (project.provider as { providerProfile?: { profileImageUrl?: string } } | undefined)?.providerProfile?.profileImageUrl ||
+                  project.assignedProvider?.providerProfile?.profileImageUrl
+                )
+              }
             >
               <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
               <span className="hidden sm:inline">Message Provider</span>
@@ -2669,25 +2663,65 @@ export default function ProjectDetailsPage({
                                   📎 Submission Attachment
                                 </span>
                               </div>
-                              <a
-                                href={`${
-                                  process.env.NEXT_PUBLIC_API_URL ||
-                                  "http://localhost:4000"
-                                }/${milestone.submissionAttachmentUrl
-                                  .replace(/\\/g, "/")
-                                  .replace(/^\//, "")}`}
-                                download={(() => {
+                              {((): React.ReactNode => {
                                   const normalized =
                                     milestone.submissionAttachmentUrl.replace(
                                       /\\/g,
                                       "/"
                                     );
-                                  return (
-                                    normalized.split("/").pop() || "attachment"
-                                  );
-                                })()}
+                                const fileName =
+                                  normalized.split("/").pop() || "attachment";
+                                const attachmentUrl = getAttachmentUrl(
+                                  milestone.submissionAttachmentUrl
+                                );
+                                const isR2Key =
+                                  attachmentUrl === "#" ||
+                                  (!attachmentUrl.startsWith("http") &&
+                                    !attachmentUrl.startsWith("/uploads/") &&
+                                    !attachmentUrl.includes(
+                                      process.env.NEXT_PUBLIC_API_URL ||
+                                        "localhost"
+                                    ));
+
+                                return (
+                                  <a
+                                    href={
+                                      attachmentUrl === "#"
+                                        ? undefined
+                                        : attachmentUrl
+                                    }
+                                    download={fileName}
                                 target="_blank"
                                 rel="noopener noreferrer"
+                                    onClick={
+                                      isR2Key && milestone.submissionAttachmentUrl
+                                        ? async (e) => {
+                                            e.preventDefault();
+                                            if (!milestone.submissionAttachmentUrl) return;
+                                            try {
+                                              const downloadUrl =
+                                                await getR2DownloadUrl(
+                                                  milestone.submissionAttachmentUrl
+                                                );
+                                              window.open(
+                                                downloadUrl.downloadUrl,
+                                                "_blank"
+                                              );
+                                            } catch (error) {
+                                              console.error(
+                                                "Failed to get download URL:",
+                                                error
+                                              );
+                                              toastHook({
+                                                title: "Error",
+                                                description:
+                                                  "Failed to download attachment",
+                                                variant: "destructive",
+                                              });
+                                            }
+                                          }
+                                        : undefined
+                                    }
                                 className="flex items-start gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2 hover:bg-gray-50 hover:shadow-sm transition"
                               >
                                 {/* Icon circle */}
@@ -2698,17 +2732,7 @@ export default function ProjectDetailsPage({
                                 {/* File info */}
                                 <div className="flex flex-col min-w-0">
                                   <span className="text-sm font-medium text-gray-900 break-all leading-snug">
-                                    {(() => {
-                                      const normalized =
-                                        milestone.submissionAttachmentUrl.replace(
-                                          /\\/g,
-                                          "/"
-                                        );
-                                      return (
-                                        normalized.split("/").pop() ||
-                                        "attachment"
-                                      );
-                                    })()}
+                                        {fileName}
                                   </span>
                                   <span className="text-xs text-gray-500 leading-snug">
                                     Click to preview / download
@@ -2717,21 +2741,11 @@ export default function ProjectDetailsPage({
 
                                 {/* Download icon */}
                                 <div className="ml-auto flex items-center text-gray-500 hover:text-gray-700">
-                                  <svg
-                                    className="w-4 h-4"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth={2}
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    viewBox="0 0 24 24"
-                                  >
-                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                                    <path d="M7 10l5 5 5-5" />
-                                    <path d="M12 15V3" />
-                                  </svg>
+                                      <Download className="w-4 h-4" />
                                 </div>
                               </a>
+                                );
+                              })()}
                             </div>
                           )}
 
@@ -2844,31 +2858,81 @@ export default function ProjectDetailsPage({
                                             <p className="text-xs font-medium text-gray-700 mb-1">
                                               Attachment:
                                             </p>
-                                            <a
-                                              href={`${
+                                            {((): React.ReactNode => {
+                                              const attachmentUrl =
+                                                getAttachmentUrl(
+                                                  historyRecord.submissionAttachmentUrl
+                                                );
+                                              const isR2Key =
+                                                attachmentUrl === "#" ||
+                                                (!attachmentUrl.startsWith(
+                                                  "http"
+                                                ) &&
+                                                  !attachmentUrl.startsWith(
+                                                    "/uploads/"
+                                                  ) &&
+                                                  !attachmentUrl.includes(
                                                 process.env
                                                   .NEXT_PUBLIC_API_URL ||
-                                                "http://localhost:4000"
-                                              }/${historyRecord.submissionAttachmentUrl
-                                                .replace(/\\/g, "/")
-                                                .replace(/^\//, "")}`}
-                                              download
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="text-xs text-blue-600 hover:text-blue-800 underline"
-                                            >
-                                              {(() => {
+                                                      "localhost"
+                                                  ));
                                                 const normalized =
                                                   historyRecord.submissionAttachmentUrl.replace(
                                                     /\\/g,
                                                     "/"
                                                   );
-                                                return (
+                                              const fileName =
                                                   normalized.split("/").pop() ||
-                                                  "attachment"
+                                                "attachment";
+
+                                              return (
+                                                <a
+                                                  href={
+                                                    attachmentUrl === "#"
+                                                      ? undefined
+                                                      : attachmentUrl
+                                                  }
+                                                  download={fileName}
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  onClick={
+                                                    isR2Key &&
+                                                    typeof historyRecord.submissionAttachmentUrl === "string"
+                                                      ? async (e) => {
+                                                          e.preventDefault();
+                                                          const attachmentUrl = historyRecord.submissionAttachmentUrl;
+                                                          if (typeof attachmentUrl !== "string") return;
+                                                          try {
+                                                            const downloadUrl =
+                                                              await getR2DownloadUrl(
+                                                                attachmentUrl
+                                                              );
+                                                            window.open(
+                                                              downloadUrl.downloadUrl,
+                                                              "_blank"
                                                 );
-                                              })()}
+                                                          } catch (error) {
+                                                            console.error(
+                                                              "Failed to get download URL:",
+                                                              error
+                                                            );
+                                                            toastHook({
+                                                              title: "Error",
+                                                              description:
+                                                                "Failed to download attachment",
+                                                              variant:
+                                                                "destructive",
+                                                            });
+                                                          }
+                                                        }
+                                                      : undefined
+                                                  }
+                                                  className="text-xs text-blue-600 hover:text-blue-800 underline"
+                                                >
+                                                  {fileName}
                                             </a>
+                                              );
+                                            })()}
                                           </div>
                                         ) : null}
 
@@ -3100,18 +3164,6 @@ export default function ProjectDetailsPage({
                                 </div>
                               </div>
 
-                              {p.providerResponseTime && (
-                                <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-1 text-xs sm:text-sm text-gray-600 mb-2">
-                                  {p.providerResponseTime && (
-                                    <div className="flex items-center gap-1">
-                                      <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
-                                      <span>
-                                        Responds in {p.providerResponseTime}
-                                      </span>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
 
                               {p.coverLetter && (
                                 <p className="text-xs sm:text-sm text-gray-600 line-clamp-2 mb-2 break-words">
@@ -3268,7 +3320,6 @@ export default function ProjectDetailsPage({
                                       avatar: p.providerAvatar,
                                       rating: p.providerRating,
                                       location: p.providerLocation,
-                                      responseTime: p.providerResponseTime,
                                     },
                                     projectTitle:
                                       p.projectTitle ||
@@ -3882,7 +3933,18 @@ export default function ProjectDetailsPage({
                 <Separator className="my-4" />
                 {messages.length > 0 && (
                   <div className="flex justify-center gap-2">
-                    <Button onClick={handleContact}>Contact</Button>
+                    <Button
+                      onClick={() =>
+                        handleContact(
+                          project.provider?.id,
+                          project.provider?.name,
+                          (project.provider as { providerProfile?: { profileImageUrl?: string } } | undefined)?.providerProfile?.profileImageUrl ||
+                          project.assignedProvider?.providerProfile?.profileImageUrl
+                        )
+                      }
+                    >
+                      Contact
+                    </Button>
                   </div>
                 )}
               </CardContent>
@@ -4532,13 +4594,6 @@ export default function ProjectDetailsPage({
                           </span>
                         </div>
 
-                        <div className="flex items-center gap-1">
-                          <Clock className="w-4 h-4" />
-                          {selectedProposalDetails.provider?.responseTime ||
-                            selectedProposalDetails.providerResponseTime ||
-                            "N/A"}{" "}
-                          response time
-                        </div>
                       </div>
 
                       {selectedProposalDetails.experience && (
@@ -5265,16 +5320,27 @@ export default function ProjectDetailsPage({
                     <SelectValue placeholder="Select a milestone (optional)" />
                   </SelectTrigger>
                   <SelectContent>
-                    {projectMilestones.map((m: Milestone) => (
+                    {projectMilestones
+                      .filter((m: Milestone) => 
+                        m.status !== "APPROVED" && m.status !== "PAID"
+                      )
+                      .map((m: Milestone) => (
                       <SelectItem key={m.id} value={m.id || ""}>
-                        {m.title} - RM{(m.amount || 0).toLocaleString()}
+                          {m.title} - RM{(m.amount || 0).toLocaleString()} ({m.status})
                       </SelectItem>
                     ))}
+                    {projectMilestones.filter((m: Milestone) => 
+                      m.status !== "APPROVED" && m.status !== "PAID"
+                    ).length === 0 && (
+                      <SelectItem value="" disabled>
+                        No milestones available for dispute
+                      </SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-gray-500 mt-1">
                   If selected, this milestone will be frozen until the dispute
-                  is resolved.
+                  is resolved. Approved or paid milestones cannot be disputed.
                 </p>
               </div>
             )}

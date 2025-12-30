@@ -119,4 +119,102 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  h1{
+    @apply font-semibold text-[2.5rem] leading-[3.25rem] md:text-[2.75rem] md:leading-[3.75rem] lg:text-[3.25rem] lg:leading-[4.0625rem] xl:text-[3.75rem] xl:leading-[4.5rem];
+  }
+
+  h2{
+    @apply text-[1.75rem] leading-[2.5rem] md:text-[2rem] md:leading-[2.5rem] lg:text-[2.5rem] lg:leading-[3.5rem] xl:text-[3rem] xl:leading-tight;
+  }
+  h3{
+    @apply text-[2rem] leading-normal md:text-[2.5rem];
+  }
+  h4{
+    @apply text-[2rem] leading-normal;
+  }
+  h5{
+    @apply text-2xl leading-normal;
+  }
+  h6{
+    @apply font-semibold text-lg leading-8;
+  }
+
+  ::-webkit-scrollbar {
+    @apply w-2
+    h-2;
+  }
+
+  ::-webkit-scrollbar-thumb{
+    @apply bg-foreground/20
+    rounded-full
+    
+    hover:bg-foreground/30;
+  }
+}
+
+@layer utilities {
+  .container {
+    @apply px-4
+    mx-auto
+    
+    /* Responsive for xl screen */
+    2xl:max-w-screen-xl;
+  }
+
+  .scrollbar-hidden::-webkit-scrollbar {
+    @apply hidden;
+  }
+
+  .section {
+    @apply py-8
+    
+    /* Responsive for medium screen */ 
+    md:py-16;
+  }
+
+  .section-head {
+    @apply pb-8
+    text-center
+    
+    /* Responsive for medium screen */
+    md:pb-16
+    
+    /* Responsive for large screen */
+    lg:max-w-screen-sm
+    lg:mx-auto;
+  }
+
+  .section-subtitle {
+    @apply text-primary
+    text-sm
+    font-medium
+    uppercase;
+  }
+
+  .section-title {
+    @apply text-foreground
+    text-3xl
+    font-semibold
+    leading-snug
+    py-3
+    
+    /* Responsive for medium screen */
+    md:text-[40px];
+  }
+
+  .section-text {
+    @apply text-muted-foreground
+    
+    /* Responsive for medium screen */
+    md:text-xl;
+  }
+
+  .img-cover {
+    @apply w-full
+    h-full
+    object-cover;
+  }
+
+  
 }

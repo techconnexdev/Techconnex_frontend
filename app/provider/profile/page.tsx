@@ -189,6 +189,24 @@ export default function ProviderProfilePage(_props: Props) {
   const [completionSuggestions, setCompletionSuggestions] = useState<string[]>(
     []
   );
+  const [profileFormErrors, setProfileFormErrors] = useState<{
+    name?: string;
+    email?: string;
+    phone?: string;
+    bio?: string;
+    major?: string;
+    location?: string;
+    hourlyRate?: string;
+    website?: string;
+    portfolioLinks?: string;
+    languages?: string;
+    skills?: string;
+    yearsExperience?: string;
+    minimumProjectBudget?: string;
+    maximumProjectBudget?: string;
+    preferredProjectDuration?: string;
+    teamSize?: string;
+  }>({});
   const { toast } = useToast();
 
   // State for input fields (similar to registration form)
@@ -463,6 +481,16 @@ export default function ProviderProfilePage(_props: Props) {
 
   // Save profile data
   const handleSaveProfile = async () => {
+    // Validate before saving
+    if (!validateProfile()) {
+      toast({
+        title: "Validation Error",
+        description: "Please fix the errors in the form before saving",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       setSaving(true);
       const response = await upsertProviderProfile({
@@ -489,12 +517,19 @@ export default function ProviderProfilePage(_props: Props) {
           description: "Profile updated successfully",
         });
         setIsEditing(false);
+        setProfileFormErrors({}); // Clear errors on success
         // Reload completion percentage and suggestions
         const completionResponse = await getProviderProfileCompletion();
         if (completionResponse.success) {
           setProfileCompletion(completionResponse.data.completion || 0);
           setCompletionSuggestions(completionResponse.data.suggestions || []);
         }
+      } else {
+        toast({
+          title: "Error",
+          description: response.error || "Failed to save profile",
+          variant: "destructive",
+        });
       }
     } catch (error) {
       console.error("Error saving profile:", error);
@@ -508,12 +543,111 @@ export default function ProviderProfilePage(_props: Props) {
     }
   };
 
+  // Validate profile form
+  const validateProfile = () => {
+    const errors: typeof profileFormErrors = {};
+
+    // Name, email, and phone are not editable - no validation needed
+
+    // Bio validation (optional but if provided, should have minimum length)
+    if (profileData.bio.trim() && profileData.bio.trim().length < 10) {
+      errors.bio = "Bio should be at least 10 characters";
+    }
+
+    // Hourly rate validation
+    if (profileData.hourlyRate < 0) {
+      errors.hourlyRate = "Hourly rate cannot be negative";
+    } else if (profileData.hourlyRate > 0 && profileData.hourlyRate < 1) {
+      errors.hourlyRate = "Hourly rate must be at least RM 1";
+    }
+
+    // Website validation (optional but must be valid URL if provided)
+    if (profileData.website.trim()) {
+      try {
+        const url = profileData.website.trim();
+        // Add protocol if missing
+        const urlWithProtocol = url.startsWith("http://") || url.startsWith("https://") 
+          ? url 
+          : `https://${url}`;
+        new URL(urlWithProtocol);
+      } catch {
+        errors.website = "Please enter a valid website URL";
+      }
+    }
+
+    // Portfolio links validation
+    if (profileData.portfolioLinks.length > 0) {
+      const invalidLinks = profileData.portfolioLinks.filter((link) => {
+        if (!link.trim()) return true;
+        try {
+          const url = link.trim();
+          const urlWithProtocol = url.startsWith("http://") || url.startsWith("https://") 
+            ? url 
+            : `https://${url}`;
+          new URL(urlWithProtocol);
+          return false;
+        } catch {
+          return true;
+        }
+      });
+      if (invalidLinks.length > 0) {
+        errors.portfolioLinks = "All portfolio links must be valid URLs";
+      }
+    }
+
+    // Languages validation
+    if (profileData.languages.length === 0) {
+      errors.languages = "At least one language is required";
+    }
+
+    // Skills validation
+    if (profileData.skills.length === 0) {
+      errors.skills = "At least one skill is required";
+    }
+
+    // Years of experience validation
+    if (profileData.yearsExperience < 0) {
+      errors.yearsExperience = "Years of experience cannot be negative";
+    }
+
+    // Budget validation
+    if (profileData.minimumProjectBudget < 0) {
+      errors.minimumProjectBudget = "Minimum budget cannot be negative";
+    }
+    if (profileData.maximumProjectBudget < 0) {
+      errors.maximumProjectBudget = "Maximum budget cannot be negative";
+    }
+    if (
+      profileData.minimumProjectBudget > 0 &&
+      profileData.maximumProjectBudget > 0 &&
+      profileData.minimumProjectBudget > profileData.maximumProjectBudget
+    ) {
+      errors.minimumProjectBudget = "Minimum budget cannot exceed maximum budget";
+      errors.maximumProjectBudget = "Maximum budget must be greater than minimum budget";
+    }
+
+    // Team size validation
+    if (profileData.teamSize < 1) {
+      errors.teamSize = "Team size must be at least 1";
+    }
+
+    setProfileFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   // Handle input changes
   const handleInputChange = (field: string, value: string | number) => {
     setProfileData((prev) => ({
       ...prev,
       [field]: value,
     }));
+    // Clear error for this field when user starts typing
+    if (profileFormErrors[field as keyof typeof profileFormErrors]) {
+      setProfileFormErrors((prev) => ({
+        ...prev,
+        [field]: undefined,
+      }));
+    }
   };
 
   // Handle skills array changes
@@ -629,15 +763,45 @@ export default function ProviderProfilePage(_props: Props) {
   };
 
   const handleAddPortfolioLink = () => {
-    if (
-      newPortfolioLink.trim() &&
-      !profileData.portfolioLinks.includes(newPortfolioLink.trim())
-    ) {
+    if (!newPortfolioLink.trim()) {
+      return;
+    }
+
+    // Validate URL format
+    try {
+      const url = newPortfolioLink.trim();
+      const urlWithProtocol = url.startsWith("http://") || url.startsWith("https://") 
+        ? url 
+        : `https://${url}`;
+      new URL(urlWithProtocol);
+    } catch {
+      toast({
+        title: "Invalid URL",
+        description: "Please enter a valid URL (e.g., https://github.com/username)",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!profileData.portfolioLinks.includes(newPortfolioLink.trim())) {
       setProfileData((prev) => ({
         ...prev,
         portfolioLinks: [...prev.portfolioLinks, newPortfolioLink.trim()],
       }));
       setNewPortfolioLink("");
+      // Clear portfolio links error if it exists
+      if (profileFormErrors.portfolioLinks) {
+        setProfileFormErrors((prev) => ({
+          ...prev,
+          portfolioLinks: undefined,
+        }));
+      }
+    } else {
+      toast({
+        title: "Duplicate Link",
+        description: "This portfolio link has already been added",
+        variant: "destructive",
+      });
     }
   };
 
@@ -1204,42 +1368,55 @@ export default function ProviderProfilePage(_props: Props) {
 
   return (
     <ProviderLayout>
-      <div className="space-y-8">
+      <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">My Profile</h1>
-            <p className="text-gray-600">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">My Profile</h1>
+            <p className="text-sm sm:text-base text-gray-600 mt-1">
               Manage your professional profile and showcase your expertise
             </p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
             {/* <Button variant="outline">
               <Eye className="w-4 h-4 mr-2" />
               Preview Profile
             </Button> */}
             {isEditing ? (
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setIsEditing(false)}>
+              <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsEditing(false);
+                    setProfileFormErrors({}); // Clear errors when canceling
+                  }}
+                  className="w-full sm:w-auto text-xs sm:text-sm"
+                >
                   Cancel
                 </Button>
-                <Button onClick={handleSaveProfile} disabled={saving}>
+                <Button onClick={handleSaveProfile} disabled={saving} className="w-full sm:w-auto text-xs sm:text-sm">
                   {saving ? (
                     <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 animate-spin" />
                       Saving...
                     </>
                   ) : (
                     <>
-                      <CheckCircle className="w-4 h-4 mr-2" />
+                      <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                       Save Changes
                     </>
                   )}
                 </Button>
               </div>
             ) : (
-              <Button onClick={() => setIsEditing(true)}>
-              <Edit className="w-4 h-4 mr-2" />
+              <Button
+                onClick={() => {
+                  setIsEditing(true);
+                  setProfileFormErrors({}); // Clear any previous errors when entering edit mode
+                }}
+                className="w-full sm:w-auto text-xs sm:text-sm"
+              >
+              <Edit className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                 Edit Profile
             </Button>
             )}
@@ -1248,45 +1425,45 @@ export default function ProviderProfilePage(_props: Props) {
 
         {/* Profile Completion */}
         <Card className="border-blue-200 bg-blue-50">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-4">
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 mb-3 sm:mb-4">
               <div>
-                <h3 className="font-semibold text-blue-900">
+                <h3 className="font-semibold text-sm sm:text-base text-blue-900">
                   Profile Completion
                 </h3>
-                <p className="text-sm text-blue-700">
+                <p className="text-xs sm:text-sm text-blue-700 mt-1">
                   Complete your profile to attract more clients
                 </p>
               </div>
-              <div className="text-right">
-                <p className="text-2xl font-bold text-blue-600">
+              <div className="text-left sm:text-right">
+                <p className="text-xl sm:text-2xl font-bold text-blue-600">
                   {profileCompletion}%
                 </p>
               </div>
             </div>
-            <Progress value={profileCompletion} className="h-2 mb-4" />
+            <Progress value={profileCompletion} className="h-2 mb-3 sm:mb-4" />
             {completionSuggestions.length > 0 && (
-              <div className="mt-4">
-                <p className="text-sm font-medium text-blue-900 mb-2">
+              <div className="mt-3 sm:mt-4">
+                <p className="text-xs sm:text-sm font-medium text-blue-900 mb-2">
                   To complete your profile:
                 </p>
                 <ul className="space-y-1">
                   {completionSuggestions.map((suggestion, index) => (
                     <li
                       key={index}
-                      className="text-sm text-blue-700 flex items-start gap-2"
+                      className="text-xs sm:text-sm text-blue-700 flex items-start gap-2"
                     >
-                      <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                      <span>{suggestion}</span>
+                      <AlertCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 mt-0.5 flex-shrink-0" />
+                      <span className="break-words">{suggestion}</span>
                     </li>
                   ))}
                 </ul>
             </div>
             )}
             {profileCompletion === 100 && (
-              <div className="mt-4 flex items-center gap-2 text-green-700">
-                <CheckCircle className="w-5 h-5" />
-                <span className="text-sm font-medium">
+              <div className="mt-3 sm:mt-4 flex items-center gap-2 text-green-700">
+                <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
+                <span className="text-xs sm:text-sm font-medium">
                   Your profile is complete! 🎉
                 </span>
               </div>
@@ -1294,32 +1471,32 @@ export default function ProviderProfilePage(_props: Props) {
           </CardContent>
         </Card>
 
-        <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
-            <TabsTrigger value="skills">Skills</TabsTrigger>
-            <TabsTrigger value="reviews">Reviews</TabsTrigger>
-            <TabsTrigger value="verification">Verification</TabsTrigger>
+        <Tabs defaultValue="overview" className="space-y-4 sm:space-y-6">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5 h-auto">
+            <TabsTrigger value="overview" className="text-xs sm:text-sm px-2 sm:px-4">Overview</TabsTrigger>
+            <TabsTrigger value="portfolio" className="text-xs sm:text-sm px-2 sm:px-4">Portfolio</TabsTrigger>
+            <TabsTrigger value="skills" className="text-xs sm:text-sm px-2 sm:px-4">Skills</TabsTrigger>
+            <TabsTrigger value="reviews" className="text-xs sm:text-sm px-2 sm:px-4">Reviews</TabsTrigger>
+            <TabsTrigger value="verification" className="text-xs sm:text-sm px-2 sm:px-4">Verification</TabsTrigger>
           </TabsList>
 
           {/* Overview */}
           <TabsContent value="overview">
-            <div className="grid lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2 space-y-6">
+            <div className="grid lg:grid-cols-3 gap-4 sm:gap-6">
+              <div className="lg:col-span-2 space-y-4 sm:space-y-6">
                 {/* Basic Info */}
                 <Card>
-                  <CardHeader>
-                    <CardTitle>Basic Information</CardTitle>
+                  <CardHeader className="p-4 sm:p-6">
+                    <CardTitle className="text-lg sm:text-xl">Basic Information</CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-6">
-                    <div className="flex items-start space-x-6">
-                      <div className="relative">
-                        <Avatar className="w-24 h-24">
+                  <CardContent className="p-4 sm:p-6 space-y-4 sm:space-y-6">
+                    <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-6">
+                      <div className="relative flex-shrink-0">
+                        <Avatar className="w-20 h-20 sm:w-24 sm:h-24">
                           <AvatarImage
                             src={getProfileImageUrl(profileData.profileImageUrl)}
                           />
-                          <AvatarFallback className="text-lg">
+                          <AvatarFallback className="text-base sm:text-lg">
                             {profileData.name
                               ?.split(" ")
                               .map((n) => n[0])
@@ -1338,58 +1515,58 @@ export default function ProviderProfilePage(_props: Props) {
                             />
                             <Button
                               size="sm"
-                              className="absolute -bottom-2 -right-2 rounded-full w-8 h-8 p-0"
+                              className="absolute -bottom-2 -right-2 rounded-full w-7 h-7 sm:w-8 sm:h-8 p-0"
                               onClick={handleImageClick}
                               disabled={uploadingImage}
                             >
                               {uploadingImage ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
+                                <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 animate-spin" />
                               ) : (
-                                <Camera className="w-4 h-4" />
+                                <Camera className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                               )}
                           </Button>
                           </>
                         )}
                       </div>
-                      <div className="flex-1 space-y-4">
+                      <div className="flex-1 min-w-0 space-y-3 sm:space-y-4">
                         {isEditing ? (
                           <>
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                               <div>
-                                <Label htmlFor="name">Full Name</Label>
+                                <Label htmlFor="name" className="text-xs sm:text-sm">Full Name</Label>
                                 <Input
                                   id="name"
                                   value={profileData.name}
-                                  onChange={(e) =>
-                                    handleInputChange("name", e.target.value)
-                                  }
+                                  disabled={true}
+                                  className="bg-gray-50 text-sm sm:text-base"
                                 />
+                                <p className="text-xs text-gray-500 mt-1">Contact support to change name</p>
                               </div>
                               <div>
-                                <Label htmlFor="email">Email</Label>
+                                <Label htmlFor="email" className="text-xs sm:text-sm">Email</Label>
                                 <Input
                                   id="email"
                                   type="email"
                                   value={profileData.email}
-                                  onChange={(e) =>
-                                    handleInputChange("email", e.target.value)
-                                  }
+                                  disabled={true}
+                                  className="bg-gray-50 text-sm sm:text-base"
                                 />
+                                <p className="text-xs text-gray-500 mt-1">Contact support to change email</p>
                               </div>
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                               <div>
-                                <Label htmlFor="phone">Phone</Label>
+                                <Label htmlFor="phone" className="text-xs sm:text-sm">Phone</Label>
                                 <Input
                                   id="phone"
                                   value={profileData.phone}
-                                  onChange={(e) =>
-                                    handleInputChange("phone", e.target.value)
-                                  }
+                                  disabled={true}
+                                  className="bg-gray-50 text-sm sm:text-base"
                                 />
+                                <p className="text-xs text-gray-500 mt-1">Contact support to change phone</p>
                               </div>
                               <div>
-                                <Label htmlFor="location">Location</Label>
+                                <Label htmlFor="location" className="text-xs sm:text-sm">Location</Label>
                                 <Input
                                   id="location"
                                   value={profileData.location}
@@ -1399,11 +1576,17 @@ export default function ProviderProfilePage(_props: Props) {
                                       e.target.value
                                     )
                                   }
+                                  className={`text-sm sm:text-base ${profileFormErrors.location ? "border-red-500" : ""}`}
                                 />
+                                {profileFormErrors.location && (
+                                  <p className="text-xs text-red-600 mt-1">
+                                    {profileFormErrors.location}
+                                  </p>
+                                )}
                               </div>
                             </div>
                             <div>
-                              <Label htmlFor="major">Major/Title</Label>
+                              <Label htmlFor="major" className="text-xs sm:text-sm">Major/Title</Label>
                               <Input
                                 id="major"
                                 value={profileData.major}
@@ -1411,10 +1594,16 @@ export default function ProviderProfilePage(_props: Props) {
                                   handleInputChange("major", e.target.value)
                                 }
                                 placeholder="e.g., Full Stack Developer, UI/UX Designer..."
+                                className={`text-sm sm:text-base ${profileFormErrors.major ? "border-red-500" : ""}`}
                               />
+                              {profileFormErrors.major && (
+                                <p className="text-xs text-red-600 mt-1">
+                                  {profileFormErrors.major}
+                                </p>
+                              )}
                             </div>
                             <div>
-                              <Label htmlFor="bio">Bio</Label>
+                              <Label htmlFor="bio" className="text-xs sm:text-sm">Bio</Label>
                               <Textarea
                                 id="bio"
                                 value={profileData.bio}
@@ -1423,39 +1612,45 @@ export default function ProviderProfilePage(_props: Props) {
                                 }
                                 placeholder="Tell clients about your experience and expertise..."
                                 rows={4}
+                                className={`text-sm sm:text-base ${profileFormErrors.bio ? "border-red-500" : ""}`}
                               />
+                              {profileFormErrors.bio && (
+                                <p className="text-xs text-red-600 mt-1">
+                                  {profileFormErrors.bio}
+                                </p>
+                              )}
                             </div>
                           </>
                         ) : (
                           <>
                             <div>
-                              <h2 className="text-2xl font-bold text-gray-900">
+                              <h2 className="text-xl sm:text-2xl font-bold text-gray-900 break-words">
                                 {profileData.name}
                               </h2>
-                              <p className="text-lg text-gray-600">
+                              <p className="text-sm sm:text-lg text-gray-600 break-words">
                                 {profileData.email}
                               </p>
-                              <p className="text-gray-500">
+                              <p className="text-xs sm:text-base text-gray-500 break-words">
                                 {profileData.phone}
                               </p>
                             </div>
-                            <div className="flex items-center gap-4 text-sm text-gray-500">
+                            <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-500">
                               <div className="flex items-center gap-1">
-                                <MapPin className="w-4 h-4" />
-                                {profileData.location}
+                                <MapPin className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
+                                <span className="break-words">{profileData.location}</span>
                               </div>
                               <div className="flex items-center gap-1">
-                                <Star className="w-4 h-4 text-yellow-400 fill-current" />
+                                <Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-yellow-400 fill-current flex-shrink-0" />
                                 {profileStats.rating} (
                                 {profileStats.totalReviews} reviews)
                               </div>
                               <div className="flex items-center gap-1">
-                                <Calendar className="w-4 h-4" />
+                                <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
                                 Joined Jan 2023
                               </div>
                               <div className="flex items-center gap-1">
                                 <CheckCircle
-                                  className={`w-4 h-4 ${
+                                  className={`w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0 ${
                                     profileData.availability === "available"
                                       ? "text-green-500"
                                       : profileData.availability === "busy"
@@ -1477,15 +1672,15 @@ export default function ProviderProfilePage(_props: Props) {
                       <>
                         {profileData.major && (
                           <div>
-                            <Label>Major/Title</Label>
-                            <p className="text-gray-600 mt-2">
+                            <Label className="text-xs sm:text-sm">Major/Title</Label>
+                            <p className="text-sm sm:text-base text-gray-600 mt-2 break-words">
                               {profileData.major}
                             </p>
                           </div>
                         )}
                         <div>
-                          <Label>Professional Bio</Label>
-                          <p className="text-gray-600 mt-2">
+                          <Label className="text-xs sm:text-sm">Professional Bio</Label>
+                          <p className="text-sm sm:text-base text-gray-600 mt-2 break-words">
                             {profileData.bio || "No bio provided"}
                           </p>
                         </div>
@@ -1493,30 +1688,37 @@ export default function ProviderProfilePage(_props: Props) {
                     )}
 
                     {isEditing && (
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                         <div>
-                          <Label htmlFor="hourlyRate">Hourly Rate (RM)</Label>
+                          <Label htmlFor="hourlyRate" className="text-xs sm:text-sm">Hourly Rate (RM)</Label>
                           <Input
                             id="hourlyRate"
                             type="number"
+                            min="0"
                             value={profileData.hourlyRate}
                             onChange={(e) =>
                               handleInputChange(
                                 "hourlyRate",
-                                Number(e.target.value)
+                                Number(e.target.value) || 0
                               )
                             }
+                            className={`text-sm sm:text-base ${profileFormErrors.hourlyRate ? "border-red-500" : ""}`}
                           />
+                          {profileFormErrors.hourlyRate && (
+                            <p className="text-xs text-red-600 mt-1">
+                              {profileFormErrors.hourlyRate}
+                            </p>
+                          )}
                         </div>
                         <div>
-                          <Label htmlFor="availability">Availability</Label>
+                          <Label htmlFor="availability" className="text-xs sm:text-sm">Availability</Label>
                           <Select
                             value={profileData.availability}
                             onValueChange={(value) =>
                               handleInputChange("availability", value)
                             }
                           >
-                            <SelectTrigger>
+                            <SelectTrigger className="text-sm sm:text-base">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -1537,15 +1739,15 @@ export default function ProviderProfilePage(_props: Props) {
 
                 {/* Resume Management */}
                 <Card>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="flex items-center gap-2">
-                        <FileText className="w-5 h-5" />
+                  <CardHeader className="p-4 sm:p-6">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
+                      <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                        <FileText className="w-4 h-4 sm:w-5 sm:h-5" />
                         Resume
                       </CardTitle>
                     </div>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="p-4 sm:p-6">
                     <input
                       ref={resumeInputRef}
                       type="file"
@@ -1554,24 +1756,25 @@ export default function ProviderProfilePage(_props: Props) {
                       className="hidden"
                     />
                     {resume ? (
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between p-4 border rounded-lg">
-                          <div className="flex items-center gap-4">
-                            <FileText className="w-8 h-8 text-gray-400" />
-                            <div>
-                              <p className="font-medium">Resume uploaded</p>
-                              <p className="text-sm text-gray-500">
+                      <div className="space-y-3 sm:space-y-4">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 p-3 sm:p-4 border rounded-lg">
+                          <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
+                            <FileText className="w-6 h-6 sm:w-8 sm:h-8 text-gray-400 flex-shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium text-sm sm:text-base">Resume uploaded</p>
+                              <p className="text-xs sm:text-sm text-gray-500">
                                 Uploaded on {new Date(resume.uploadedAt).toLocaleDateString()}
                               </p>
                             </div>
                           </div>
-                          <div className="flex gap-2">
+                          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                             <Button
                               variant="outline"
                               size="sm"
                               onClick={handleDownloadResume}
+                              className="w-full sm:w-auto text-xs sm:text-sm"
                             >
-                              <ExternalLink className="w-4 h-4 mr-2" />
+                              <ExternalLink className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                               Download
                             </Button>
                             {isEditing && (
@@ -1580,11 +1783,12 @@ export default function ProviderProfilePage(_props: Props) {
                                 size="sm"
                                 onClick={handleResumeClick}
                                 disabled={uploadingResume}
+                                className="w-full sm:w-auto text-xs sm:text-sm"
                               >
                                 {uploadingResume ? (
-                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                  <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 animate-spin" />
                                 ) : (
-                                  <Upload className="w-4 h-4 mr-2" />
+                                  <Upload className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                                 )}
                                 Replace
                               </Button>
@@ -1595,11 +1799,12 @@ export default function ProviderProfilePage(_props: Props) {
                                 size="sm"
                                 onClick={handleDeleteResume}
                                 disabled={deletingResume}
+                                className="w-full sm:w-auto text-xs sm:text-sm"
                               >
                                 {deletingResume ? (
-                                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                  <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 animate-spin" />
                                 ) : (
-                                  <Trash2 className="w-4 h-4 mr-2" />
+                                  <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                                 )}
                                 Delete
                               </Button>
@@ -1608,22 +1813,23 @@ export default function ProviderProfilePage(_props: Props) {
                         </div>
                       </div>
                     ) : (
-                      <div className="text-center py-8">
-                        <FileText className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                        <p className="text-gray-500 mb-4">No resume uploaded yet</p>
+                      <div className="text-center py-6 sm:py-8">
+                        <FileText className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-3 sm:mb-4 text-gray-300" />
+                        <p className="text-sm sm:text-base text-gray-500 mb-3 sm:mb-4">No resume uploaded yet</p>
                         {isEditing && (
                           <Button
                             onClick={handleResumeClick}
                             disabled={uploadingResume}
+                            className="text-xs sm:text-sm"
                           >
                             {uploadingResume ? (
                               <>
-                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 animate-spin" />
                                 Uploading...
                               </>
                             ) : (
                               <>
-                                <Upload className="w-4 h-4 mr-2" />
+                                <Upload className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                                 Upload Resume (PDF)
                               </>
                             )}
@@ -1636,53 +1842,53 @@ export default function ProviderProfilePage(_props: Props) {
 
                 {/* Certifications */}
                 <Card>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="flex items-center gap-2">
-                        <Award className="w-5 h-5" />
+                  <CardHeader className="p-4 sm:p-6">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
+                      <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                        <Award className="w-4 h-4 sm:w-5 sm:h-5" />
                         Certifications
                       </CardTitle>
                       {isEditing && (
-                        <Button size="sm" onClick={handleAddCertification}>
-                          <Plus className="w-4 h-4 mr-2" />
+                        <Button size="sm" onClick={handleAddCertification} className="w-full sm:w-auto text-xs sm:text-sm">
+                          <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                           Add Certification
                         </Button>
                       )}
                     </div>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="p-4 sm:p-6">
                     {loadingCertifications ? (
-                      <div className="flex items-center justify-center py-8">
-                        <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
-                        <span className="ml-2 text-gray-600">
+                      <div className="flex items-center justify-center py-6 sm:py-8">
+                        <Loader2 className="h-5 w-5 sm:h-6 sm:w-6 animate-spin text-gray-400" />
+                        <span className="ml-2 text-xs sm:text-sm text-gray-600">
                           Loading certifications...
                         </span>
                       </div>
                     ) : certifications.length === 0 ? (
-                      <div className="text-center py-8 text-gray-500">
-                        <Award className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                        <p>No certifications added yet</p>
+                      <div className="text-center py-6 sm:py-8 text-gray-500">
+                        <Award className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-3 sm:mb-4 text-gray-300" />
+                        <p className="text-sm sm:text-base">No certifications added yet</p>
                         {isEditing && (
-                          <p className="text-sm mt-2">
+                          <p className="text-xs sm:text-sm mt-2">
                             Click &quot;Add Certification&quot; to add your professional
                             certifications
                           </p>
                         )}
                       </div>
                     ) : (
-                    <div className="space-y-4">
+                    <div className="space-y-3 sm:space-y-4">
                       {certifications.map((cert, index) => (
-                          <div key={cert.id || index} className="flex items-center justify-between p-4 border rounded-lg">
-                            <div className="flex items-center space-x-3 flex-1">
-                              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                              <Award className="w-6 h-6 text-blue-600" />
+                          <div key={cert.id || index} className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 p-3 sm:p-4 border rounded-lg">
+                            <div className="flex items-center space-x-3 flex-1 min-w-0 w-full sm:w-auto">
+                              <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                              <Award className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
                             </div>
                               <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
-                                <p className="font-medium">{cert.name}</p>
-                                  {cert.verified && <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />}
+                                <p className="font-medium text-sm sm:text-base break-words">{cert.name}</p>
+                                  {cert.verified && <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-500 flex-shrink-0" />}
                               </div>
-                              <p className="text-sm text-gray-600">{cert.issuer}</p>
+                              <p className="text-xs sm:text-sm text-gray-600 break-words">{cert.issuer}</p>
                                 <p className="text-xs text-gray-500">
                                   Issued:{" "}
                                   {cert.issuedDate
@@ -1692,7 +1898,7 @@ export default function ProviderProfilePage(_props: Props) {
                                     : "N/A"}
                                 </p>
                                 {cert.serialNumber && (
-                                  <p className="text-xs text-gray-500 mt-1">
+                                  <p className="text-xs text-gray-500 mt-1 break-words">
                                     Serial: {cert.serialNumber}
                                   </p>
                                 )}
@@ -1701,7 +1907,7 @@ export default function ProviderProfilePage(_props: Props) {
                                     href={cert.sourceUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="text-xs text-blue-600 hover:underline mt-1 inline-block"
+                                    className="text-xs text-blue-600 active:text-blue-800 sm:hover:underline mt-1 inline-block break-all"
                                   >
                                     Verify Certificate ↗
                                   </a>
@@ -1709,13 +1915,14 @@ export default function ProviderProfilePage(_props: Props) {
                             </div>
                           </div>
                           {isEditing && (
-                              <div className="flex gap-2 ml-4">
+                              <div className="flex gap-2 w-full sm:w-auto sm:ml-4">
                                 <Button
                                   variant="outline"
                                   size="sm"
                                   onClick={() => handleEditCertification(index)}
+                                  className="flex-1 sm:flex-none text-xs sm:text-sm"
                                 >
-                                  <Edit className="w-4 h-4" />
+                                  <Edit className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                                 </Button>
                                 <Button
                                   variant="outline"
@@ -1723,8 +1930,9 @@ export default function ProviderProfilePage(_props: Props) {
                                   onClick={() =>
                                     handleDeleteCertification(index)
                                   }
+                                  className="flex-1 sm:flex-none text-xs sm:text-sm"
                                 >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                             </Button>
                               </div>
                           )}
@@ -1737,7 +1945,7 @@ export default function ProviderProfilePage(_props: Props) {
               </div>
 
               {/* Sidebar */}
-              <div className="space-y-6">
+              <div className="space-y-4 sm:space-y-6">
                 {/* 
                 <Card>
                   <CardHeader>
@@ -1762,50 +1970,61 @@ export default function ProviderProfilePage(_props: Props) {
 
                 {/* Contact Info */}
                 <Card>
-                  <CardHeader>
-                    <CardTitle>Contact Information</CardTitle>
+                  <CardHeader className="p-4 sm:p-6">
+                    <CardTitle className="text-base sm:text-lg">Contact Information</CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-4">
+                  <CardContent className="p-4 sm:p-6 space-y-3 sm:space-y-4">
                     {isEditing ? (
                       <>
                         <div>
-                          <Label htmlFor="sidebar-email">Email</Label>
+                          <Label htmlFor="sidebar-email" className="text-xs sm:text-sm">Email</Label>
                           <Input
                             id="sidebar-email"
                             type="email"
                             value={profileData.email}
-                            onChange={(e) =>
-                              handleInputChange("email", e.target.value)
-                            }
+                            disabled={true}
+                            className="bg-gray-50 text-sm sm:text-base"
                           />
+                          <p className="text-xs text-gray-500 mt-1">Contact support to change email</p>
                         </div>
                         <div>
-                          <Label htmlFor="sidebar-phone">Phone</Label>
+                          <Label htmlFor="sidebar-phone" className="text-xs sm:text-sm">Phone</Label>
                           <Input
                             id="sidebar-phone"
                             value={profileData.phone}
-                            onChange={(e) =>
-                              handleInputChange("phone", e.target.value)
-                            }
+                            disabled={true}
+                            className="bg-gray-50 text-sm sm:text-base"
                           />
+                          <p className="text-xs text-gray-500 mt-1">Contact support to change phone</p>
                         </div>
                         <div>
-                          <Label htmlFor="sidebar-website">Website</Label>
+                          <Label htmlFor="sidebar-website" className="text-xs sm:text-sm">Website</Label>
                           <Input
                             id="sidebar-website"
                             value={profileData.website}
                             onChange={(e) =>
                               handleInputChange("website", e.target.value)
                             }
+                            className={`text-sm sm:text-base ${profileFormErrors.website ? "border-red-500" : ""}`}
                           />
+                          {profileFormErrors.website && (
+                            <p className="text-xs text-red-600 mt-1">
+                              {profileFormErrors.website}
+                            </p>
+                          )}
                         </div>
-                        <div className="space-y-4">
-                          <Label>Languages *</Label>
-                          <p className="text-sm text-gray-600">
+                        <div className="space-y-3 sm:space-y-4">
+                          <Label className="text-xs sm:text-sm">Languages *</Label>
+                          <p className="text-xs sm:text-sm text-gray-600">
                             Add languages you can communicate in
                           </p>
+                          {profileFormErrors.languages && (
+                            <p className="text-xs text-red-600">
+                              {profileFormErrors.languages}
+                            </p>
+                          )}
 
-                          <div className="flex gap-2">
+                          <div className="flex flex-col sm:flex-row gap-2">
                           <Input
                               value={customLanguage}
                               onChange={(e) =>
@@ -1816,27 +2035,29 @@ export default function ProviderProfilePage(_props: Props) {
                                 e.key === "Enter" &&
                                 (e.preventDefault(), handleAddCustomLanguage())
                               }
+                              className="text-sm sm:text-base"
                             />
                             <Button
                               type="button"
                               onClick={handleAddCustomLanguage}
                               variant="outline"
+                              className="w-full sm:w-auto text-xs sm:text-sm"
                             >
-                              <Plus className="w-4 h-4" />
+                              <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                             </Button>
                           </div>
 
                           {profileData.languages.length > 0 && (
                             <div className="space-y-2">
-                              <Label className="text-sm font-medium">
+                              <Label className="text-xs sm:text-sm font-medium">
                                 Selected Languages (
                                 {profileData.languages.length})
                               </Label>
-                              <div className="flex flex-wrap gap-2 p-3 border rounded-lg bg-gray-50">
+                              <div className="flex flex-wrap gap-1.5 sm:gap-2 p-2 sm:p-3 border rounded-lg bg-gray-50">
                                 {profileData.languages.map((language) => (
                                   <Badge
                                     key={language}
-                                    className="bg-green-600 hover:bg-green-700 text-white pr-1"
+                                    className="bg-green-600 active:bg-green-700 sm:hover:bg-green-700 text-white pr-1 text-xs"
                                   >
                                     {language}
                                     <button
@@ -1844,7 +2065,7 @@ export default function ProviderProfilePage(_props: Props) {
                                       onClick={() =>
                                         handleRemoveLanguage(language)
                                       }
-                                      className="ml-1 hover:bg-green-800 rounded-full p-0.5"
+                                      className="ml-1 active:bg-green-800 sm:hover:bg-green-800 rounded-full p-0.5"
                                     >
                                       <X className="w-3 h-3" />
                                     </button>
@@ -1855,10 +2076,10 @@ export default function ProviderProfilePage(_props: Props) {
                           )}
 
                           <div className="space-y-2">
-                            <Label className="text-sm font-medium">
+                            <Label className="text-xs sm:text-sm font-medium">
                               Common Languages (click to add)
                             </Label>
-                            <div className="flex flex-wrap gap-2 p-3 border rounded-lg bg-gray-50">
+                            <div className="flex flex-wrap gap-1.5 sm:gap-2 p-2 sm:p-3 border rounded-lg bg-gray-50">
                               {commonLanguages
                                 .filter(
                                   (language) =>
@@ -1868,7 +2089,7 @@ export default function ProviderProfilePage(_props: Props) {
                                   <Badge
                                     key={language}
                                     variant="outline"
-                                    className="cursor-pointer hover:bg-green-50 hover:border-green-300 transition-all duration-200"
+                                    className="cursor-pointer active:bg-green-50 active:border-green-300 sm:hover:bg-green-50 sm:hover:border-green-300 transition-all duration-200 text-xs"
                                     onClick={() =>
                                       handleLanguageToggle(language)
                                     }
@@ -1883,31 +2104,31 @@ export default function ProviderProfilePage(_props: Props) {
                     ) : (
                       <>
                         <div>
-                          <p className="text-sm text-gray-600">Email</p>
-                          <p className="font-medium">{profileData.email}</p>
+                          <p className="text-xs sm:text-sm text-gray-600">Email</p>
+                          <p className="font-medium text-sm sm:text-base break-words">{profileData.email}</p>
                         </div>
                         <div>
-                          <p className="text-sm text-gray-600">Phone</p>
-                          <p className="font-medium">{profileData.phone}</p>
+                          <p className="text-xs sm:text-sm text-gray-600">Phone</p>
+                          <p className="font-medium text-sm sm:text-base break-words">{profileData.phone}</p>
                         </div>
                         <div>
-                          <p className="text-sm text-gray-600">Website</p>
+                          <p className="text-xs sm:text-sm text-gray-600">Website</p>
                           {profileData.website ? (
                           <a
                             href={profileData.website}
-                            className="font-medium text-blue-600 hover:underline flex items-center gap-1"
+                            className="font-medium text-sm sm:text-base text-blue-600 active:text-blue-800 sm:hover:underline flex items-center gap-1 break-all"
                           >
                             {profileData.website}
-                            <ExternalLink className="w-3 h-3" />
+                            <ExternalLink className="w-3 h-3 flex-shrink-0" />
                           </a>
                           ) : (
-                            <p className="font-medium text-gray-500">
+                            <p className="font-medium text-sm sm:text-base text-gray-500">
                               No website provided
                             </p>
                           )}
                         </div>
                         <div>
-                          <p className="text-sm text-gray-600">Languages</p>
+                          <p className="text-xs sm:text-sm text-gray-600">Languages</p>
                           <div className="flex flex-wrap gap-1 mt-1">
                             {profileData.languages.map((language, index) => (
                               <Badge
@@ -1919,7 +2140,7 @@ export default function ProviderProfilePage(_props: Props) {
                               </Badge>
                             ))}
                             {profileData.languages.length === 0 && (
-                              <p className="text-gray-500 text-sm">
+                              <p className="text-gray-500 text-xs sm:text-sm">
                                 No languages specified
                               </p>
                             )}
@@ -1932,17 +2153,17 @@ export default function ProviderProfilePage(_props: Props) {
 
                 {/* Portfolio URLs */}
                 <Card>
-                  <CardHeader>
-                    <CardTitle>Portfolio Links</CardTitle>
+                  <CardHeader className="p-4 sm:p-6">
+                    <CardTitle className="text-base sm:text-lg">Portfolio Links</CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-4">
+                  <CardContent className="p-4 sm:p-6 space-y-3 sm:space-y-4">
                     {isEditing ? (
                       <>
-                        <p className="text-sm text-gray-600">
+                        <p className="text-xs sm:text-sm text-gray-600">
                           Add links to your GitHub, LinkedIn, portfolio website, or other
                           professional profiles
                         </p>
-                        <div className="flex gap-2">
+                        <div className="flex flex-col sm:flex-row gap-2">
                           <Input
                             value={newPortfolioLink}
                             onChange={(e) => setNewPortfolioLink(e.target.value)}
@@ -1952,32 +2173,39 @@ export default function ProviderProfilePage(_props: Props) {
                               e.key === "Enter" &&
                               (e.preventDefault(), handleAddPortfolioLink())
                             }
+                            className="text-sm sm:text-base"
                           />
                           <Button
                             type="button"
                             onClick={handleAddPortfolioLink}
                             variant="outline"
+                            className="w-full sm:w-auto text-xs sm:text-sm"
                           >
-                            <Plus className="w-4 h-4" />
+                            <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                           </Button>
                         </div>
 
+                        {profileFormErrors.portfolioLinks && (
+                          <p className="text-xs text-red-600">
+                            {profileFormErrors.portfolioLinks}
+                          </p>
+                        )}
                         {profileData.portfolioLinks.length > 0 && (
                           <div className="space-y-2">
-                            <Label className="text-sm font-medium">
+                            <Label className="text-xs sm:text-sm font-medium">
                               Portfolio Links ({profileData.portfolioLinks.length})
                             </Label>
                             <div className="space-y-2">
                               {profileData.portfolioLinks.map((url, index) => (
                                 <div
                                   key={index}
-                                  className="flex items-center justify-between p-3 bg-gray-50 border rounded-lg"
+                                  className="flex items-center justify-between p-2 sm:p-3 bg-gray-50 border rounded-lg gap-2"
                                 >
                                   <a
                                     href={url}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="text-blue-600 hover:text-blue-700 text-sm truncate flex-1"
+                                    className="text-blue-600 active:text-blue-800 sm:hover:text-blue-700 text-xs sm:text-sm truncate flex-1 break-all"
                                   >
                                     {url}
                                   </a>
@@ -1986,9 +2214,9 @@ export default function ProviderProfilePage(_props: Props) {
                                     onClick={() =>
                                       handleRemovePortfolioLink(url)
                                     }
-                                    className="ml-2 text-red-500 hover:text-red-700"
+                                    className="text-red-500 active:text-red-700 sm:hover:text-red-700 flex-shrink-0"
                                   >
-                                    <X className="w-4 h-4" />
+                                    <X className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                                   </button>
                                 </div>
                               ))}
@@ -1997,10 +2225,10 @@ export default function ProviderProfilePage(_props: Props) {
                         )}
 
                         {profileData.portfolioLinks.length === 0 && (
-                          <div className="text-center py-8 text-gray-500 border-2 border-dashed border-gray-200 rounded-lg">
-                            <Globe className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                            <p>No portfolio links added yet</p>
-                            <p className="text-sm">
+                          <div className="text-center py-6 sm:py-8 text-gray-500 border-2 border-dashed border-gray-200 rounded-lg">
+                            <Globe className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-3 sm:mb-4 text-gray-300" />
+                            <p className="text-sm sm:text-base">No portfolio links added yet</p>
+                            <p className="text-xs sm:text-sm mt-1">
                               Add links to showcase your work and professional
                               profiles (e.g., GitHub, LinkedIn, portfolio website)
                             </p>
@@ -2016,14 +2244,14 @@ export default function ProviderProfilePage(_props: Props) {
                               href={url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="flex items-center gap-2 text-blue-600 hover:underline"
+                              className="flex items-center gap-2 text-blue-600 active:text-blue-800 sm:hover:underline break-all"
                             >
-                              {url}
-                              <ExternalLink className="w-3 h-3" />
+                              <span className="break-all">{url}</span>
+                              <ExternalLink className="w-3 h-3 flex-shrink-0" />
                             </a>
                           ))
                         ) : (
-                          <p className="text-gray-500 text-sm">
+                          <p className="text-gray-500 text-xs sm:text-sm">
                             No portfolio links added
                           </p>
                         )}
@@ -2037,55 +2265,55 @@ export default function ProviderProfilePage(_props: Props) {
 
           {/* Portfolio */}
           <TabsContent value="portfolio">
-            <div className="space-y-8">
+            <div className="space-y-6 sm:space-y-8">
               {/* Projects Completed Section (Platform Projects) */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
+              <div className="space-y-3 sm:space-y-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
                   <div>
-                    <h2 className="text-2xl font-bold">Projects Completed</h2>
-                    <p className="text-gray-600">
+                    <h2 className="text-xl sm:text-2xl font-bold">Projects Completed</h2>
+                    <p className="text-sm sm:text-base text-gray-600 mt-1">
                       Projects you&apos;ve completed on this platform
                     </p>
                   </div>
                 </div>
 
                 {loadingPortfolio ? (
-                  <div className="flex items-center justify-center py-12">
-                    <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-                    <span className="ml-2 text-gray-600">
+                  <div className="flex items-center justify-center py-8 sm:py-12">
+                    <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin text-gray-400" />
+                    <span className="ml-2 text-sm sm:text-base text-gray-600">
                       Loading projects...
                     </span>
                   </div>
                 ) : portfolioProjects.length === 0 ? (
                   <Card>
-                    <CardContent className="p-12 text-center">
-                      <Award className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-                      <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    <CardContent className="p-8 sm:p-12 text-center">
+                      <Award className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 text-gray-300" />
+                      <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
                         No completed projects yet
                       </h3>
-                      <p className="text-gray-600">
+                      <p className="text-sm sm:text-base text-gray-600">
                         Your completed projects will appear here automatically
                         once you finish working on them.
                       </p>
                     </CardContent>
                   </Card>
                 ) : (
-                  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                     {portfolioProjects.map((project) => (
-                      <Card key={project.id} className="hover:shadow-lg transition-shadow">
-                        <div className="relative bg-gradient-to-br from-blue-50 to-purple-50 h-48 flex items-center justify-center rounded-t-lg">
-                          <div className="text-center p-4">
-                            <div className="w-16 h-16 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-2">
-                              <Award className="w-8 h-8 text-blue-600" />
+                      <Card key={project.id} className="active:shadow-md sm:hover:shadow-lg transition-shadow">
+                        <div className="relative bg-gradient-to-br from-blue-50 to-purple-50 h-40 sm:h-48 flex items-center justify-center rounded-t-lg">
+                          <div className="text-center p-3 sm:p-4">
+                            <div className="w-12 h-12 sm:w-16 sm:h-16 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-2">
+                              <Award className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600" />
                             </div>
                             <Badge variant="secondary" className="text-xs">
                               {project.category || "Project"}
                             </Badge>
                           </div>
                         </div>
-                        <CardContent className="p-4">
-                          <h3 className="font-semibold text-lg mb-2 line-clamp-1">{project.title}</h3>
-                          <p className="text-gray-600 text-sm mb-3 line-clamp-2">{project.description || "No description provided"}</p>
+                        <CardContent className="p-3 sm:p-4">
+                          <h3 className="font-semibold text-base sm:text-lg mb-2 line-clamp-1 break-words">{project.title}</h3>
+                          <p className="text-gray-600 text-xs sm:text-sm mb-3 line-clamp-2 break-words">{project.description || "No description provided"}</p>
                           {project.technologies && project.technologies.length > 0 && (
                             <div className="flex flex-wrap gap-1 mb-3">
                               {project.technologies.slice(0, 6).map((tech: string, index: number) => (
@@ -2100,8 +2328,8 @@ export default function ProviderProfilePage(_props: Props) {
                               )}
                             </div>
                           )}
-                          <div className="flex items-center justify-between text-sm text-gray-500 mb-2">
-                            <span className="font-medium">{project.client}</span>
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 sm:gap-0 text-xs sm:text-sm text-gray-500 mb-2">
+                            <span className="font-medium break-words">{project.client}</span>
                             {project.completedDate && (
                               <span>
                                 {new Date(project.completedDate).toLocaleDateString()}
@@ -2109,7 +2337,7 @@ export default function ProviderProfilePage(_props: Props) {
                             )}
                           </div>
                           {project.approvedPrice && (
-                            <div className="text-sm text-green-600 font-semibold">
+                            <div className="text-xs sm:text-sm text-green-600 font-semibold">
                               RM {Number(project.approvedPrice).toLocaleString()}
                             </div>
                           )}
@@ -2121,11 +2349,11 @@ export default function ProviderProfilePage(_props: Props) {
               </div>
 
               {/* Portfolio Section (External Work) */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
+              <div className="space-y-3 sm:space-y-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
                   <div>
-                    <h2 className="text-2xl font-bold">Portfolio</h2>
-                    <p className="text-gray-600">
+                    <h2 className="text-xl sm:text-2xl font-bold">Portfolio</h2>
+                    <p className="text-sm sm:text-base text-gray-600 mt-1">
                       Showcase your work and studies done outside this platform
                     </p>
                   </div>
@@ -2144,28 +2372,28 @@ export default function ProviderProfilePage(_props: Props) {
                       setPortfolioFormErrors({});
                       setEditingPortfolioIndex(null);
                       setShowPortfolioDialog(true);
-                    }}>
-                      <Plus className="w-4 h-4 mr-2" />
+                    }} className="w-full sm:w-auto text-xs sm:text-sm">
+                      <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                       Add Portfolio Item
                     </Button>
                   )}
                 </div>
 
                 {loadingPortfolioItems ? (
-                  <div className="flex items-center justify-center py-12">
-                    <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-                    <span className="ml-2 text-gray-600">
+                  <div className="flex items-center justify-center py-8 sm:py-12">
+                    <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin text-gray-400" />
+                    <span className="ml-2 text-sm sm:text-base text-gray-600">
                       Loading portfolio items...
                     </span>
                   </div>
                 ) : portfolioItems.length === 0 ? (
                   <Card>
-                    <CardContent className="p-12 text-center">
-                      <Globe className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-                      <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    <CardContent className="p-8 sm:p-12 text-center">
+                      <Globe className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 text-gray-300" />
+                      <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
                         No portfolio items yet
                       </h3>
-                      <p className="text-gray-600">
+                      <p className="text-sm sm:text-base text-gray-600">
                         {isEditing 
                           ? "Add your external work, studies, or projects to showcase your experience."
                           : "No portfolio items added yet."}
@@ -2173,11 +2401,11 @@ export default function ProviderProfilePage(_props: Props) {
                     </CardContent>
                   </Card>
                 ) : (
-                  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                     {portfolioItems.map((item, index) => (
-                      <Card key={item.id} className="hover:shadow-lg transition-shadow">
+                      <Card key={item.id} className="active:shadow-md sm:hover:shadow-lg transition-shadow">
                         {item.imageUrl ? (
-                          <div className="relative h-48 overflow-hidden rounded-t-lg bg-gray-100">
+                          <div className="relative h-40 sm:h-48 overflow-hidden rounded-t-lg bg-gray-100">
                             {(() => {
                               // Use getProfileImageUrl helper for consistent URL handling
                               const imageUrl = getProfileImageUrl(item.imageUrl);
@@ -2215,10 +2443,10 @@ export default function ProviderProfilePage(_props: Props) {
                             })()}
                           </div>
                         ) : (
-                          <div className="relative bg-gradient-to-br from-green-50 to-teal-50 h-48 flex items-center justify-center rounded-t-lg">
-                            <div className="text-center p-4">
-                              <div className="w-16 h-16 bg-green-100 rounded-lg flex items-center justify-center mx-auto mb-2">
-                                <Globe className="w-8 h-8 text-green-600" />
+                          <div className="relative bg-gradient-to-br from-green-50 to-teal-50 h-40 sm:h-48 flex items-center justify-center rounded-t-lg">
+                            <div className="text-center p-3 sm:p-4">
+                              <div className="w-12 h-12 sm:w-16 sm:h-16 bg-green-100 rounded-lg flex items-center justify-center mx-auto mb-2">
+                                <Globe className="w-6 h-6 sm:w-8 sm:h-8 text-green-600" />
                               </div>
                               <Badge variant="secondary" className="text-xs">
                                 Portfolio
@@ -2226,11 +2454,11 @@ export default function ProviderProfilePage(_props: Props) {
                             </div>
                           </div>
                         )}
-                        <CardContent className="p-4">
-                          <div className="flex items-start justify-between mb-2">
-                            <h3 className="font-semibold text-lg line-clamp-1 flex-1">{item.title}</h3>
+                        <CardContent className="p-3 sm:p-4">
+                          <div className="flex items-start justify-between mb-2 gap-2">
+                            <h3 className="font-semibold text-base sm:text-lg line-clamp-1 flex-1 break-words">{item.title}</h3>
                             {isEditing && (
-                              <div className="flex gap-1 ml-2">
+                              <div className="flex gap-1 flex-shrink-0">
                                 <Button
                                   variant="ghost"
                                   size="sm"
@@ -2249,8 +2477,9 @@ export default function ProviderProfilePage(_props: Props) {
                                     setEditingPortfolioIndex(index);
                                     setShowPortfolioDialog(true);
                                   }}
+                                  className="text-xs sm:text-sm"
                                 >
-                                  <Edit className="w-4 h-4" />
+                                  <Edit className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                                 </Button>
                                 <Button
                                   variant="ghost"
@@ -2288,13 +2517,14 @@ export default function ProviderProfilePage(_props: Props) {
                                       }
                                     }
                                   }}
+                                  className="text-xs sm:text-sm"
                                 >
-                                  <Trash2 className="w-4 h-4 text-red-500" />
+                                  <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-red-500" />
                                 </Button>
                               </div>
                             )}
                           </div>
-                          <p className="text-gray-600 text-sm mb-3 line-clamp-2">{item.description || "No description provided"}</p>
+                          <p className="text-gray-600 text-xs sm:text-sm mb-3 line-clamp-2 break-words">{item.description || "No description provided"}</p>
                           {item.techStack && item.techStack.length > 0 && (
                             <div className="flex flex-wrap gap-1 mb-3">
                               {item.techStack.slice(0, 6).map((tech: string, techIndex: number) => (
@@ -2309,8 +2539,8 @@ export default function ProviderProfilePage(_props: Props) {
                               )}
                             </div>
                           )}
-                          <div className="flex items-center justify-between text-sm text-gray-500 mb-2">
-                            {item.client && <span className="font-medium">{item.client}</span>}
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 sm:gap-0 text-xs sm:text-sm text-gray-500 mb-2">
+                            {item.client && <span className="font-medium break-words">{item.client}</span>}
                             {item.date && (
                               <span>
                                 {new Date(item.date).toLocaleDateString()}
@@ -2322,10 +2552,10 @@ export default function ProviderProfilePage(_props: Props) {
                               href={item.externalUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-sm text-blue-600 hover:underline flex items-center gap-1"
+                              className="text-xs sm:text-sm text-blue-600 active:text-blue-800 sm:hover:underline flex items-center gap-1"
                             >
                               View Project
-                              <ExternalLink className="w-3 h-3" />
+                              <ExternalLink className="w-3 h-3 flex-shrink-0" />
                             </a>
                           )}
                         </CardContent>
@@ -2339,17 +2569,17 @@ export default function ProviderProfilePage(_props: Props) {
 
           {/* Skills */}
           <TabsContent value="skills">
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
+            <div className="space-y-4 sm:space-y-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
                 <div>
-                  <h2 className="text-2xl font-bold">Skills & Expertise</h2>
-                  <p className="text-gray-600">
+                  <h2 className="text-xl sm:text-2xl font-bold">Skills & Expertise</h2>
+                  <p className="text-sm sm:text-base text-gray-600 mt-1">
                     Showcase your technical skills and expertise
                   </p>
                 </div>
                 {isEditing && (
-                <Button>
-                  <Plus className="w-4 h-4 mr-2" />
+                <Button className="w-full sm:w-auto text-xs sm:text-sm">
+                  <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                   Add Skill
                 </Button>
                 )}
@@ -2357,15 +2587,20 @@ export default function ProviderProfilePage(_props: Props) {
 
               {isEditing ? (
                 <Card>
-                  <CardContent className="p-6">
-                    <div className="space-y-4">
-                      <div className="space-y-4">
-                        <Label>Technical Skills *</Label>
-                        <p className="text-sm text-gray-600">
+                  <CardContent className="p-4 sm:p-6">
+                    <div className="space-y-3 sm:space-y-4">
+                      <div className="space-y-3 sm:space-y-4">
+                        <Label className="text-xs sm:text-sm">Technical Skills *</Label>
+                        <p className="text-xs sm:text-sm text-gray-600">
                           Add your technical skills and expertise
                         </p>
+                          {profileFormErrors.skills && (
+                            <p className="text-xs text-red-600">
+                              {profileFormErrors.skills}
+                            </p>
+                          )}
 
-                        <div className="flex gap-2">
+                        <div className="flex flex-col sm:flex-row gap-2">
                         <Input
                             value={customSkill}
                             onChange={(e) => setCustomSkill(e.target.value)}
@@ -2374,32 +2609,34 @@ export default function ProviderProfilePage(_props: Props) {
                               e.key === "Enter" &&
                               (e.preventDefault(), handleAddCustomSkill())
                             }
+                            className="text-sm sm:text-base"
                           />
                           <Button
                             type="button"
                             onClick={handleAddCustomSkill}
                             variant="outline"
+                            className="w-full sm:w-auto text-xs sm:text-sm"
                           >
-                            <Plus className="w-4 h-4" />
+                            <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                           </Button>
                         </div>
 
                         {profileData.skills.length > 0 && (
                           <div className="space-y-2">
-                            <Label className="text-sm font-medium">
+                            <Label className="text-xs sm:text-sm font-medium">
                               Selected Skills ({profileData.skills.length})
                             </Label>
-                            <div className="flex flex-wrap gap-2 p-3 border rounded-lg bg-gray-50 max-h-32 overflow-y-auto">
+                            <div className="flex flex-wrap gap-1.5 sm:gap-2 p-2 sm:p-3 border rounded-lg bg-gray-50 max-h-32 overflow-y-auto">
                               {profileData.skills.map((skill) => (
                                 <Badge
                                   key={skill}
-                                  className="bg-blue-600 hover:bg-blue-700 text-white pr-1"
+                                  className="bg-blue-600 active:bg-blue-700 sm:hover:bg-blue-700 text-white pr-1 text-xs"
                                 >
                                   {skill}
                                   <button
                                     type="button"
                                     onClick={() => handleRemoveSkill(skill)}
-                                    className="ml-1 hover:bg-blue-800 rounded-full p-0.5"
+                                    className="ml-1 active:bg-blue-800 sm:hover:bg-blue-800 rounded-full p-0.5"
                                   >
                                     <X className="w-3 h-3" />
                                   </button>
@@ -2410,10 +2647,10 @@ export default function ProviderProfilePage(_props: Props) {
                         )}
 
                         <div className="space-y-2">
-                          <Label className="text-sm font-medium">
+                          <Label className="text-xs sm:text-sm font-medium">
                             Popular Skills (click to add)
                           </Label>
-                          <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-3 border rounded-lg bg-gray-50">
+                          <div className="flex flex-wrap gap-1.5 sm:gap-2 max-h-40 overflow-y-auto p-2 sm:p-3 border rounded-lg bg-gray-50">
                             {popularSkills
                               .filter(
                                 (skill) => !profileData.skills.includes(skill)
@@ -2422,7 +2659,7 @@ export default function ProviderProfilePage(_props: Props) {
                                 <Badge
                                   key={skill}
                                   variant="outline"
-                                  className="cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition-all duration-200"
+                                  className="cursor-pointer active:bg-blue-50 active:border-blue-300 sm:hover:bg-blue-50 sm:hover:border-blue-300 transition-all duration-200 text-xs"
                                   onClick={() => handleSkillToggle(skill)}
                                 >
                                   {skill}
@@ -2431,25 +2668,32 @@ export default function ProviderProfilePage(_props: Props) {
                           </div>
                         </div>
                         </div>
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                         <div>
-                          <Label htmlFor="yearsExperience">
+                          <Label htmlFor="yearsExperience" className="text-xs sm:text-sm">
                             Years of Experience
                           </Label>
                           <Input
                             id="yearsExperience"
                             type="number"
+                            min="0"
                             value={profileData.yearsExperience}
                             onChange={(e) =>
                               handleInputChange(
                                 "yearsExperience",
-                                Number(e.target.value)
+                                Number(e.target.value) || 0
                               )
                             }
+                            className={`text-sm sm:text-base ${profileFormErrors.yearsExperience ? "border-red-500" : ""}`}
                           />
+                          {profileFormErrors.yearsExperience && (
+                            <p className="text-xs text-red-600 mt-1">
+                              {profileFormErrors.yearsExperience}
+                            </p>
+                          )}
                       </div>
                         <div>
-                          <Label htmlFor="workPreference">
+                          <Label htmlFor="workPreference" className="text-xs sm:text-sm">
                             Work Preference
                           </Label>
                           <Select
@@ -2458,7 +2702,7 @@ export default function ProviderProfilePage(_props: Props) {
                               handleInputChange("workPreference", value)
                             }
                           >
-                            <SelectTrigger>
+                            <SelectTrigger className="text-sm sm:text-base">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -2469,43 +2713,57 @@ export default function ProviderProfilePage(_props: Props) {
                           </Select>
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                         <div>
-                          <Label htmlFor="minimumProjectBudget">
+                          <Label htmlFor="minimumProjectBudget" className="text-xs sm:text-sm">
                             Minimum Project Budget (RM)
                           </Label>
                           <Input
                             id="minimumProjectBudget"
                             type="number"
+                            min="0"
                             value={profileData.minimumProjectBudget}
                             onChange={(e) =>
                               handleInputChange(
                                 "minimumProjectBudget",
-                                Number(e.target.value)
+                                Number(e.target.value) || 0
                               )
                             }
+                            className={`text-sm sm:text-base ${profileFormErrors.minimumProjectBudget ? "border-red-500" : ""}`}
                           />
+                          {profileFormErrors.minimumProjectBudget && (
+                            <p className="text-xs text-red-600 mt-1">
+                              {profileFormErrors.minimumProjectBudget}
+                            </p>
+                          )}
                         </div>
                         <div>
-                          <Label htmlFor="maximumProjectBudget">
+                          <Label htmlFor="maximumProjectBudget" className="text-xs sm:text-sm">
                             Maximum Project Budget (RM)
                           </Label>
                           <Input
                             id="maximumProjectBudget"
                             type="number"
+                            min="0"
                             value={profileData.maximumProjectBudget}
                             onChange={(e) =>
                               handleInputChange(
                                 "maximumProjectBudget",
-                                Number(e.target.value)
+                                Number(e.target.value) || 0
                               )
                             }
+                            className={`text-sm sm:text-base ${profileFormErrors.maximumProjectBudget ? "border-red-500" : ""}`}
                           />
+                          {profileFormErrors.maximumProjectBudget && (
+                            <p className="text-xs text-red-600 mt-1">
+                              {profileFormErrors.maximumProjectBudget}
+                            </p>
+                          )}
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                         <div>
-                          <Label htmlFor="preferredProjectDuration">
+                          <Label htmlFor="preferredProjectDuration" className="text-xs sm:text-sm">
                             Preferred Project Duration
                           </Label>
                           <Input
@@ -2518,21 +2776,34 @@ export default function ProviderProfilePage(_props: Props) {
                               )
                             }
                             placeholder="e.g., 1-3 months, 3-6 months..."
+                            className={`text-sm sm:text-base ${profileFormErrors.preferredProjectDuration ? "border-red-500" : ""}`}
                           />
+                          {profileFormErrors.preferredProjectDuration && (
+                            <p className="text-xs text-red-600 mt-1">
+                              {profileFormErrors.preferredProjectDuration}
+                            </p>
+                          )}
                         </div>
                         <div>
-                          <Label htmlFor="teamSize">Team Size</Label>
+                          <Label htmlFor="teamSize" className="text-xs sm:text-sm">Team Size</Label>
                           <Input
                             id="teamSize"
                             type="number"
+                            min="1"
                             value={profileData.teamSize}
                             onChange={(e) =>
                               handleInputChange(
                                 "teamSize",
-                                Number(e.target.value)
+                                Number(e.target.value) || 1
                               )
                             }
+                            className={`text-sm sm:text-base ${profileFormErrors.teamSize ? "border-red-500" : ""}`}
                           />
+                          {profileFormErrors.teamSize && (
+                            <p className="text-xs text-red-600 mt-1">
+                              {profileFormErrors.teamSize}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -2708,18 +2979,18 @@ export default function ProviderProfilePage(_props: Props) {
 
         {/* Certification Dialog */}
         <Dialog open={showCertDialog} onOpenChange={setShowCertDialog}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
             <DialogHeader>
-              <DialogTitle>
+              <DialogTitle className="text-lg sm:text-xl">
                 {editingCertIndex !== null
                   ? "Edit Certification"
                   : "Add Certification"}
               </DialogTitle>
-              <DialogDescription>
+              <DialogDescription className="text-xs sm:text-sm">
                 Add your professional certifications to showcase your expertise
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4">
+            <div className="space-y-3 sm:space-y-4 py-3 sm:py-4">
               <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                 <div className="flex items-start">
                   <AlertCircle className="w-5 h-5 text-blue-600 mr-2 mt-0.5 flex-shrink-0" />
@@ -2883,18 +3154,18 @@ export default function ProviderProfilePage(_props: Props) {
 
         {/* Portfolio Item Dialog */}
         <Dialog open={showPortfolioDialog} onOpenChange={setShowPortfolioDialog}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
             <DialogHeader>
-              <DialogTitle>
+              <DialogTitle className="text-lg sm:text-xl">
                 {editingPortfolioIndex !== null
                   ? "Edit Portfolio Item"
                   : "Add Portfolio Item"}
               </DialogTitle>
-              <DialogDescription>
+              <DialogDescription className="text-xs sm:text-sm">
                 Add your external work, studies, or projects to showcase your experience
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4">
+            <div className="space-y-3 sm:space-y-4 py-3 sm:py-4">
               <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
                 <div className="flex items-start">
                   <AlertCircle className="w-5 h-5 text-green-600 mr-2 mt-0.5 flex-shrink-0" />

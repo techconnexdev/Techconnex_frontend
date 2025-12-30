@@ -82,6 +82,7 @@ export interface Project {
   createdAt: string
   budgetMin?: number
   budgetMax?: number
+  approvedPrice?: number
   customer?: {
     name: string
   }

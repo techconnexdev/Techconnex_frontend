@@ -93,8 +93,13 @@ export default function AdminReviewsPage() {
     setLoading(true);
     try {
       const token = localStorage.getItem("token");
+      if (!token) {
+        throw new Error("No authentication token found");
+      }
       const API_URL =
-        process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+        process.env.NEXT_PUBLIC_API_BASE_URL ||
+        process.env.NEXT_PUBLIC_API_URL ||
+        "http://localhost:4000";
 
       // Build endpoint based on active tab
       let endpoint = "/admin/reviews";
@@ -118,20 +123,30 @@ export default function AdminReviewsPage() {
         },
       });
 
-      if (reviewsResponse.ok && statsResponse.ok) {
-        const reviewsData = await reviewsResponse.json();
-        const statsData = await statsResponse.json();
-
-        setReviews(reviewsData.reviews || []);
-        setStats({
-          totalReviews: statsData.stats.totalReviews || 0,
-          averageRating: statsData.stats.averageRating || 0,
-          companyReviews: statsData.stats.companyReviews || 0,
-          providerReviews: statsData.stats.providerReviews || 0,
-        });
-      } else {
-        throw new Error("Failed to fetch reviews");
+      if (!reviewsResponse.ok) {
+        const errorData = await reviewsResponse.json().catch(() => ({}));
+        throw new Error(errorData.message || `Failed to fetch reviews: ${reviewsResponse.status}`);
       }
+
+      if (!statsResponse.ok) {
+        const errorData = await statsResponse.json().catch(() => ({}));
+        throw new Error(errorData.message || `Failed to fetch statistics: ${statsResponse.status}`);
+      }
+
+      const reviewsData = await reviewsResponse.json();
+      const statsData = await statsResponse.json();
+
+      // Handle both possible response structures
+      const reviewsList = reviewsData.reviews || reviewsData || [];
+      const statsObj = statsData.stats || statsData || {};
+
+      setReviews(Array.isArray(reviewsList) ? reviewsList : []);
+      setStats({
+        totalReviews: statsObj.totalReviews || 0,
+        averageRating: statsObj.averageRating || 0,
+        companyReviews: statsObj.companyReviews || 0,
+        providerReviews: statsObj.providerReviews || 0,
+      });
     } catch (error: unknown) {
       console.error("Error loading reviews:", error);
       toast({
@@ -160,7 +175,9 @@ export default function AdminReviewsPage() {
     try {
       const token = localStorage.getItem("token");
       const API_URL =
-        process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+        process.env.NEXT_PUBLIC_API_BASE_URL ||
+        process.env.NEXT_PUBLIC_API_URL ||
+        "http://localhost:4000";
 
       const response = await fetch(`${API_URL}/admin/reviews/${reviewId}`, {
         method: "DELETE",

@@ -130,7 +130,7 @@ type AiDraft = {
 
 export default function ProviderOpportunitiesPage() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [submissionFilter, setSubmissionFilter] = useState("all");
   const [selectedProject, setSelectedProject] = useState<OpportunityData | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [isProposalModalOpen, setIsProposalModalOpen] = useState(false);
@@ -288,7 +288,7 @@ export default function ProviderOpportunitiesPage() {
           page: 1,
           limit: 100,
           search: searchQuery,
-          category: categoryFilter === "all" ? undefined : categoryFilter,
+          // Note: submissionFilter is handled client-side, not sent to API
         });
 
         if (response.success) {
@@ -340,7 +340,7 @@ export default function ProviderOpportunitiesPage() {
     };
 
     fetchOpportunities();
-  }, [searchQuery, categoryFilter]);
+  }, [searchQuery]); // submissionFilter is handled client-side
 
   // Fetch recommended opportunities
   useEffect(() => {
@@ -439,18 +439,15 @@ export default function ProviderOpportunitiesPage() {
         skill.toLowerCase().includes(searchQuery.toLowerCase())
       );
 
-    let matchesCategory = true;
-    if (categoryFilter === "submitted") {
-      matchesCategory = opportunity.hasSubmitted;
-    } else if (categoryFilter === "not-submitted") {
-      matchesCategory = !opportunity.hasSubmitted;
-    } else if (categoryFilter !== "all") {
-      matchesCategory = opportunity.category
-        ? opportunity.category.toLowerCase().includes(categoryFilter.toLowerCase())
-        : false;
+    // Submission status filter
+    let matchesSubmission = true;
+    if (submissionFilter === "submitted") {
+      matchesSubmission = opportunity.hasSubmitted;
+    } else if (submissionFilter === "not-submitted") {
+      matchesSubmission = !opportunity.hasSubmitted;
     }
 
-    return matchesSearch && matchesCategory;
+    return matchesSearch && matchesSubmission;
   });
 
   const handleSubmitProposal = (opportunity: OpportunityData) => {
@@ -726,8 +723,62 @@ export default function ProviderOpportunitiesPage() {
       if (response.success) {
         toast.success("Proposal submitted successfully!");
         setIsProposalModalOpen(false);
+        setSelectedProject(null);
 
-        // optimistic UI
+        // Reset form + errors
+        setProposalData({
+          coverLetter: "",
+          bidAmount: "",
+          timelineAmount: "",
+          timelineUnit: "",
+          milestones: [],
+          attachments: [],
+        });
+        setProposalErrors({});
+
+        // Refresh opportunities from backend to get updated hasSubmitted status
+        // This ensures the "Already Submitted" filter will show the newly submitted opportunity
+        try {
+          const refreshResponse = await getProviderOpportunities({
+            page: 1,
+            limit: 100,
+            search: searchQuery,
+          });
+
+          if (refreshResponse.success) {
+            let mappedOpportunities = (refreshResponse.opportunities || []).map(
+              (opp: Record<string, unknown>) => mapOpportunityData(opp, false)
+            );
+
+            // Fetch AiDraft summaries and merge into opportunities
+            const serviceRequestIds = mappedOpportunities
+              .map((opp: OpportunityData) => opp.serviceRequestId)
+              .filter(Boolean);
+            if (serviceRequestIds.length > 0) {
+              try {
+                const draftRes = await getServiceRequestAiDrafts(serviceRequestIds);
+                if (draftRes?.success && Array.isArray(draftRes.drafts)) {
+                  const draftMap = new Map<string, string>(
+                    (draftRes.drafts as AiDraft[]).map((d: AiDraft) => [d.referenceId, d.summary || ""])
+                  );
+                  mappedOpportunities = mappedOpportunities.map((opp: OpportunityData) => ({
+                    ...opp,
+                    aiExplanation:
+                      opp.serviceRequestId && draftMap.has(opp.serviceRequestId)
+                        ? draftMap.get(opp.serviceRequestId) || null
+                        : null,
+                  }));
+                }
+              } catch (err) {
+                console.warn("Failed to fetch AI drafts after proposal submission", err);
+              }
+            }
+
+            setOpportunities(mappedOpportunities);
+          }
+        } catch (err) {
+          console.error("Failed to refresh opportunities after proposal submission", err);
+          // Fallback: optimistic UI update
         const updatedOpportunities = opportunities.map((opp) =>
           opp.id === selectedProject?.id
             ? {
@@ -738,17 +789,7 @@ export default function ProviderOpportunitiesPage() {
             : opp
         );
         setOpportunities(updatedOpportunities);
-
-        // reset form + errors
-        setProposalData({
-          coverLetter: "",
-          bidAmount: "",
-          timelineAmount: "",
-          timelineUnit: "",
-          milestones: [],
-          attachments: [],
-        });
-        setProposalErrors({});
+        }
       } else {
         toast.error(response.message || "Failed to submit proposal");
       }
@@ -817,14 +858,14 @@ export default function ProviderOpportunitiesPage() {
 
   return (
     <ProviderLayout>
-      <div className="space-y-8">
+      <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
               Job Opportunities
             </h1>
-            <p className="text-gray-600">
+            <p className="text-sm sm:text-base text-gray-600 mt-1">
               Discover projects that match your skills and expertise
             </p>
           </div>
@@ -838,32 +879,27 @@ export default function ProviderOpportunitiesPage() {
 
         {/* Filters */}
         <Card>
-          <CardContent className="p-6">
-            <div className="flex flex-col sm:flex-row gap-4">
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
               <div className="flex-1">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                   <Input
                     placeholder="Search opportunities by title, client, or skills..."
-                    className="pl-10"
+                    className="pl-10 text-sm sm:text-base"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
                 </div>
               </div>
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger className="w-full sm:w-48">
-                  <SelectValue placeholder="All Categories" />
+              <Select value={submissionFilter} onValueChange={setSubmissionFilter}>
+                <SelectTrigger className="w-full sm:w-48 text-sm sm:text-base">
+                  <SelectValue placeholder="Submission Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Categories</SelectItem>
-                  <SelectItem value="submitted">Already Submitted</SelectItem>
+                  <SelectItem value="all">All Status</SelectItem>
                   <SelectItem value="not-submitted">Not Submitted</SelectItem>
-                  <SelectItem value="web">Web Development</SelectItem>
-                  <SelectItem value="mobile">Mobile Development</SelectItem>
-                  <SelectItem value="cloud">Cloud Services</SelectItem>
-                  <SelectItem value="iot">IoT Solutions</SelectItem>
-                  <SelectItem value="data">Data Analytics</SelectItem>
+                  <SelectItem value="submitted">Already Submitted</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -873,53 +909,54 @@ export default function ProviderOpportunitiesPage() {
         {/* Opportunities */}
         {loading ? (
           <Card>
-            <CardContent className="p-12 text-center">
-              <Loader2 className="w-12 h-12 text-gray-400 mx-auto mb-4 animate-spin" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            <CardContent className="p-8 sm:p-12 text-center">
+              <Loader2 className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-4 animate-spin" />
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
                 Loading opportunities...
               </h3>
-              <p className="text-gray-600">
+              <p className="text-sm sm:text-base text-gray-600">
                 Please wait while we fetch available opportunities.
               </p>
             </CardContent>
           </Card>
         ) : error ? (
           <Card>
-            <CardContent className="p-12 text-center">
-              <div className="w-12 h-12 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
-                <span className="text-red-600 text-xl">⚠️</span>
+            <CardContent className="p-8 sm:p-12 text-center">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
+                <span className="text-red-600 text-lg sm:text-xl">⚠️</span>
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
                 Error loading opportunities
               </h3>
-              <p className="text-gray-600 mb-4">{error}</p>
+              <p className="text-sm sm:text-base text-gray-600 mb-4">{error}</p>
               <Button
                 onClick={() => window.location.reload()}
                 variant="outline"
+                className="text-xs sm:text-sm"
               >
                 Try Again
               </Button>
             </CardContent>
           </Card>
         ) : (
-          <Tabs defaultValue="all" className="space-y-6">
-            <TabsList>
-              <TabsTrigger value="all">All</TabsTrigger>
-              <TabsTrigger value="recommended">AI Recommended</TabsTrigger>
+          <Tabs defaultValue="all" className="space-y-4 sm:space-y-6">
+            <TabsList className="grid w-full grid-cols-2 h-auto">
+              <TabsTrigger value="all" className="text-xs sm:text-sm px-2 sm:px-4">All</TabsTrigger>
+              <TabsTrigger value="recommended" className="text-xs sm:text-sm px-2 sm:px-4">AI Recommended</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="all" className="space-y-6">
+            <TabsContent value="all" className="space-y-4 sm:space-y-6">
               {filteredOpportunities.length === 0 ? (
                 <Card>
-                  <CardContent className="p-12 text-center">
-                    <div className="w-16 h-16 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
-                      <Search className="w-8 h-8 text-gray-400" />
+                  <CardContent className="p-8 sm:p-12 text-center">
+                    <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
+                      <Search className="w-6 h-6 sm:w-8 sm:h-8 text-gray-400" />
                     </div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
                       No opportunities found
                     </h3>
-                    <p className="text-gray-600">
-                      {searchQuery || categoryFilter !== "all"
+                    <p className="text-sm sm:text-base text-gray-600">
+                      {searchQuery || submissionFilter !== "all"
                         ? "Try adjusting your search or filter criteria."
                         : "There are no opportunities available at the moment."}
                     </p>
@@ -931,11 +968,11 @@ export default function ProviderOpportunitiesPage() {
                   return (
                     <Card
                       key={opportunity.id}
-                      className="group relative hover:shadow-lg transition-shadow"
+                      className="group relative sm:hover:shadow-lg transition-shadow"
                     >
                       {/* AI Badge Indicator */}
                       {opportunity.aiExplanation && (
-                        <div className="absolute top-3 right-3 opacity-0 lg:group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-10">
+                        <div className="absolute top-2 right-2 sm:top-3 sm:right-3 opacity-0 lg:group-hover:opacity-100 transition-opacity duration-300 pointer-events-none z-10">
                           <div className="flex items-center gap-1.5 px-2 py-1 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-full text-xs font-medium shadow-md">
                             <Sparkles className="w-3 h-3" />
                             <span className="hidden sm:inline">
@@ -944,42 +981,42 @@ export default function ProviderOpportunitiesPage() {
                           </div>
                         </div>
                       )}
-                      <CardHeader>
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1 pr-0 sm:pr-20">
-                            <div className="flex items-center gap-3 mb-2">
-                              <CardTitle className="text-xl">
+                      <CardHeader className="p-4 sm:p-6">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0 pr-0 sm:pr-20">
+                            <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
+                              <CardTitle className="text-lg sm:text-xl break-words">
                                 {opportunity.title}
                               </CardTitle>
                               {opportunity.urgent && (
-                                <Badge className="bg-red-100 text-red-800">
+                                <Badge className="bg-red-100 text-red-800 text-xs shrink-0">
                                   <Clock className="w-3 h-3 mr-1" />
                                   Urgent
                                 </Badge>
                               )}
                               {opportunity.verified && (
-                                <Badge className="bg-green-100 text-green-800">
+                                <Badge className="bg-green-100 text-green-800 text-xs shrink-0">
                                   <CheckCircle className="w-3 h-3 mr-1" />
                                   Verified Client
                                 </Badge>
                               )}
                               {opportunity.hasSubmitted && (
-                                <Badge className="bg-green-100 text-green-800">
+                                <Badge className="bg-green-100 text-green-800 text-xs shrink-0">
                                   <CheckCircle className="w-3 h-3 mr-1" />
                                   Submitted
                                 </Badge>
                               )}
                             </div>
-                            <CardDescription className="text-base line-clamp-3">
+                            <CardDescription className="text-sm sm:text-base line-clamp-2 sm:line-clamp-3 break-words">
                               {opportunity.description}
                             </CardDescription>
                           </div>
                         </div>
                       </CardHeader>
-                      <CardContent className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-4">
-                            <Avatar>
+                      <CardContent className="p-4 sm:p-6 space-y-3 sm:space-y-4">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+                          <div className="flex items-center space-x-3 sm:space-x-4 flex-1 min-w-0">
+                            <Avatar className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0">
                               <AvatarImage
                                 src={
                                   opportunity.avatar &&
@@ -996,20 +1033,20 @@ export default function ProviderOpportunitiesPage() {
                                 {opportunity.client.charAt(0)}
                               </AvatarFallback>
                             </Avatar>
-                            <div>
+                            <div className="min-w-0 flex-1">
                               {opportunity.clientId ? (
                                 <Link
                                   href={`/provider/companies/${opportunity.clientId}`}
-                                  className="font-medium text-blue-600 hover:text-blue-800 hover:underline"
+                                  className="font-medium text-sm sm:text-base text-blue-600 active:text-blue-800 sm:hover:text-blue-800 sm:hover:underline break-words"
                                 >
                                   {opportunity.client}
                                 </Link>
                               ) : (
-                                <p className="font-medium">
+                                <p className="font-medium text-sm sm:text-base break-words">
                                   {opportunity.client}
                                 </p>
                               )}
-                              <div className="flex items-center gap-2 text-sm text-gray-500">
+                              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-gray-500">
                                 <div className="flex items-center">
                                   <span className="text-yellow-400">★</span>
                                   <span className="ml-1">
@@ -1022,24 +1059,24 @@ export default function ProviderOpportunitiesPage() {
                                 </span>
                                 <span>•</span>
                                 <div className="flex items-center">
-                                  <MapPin className="w-3 h-3 mr-1" />
-                                  {opportunity.location}
+                                  <MapPin className="w-3 h-3 mr-1 flex-shrink-0" />
+                                  <span className="break-words">{opportunity.location}</span>
                                 </div>
                               </div>
                             </div>
                           </div>
-                          <div className="text-right">
-                            <div className="flex items-center text-green-600 font-semibold">
-                              <DollarSign className="w-4 h-4 mr-1" />
-                              {opportunity.budget}
+                          <div className="text-left sm:text-right w-full sm:w-auto">
+                            <div className="flex items-center text-green-600 font-semibold text-sm sm:text-base">
+                              <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 flex-shrink-0" />
+                              <span className="break-words">{opportunity.budget}</span>
                             </div>
-                            <p className="text-sm text-gray-500">
+                            <p className="text-xs sm:text-sm text-gray-500">
                               {formatTimeline(opportunity.timeline)}
                             </p>
                           </div>
                         </div>
 
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-wrap gap-1.5 sm:gap-2">
                           {opportunity.skills.map((skill: string) => (
                             <Badge
                               key={skill}
@@ -1066,7 +1103,7 @@ export default function ProviderOpportunitiesPage() {
                                     isExpanded ? null : opportunity.id
                                   )
                                 }
-                                className="flex items-center gap-2 text-xs text-blue-600 hover:text-blue-700 active:text-blue-800 font-medium touch-manipulation"
+                                className="flex items-center gap-2 text-xs text-blue-600 active:text-blue-800 sm:hover:text-blue-700 font-medium touch-manipulation"
                               >
                                 <Sparkles className="w-3.5 h-3.5 shrink-0" />
                                 <span className="hidden sm:inline">
@@ -1102,7 +1139,7 @@ export default function ProviderOpportunitiesPage() {
                                     onClick={() =>
                                       setExpandedOpportunityId(null)
                                     }
-                                    className="ml-auto lg:hidden text-blue-600 hover:text-blue-800 p-1"
+                                    className="ml-auto lg:hidden text-blue-600 active:text-blue-800 sm:hover:text-blue-800 p-1"
                                     aria-label="Close insights"
                                   >
                                     <span className="text-lg">×</span>
@@ -1155,26 +1192,27 @@ export default function ProviderOpportunitiesPage() {
                           </div>
                         )}
 
-                        <div className="flex items-center justify-between pt-4 border-t">
-                          <div className="flex items-center gap-4 text-sm text-gray-500">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 pt-3 sm:pt-4 border-t">
+                          <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-500">
                             <span>{opportunity.postedTime}</span>
                             <div className="flex items-center">
-                              <Users className="w-4 h-4 mr-1" />
+                              <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 flex-shrink-0" />
                               {opportunity.proposals} proposals
                             </div>
                           </div>
-                          <div className="flex gap-2">
+                          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                             <Link
                               href={`/provider/opportunities/${opportunity.id}`}
+                              className="w-full sm:w-auto"
                             >
-                              <Button variant="outline" size="sm">
-                                <Eye className="w-4 h-4 mr-2" />
+                              <Button variant="outline" size="sm" className="w-full sm:w-auto text-xs sm:text-sm">
+                                <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                                 View Details
                               </Button>
                             </Link>
                             {opportunity.hasSubmitted ? (
-                              <Button size="sm" disabled>
-                                <CheckCircle className="w-4 h-4 mr-2" />
+                              <Button size="sm" disabled className="w-full sm:w-auto text-xs sm:text-sm">
+                                <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                                 Submitted
                               </Button>
                             ) : (
@@ -1183,8 +1221,9 @@ export default function ProviderOpportunitiesPage() {
                                 onClick={() =>
                                   handleSubmitProposal(opportunity)
                                 }
+                                className="w-full sm:w-auto text-xs sm:text-sm"
                               >
-                                <ThumbsUp className="w-4 h-4 mr-2" />
+                                <ThumbsUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                                 Submit Proposal
                               </Button>
                             )}
@@ -1197,32 +1236,33 @@ export default function ProviderOpportunitiesPage() {
               )}
             </TabsContent>
 
-            <TabsContent value="recommended" className="space-y-6">
+            <TabsContent value="recommended" className="space-y-4 sm:space-y-6">
               {loadingRecommended ? (
                 <Card>
-                  <CardContent className="p-12 text-center">
-                    <Loader2 className="w-12 h-12 text-gray-400 mx-auto mb-4 animate-spin" />
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  <CardContent className="p-8 sm:p-12 text-center">
+                    <Loader2 className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-4 animate-spin" />
+                    <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
                       Loading recommended opportunities...
                     </h3>
-                    <p className="text-gray-600">
+                    <p className="text-sm sm:text-base text-gray-600">
                       Please wait while we fetch AI-matched opportunities.
                     </p>
                   </CardContent>
                 </Card>
               ) : errorRecommended ? (
                 <Card>
-                  <CardContent className="p-12 text-center">
-                    <div className="w-12 h-12 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
-                      <span className="text-red-600 text-xl">⚠️</span>
+                  <CardContent className="p-8 sm:p-12 text-center">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
+                      <span className="text-red-600 text-lg sm:text-xl">⚠️</span>
                     </div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
                       Error loading recommendations
                     </h3>
-                    <p className="text-gray-600 mb-4">{errorRecommended}</p>
+                    <p className="text-sm sm:text-base text-gray-600 mb-4">{errorRecommended}</p>
                     <Button
                       onClick={() => window.location.reload()}
                       variant="outline"
+                      className="text-xs sm:text-sm"
                     >
                       Try Again
                     </Button>
@@ -1230,14 +1270,14 @@ export default function ProviderOpportunitiesPage() {
                 </Card>
               ) : recommendedOpportunities.length === 0 ? (
                 <Card>
-                  <CardContent className="p-12 text-center">
-                    <div className="w-16 h-16 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
-                      <Sparkles className="w-8 h-8 text-gray-400" />
+                  <CardContent className="p-8 sm:p-12 text-center">
+                    <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-4 bg-gray-100 rounded-full flex items-center justify-center">
+                      <Sparkles className="w-6 h-6 sm:w-8 sm:h-8 text-gray-400" />
                     </div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
                       No recommended opportunities found
                     </h3>
-                    <p className="text-gray-600">
+                    <p className="text-sm sm:text-base text-gray-600">
                       Check back later for AI-matched opportunities based on
                       your skills and preferences.
                     </p>
@@ -1247,7 +1287,7 @@ export default function ProviderOpportunitiesPage() {
                 <>
                   {recommendationsCacheInfo.cachedAt &&
                     recommendationsCacheInfo.nextRefreshAt && (
-                      <div className="text-xs text-gray-500 mb-4">
+                      <div className="text-xs text-gray-500 mb-3 sm:mb-4">
                         {(() => {
                           const now = Date.now();
                           const cachedAt = recommendationsCacheInfo.cachedAt;
@@ -1298,7 +1338,7 @@ export default function ProviderOpportunitiesPage() {
                       return (
                         <Card
                           key={opportunity.id}
-                          className="group relative p-3 sm:p-4 md:p-5 border-2 border-gray-200 rounded-lg sm:rounded-xl hover:border-blue-400 hover:shadow-lg transition-all duration-300 bg-white"
+                          className="group relative p-3 sm:p-4 md:p-5 border-2 border-gray-200 rounded-lg sm:rounded-xl active:border-blue-400 active:shadow-md sm:hover:border-blue-400 sm:hover:shadow-lg transition-all duration-300 bg-white"
                         >
                           {/* AI Badge Indicator - Desktop hover only */}
                           {opportunity.aiExplanation && (
@@ -1316,7 +1356,7 @@ export default function ProviderOpportunitiesPage() {
                             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-3 pr-0 sm:pr-20">
                               <div className="flex-1 min-w-0">
                                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-2 flex-wrap">
-                                  <CardTitle className="font-semibold text-gray-900 group-hover:text-blue-700 transition-colors text-base sm:text-lg break-words">
+                                  <CardTitle className="font-semibold text-gray-900 sm:group-hover:text-blue-700 transition-colors text-base sm:text-lg break-words">
                                     {opportunity.title}
                                   </CardTitle>
                                   {opportunity.matchScore !== undefined && (
@@ -1333,12 +1373,12 @@ export default function ProviderOpportunitiesPage() {
                                     </Badge>
                                   )}
                                 </div>
-                                <CardDescription className="text-xs sm:text-sm font-medium text-gray-700 mt-1">
+                                <CardDescription className="text-xs sm:text-sm font-medium text-gray-700 mt-1 break-words">
                                   {opportunity.budget}
                                 </CardDescription>
                                 {opportunity.client && (
                                   <div className="flex items-center gap-2 mt-2 flex-wrap">
-                                    <p className="text-xs text-gray-600">
+                                    <p className="text-xs text-gray-600 break-words">
                                       {opportunity.client}
                                     </p>
                                     {opportunity.verified && (
@@ -1366,7 +1406,7 @@ export default function ProviderOpportunitiesPage() {
                                         isExpanded ? null : opportunity.id
                                       )
                                     }
-                                    className="flex items-center gap-2 text-xs text-blue-600 hover:text-blue-700 active:text-blue-800 font-medium touch-manipulation"
+                                    className="flex items-center gap-2 text-xs text-blue-600 active:text-blue-800 sm:hover:text-blue-700 font-medium touch-manipulation"
                                   >
                                     <Sparkles className="w-3.5 h-3.5 shrink-0" />
                                     <span className="hidden sm:inline">
@@ -1402,7 +1442,7 @@ export default function ProviderOpportunitiesPage() {
                                         onClick={() =>
                                           setExpandedOpportunityId(null)
                                         }
-                                        className="ml-auto lg:hidden text-blue-600 hover:text-blue-800 p-1"
+                                        className="ml-auto lg:hidden text-blue-600 active:text-blue-800 sm:hover:text-blue-800 p-1"
                                         aria-label="Close insights"
                                       >
                                         <span className="text-lg">×</span>
@@ -1445,7 +1485,7 @@ export default function ProviderOpportunitiesPage() {
                                   <Badge
                                     key={skill}
                                     variant="secondary"
-                                    className="text-xs group-hover:bg-blue-100 group-hover:text-blue-700 transition-colors border"
+                                    className="text-xs sm:group-hover:bg-blue-100 sm:group-hover:text-blue-700 transition-colors border"
                                   >
                                     {skill}
                                   </Badge>
@@ -1460,7 +1500,7 @@ export default function ProviderOpportunitiesPage() {
                               )}
                             </div>
 
-                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 pt-3 border-t border-gray-200 group-hover:border-blue-200 transition-colors">
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 pt-3 border-t border-gray-200 sm:group-hover:border-blue-200 transition-colors">
                               <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs text-gray-600 w-full sm:w-auto">
                                 <span className="capitalize font-medium">
                                   {opportunity.category}
@@ -1480,17 +1520,17 @@ export default function ProviderOpportunitiesPage() {
                                   </span>
                                 )}
                               </div>
-                              <div className="flex gap-2 w-full sm:w-auto">
+                              <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                                 <Link
                                   href={`/provider/opportunities/${opportunity.id}`}
-                                  className="flex-1 sm:flex-none"
+                                  className="w-full sm:w-auto"
                                 >
                                   <Button
                                     variant="outline"
                                     size="sm"
-                                    className="w-full sm:w-auto"
+                                    className="w-full sm:w-auto text-xs sm:text-sm"
                                   >
-                                    <Eye className="w-4 h-4 mr-2" />
+                                    <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                                     View Details
                                   </Button>
                                 </Link>
@@ -1498,9 +1538,9 @@ export default function ProviderOpportunitiesPage() {
                                   <Button
                                     size="sm"
                                     disabled
-                                    className="flex-1 sm:flex-none"
+                                    className="w-full sm:w-auto text-xs sm:text-sm"
                                   >
-                                    <CheckCircle className="w-4 h-4 mr-2" />
+                                    <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                                     Submitted
                                   </Button>
                                 ) : (
@@ -1509,9 +1549,9 @@ export default function ProviderOpportunitiesPage() {
                                     onClick={() =>
                                       handleSubmitProposal(opportunity)
                                     }
-                                    className="flex-1 sm:flex-none group-hover:bg-blue-600 group-hover:text-white transition-all duration-300"
+                                    className="w-full sm:w-auto sm:group-hover:bg-blue-600 sm:group-hover:text-white transition-all duration-300 text-xs sm:text-sm"
                                   >
-                                    <ThumbsUp className="w-4 h-4 mr-2" />
+                                    <ThumbsUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                                     Submit Proposal
                                   </Button>
                                 )}

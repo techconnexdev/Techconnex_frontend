@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,10 +32,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import {
   MapPin,
   Star,
   CheckCircle2,
-  MessageSquare,
   Heart,
   Building2,
   Globe,
@@ -47,13 +54,13 @@ import {
   Send,
   Paperclip,
   Loader2,
+  AlertTriangle,
   Image as ImageIcon,
   ChevronLeft,
   ChevronRight,
   X,
 } from "lucide-react";
 import type { Company, Review } from "./types";
-import { useRouter } from "next/navigation";
 import {
   getCompanyOpportunities,
   sendProposal,
@@ -106,6 +113,8 @@ type TransformedOpportunity = {
   originalData: Record<string, unknown>;
 };
 
+type SortOption = "newest" | "oldest" | "highest" | "lowest";
+
 export default function CompanyDetailClient({
   company,
   reviews,
@@ -114,7 +123,42 @@ export default function CompanyDetailClient({
   reviews: Review[];
 }) {
   const [saved, setSaved] = useState<boolean>(!!company.saved);
-  const router = useRouter();
+
+  // Reviews filtering and pagination
+  const [sortBy, setSortBy] = useState<SortOption>("newest");
+  const [currentPage, setCurrentPage] = useState(1);
+  const reviewsPerPage = 5;
+
+  const sortedReviews = useMemo(() => {
+    const sorted = [...(reviews || [])];
+    switch (sortBy) {
+      case "newest":
+        return sorted.sort(
+          (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+        );
+      case "oldest":
+        return sorted.sort(
+          (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+        );
+      case "highest":
+        return sorted.sort((a, b) => b.rating - a.rating);
+      case "lowest":
+        return sorted.sort((a, b) => a.rating - b.rating);
+      default:
+        return sorted;
+    }
+  }, [reviews, sortBy]);
+
+  const totalPages = Math.ceil(sortedReviews.length / reviewsPerPage);
+  const startIndex = (currentPage - 1) * reviewsPerPage;
+  const endIndex = startIndex + reviewsPerPage;
+  const paginatedReviews = sortedReviews.slice(startIndex, endIndex);
+
+  // Reset to page 1 when sort changes
+  const handleSortChange = (value: SortOption) => {
+    setSortBy(value);
+    setCurrentPage(1);
+  };
 
   // Lightbox state
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -274,15 +318,6 @@ export default function CompanyDetailClient({
     fetchOpportunities();
   }, [company.id]);
 
-  const handleContact = () => {
-    const avatarUrl = getProfileImageUrl(company.avatar);
-    router.push(
-      `/provider/messages?userId=${company.id}&name=${encodeURIComponent(
-        company.name
-      )}&avatar=${encodeURIComponent(avatarUrl)}`
-    );
-  };
-
   const getUserAndToken = () => {
     if (typeof window === "undefined") return { userId: "", token: "" };
     try {
@@ -305,7 +340,7 @@ export default function CompanyDetailClient({
       const method = saved ? "DELETE" : "POST";
       const response = await fetch(
         `${
-          process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"
+          process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000"
         }/companies/${company.id}/save?userId=${encodeURIComponent(userId)}`,
         {
           method,
@@ -329,71 +364,76 @@ export default function CompanyDetailClient({
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
       {/* Back + Actions */}
-      <div className="flex items-center justify-between">
-        <div className="flex gap-2">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
           <Button
             variant={saved ? "default" : "outline"}
             onClick={handleSaveToggle}
-            className={saved ? "bg-red-600 hover:bg-red-700 text-white" : ""}
+            className={`${
+              saved
+                ? "bg-red-600 active:bg-red-700 sm:hover:bg-red-700 text-white"
+                : ""
+            } w-full sm:w-auto text-xs sm:text-sm`}
           >
-            <Heart className={`w-4 h-4 mr-2 ${saved ? "fill-current" : ""}`} />{" "}
+            <Heart
+              className={`w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 ${
+                saved ? "fill-current" : ""
+              }`}
+            />{" "}
             {saved ? "Saved" : "Save"}
           </Button>
-
-          {company.allowMessages !== false && (
-            <Button onClick={handleContact}>
-              <MessageSquare className="w-4 h-4 mr-2" />
-              Contact
-            </Button>
-          )}
         </div>
       </div>
 
       {/* Header card */}
       <Card>
-        <CardContent className="p-6">
-          <div className="flex items-start gap-5">
-            <Avatar className="w-20 h-20">
+        <CardContent className="p-4 sm:p-6">
+          <div className="flex items-start gap-3 sm:gap-5">
+            <Avatar className="w-16 h-16 sm:w-20 sm:h-20 flex-shrink-0">
               <AvatarImage src={getProfileImageUrl(company.avatar)} />
               <AvatarFallback>
-                <Building2 className="w-10 h-10" />
+                <Building2 className="w-8 h-8 sm:w-10 sm:h-10" />
               </AvatarFallback>
             </Avatar>
-            <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold">{company.name}</h1>
+            <div className="flex-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-xl sm:text-2xl font-bold break-words">
+                  {company.name}
+                </h1>
                 {company.verified && (
-                  <Badge className="bg-green-100 text-green-800">
-                    <CheckCircle2 className="w-4 h-4 mr-1" />
+                  <Badge className="bg-green-100 text-green-800 text-xs shrink-0">
+                    <CheckCircle2 className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
                     Verified
                   </Badge>
                 )}
+                {!company.verified && (
+                  <Badge className="bg-gray-100 text-gray-700 border-gray-300 text-xs shrink-0">
+                    <AlertTriangle className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+                    Not Verified
+                  </Badge>
+                )}
               </div>
-              <p className="text-gray-600">
-                {company.industry} • {company.companySize}
+              <p className="text-sm sm:text-base text-gray-600 mt-1 break-words">
+                {company.industry}
               </p>
-              <div className="mt-2 flex flex-wrap items-center gap-4 text-sm text-gray-600">
+              <div className="mt-2 flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-600">
                 <span className="flex items-center gap-1">
-                  <Star className="w-4 h-4 text-yellow-400 fill-current" />
+                  <Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-yellow-400 fill-current flex-shrink-0" />
                   <b>{company.rating}</b> ({company.reviewCount} reviews)
                 </span>
                 <span className="flex items-center gap-1">
-                  <MapPin className="w-4 h-4" />
-                  {company.location}
+                  <MapPin className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
+                  <span className="break-words">{company.location}</span>
                 </span>
                 <span className="flex items-center gap-1">
-                  <DollarSign className="w-4 h-4" />
-                  RM{company.totalSpend.toLocaleString()} total spent
-                </span>
-                <span className="flex items-center gap-1">
-                  <Users className="w-4 h-4" />
+                  <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
                   {company.projectsPosted} projects posted
                 </span>
                 {company.establishedYear && (
                   <span className="flex items-center gap-1">
-                    <Calendar className="w-4 h-4" />
+                    <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
                     Est. {company.establishedYear}
                   </span>
                 )}
@@ -401,16 +441,18 @@ export default function CompanyDetailClient({
                   <span>{company.employeeCount} employees</span>
                 )}
                 <span className="flex items-center gap-1">
-                  <Calendar className="w-4 h-4" />
+                  <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
                   Member since {company.memberSince}
                 </span>
               </div>
             </div>
           </div>
-          <Separator className="my-4" />
-          <p className="text-gray-800">{company.description}</p>
+          <Separator className="my-3 sm:my-4" />
+          <p className="text-sm sm:text-base text-gray-800 break-words">
+            {company.description}
+          </p>
           {company.website && (
-            <div className="mt-4">
+            <div className="mt-3 sm:mt-4">
               <a
                 href={
                   company.website.startsWith("http")
@@ -419,10 +461,10 @@ export default function CompanyDetailClient({
                 }
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-2 text-blue-600 hover:text-blue-800"
+                className="flex items-center gap-2 text-blue-600 active:text-blue-800 sm:hover:text-blue-800 break-all"
               >
-                <Globe className="w-4 h-4" />
-                {company.website}
+                <Globe className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
+                <span className="break-all">{company.website}</span>
               </a>
             </div>
           )}
@@ -430,26 +472,38 @@ export default function CompanyDetailClient({
       </Card>
 
       {/* Company Details & Reviews */}
-      <div className="grid lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
+      <div className="grid lg:grid-cols-3 gap-4 sm:gap-6">
+        <div className="lg:col-span-2 space-y-4 sm:space-y-6">
           {/* Company Information */}
           <Card>
-            <CardHeader>
-              <CardTitle>Company Information</CardTitle>
+            <CardHeader className="p-4 sm:p-6">
+              <CardTitle className="text-lg sm:text-xl">
+                Company Information
+              </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="p-4 sm:p-6 space-y-3 sm:space-y-4">
               {company.mission && (
                 <div>
-                  <h4 className="font-semibold mb-2">Mission</h4>
-                  <p className="text-gray-700">{company.mission}</p>
+                  <h4 className="font-semibold text-sm sm:text-base mb-2">
+                    Mission
+                  </h4>
+                  <p className="text-sm sm:text-base text-gray-700 break-words">
+                    {company.mission}
+                  </p>
                 </div>
               )}
               {company.values && company.values.length > 0 && (
                 <div>
-                  <h4 className="font-semibold mb-2">Values</h4>
-                  <div className="flex flex-wrap gap-2">
+                  <h4 className="font-semibold text-sm sm:text-base mb-2">
+                    Values
+                  </h4>
+                  <div className="flex flex-wrap gap-1.5 sm:gap-2">
                     {company.values.map((value) => (
-                      <Badge key={value} variant="secondary">
+                      <Badge
+                        key={value}
+                        variant="secondary"
+                        className="text-xs"
+                      >
                         {value}
                       </Badge>
                     ))}
@@ -459,12 +513,16 @@ export default function CompanyDetailClient({
               {company.categoriesHiringFor &&
                 company.categoriesHiringFor.length > 0 && (
                   <div>
-                    <h4 className="font-semibold mb-2">
+                    <h4 className="font-semibold text-sm sm:text-base mb-2">
                       Categories Hiring For
                     </h4>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-1.5 sm:gap-2">
                       {company.categoriesHiringFor.map((category) => (
-                        <Badge key={category} variant="secondary">
+                        <Badge
+                          key={category}
+                          variant="secondary"
+                          className="text-xs"
+                        >
                           {category}
                         </Badge>
                       ))}
@@ -473,30 +531,22 @@ export default function CompanyDetailClient({
                 )}
               {company.employeeCount && (
                 <div>
-                  <h4 className="font-semibold mb-2">Employee Count</h4>
-                  <p className="text-gray-700">
+                  <h4 className="font-semibold text-sm sm:text-base mb-2">
+                    Employee Count
+                  </h4>
+                  <p className="text-sm sm:text-base text-gray-700">
                     {company.employeeCount.toLocaleString()} employees
                   </p>
                 </div>
               )}
               {company.establishedYear && (
                 <div>
-                  <h4 className="font-semibold mb-2">Established</h4>
-                  <p className="text-gray-700">{company.establishedYear}</p>
-                </div>
-              )}
-              {company.annualRevenue && (
-                <div>
-                  <h4 className="font-semibold mb-2">Annual Revenue</h4>
-                  <p className="text-gray-700">
-                    RM {Number(company.annualRevenue).toLocaleString()}
+                  <h4 className="font-semibold text-sm sm:text-base mb-2">
+                    Established
+                  </h4>
+                  <p className="text-sm sm:text-base text-gray-700">
+                    {company.establishedYear}
                   </p>
-                </div>
-              )}
-              {company.fundingStage && (
-                <div>
-                  <h4 className="font-semibold mb-2">Funding Stage</h4>
-                  <p className="text-gray-700">{company.fundingStage}</p>
                 </div>
               )}
             </CardContent>
@@ -505,21 +555,23 @@ export default function CompanyDetailClient({
           {/* Media Gallery */}
           {company.mediaGallery && company.mediaGallery.length > 0 && (
             <Card>
-              <CardHeader>
-                <CardTitle>Media Gallery</CardTitle>
-                <CardDescription>
+              <CardHeader className="p-4 sm:p-6">
+                <CardTitle className="text-lg sm:text-xl">
+                  Media Gallery
+                </CardTitle>
+                <CardDescription className="text-xs sm:text-sm">
                   Company images and visual content
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <CardContent className="p-4 sm:p-6">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
                   {company.mediaGallery.map((url, index) => (
                     <div
                       key={index}
-                      className="relative group border rounded-lg overflow-hidden bg-white hover:shadow-lg transition-shadow cursor-pointer"
+                      className="relative group border rounded-lg overflow-hidden bg-white active:shadow-md sm:hover:shadow-lg transition-shadow cursor-pointer"
                       onClick={() => isImageUrl(url) && openLightbox(index)}
                     >
-                      <div className="w-full h-48 bg-gray-50 relative overflow-hidden">
+                      <div className="w-full h-32 sm:h-48 bg-gray-50 relative overflow-hidden">
                         {isImageUrl(url) ? (
                           <MediaImage
                             src={url}
@@ -529,10 +581,10 @@ export default function CompanyDetailClient({
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center">
-                            <ImageIcon className="w-12 h-12 text-gray-400" />
+                            <ImageIcon className="w-8 h-8 sm:w-12 sm:h-12 text-gray-400" />
                           </div>
                         )}
-                        <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-opacity" />
+                        <div className="absolute inset-0 bg-black bg-opacity-0 sm:group-hover:bg-opacity-10 transition-opacity" />
                       </div>
                       <div className="p-2 bg-white border-t">
                         <p
@@ -551,39 +603,115 @@ export default function CompanyDetailClient({
 
           {/* Reviews */}
           <Card>
-            <CardHeader>
-              <CardTitle>Reviews</CardTitle>
-              <CardDescription>Reviews given by this company</CardDescription>
+            <CardHeader className="p-4 sm:p-6">
+              <CardTitle className="text-lg sm:text-xl">Reviews</CardTitle>
+              <CardDescription className="text-xs sm:text-sm">
+                Reviews given by this company
+              </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-4 sm:p-6">
               {reviews && reviews.length > 0 ? (
-                <div className="space-y-4">
-                  {reviews.map((review) => (
-                    <div
-                      key={review.id}
-                      className="border-b pb-4 last:border-0"
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <div>
-                          <p className="font-medium">{review.author}</p>
-                          {review.provider && (
-                            <p className="text-sm text-gray-500">
-                              {review.provider.location} • Rating:{" "}
-                              {review.provider.rating}
+                <div className="space-y-3 sm:space-y-4">
+                  {/* Filter */}
+                  <div className="flex justify-end">
+                    <Select value={sortBy} onValueChange={handleSortChange}>
+                      <SelectTrigger className="w-full sm:w-[180px] text-xs sm:text-sm">
+                        <SelectValue placeholder="Sort by" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="newest">Newest First</SelectItem>
+                        <SelectItem value="oldest">Oldest First</SelectItem>
+                        <SelectItem value="highest">Highest Rating</SelectItem>
+                        <SelectItem value="lowest">Lowest Rating</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Reviews */}
+                  <div className="space-y-3 sm:space-y-4">
+                    {paginatedReviews.map((review) => (
+                      <div
+                        key={review.id}
+                        className="border rounded-lg p-3 sm:p-4"
+                      >
+                        <div className="flex items-start justify-between mb-2 gap-2">
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium text-sm sm:text-base break-words">
+                              {review.author}
                             </p>
-                          )}
+                          </div>
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-yellow-400 fill-current" />
+                            <span className="text-sm sm:text-base">
+                              {review.rating}
+                            </span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1">
-                          <Star className="w-4 h-4 text-yellow-400 fill-current" />
-                          <span>{review.rating}</span>
-                        </div>
+                        <p className="text-sm sm:text-base text-gray-700 break-words">
+                          {review.text}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-2">
+                          {review.date}
+                        </p>
                       </div>
-                      <p className="text-gray-700">{review.text}</p>
-                      <p className="text-xs text-gray-500 mt-2">
-                        {review.date}
-                      </p>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+
+                  {/* Pagination */}
+                  {totalPages > 1 && (
+                    <Pagination>
+                      <PaginationContent>
+                        <PaginationItem>
+                          <PaginationPrevious
+                            onClick={(e) => {
+                              e.preventDefault();
+                              setCurrentPage((prev) => Math.max(1, prev - 1));
+                            }}
+                            href="#"
+                            className={
+                              currentPage === 1
+                                ? "pointer-events-none opacity-50"
+                                : "cursor-pointer"
+                            }
+                          />
+                        </PaginationItem>
+                        {Array.from(
+                          { length: totalPages },
+                          (_, i) => i + 1
+                        ).map((page) => (
+                          <PaginationItem key={page}>
+                            <PaginationLink
+                              onClick={(e) => {
+                                e.preventDefault();
+                                setCurrentPage(page);
+                              }}
+                              href="#"
+                              isActive={currentPage === page}
+                              className="cursor-pointer"
+                            >
+                              {page}
+                            </PaginationLink>
+                          </PaginationItem>
+                        ))}
+                        <PaginationItem>
+                          <PaginationNext
+                            onClick={(e) => {
+                              e.preventDefault();
+                              setCurrentPage((prev) =>
+                                Math.min(totalPages, prev + 1)
+                              );
+                            }}
+                            href="#"
+                            className={
+                              currentPage === totalPages
+                                ? "pointer-events-none opacity-50"
+                                : "cursor-pointer"
+                            }
+                          />
+                        </PaginationItem>
+                      </PaginationContent>
+                    </Pagination>
+                  )}
                 </div>
               ) : (
                 <p className="text-gray-600">No reviews yet</p>
@@ -593,38 +721,16 @@ export default function CompanyDetailClient({
         </div>
 
         {/* Sidebar */}
-        <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Company Stats</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Projects Posted</span>
-                <span className="font-semibold">{company.projectsPosted}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Total Spent</span>
-                <span className="font-semibold text-green-600">
-                  RM{company.totalSpend.toLocaleString()}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Rating</span>
-                <span className="font-semibold">
-                  {company.rating} ({company.reviewCount} reviews)
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-
+        <div className="space-y-4 sm:space-y-6">
           {company.preferredContractTypes &&
             company.preferredContractTypes.length > 0 && (
               <Card>
-                <CardHeader>
-                  <CardTitle>Preferred Contract Types</CardTitle>
+                <CardHeader className="p-4 sm:p-6">
+                  <CardTitle className="text-base sm:text-lg">
+                    Preferred Contract Types
+                  </CardTitle>
                 </CardHeader>
-                <CardContent className="flex flex-wrap gap-2">
+                <CardContent className="p-4 sm:p-6 flex flex-wrap gap-1.5 sm:gap-2">
                   {company.preferredContractTypes.map((type) => (
                     <Badge key={type} variant="secondary" className="text-xs">
                       {type}
@@ -636,10 +742,12 @@ export default function CompanyDetailClient({
 
           {company.languages && company.languages.length > 0 && (
             <Card>
-              <CardHeader>
-                <CardTitle>Languages</CardTitle>
+              <CardHeader className="p-4 sm:p-6">
+                <CardTitle className="text-base sm:text-lg">
+                  Languages
+                </CardTitle>
               </CardHeader>
-              <CardContent className="flex flex-wrap gap-2">
+              <CardContent className="p-4 sm:p-6 flex flex-wrap gap-1.5 sm:gap-2">
                 {company.languages.map((lang) => (
                   <Badge key={lang} variant="secondary" className="text-xs">
                     {lang}
@@ -652,17 +760,21 @@ export default function CompanyDetailClient({
           {/* Contact Information Card - Only show if privacy settings allow */}
           {(company.email || company.phone) && (
             <Card>
-              <CardHeader>
-                <CardTitle>Contact Information</CardTitle>
-                <CardDescription>Direct contact details</CardDescription>
+              <CardHeader className="p-4 sm:p-6">
+                <CardTitle className="text-base sm:text-lg">
+                  Contact Information
+                </CardTitle>
+                <CardDescription className="text-xs sm:text-sm">
+                  Direct contact details
+                </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-2.5 sm:space-y-3 text-xs sm:text-sm">
+              <CardContent className="p-4 sm:p-6 space-y-2.5 sm:space-y-3 text-xs sm:text-sm">
                 {company.email && (
                   <div>
                     <p className="text-gray-500">Email</p>
                     <a
                       href={`mailto:${company.email}`}
-                      className="font-medium text-blue-600 hover:underline break-all"
+                      className="font-medium text-blue-600 active:text-blue-800 sm:hover:underline break-all"
                     >
                       {company.email}
                     </a>
@@ -673,7 +785,7 @@ export default function CompanyDetailClient({
                     <p className="text-gray-500">Phone</p>
                     <a
                       href={`tel:${company.phone}`}
-                      className="font-medium text-blue-600 hover:underline"
+                      className="font-medium text-blue-600 active:text-blue-800 sm:hover:underline"
                     >
                       {company.phone}
                     </a>
@@ -685,21 +797,27 @@ export default function CompanyDetailClient({
 
           {/* Additional Information Card */}
           <Card>
-            <CardHeader>
-              <CardTitle>Additional Information</CardTitle>
-              <CardDescription>Company preferences and details</CardDescription>
+            <CardHeader className="p-4 sm:p-6">
+              <CardTitle className="text-base sm:text-lg">
+                Additional Information
+              </CardTitle>
+              <CardDescription className="text-xs sm:text-sm">
+                Company preferences and details
+              </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3 text-sm">
+            <CardContent className="p-4 sm:p-6 space-y-3 text-xs sm:text-sm">
               {company.remotePolicy && (
                 <div>
                   <p className="text-gray-500">Remote Policy</p>
-                  <p className="font-medium">{company.remotePolicy}</p>
+                  <p className="font-medium break-words">
+                    {company.remotePolicy}
+                  </p>
                 </div>
               )}
               {company.hiringFrequency && (
                 <div>
                   <p className="text-gray-500">Hiring Frequency</p>
-                  <p className="font-medium capitalize">
+                  <p className="font-medium capitalize break-words">
                     {company.hiringFrequency}
                   </p>
                 </div>
@@ -707,20 +825,8 @@ export default function CompanyDetailClient({
               {company.averageBudgetRange && (
                 <div>
                   <p className="text-gray-500">Average Budget Range</p>
-                  <p className="font-medium">{company.averageBudgetRange}</p>
-                </div>
-              )}
-              {company.fundingStage && (
-                <div>
-                  <p className="text-gray-500">Funding Stage</p>
-                  <p className="font-medium">{company.fundingStage}</p>
-                </div>
-              )}
-              {company.annualRevenue && (
-                <div>
-                  <p className="text-gray-500">Annual Revenue</p>
-                  <p className="font-medium">
-                    RM {Number(company.annualRevenue).toLocaleString()}
+                  <p className="font-medium break-words">
+                    {company.averageBudgetRange}
                   </p>
                 </div>
               )}
@@ -739,7 +845,7 @@ export default function CompanyDetailClient({
                             }
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-blue-600 hover:underline text-xs"
+                            className="text-blue-600 active:text-blue-800 sm:hover:underline text-xs break-all"
                           >
                             {link}
                           </a>
@@ -755,78 +861,82 @@ export default function CompanyDetailClient({
 
       {/* Opportunities Section */}
       <Card>
-        <CardHeader>
-          <CardTitle>Open Opportunities</CardTitle>
-          <CardDescription>
+        <CardHeader className="p-4 sm:p-6">
+          <CardTitle className="text-lg sm:text-xl">
+            Open Opportunities
+          </CardTitle>
+          <CardDescription className="text-xs sm:text-sm">
             Available projects from this company that you can submit proposals
             for
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-4 sm:p-6">
           {loadingOpportunities ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-              <span className="ml-2 text-gray-600">
+            <div className="flex items-center justify-center py-8 sm:py-12">
+              <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin text-gray-400" />
+              <span className="ml-2 text-sm sm:text-base text-gray-600">
                 Loading opportunities...
               </span>
             </div>
           ) : opportunities.length === 0 ? (
-            <div className="text-center py-12">
-              <Building2 className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            <div className="text-center py-8 sm:py-12">
+              <Building2 className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-4 text-gray-300" />
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
                 No open opportunities
               </h3>
-              <p className="text-gray-600">
+              <p className="text-sm sm:text-base text-gray-600">
                 This company doesn&apos;t have any open projects at the moment.
               </p>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
               {opportunities.map((opp) => (
                 <Card
                   key={opp.id}
-                  className="hover:shadow-lg transition-shadow"
+                  className="active:shadow-md sm:hover:shadow-lg transition-shadow"
                 >
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <CardTitle className="text-xl">{opp.title}</CardTitle>
+                  <CardHeader className="p-4 sm:p-6">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
+                          <CardTitle className="text-lg sm:text-xl break-words">
+                            {opp.title}
+                          </CardTitle>
                           {opp.priority === "High" && (
-                            <Badge className="bg-red-100 text-red-800">
+                            <Badge className="bg-red-100 text-red-800 text-xs shrink-0">
                               <Clock className="w-3 h-3 mr-1" />
                               Urgent
                             </Badge>
                           )}
                           {opp.hasSubmitted && (
-                            <Badge className="bg-green-100 text-green-800">
+                            <Badge className="bg-green-100 text-green-800 text-xs shrink-0">
                               <CheckCircle2 className="w-3 h-3 mr-1" />
                               Submitted
                             </Badge>
                           )}
                         </div>
-                        <CardDescription className="text-base line-clamp-2">
+                        <CardDescription className="text-sm sm:text-base line-clamp-2 break-words">
                           {opp.description}
                         </CardDescription>
                       </div>
                     </div>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
+                  <CardContent className="p-4 sm:p-6 space-y-3 sm:space-y-4">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
+                      <div className="flex items-center space-x-3 sm:space-x-4">
                         <div>
-                          <div className="flex items-center text-green-600 font-semibold">
-                            <DollarSign className="w-4 h-4 mr-1" />
-                            {opp.budget}
+                          <div className="flex items-center text-green-600 font-semibold text-sm sm:text-base">
+                            <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 flex-shrink-0" />
+                            <span className="break-words">{opp.budget}</span>
                           </div>
-                          <p className="text-sm text-gray-500">
+                          <p className="text-xs sm:text-sm text-gray-500 break-words">
                             {opp.timeline}
                           </p>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <div className="flex items-center text-sm text-gray-500">
-                          <Users className="w-4 h-4 mr-1" />
+                      <div className="text-left sm:text-right">
+                        <div className="flex items-center text-xs sm:text-sm text-gray-500">
+                          <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 flex-shrink-0" />
                           {opp.proposals} proposals
                         </div>
                         <p className="text-xs text-gray-400">
@@ -835,7 +945,7 @@ export default function CompanyDetailClient({
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-1.5 sm:gap-2">
                       {opp.skills.slice(0, 6).map((skill: string) => (
                         <Badge
                           key={skill}
@@ -852,7 +962,7 @@ export default function CompanyDetailClient({
                       )}
                     </div>
 
-                    <div className="flex items-center justify-between pt-4 border-t">
+                    <div className="flex items-center justify-between pt-3 sm:pt-4 border-t">
                       <Button
                         variant="outline"
                         size="sm"
@@ -870,15 +980,16 @@ export default function CompanyDetailClient({
                           setProposalErrors({});
                         }}
                         disabled={opp.hasSubmitted}
+                        className="text-xs sm:text-sm"
                       >
                         {opp.hasSubmitted ? (
                           <>
-                            <CheckCircle2 className="w-4 h-4 mr-2" />
+                            <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                             Already Submitted
                           </>
                         ) : (
                           <>
-                            <ThumbsUp className="w-4 h-4 mr-2" />
+                            <ThumbsUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                             Submit Proposal
                           </>
                         )}
@@ -894,19 +1005,23 @@ export default function CompanyDetailClient({
 
       {/* Proposal Submission Modal */}
       <Dialog open={isProposalModalOpen} onOpenChange={setIsProposalModalOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
-            <DialogTitle className="text-xl">Submit Proposal</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-lg sm:text-xl">
+              Submit Proposal
+            </DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm">
               Submit your proposal for &quot;{selectedOpportunity?.title}&quot;
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             {/* Bid Amount */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div>
-                <Label htmlFor="bidAmount">Your Bid Amount (RM) *</Label>
+                <Label htmlFor="bidAmount" className="text-xs sm:text-sm">
+                  Your Bid Amount (RM) *
+                </Label>
                 <Input
                   id="bidAmount"
                   type="number"
@@ -918,26 +1033,28 @@ export default function CompanyDetailClient({
                       bidAmount: e.target.value,
                     }))
                   }
-                  className={
+                  className={`text-sm sm:text-base ${
                     proposalErrors.bidAmount
                       ? "border-red-500 focus-visible:ring-red-500"
                       : ""
-                  }
+                  }`}
                 />
                 {proposalErrors.bidAmount && (
-                  <p className="text-xs text-red-600">
+                  <p className="text-xs text-red-600 mt-1">
                     {proposalErrors.bidAmount}
                   </p>
                 )}
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-gray-500 mt-1 break-words">
                   Client budget range: RM{" "}
                   {selectedOpportunity?.budgetMin?.toLocaleString() || "0"} - RM{" "}
                   {selectedOpportunity?.budgetMax?.toLocaleString() || "0"}
                 </p>
               </div>
               <div>
-                <Label htmlFor="timeline">Delivery Timeline *</Label>
-                <div className="flex gap-2">
+                <Label htmlFor="timeline" className="text-xs sm:text-sm">
+                  Delivery Timeline *
+                </Label>
+                <div className="flex flex-col sm:flex-row gap-2">
                   <Input
                     id="timelineAmount"
                     type="number"
@@ -950,11 +1067,11 @@ export default function CompanyDetailClient({
                         timelineAmount: e.target.value,
                       }))
                     }
-                    className={
+                    className={`text-sm sm:text-base ${
                       proposalErrors.timelineAmount
                         ? "border-red-500 focus-visible:ring-red-500"
                         : ""
-                    }
+                    }`}
                   />
                   <Select
                     value={proposalData.timelineUnit}
@@ -966,11 +1083,11 @@ export default function CompanyDetailClient({
                     }
                   >
                     <SelectTrigger
-                      className={
+                      className={`text-sm sm:text-base ${
                         proposalErrors.timelineUnit
                           ? "border-red-500 focus:ring-red-500"
                           : ""
-                      }
+                      }`}
                     >
                       <SelectValue placeholder="Unit" />
                     </SelectTrigger>
@@ -991,7 +1108,7 @@ export default function CompanyDetailClient({
                     {proposalErrors.timelineUnit}
                   </p>
                 )}
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-gray-500 mt-1 break-words">
                   Company timeline:{" "}
                   {selectedOpportunity?.originalTimeline
                     ? formatTimeline(selectedOpportunity.originalTimeline)
@@ -1002,11 +1119,13 @@ export default function CompanyDetailClient({
 
             {/* Cover Letter */}
             <div>
-              <Label htmlFor="coverLetter">Cover Letter *</Label>
+              <Label htmlFor="coverLetter" className="text-xs sm:text-sm">
+                Cover Letter *
+              </Label>
               <Textarea
                 id="coverLetter"
                 placeholder="Introduce yourself and explain why you're the best fit for this project..."
-                className={`min-h-[120px] ${
+                className={`min-h-[120px] text-sm sm:text-base ${
                   proposalErrors.coverLetter
                     ? "border-red-500 focus-visible:ring-red-500"
                     : ""
@@ -1020,7 +1139,7 @@ export default function CompanyDetailClient({
                 }
               />
               {proposalErrors.coverLetter && (
-                <p className="text-xs text-red-600">
+                <p className="text-xs text-red-600 mt-1">
                   {proposalErrors.coverLetter}
                 </p>
               )}
@@ -1028,8 +1147,8 @@ export default function CompanyDetailClient({
 
             {/* Milestones */}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <Label>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0 mb-2">
+                <Label className="text-xs sm:text-sm">
                   Project Milestones <span className="text-red-500">*</span>
                 </Label>
                 <Button
@@ -1051,13 +1170,14 @@ export default function CompanyDetailClient({
                       ],
                     }));
                   }}
+                  className="w-full sm:w-auto text-xs sm:text-sm"
                 >
                   + Add Milestone
                 </Button>
               </div>
               {proposalData.milestones.length === 0 && (
                 <p
-                  className={`text-sm ${
+                  className={`text-xs sm:text-sm ${
                     proposalErrors.milestones
                       ? "text-red-600 font-medium"
                       : "text-gray-500"
@@ -1070,14 +1190,23 @@ export default function CompanyDetailClient({
               <div className="space-y-3">
                 {proposalData.milestones.map((m, i) => (
                   <Card key={i}>
-                    <CardContent className="p-4 space-y-3">
-                      <div className="grid md:grid-cols-12 gap-3">
-                        <div className="md:col-span-1">
-                          <label className="text-sm font-medium">Seq</label>
-                          <Input type="number" value={i + 1} disabled />
+                    <CardContent className="p-3 sm:p-4 space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                        <div className="sm:col-span-1">
+                          <label className="text-xs sm:text-sm font-medium">
+                            Seq
+                          </label>
+                          <Input
+                            type="number"
+                            value={i + 1}
+                            disabled
+                            className="text-sm sm:text-base"
+                          />
                         </div>
-                        <div className="md:col-span-4">
-                          <label className="text-sm font-medium">Title</label>
+                        <div className="sm:col-span-12 md:col-span-4">
+                          <label className="text-xs sm:text-sm font-medium">
+                            Title
+                          </label>
                           <Input
                             value={m.title}
                             onChange={(e) => {
@@ -1091,10 +1220,11 @@ export default function CompanyDetailClient({
                                 milestones: updated,
                               }));
                             }}
+                            className="text-sm sm:text-base"
                           />
                         </div>
-                        <div className="md:col-span-3">
-                          <label className="text-sm font-medium">
+                        <div className="sm:col-span-12 md:col-span-3">
+                          <label className="text-xs sm:text-sm font-medium">
                             Amount (RM)
                           </label>
                           <Input
@@ -1111,10 +1241,11 @@ export default function CompanyDetailClient({
                                 milestones: updated,
                               }));
                             }}
+                            className="text-sm sm:text-base"
                           />
                         </div>
-                        <div className="md:col-span-4">
-                          <label className="text-sm font-medium">
+                        <div className="sm:col-span-12 md:col-span-4">
+                          <label className="text-xs sm:text-sm font-medium">
                             Due Date
                           </label>
                           <Input
@@ -1131,11 +1262,12 @@ export default function CompanyDetailClient({
                                 milestones: updated,
                               }));
                             }}
+                            className="text-sm sm:text-base"
                           />
                         </div>
                       </div>
                       <div>
-                        <label className="text-sm font-medium">
+                        <label className="text-xs sm:text-sm font-medium">
                           Description
                         </label>
                         <Textarea
@@ -1152,6 +1284,7 @@ export default function CompanyDetailClient({
                               milestones: updated,
                             }));
                           }}
+                          className="text-sm sm:text-base"
                         />
                       </div>
                       <div className="flex justify-end">
@@ -1167,6 +1300,7 @@ export default function CompanyDetailClient({
                               ),
                             }));
                           }}
+                          className="text-xs sm:text-sm"
                         >
                           Remove
                         </Button>
@@ -1184,8 +1318,10 @@ export default function CompanyDetailClient({
 
             {/* Attachments */}
             <div>
-              <Label>Attachments (Optional)</Label>
-              <div className="border-2 border-dashed rounded-lg p-6 text-center">
+              <Label className="text-xs sm:text-sm">
+                Attachments (Optional)
+              </Label>
+              <div className="border-2 border-dashed rounded-lg p-4 sm:p-6 text-center">
                 <input
                   type="file"
                   multiple
@@ -1212,8 +1348,8 @@ export default function CompanyDetailClient({
                   accept=".pdf,.doc,.docx,.txt,.jpg,.png"
                 />
                 <label htmlFor="file-upload" className="cursor-pointer">
-                  <Paperclip className="w-8 h-8 mx-auto text-gray-400 mb-2" />
-                  <p className="text-sm text-gray-600">
+                  <Paperclip className="w-6 h-6 sm:w-8 sm:h-8 mx-auto text-gray-400 mb-2" />
+                  <p className="text-xs sm:text-sm text-gray-600">
                     Click to upload portfolio, resume, or relevant documents
                   </p>
                   <p className="text-xs text-gray-500 mt-1">
@@ -1228,7 +1364,9 @@ export default function CompanyDetailClient({
                       key={index}
                       className="flex items-center justify-between bg-gray-50 p-2 rounded"
                     >
-                      <span className="text-sm text-gray-700">{file.name}</span>
+                      <span className="text-xs sm:text-sm text-gray-700 truncate flex-1 mr-2">
+                        {file.name}
+                      </span>
                       <Button
                         type="button"
                         variant="ghost"
@@ -1241,6 +1379,7 @@ export default function CompanyDetailClient({
                             ),
                           }));
                         }}
+                        className="text-xs sm:text-sm flex-shrink-0"
                       >
                         Remove
                       </Button>
@@ -1251,10 +1390,11 @@ export default function CompanyDetailClient({
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
             <Button
               variant="outline"
               onClick={() => setIsProposalModalOpen(false)}
+              className="w-full sm:w-auto text-xs sm:text-sm"
             >
               Cancel
             </Button>
@@ -1429,15 +1569,16 @@ export default function CompanyDetailClient({
                 }
               }}
               disabled={submittingProposal}
+              className="w-full sm:w-auto text-xs sm:text-sm"
             >
               {submittingProposal ? (
                 <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 animate-spin" />
                   Submitting...
                 </>
               ) : (
                 <>
-                  <Send className="w-4 h-4 mr-2" />
+                  <Send className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                   Submit Proposal
                 </>
               )}

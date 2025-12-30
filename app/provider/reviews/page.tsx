@@ -35,6 +35,7 @@ import {
   MessageSquare,
   Reply,
   Clock,
+  Award,
 } from "lucide-react";
 import { ProviderLayout } from "@/components/provider-layout";
 import { useToast } from "@/hooks/use-toast";
@@ -189,7 +190,7 @@ export default function ProviderReviewsPage() {
     if (!targetProjectId) {
       toast({
         title: "No companies available",
-        description: "All completed projects already have reviews.",
+        description: "All completed and disputed projects already have reviews.",
       });
       return;
     }
@@ -392,7 +393,7 @@ export default function ProviderReviewsPage() {
             </h1>
             <p className="text-muted-foreground">
               Manage the reviews you leave for clients and the feedback you
-              receive.
+              receive for completed or disputed projects.
             </p>
           </div>
           <Button
@@ -414,7 +415,7 @@ export default function ProviderReviewsPage() {
                 ? "…"
                 : stats.totalReviews.toString().padStart(1, "0")
             }
-            icon={<MessageSquare className="h-8 w-8 text-blue-600" />}
+            icon={<Award className="h-8 w-8 text-blue-600" />}
             helper="Combined reviews given and received"
           />
           <StatsCard
@@ -813,7 +814,7 @@ function PendingProjectsList({
       <EmptyState
         icon={<Clock className="h-10 w-10 text-muted-foreground" />}
         title="You're all caught up"
-        description="Every completed project has been reviewed."
+        description="Every completed and disputed project has been reviewed."
       />
     );
   }
@@ -824,9 +825,16 @@ function PendingProjectsList({
         <Card key={project.id}>
           <CardContent className="flex flex-col gap-4 p-6 md:flex-row md:items-center md:justify-between">
             <div>
-              <h3 className="font-semibold text-foreground">
-                {project.title || "Project"}
-              </h3>
+              <div className="flex items-center gap-2 mb-1">
+                <h3 className="font-semibold text-foreground">
+                  {project.title || "Project"}
+                </h3>
+                {project.status === "DISPUTED" && (
+                  <Badge variant="destructive" className="text-xs">
+                    Disputed
+                  </Badge>
+                )}
+              </div>
               <p className="text-sm text-muted-foreground">
                 {project.customer?.name ?? "Company"}
               </p>
@@ -894,7 +902,7 @@ function ReviewDialog({
               disabled={mode === "edit" || !hasProjects}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Select completed project" />
+                <SelectValue placeholder="Select completed or disputed project" />
               </SelectTrigger>
               <SelectContent>
                 {hasProjects ? (
@@ -913,25 +921,9 @@ function ReviewDialog({
             </Select>
             {!hasProjects && mode === "create" && (
               <p className="mt-2 text-xs text-muted-foreground">
-                All completed projects already have reviews.
+                All completed and disputed projects already have reviews.
               </p>
             )}
-          </div>
-
-          <div>
-            <Label>Overall rating (computed)</Label>
-            <div className="mt-2 flex items-center gap-2">
-              <RatingStars rating={formState.rating} />
-              <span className="text-xs text-muted-foreground">
-                {formState.rating
-                  ? `${formState.rating.toFixed(1)}/5`
-                  : "Rate every category to calculate"}
-              </span>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Automatically averaged from Communication, Clarity, Payment, and
-              Professionalism ratings.
-            </p>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -955,6 +947,22 @@ function ReviewDialog({
               value={formState.professionalismRating}
               onChange={(value) => onChange({ professionalismRating: value })}
             />
+          </div>
+
+          <div>
+            <Label>Overall rating (computed)</Label>
+            <div className="mt-2 flex items-center gap-2">
+              <RatingStars rating={formState.rating} />
+              <span className="text-xs text-muted-foreground">
+                {formState.rating
+                  ? `${formState.rating.toFixed(1)}/5`
+                  : "Rate every category to calculate"}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Automatically averaged from Communication, Clarity, Payment, and
+              Professionalism ratings.
+            </p>
           </div>
 
           <div>

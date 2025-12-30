@@ -1,6 +1,6 @@
 // lib/api.ts
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000";
 
 /**
  * Get the full URL for a profile image
@@ -2081,6 +2081,52 @@ export async function getAdminUserStats() {
   return data;
 }
 
+// Get admin users for customer support (accessible to authenticated users)
+export async function getAdminUsersForSupport() {
+  const token = getToken();
+  if (!token) throw new Error("Not authenticated");
+
+  const res = await fetch(`${API_BASE}/admins`, {
+    method: "GET",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+  });
+  
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.message || "Failed to fetch admin users");
+  return data;
+}
+
+export async function exportAdminUsers(params?: {
+  search?: string;
+  role?: string;
+  status?: string;
+}): Promise<Blob> {
+  const token = getToken();
+  if (!token) throw new Error("Not authenticated");
+
+  const searchParams = new URLSearchParams();
+  if (params?.search) searchParams.append("search", params.search);
+  if (params?.role) searchParams.append("role", params.role);
+  if (params?.status) searchParams.append("status", params.status);
+
+  const res = await fetch(`${API_BASE}/admin/users/export?${searchParams.toString()}`, {
+    method: "GET",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+    },
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json();
+    throw new Error(errorData?.error || "Failed to export users");
+  }
+
+  return await res.blob();
+}
+
 export async function getAdminUserById(userId: string) {
   const token = getToken();
   if (!token) throw new Error("Not authenticated");
@@ -3394,6 +3440,27 @@ export async function getR2DownloadUrl(key: string, expiresIn: number = 3600) {
     success: boolean;
     downloadUrl: string;
     expiresIn: number;
+  };
+}
+
+// Get total unread message count for the current user
+export async function getUnreadMessageCount() {
+  const token = getToken();
+  if (!token) throw new Error("Not authenticated");
+
+  const res = await fetch(`${API_BASE}/messages/unread-count`, {
+    method: "GET",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.message || "Failed to fetch unread message count");
+  return data as {
+    success: boolean;
+    count: number;
   };
 }
 

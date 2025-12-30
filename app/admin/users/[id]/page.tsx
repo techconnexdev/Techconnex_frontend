@@ -290,9 +290,9 @@ export default function AdminUserDetailPage() {
   if (loading) {
     return (
       <AdminLayout>
-        <div className="flex items-center justify-center min-h-[400px]">
-          <Loader2 className="h-8 w-8 animate-spin" />
-          <span className="ml-2">Loading user data...</span>
+        <div className="flex items-center justify-center min-h-[400px] px-4 sm:px-6 lg:px-0">
+          <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin" />
+          <span className="ml-2 text-sm sm:text-base">Loading user data...</span>
         </div>
       </AdminLayout>
     )
@@ -301,10 +301,10 @@ export default function AdminUserDetailPage() {
   if (!user || !formData) {
     return (
       <AdminLayout>
-        <div className="text-center py-12">
-          <p className="text-gray-500">User not found</p>
+        <div className="text-center py-8 sm:py-12 px-4 sm:px-6 lg:px-0">
+          <p className="text-sm sm:text-base text-gray-500">User not found</p>
           <Link href="/admin/users">
-            <Button className="mt-4">Back to Users</Button>
+            <Button className="mt-3 sm:mt-4 text-xs sm:text-sm">Back to Users</Button>
           </Link>
         </div>
       </AdminLayout>
@@ -424,7 +424,15 @@ export default function AdminUserDetailPage() {
   const projectsAsProvider: Project[] = isProvider && Array.isArray(user.projectsAsProvider)
     ? (user.projectsAsProvider as Array<Record<string, unknown>>)
         .filter((p) => p.id && p.title && p.status && p.createdAt)
-        .map((p) => ({
+        .map((p) => {
+          // Calculate approvedPrice from milestones
+          const milestones = Array.isArray(p.milestones) ? p.milestones : []
+          const approvedPrice = milestones.reduce(
+            (sum: number, m: Record<string, unknown>) => sum + (typeof m.amount === "number" ? m.amount : 0),
+            0
+          )
+          
+          return {
           id: String(p.id),
           title: String(p.title),
           description: typeof p.description === "string" ? p.description : undefined,
@@ -432,16 +440,26 @@ export default function AdminUserDetailPage() {
           createdAt: String(p.createdAt),
           budgetMin: typeof p.budgetMin === "number" ? p.budgetMin : undefined,
           budgetMax: typeof p.budgetMax === "number" ? p.budgetMax : undefined,
+            approvedPrice: approvedPrice > 0 ? approvedPrice : undefined,
           customer: p.customer && typeof p.customer === "object" && "name" in p.customer
             ? { name: String((p.customer as Record<string, unknown>).name) }
             : undefined,
-        }))
+          }
+        })
     : []
 
   const projectsAsCustomer: Project[] = isCustomer && Array.isArray(user.projectsAsCustomer)
     ? (user.projectsAsCustomer as Array<Record<string, unknown>>)
         .filter((p) => p.id && p.title && p.status && p.createdAt)
-        .map((p) => ({
+        .map((p) => {
+          // Calculate approvedPrice from milestones
+          const milestones = Array.isArray(p.milestones) ? p.milestones : []
+          const approvedPrice = milestones.reduce(
+            (sum: number, m: Record<string, unknown>) => sum + (typeof m.amount === "number" ? m.amount : 0),
+            0
+          )
+          
+          return {
           id: String(p.id),
           title: String(p.title),
           description: typeof p.description === "string" ? p.description : undefined,
@@ -449,17 +467,19 @@ export default function AdminUserDetailPage() {
           createdAt: String(p.createdAt),
           budgetMin: typeof p.budgetMin === "number" ? p.budgetMin : undefined,
           budgetMax: typeof p.budgetMax === "number" ? p.budgetMax : undefined,
+            approvedPrice: approvedPrice > 0 ? approvedPrice : undefined,
           provider: p.provider && typeof p.provider === "object" && "name" in p.provider
             ? { name: String((p.provider as Record<string, unknown>).name) }
             : undefined,
-        }))
+          }
+        })
     : []
 
   const allProjects = [...projectsAsProvider, ...projectsAsCustomer]
 
   return (
     <AdminLayout>
-      <div className="space-y-6">
+      <div className="space-y-4 sm:space-y-6 px-4 sm:px-6 lg:px-0">
         <UserHeader
           userName={userName}
           userEmail={userEmail}
@@ -485,15 +505,15 @@ export default function AdminUserDetailPage() {
           isVerified={userIsVerified}
         />
 
-        <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList>
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="profile">Profile</TabsTrigger>
-            {kycDocuments.length > 0 && <TabsTrigger value="documents">Documents</TabsTrigger>}
-            {allProjects.length > 0 && <TabsTrigger value="projects">Projects</TabsTrigger>}
+        <Tabs defaultValue="overview" className="space-y-4 sm:space-y-6">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto">
+            <TabsTrigger value="overview" className="text-xs sm:text-sm px-2 sm:px-4">Overview</TabsTrigger>
+            <TabsTrigger value="profile" className="text-xs sm:text-sm px-2 sm:px-4">Profile</TabsTrigger>
+            {kycDocuments.length > 0 && <TabsTrigger value="documents" className="text-xs sm:text-sm px-2 sm:px-4">Documents</TabsTrigger>}
+            {allProjects.length > 0 && <TabsTrigger value="projects" className="text-xs sm:text-sm px-2 sm:px-4">Projects</TabsTrigger>}
           </TabsList>
 
-          <TabsContent value="overview" className="space-y-6">
+          <TabsContent value="overview" className="space-y-4 sm:space-y-6">
             <BasicInformationCard
               userInfo={userBasicInfo}
               formData={formData}
@@ -510,7 +530,7 @@ export default function AdminUserDetailPage() {
             )}
           </TabsContent>
 
-          <TabsContent value="profile" className="space-y-6">
+          <TabsContent value="profile" className="space-y-4 sm:space-y-6">
             {isProvider && providerProfile && formData.providerProfile && (
               <>
                 <ProviderProfileCard
@@ -536,13 +556,13 @@ export default function AdminUserDetailPage() {
           </TabsContent>
 
           {kycDocuments.length > 0 && (
-            <TabsContent value="documents" className="space-y-6">
+            <TabsContent value="documents" className="space-y-4 sm:space-y-6">
               <KycDocumentsCard documents={kycDocuments} />
             </TabsContent>
           )}
 
           {allProjects.length > 0 && (
-            <TabsContent value="projects" className="space-y-6">
+            <TabsContent value="projects" className="space-y-4 sm:space-y-6">
               <ProjectsCard projects={allProjects} isProvider={isProvider} isCustomer={isCustomer} />
             </TabsContent>
           )}

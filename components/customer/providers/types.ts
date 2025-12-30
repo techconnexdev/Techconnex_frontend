@@ -36,6 +36,8 @@ export type Provider = {
     name: string;
     issuer: string;
     issuedDate: string;
+    serialNumber?: string;
+    sourceUrl?: string;
     verified: boolean;
   }>;
 };
@@ -47,9 +49,12 @@ export type Option = { value: string; label: string };
 export type PortfolioItem = {
   id: string;
   title: string;
-  cover: string;
-  url?: string;
-  tags?: string[];
+  cover?: string; // Legacy field
+  imageUrl?: string; // New field for image
+  url?: string; // Legacy field
+  externalUrl?: string; // New field for external link
+  tags?: string[]; // Legacy field
+  techStack?: string[]; // New field for technologies
   description?: string;
   client?: string | null;
   date?: string | null;

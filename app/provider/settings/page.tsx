@@ -54,6 +54,7 @@ export default function CustomerSettingsPage() {
   const [loadingPassword, setLoadingPassword] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState("");
   const [passwordSuccess, setPasswordSuccess] = useState(false);
+  const [passwordStrength, setPasswordStrength] = useState<{ score: number; feedback: string[] }>({ score: 0, feedback: [] });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -163,6 +164,48 @@ export default function CustomerSettingsPage() {
     }
   };
 
+  const validatePasswordStrength = (password: string) => {
+    const feedback: string[] = [];
+    let score = 0;
+
+    // Minimum length
+    if (password.length >= 8) {
+      score += 1;
+    } else {
+      feedback.push("At least 8 characters");
+    }
+
+    // Has uppercase
+    if (/[A-Z]/.test(password)) {
+      score += 1;
+    } else {
+      feedback.push("One uppercase letter");
+    }
+
+    // Has lowercase
+    if (/[a-z]/.test(password)) {
+      score += 1;
+    } else {
+      feedback.push("One lowercase letter");
+    }
+
+    // Has number
+    if (/[0-9]/.test(password)) {
+      score += 1;
+    } else {
+      feedback.push("One number");
+    }
+
+    // Has special character
+    if (/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+      score += 1;
+    } else {
+      feedback.push("One special character");
+    }
+
+    return { score, feedback };
+  };
+
   const handleChangePassword = async () => {
     if (!oldPassword || !newPassword || !confirmPassword) {
       setPasswordMessage("Please fill in all password fields.");
@@ -172,6 +215,18 @@ export default function CustomerSettingsPage() {
 
     if (newPassword !== confirmPassword) {
       setPasswordMessage("New passwords do not match.");
+      setPasswordSuccess(false);
+      return;
+    }
+
+    // Validate password strength
+    const strength = validatePasswordStrength(newPassword);
+    setPasswordStrength(strength);
+
+    if (strength.score < 5) {
+      setPasswordMessage(
+        `Password must be stronger. Missing: ${strength.feedback.join(", ")}.`
+      );
       setPasswordSuccess(false);
       return;
     }
@@ -611,8 +666,47 @@ export default function CustomerSettingsPage() {
                       id="new-password"
                       type="password"
                       value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
+                      onChange={(e) => {
+                        setNewPassword(e.target.value);
+                        if (e.target.value) {
+                          setPasswordStrength(validatePasswordStrength(e.target.value));
+                        } else {
+                          setPasswordStrength({ score: 0, feedback: [] });
+                        }
+                      }}
                     />
+                    {newPassword && (
+                      <div className="mt-2">
+                        <div className="h-2 w-full rounded-full bg-gray-200">
+                          <div
+                            className={`h-full rounded-full ${
+                              passwordStrength.score === 5
+                                ? "bg-green-500"
+                                : passwordStrength.score >= 3
+                                ? "bg-yellow-500"
+                                : "bg-red-500"
+                            }`}
+                            style={{ width: `${(passwordStrength.score / 5) * 100}%` }}
+                          />
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Strength: {passwordStrength.score}/5 (
+                          {passwordStrength.score === 5
+                            ? "Strong"
+                            : passwordStrength.score >= 3
+                            ? "Medium"
+                            : "Weak"}
+                          )
+                        </p>
+                        {passwordStrength.feedback.length > 0 && (
+                          <ul className="text-xs text-red-500 mt-1 list-disc pl-4">
+                            {passwordStrength.feedback.map((item, index) => (
+                              <li key={index}>{item}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="confirm-password">

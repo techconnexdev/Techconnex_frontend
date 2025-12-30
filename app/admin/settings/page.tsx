@@ -12,23 +12,18 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
-import { Separator } from "@/components/ui/separator";
 import {
   Settings,
   Save,
-  Shield,
-  Bell,
   DollarSign,
-  Mail,
-  Globe,
-  AlertTriangle,
 } from "lucide-react";
 import { AdminLayout } from "@/components/admin-layout";
 import { toast } from "sonner";
 
 export default function AdminSettingsPage() {
-  const [settings, setSettings] = useState<Record<string, unknown> | null>(null);
+  const [settings, setSettings] = useState<Record<string, unknown> | null>(
+    null
+  );
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -36,10 +31,7 @@ export default function AdminSettingsPage() {
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const res = await fetch(`${
-                                    process.env.NEXT_PUBLIC_API_URL ||
-                                    "http://localhost:4000"
-                                  }/admin/settings`);
+        const res = await fetch("http://localhost:4000/admin/settings");
         const data = await res.json();
 
         if (data.success && data.data) {
@@ -75,11 +67,6 @@ export default function AdminSettingsPage() {
     return 0;
   };
 
-  const getBooleanValue = (key: string): boolean => {
-    if (!settings) return false;
-    const value = settings[key];
-    return typeof value === "boolean" ? value : false;
-  };
 
   // ✅ Handle input updates
   const handleInputChange = (key: string, value: unknown) => {
@@ -94,7 +81,7 @@ export default function AdminSettingsPage() {
     setSaving(true);
 
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/admin/settings`, {
+      const res = await fetch("http://localhost:4000/admin/settings", {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -270,7 +257,7 @@ export default function AdminSettingsPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
+                  {/* <div className="space-y-2">
                     <Label htmlFor="platformCommission">
                       Platform Commission (%)
                     </Label>
@@ -288,7 +275,7 @@ export default function AdminSettingsPage() {
                         )
                       }
                     />
-                  </div>
+                  </div> */}
                   <div className="space-y-2">
                     <Label htmlFor="withdrawalFee">Withdrawal Fee (%)</Label>
                     <Input
@@ -307,7 +294,7 @@ export default function AdminSettingsPage() {
                     />
                   </div>
                 </div>
-                <div className="grid md:grid-cols-2 gap-4">
+                {/* <div className="grid md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="minimumWithdrawal">
                       Minimum Withdrawal (RM)
@@ -343,12 +330,12 @@ export default function AdminSettingsPage() {
                       }
                     />
                   </div>
-                </div>
+                </div> */}
               </CardContent>
             </Card>
 
             {/* Email Settings */}
-            <Card>
+            {/* <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Mail className="w-5 h-5" />
@@ -408,10 +395,10 @@ export default function AdminSettingsPage() {
                   />
                 </div>
               </CardContent>
-            </Card>
+            </Card> */}
 
             {/* Notification Settings */}
-            <Card>
+            {/* <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Bell className="w-5 h-5" />
@@ -482,10 +469,10 @@ export default function AdminSettingsPage() {
                   />
                 </div>
               </CardContent>
-            </Card>
+            </Card> */}
 
             {/* Security Settings */}
-            <Card>
+            {/* <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Shield className="w-5 h-5" />
@@ -566,10 +553,10 @@ export default function AdminSettingsPage() {
                   />
                 </div>
               </CardContent>
-            </Card>
+            </Card> */}
 
             {/* Feature Flags */}
-            <Card>
+            {/* <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Globe className="w-5 h-5" />
@@ -643,7 +630,7 @@ export default function AdminSettingsPage() {
                   />
                 </div>
               </CardContent>
-            </Card>
+            </Card> */}
 
             {/* Save Button */}
             <div className="flex justify-end">

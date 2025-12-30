@@ -16,6 +16,7 @@ import {
   MapPin,
   Star,
   CheckCircle2,
+  CheckCircle,
   MessageSquare,
   Heart,
   Award,
@@ -23,6 +24,7 @@ import {
   Globe,
   FileText,
   ExternalLink,
+  AlertTriangle,
 } from "lucide-react";
 import type { Provider, PortfolioItem, Review } from "./types";
 import PortfolioGrid from "./sections/PortfolioGrid";
@@ -137,7 +139,7 @@ export default function ProviderDetailClient({
       const method = saved ? "DELETE" : "POST";
       const response = await fetch(
         `${
-          process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"
+          process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000"
         }/providers/${provider.id}/save?userId=${encodeURIComponent(userId)}`,
         {
           method,
@@ -214,6 +216,12 @@ export default function ProviderDetailClient({
                   <Badge className="bg-green-100 text-green-800 text-xs">
                     <CheckCircle2 className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
                     Verified
+                  </Badge>
+                )}
+                {!provider.verified && (
+                  <Badge className="bg-gray-100 text-gray-700 border-gray-300 text-xs">
+                    <AlertTriangle className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
+                    Not Verified
                   </Badge>
                 )}
                 {provider.topRated && (
@@ -622,33 +630,51 @@ export default function ProviderDetailClient({
                   Verified credentials
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-2.5 sm:space-y-3 p-4 sm:p-6 pt-0">
+              <CardContent className="p-4 sm:p-6 pt-0">
+                <div className="space-y-4">
                 {provider.certifications.map((cert) => (
                   <div
                     key={cert.id}
-                    className="border-b pb-2.5 sm:pb-3 last:border-0"
+                      className="flex items-center justify-between p-4 border rounded-lg"
                   >
-                    <div className="flex flex-col sm:flex-row items-start sm:items-start justify-between gap-2">
+                      <div className="flex items-center space-x-3 flex-1">
+                        <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                          <Award className="w-6 h-6 text-blue-600" />
+                        </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-xs sm:text-sm break-words">
-                          {cert.name}
-                        </p>
-                        <p className="text-xs sm:text-sm text-gray-500 break-words">
-                          {cert.issuer}
-                        </p>
-                        <p className="text-[10px] sm:text-xs text-gray-400">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium">{cert.name}</p>
+                            {cert.verified && (
+                              <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                            )}
+                          </div>
+                          <p className="text-sm text-gray-600">{cert.issuer}</p>
+                          <p className="text-xs text-gray-500">
                           Issued:{" "}
-                          {new Date(cert.issuedDate).toLocaleDateString()}
+                            {cert.issuedDate
+                              ? new Date(cert.issuedDate).toLocaleDateString()
+                              : "N/A"}
                         </p>
+                          {cert.serialNumber && (
+                            <p className="text-xs text-gray-500 mt-1">
+                              Serial: {cert.serialNumber}
+                            </p>
+                          )}
+                          {cert.sourceUrl && (
+                            <a
+                              href={cert.sourceUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-blue-600 hover:underline mt-1 inline-block"
+                            >
+                              Verify Certificate ↗
+                            </a>
+                          )}
+                        </div>
                       </div>
-                      {cert.verified && (
-                        <Badge className="bg-green-100 text-green-800 text-[10px] sm:text-xs flex-shrink-0">
-                          Verified
-                        </Badge>
-                      )}
                     </div>
+                  ))}
                   </div>
-                ))}
               </CardContent>
             </Card>
           )}

@@ -39,7 +39,7 @@ import {
   Check,
 } from "lucide-react"
 import { AdminLayout } from "@/components/admin-layout"
-import { getAdminUsers, getAdminUserStats, suspendUser, activateUser, getProfileImageUrl, createAdminUser } from "@/lib/api"
+import { getAdminUsers, getAdminUserStats, suspendUser, activateUser, getProfileImageUrl, createAdminUser, exportAdminUsers } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
 import { Label } from "@/components/ui/label"
@@ -322,83 +322,116 @@ export default function AdminUsersPage() {
 
   return (
     <AdminLayout>
-      <div className="space-y-8">
+      <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">User Management</h1>
-            <p className="text-gray-600">Manage all platform users and their activities</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">User Management</h1>
+            <p className="text-sm sm:text-base text-gray-600 mt-1">Manage all platform users and their activities</p>
           </div>
-          <div className="flex gap-3">
-            <Button variant="outline">
-              <Filter className="w-4 h-4 mr-2" />
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
+            <Button
+              variant="outline"
+              onClick={async () => {
+                try {
+                  const blob = await exportAdminUsers({
+                    search: searchQuery,
+                    role: roleFilter !== "all" ? roleFilter : undefined,
+                    status: statusFilter !== "all" ? statusFilter : undefined,
+                  })
+                  const url = URL.createObjectURL(blob)
+                  const link = document.createElement("a")
+                  link.href = url
+                  link.download = `admin-users-${Date.now()}.pdf`
+                  document.body.appendChild(link)
+                  link.click()
+                  document.body.removeChild(link)
+                  URL.revokeObjectURL(url)
+                  toast({
+                    title: "Export successful",
+                    description: "Users exported as PDF",
+                  })
+                } catch (err) {
+                  toast({
+                    title: "Export failed",
+                    description:
+                      err instanceof Error
+                        ? err.message
+                        : "Failed to export users",
+                    variant: "destructive",
+                  })
+                }
+              }}
+              className="w-full sm:w-auto text-xs sm:text-sm"
+            >
+              <Filter className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
               Export Data
             </Button>
-            <Button onClick={() => setAddUserDialogOpen(true)}>
-              <Users className="w-4 h-4 mr-2" />
+            <Button onClick={() => setAddUserDialogOpen(true)} className="w-full sm:w-auto text-xs sm:text-sm">
+              <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
               Add User
             </Button>
           </div>
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6">
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Total Users</p>
-                  <p className="text-2xl font-bold text-gray-900">{stats.totalUsers}</p>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">Total Users</p>
+                  <p className="text-xl sm:text-2xl font-bold text-gray-900 truncate">{stats.totalUsers}</p>
                 </div>
-                <Users className="w-8 h-8 text-blue-600" />
+                <Users className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600 flex-shrink-0 ml-2" />
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Active</p>
-                  <p className="text-2xl font-bold text-green-600">{stats.activeUsers}</p>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">Active</p>
+                  <p className="text-xl sm:text-2xl font-bold text-green-600 truncate">{stats.activeUsers}</p>
                 </div>
-                <CheckCircle className="w-8 h-8 text-green-600" />
+                <CheckCircle className="w-6 h-6 sm:w-8 sm:h-8 text-green-600 flex-shrink-0 ml-2" />
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Suspended</p>
-                  <p className="text-2xl font-bold text-red-600">{stats.suspendedUsers || 0}</p>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">Suspended</p>
+                  <p className="text-xl sm:text-2xl font-bold text-red-600 truncate">{stats.suspendedUsers || 0}</p>
                 </div>
-                <AlertTriangle className="w-8 h-8 text-red-600" />
+                <AlertTriangle className="w-6 h-6 sm:w-8 sm:h-8 text-red-600 flex-shrink-0 ml-2" />
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Providers</p>
-                  <p className="text-2xl font-bold text-blue-600">{stats.providers}</p>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">Providers</p>
+                  <p className="text-xl sm:text-2xl font-bold text-blue-600 truncate">{stats.providers}</p>
                 </div>
-                <Users className="w-8 h-8 text-blue-600" />
+                <Users className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600 flex-shrink-0 ml-2" />
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Customers</p>
-                  <p className="text-2xl font-bold text-purple-600">{stats.customers}</p>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">Customers</p>
+                  <p className="text-xl sm:text-2xl font-bold text-purple-600 truncate">{stats.customers}</p>
                 </div>
-                <Building className="w-8 h-8 text-purple-600" />
+                <Building className="w-6 h-6 sm:w-8 sm:h-8 text-purple-600 flex-shrink-0 ml-2" />
               </div>
             </CardContent>
           </Card>
@@ -406,21 +439,21 @@ export default function AdminUsersPage() {
 
         {/* Filters */}
         <Card>
-          <CardContent className="p-6">
-            <div className="flex flex-col sm:flex-row gap-4">
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
               <div className="flex-1">
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   <Input
                     placeholder="Search users by name or email..."
-                    className="pl-10"
+                    className="pl-9 sm:pl-10 text-sm sm:text-base"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
                 </div>
               </div>
               <Select value={roleFilter} onValueChange={setRoleFilter}>
-                <SelectTrigger className="w-full sm:w-48">
+                <SelectTrigger className="w-full sm:w-48 text-sm sm:text-base">
                   <SelectValue placeholder="All Roles" />
                 </SelectTrigger>
                 <SelectContent>
@@ -431,7 +464,7 @@ export default function AdminUsersPage() {
                 </SelectContent>
               </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-full sm:w-48">
+                <SelectTrigger className="w-full sm:w-48 text-sm sm:text-base">
                   <SelectValue placeholder="All Status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -446,33 +479,34 @@ export default function AdminUsersPage() {
 
         {/* Users Table */}
         <Card>
-          <CardHeader>
-            <CardTitle>Users ({users.length})</CardTitle>
-            <CardDescription>Manage user accounts and permissions</CardDescription>
+          <CardHeader className="p-4 sm:p-6">
+            <CardTitle className="text-lg sm:text-xl">Users ({users.length})</CardTitle>
+            <CardDescription className="text-xs sm:text-sm">Manage user accounts and permissions</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-0 sm:p-4 sm:p-6">
             {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin" />
-                <span className="ml-2">Loading users...</span>
+              <div className="flex items-center justify-center py-8 sm:py-12 px-4 sm:px-0">
+                <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin" />
+                <span className="ml-2 text-sm sm:text-base">Loading users...</span>
               </div>
             ) : (
+            <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>User</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Status</TableHead>
-                    <TableHead>Projects/Stats</TableHead>
-                  <TableHead>Rating</TableHead>
-                    <TableHead>Joined</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead className="text-xs sm:text-sm">User</TableHead>
+                  <TableHead className="text-xs sm:text-sm">Role</TableHead>
+                  <TableHead className="text-xs sm:text-sm">Status</TableHead>
+                    <TableHead className="text-xs sm:text-sm">Projects/Stats</TableHead>
+                  <TableHead className="text-xs sm:text-sm">Rating</TableHead>
+                    <TableHead className="text-xs sm:text-sm">Joined</TableHead>
+                  <TableHead className="text-right text-xs sm:text-sm">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                   {users.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-12 text-gray-500">
+                      <TableCell colSpan={7} className="text-center py-8 sm:py-12 text-sm sm:text-base text-gray-500">
                         No users found
                       </TableCell>
                     </TableRow>
@@ -489,24 +523,24 @@ export default function AdminUsersPage() {
                       
                       return (
                   <TableRow key={user.id as string}>
-                    <TableCell>
-                      <div className="flex items-center space-x-3">
-                        <Avatar>
+                    <TableCell className="p-3 sm:p-4">
+                      <div className="flex items-center space-x-2 sm:space-x-3">
+                        <Avatar className="w-8 h-8 sm:w-10 sm:h-10 flex-shrink-0">
                           <AvatarImage 
                             src={getProfileImageUrl(profile?.profileImageUrl as string | undefined)}
                           />
-                          <AvatarFallback>{(userName?.charAt(0) || "U") as string}</AvatarFallback>
+                          <AvatarFallback className="text-xs sm:text-sm">{(userName?.charAt(0) || "U") as string}</AvatarFallback>
                         </Avatar>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium">{userName as string}</p>
-                            {(user.isVerified as boolean) && <CheckCircle className="w-4 h-4 text-green-500" />}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 sm:gap-2">
+                            <p className="font-medium text-sm sm:text-base truncate">{userName as string}</p>
+                            {(user.isVerified as boolean) && <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-500 flex-shrink-0" />}
                           </div>
-                          <p className="text-sm text-gray-500">{userEmail as string}</p>
+                          <p className="text-xs sm:text-sm text-gray-500 truncate">{userEmail as string}</p>
                           {(() => {
                             const location = profile?.location as string | undefined;
                             return location ? (
-                              <p className="text-xs text-gray-400">{location}</p>
+                              <p className="text-xs text-gray-400 truncate">{location}</p>
                             ) : null;
                           })()}
                           {(() => {
@@ -524,76 +558,76 @@ export default function AdminUsersPage() {
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell>
-                      <Badge className={getRoleColor(userRole)}>
+                    <TableCell className="p-3 sm:p-4">
+                      <Badge className={`${getRoleColor(userRole)} text-xs`}>
                               {getPrimaryRole(userRole)}
                       </Badge>
                     </TableCell>
-                    <TableCell>
-                      <Badge className={getStatusColor(userStatus || "")}>
+                    <TableCell className="p-3 sm:p-4">
+                      <Badge className={`${getStatusColor(userStatus || "")} text-xs`}>
                               {userStatus || "ACTIVE"}
                       </Badge>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="p-3 sm:p-4">
                             {isProvider ? (
                               <div>
-                                <p className="font-medium">{(profile?.totalProjects as number || 0)} projects</p>
-                                <p className="text-sm text-gray-500">
+                                <p className="font-medium text-xs sm:text-sm">{(profile?.totalProjects as number || 0)} projects</p>
+                                <p className="text-xs text-gray-500">
                                   RM {Number(profile?.totalEarnings || 0).toLocaleString()} earned
                                 </p>
                               </div>
                             ) : (
                       <div>
-                                <p className="font-medium">{(profile?.projectsPosted as number || 0)} posted</p>
-                        <p className="text-sm text-gray-500">
+                                <p className="font-medium text-xs sm:text-sm">{(profile?.projectsPosted as number || 0)} posted</p>
+                        <p className="text-xs text-gray-500">
                                   RM {Number(profile?.totalSpend || 0).toLocaleString()} spent
                         </p>
                       </div>
                             )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="p-3 sm:p-4">
                             {profile?.rating ? (
                         <div className="flex items-center">
-                          <span className="text-yellow-400">★</span>
-                                <span className="ml-1 font-medium">{Number(profile.rating).toFixed(1)}</span>
+                          <span className="text-yellow-400 text-xs sm:text-sm">★</span>
+                                <span className="ml-1 font-medium text-xs sm:text-sm">{Number(profile.rating).toFixed(1)}</span>
                         </div>
                       ) : (
-                        <span className="text-gray-400">No rating</span>
+                        <span className="text-xs sm:text-sm text-gray-400">No rating</span>
                       )}
                     </TableCell>
-                    <TableCell>
-                            <p className="text-sm">{formatDate(userCreatedAt || "")}</p>
+                    <TableCell className="p-3 sm:p-4">
+                            <p className="text-xs sm:text-sm">{formatDate(userCreatedAt || "")}</p>
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right p-3 sm:p-4">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" className="h-8 w-8 p-0">
-                            <MoreHorizontal className="h-4 w-4" />
+                          <Button variant="ghost" className="h-7 w-7 sm:h-8 sm:w-8 p-0">
+                            <MoreHorizontal className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                           </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                        <DropdownMenuContent align="end" className="text-xs sm:text-sm">
+                          <DropdownMenuLabel className="text-xs sm:text-sm">Actions</DropdownMenuLabel>
                                 <DropdownMenuItem asChild>
-                                  <Link href={`/admin/users/${user.id}`}>
-                            <Eye className="mr-2 h-4 w-4" />
+                                  <Link href={`/admin/users/${user.id}`} className="text-xs sm:text-sm">
+                            <Eye className="mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
                             View Profile
                                   </Link>
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                                 {user.status === "ACTIVE" ? (
                                   <DropdownMenuItem
-                                    className="text-red-600"
+                                    className="text-red-600 text-xs sm:text-sm"
                                     onClick={() => handleSuspendClick(user)}
                                   >
-                              <Ban className="mr-2 h-4 w-4" />
+                              <Ban className="mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
                               Suspend User
                             </DropdownMenuItem>
                           ) : (
                                   <DropdownMenuItem
-                                    className="text-green-600"
+                                    className="text-green-600 text-xs sm:text-sm"
                                     onClick={() => handleActivateClick(user)}
                                   >
-                              <CheckCircle className="mr-2 h-4 w-4" />
+                              <CheckCircle className="mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
                               Activate User
                             </DropdownMenuItem>
                           )}
@@ -606,24 +640,26 @@ export default function AdminUsersPage() {
                   )}
               </TableBody>
             </Table>
+            </div>
             )}
           </CardContent>
         </Card>
 
         {/* Suspend Dialog */}
         <Dialog open={suspendDialogOpen} onOpenChange={setSuspendDialogOpen}>
-          <DialogContent>
+          <DialogContent className="p-4 sm:p-6">
             <DialogHeader>
-              <DialogTitle>Suspend User</DialogTitle>
-              <DialogDescription>
+              <DialogTitle className="text-lg sm:text-xl">Suspend User</DialogTitle>
+              <DialogDescription className="text-xs sm:text-sm">
                 Are you sure you want to suspend {selectedUser?.name as string}? They will not be able to login until activated.
               </DialogDescription>
             </DialogHeader>
-            <DialogFooter>
+            <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
               <Button
                 variant="outline"
                 onClick={() => setSuspendDialogOpen(false)}
                 disabled={actionLoading}
+                className="w-full sm:w-auto text-xs sm:text-sm"
               >
                 Cancel
               </Button>
@@ -631,10 +667,11 @@ export default function AdminUsersPage() {
                 variant="destructive"
                 onClick={confirmSuspend}
                 disabled={actionLoading}
+                className="w-full sm:w-auto text-xs sm:text-sm"
               >
                 {actionLoading ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Loader2 className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin" />
                     Suspending...
                   </>
                 ) : (
@@ -647,28 +684,30 @@ export default function AdminUsersPage() {
 
         {/* Activate Dialog */}
         <Dialog open={activateDialogOpen} onOpenChange={setActivateDialogOpen}>
-          <DialogContent>
+          <DialogContent className="p-4 sm:p-6">
             <DialogHeader>
-              <DialogTitle>Activate User</DialogTitle>
-              <DialogDescription>
+              <DialogTitle className="text-lg sm:text-xl">Activate User</DialogTitle>
+              <DialogDescription className="text-xs sm:text-sm">
                 Are you sure you want to activate {selectedUser?.name as string}? They will be able to login again.
               </DialogDescription>
             </DialogHeader>
-            <DialogFooter>
+            <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
               <Button
                 variant="outline"
                 onClick={() => setActivateDialogOpen(false)}
                 disabled={actionLoading}
+                className="w-full sm:w-auto text-xs sm:text-sm"
               >
                 Cancel
               </Button>
               <Button
                 onClick={confirmActivate}
                 disabled={actionLoading}
+                className="w-full sm:w-auto text-xs sm:text-sm"
               >
                 {actionLoading ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Loader2 className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin" />
                     Activating...
                   </>
                 ) : (
@@ -681,59 +720,62 @@ export default function AdminUsersPage() {
 
         {/* Add User Dialog */}
         <Dialog open={addUserDialogOpen} onOpenChange={setAddUserDialogOpen}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
             <DialogHeader>
-              <DialogTitle>Add New User</DialogTitle>
-              <DialogDescription>
+              <DialogTitle className="text-lg sm:text-xl">Add New User</DialogTitle>
+              <DialogDescription className="text-xs sm:text-sm">
                 Create a new user account. A password will be automatically generated.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4">
+            <div className="space-y-3 sm:space-y-4 py-3 sm:py-4">
               {/* Name */}
               <div className="space-y-2">
-                <Label htmlFor="name">Name *</Label>
+                <Label htmlFor="name" className="text-xs sm:text-sm">Name *</Label>
                 <Input
                   id="name"
                   placeholder="Enter full name"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="text-sm sm:text-base"
                 />
               </div>
 
               {/* Email */}
               <div className="space-y-2">
-                <Label htmlFor="email">Email *</Label>
+                <Label htmlFor="email" className="text-xs sm:text-sm">Email *</Label>
                 <Input
                   id="email"
                   type="email"
                   placeholder="Enter email address"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  className="text-sm sm:text-base"
                 />
               </div>
 
               {/* Phone */}
               <div className="space-y-2">
-                <Label htmlFor="phone">Phone Number</Label>
+                <Label htmlFor="phone" className="text-xs sm:text-sm">Phone Number</Label>
                 <Input
                   id="phone"
                   type="tel"
                   placeholder="Enter phone number (optional)"
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                  className="text-sm sm:text-base"
                 />
               </div>
 
               {/* Role */}
               <div className="space-y-2">
-                <Label htmlFor="role">Role *</Label>
+                <Label htmlFor="role" className="text-xs sm:text-sm">Role *</Label>
                 <Select
                   value={formData.role}
                   onValueChange={(value: "ADMIN" | "PROVIDER" | "CUSTOMER") =>
                     setFormData({ ...formData, role: value })
                   }
                 >
-                  <SelectTrigger id="role">
+                  <SelectTrigger id="role" className="text-sm sm:text-base">
                     <SelectValue placeholder="Select role" />
                   </SelectTrigger>
                   <SelectContent>
@@ -746,41 +788,45 @@ export default function AdminUsersPage() {
 
               {/* Generated Password */}
               <div className="space-y-2">
-                <Label>Generated Password</Label>
-                <div className="flex gap-2">
+                <Label className="text-xs sm:text-sm">Generated Password</Label>
+                <div className="flex flex-col sm:flex-row gap-2">
                   <Input
                     type="text"
                     value={generatedPassword}
                     readOnly
-                    className="font-mono"
+                    className="font-mono text-xs sm:text-sm"
                   />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={copyPassword}
-                    title="Copy password"
-                  >
-                    {passwordCopied ? (
-                      <Check className="h-4 w-4 text-green-600" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={generatePassword}
-                  >
-                    Regenerate
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={copyPassword}
+                      title="Copy password"
+                      className="flex-shrink-0"
+                    >
+                      {passwordCopied ? (
+                        <Check className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-green-600" />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={generatePassword}
+                      className="text-xs sm:text-sm"
+                    >
+                      Regenerate
+                    </Button>
+                  </div>
                 </div>
-                <p className="text-sm text-gray-500">
+                <p className="text-xs sm:text-sm text-gray-500">
                   This password will be used for the initial login. Make sure to copy it before closing this dialog.
                 </p>
               </div>
             </div>
-            <DialogFooter>
+            <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
               <Button
                 variant="outline"
                 onClick={() => {
@@ -795,16 +841,18 @@ export default function AdminUsersPage() {
                   setPasswordCopied(false)
                 }}
                 disabled={createLoading}
+                className="w-full sm:w-auto text-xs sm:text-sm"
               >
                 Cancel
               </Button>
               <Button
                 onClick={handleAddUser}
                 disabled={createLoading || !formData.name || !formData.email}
+                className="w-full sm:w-auto text-xs sm:text-sm"
               >
                 {createLoading ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Loader2 className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin" />
                     Creating...
                   </>
                 ) : (

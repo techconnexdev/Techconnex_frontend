@@ -43,6 +43,7 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import { Badge as BadgeComponent } from "@/components/ui/badge";
+import { getUnreadMessageCount } from "@/lib/api";
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -94,6 +95,9 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedNotification, setSelectedNotification] =
     useState<Notification | null>(null);
+
+  // Unread message count state
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
 
   const handleLogout = () => {
     // Clear user data from localStorage
@@ -172,6 +176,33 @@ export function AdminLayout({ children }: AdminLayoutProps) {
 
   // Calculate unread notifications
   const unreadCount = notifications.filter((n) => !n.isRead).length;
+
+  // Fetch unread message count
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    const fetchUnreadCount = async () => {
+      try {
+        const response = await getUnreadMessageCount();
+        if (response.success) {
+          setUnreadMessageCount(response.count);
+        }
+      } catch (error) {
+        console.error("Failed to fetch unread message count:", error);
+        setUnreadMessageCount(0);
+      }
+    };
+
+    // Fetch immediately
+    fetchUnreadCount();
+
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchUnreadCount, 30000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Handler to mark a notification as read
   const handleNotificationClick = async (id: string) => {
@@ -269,7 +300,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
               <Link
                 key={item.name}
                 href={item.href}
-                className={`flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                className={`flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors relative ${
                   isActive(item.href)
                     ? "bg-blue-100 text-blue-700"
                     : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
@@ -278,6 +309,11 @@ export function AdminLayout({ children }: AdminLayoutProps) {
               >
                 <item.icon className="w-5 h-5 mr-3" />
                 {item.name}
+                {item.name === "Messages" && unreadMessageCount > 0 && (
+                  <BadgeComponent className="ml-auto bg-red-500 text-white text-xs min-w-[20px] h-5 flex items-center justify-center px-1.5">
+                    {unreadMessageCount > 99 ? "99+" : unreadMessageCount}
+                  </BadgeComponent>
+                )}
               </Link>
             ))}
           </nav>
@@ -302,7 +338,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
               <Link
                 key={item.name}
                 href={item.href}
-                className={`flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                className={`flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors relative ${
                   isActive(item.href)
                     ? "bg-blue-100 text-blue-700"
                     : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
@@ -310,6 +346,11 @@ export function AdminLayout({ children }: AdminLayoutProps) {
               >
                 <item.icon className="w-5 h-5 mr-3" />
                 {item.name}
+                {item.name === "Messages" && unreadMessageCount > 0 && (
+                  <BadgeComponent className="ml-auto bg-red-500 text-white text-xs min-w-[20px] h-5 flex items-center justify-center px-1.5">
+                    {unreadMessageCount > 99 ? "99+" : unreadMessageCount}
+                  </BadgeComponent>
+                )}
               </Link>
             ))}
           </nav>
@@ -321,7 +362,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
               </Button>
             </Link>
           </div> */}
-          <div className="p-4 border-t">
+          {/* <div className="p-4 border-t">
             <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg p-4 text-white">
               <h3 className="text-sm font-medium mb-1">Need Help?</h3>
               <p className="text-xs opacity-90 mb-3">
@@ -331,7 +372,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                 Get Support
               </Button>
             </div>
-          </div>
+          </div> */}
         </div>
       </div>
 
@@ -459,15 +500,19 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => router.push("/admin/users")}>
                     <User className="mr-2 h-4 w-4" />
-                    <span>Profile</span>
+                    <span>Users</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => router.push("/admin/payments")}
+                  >
                     <CreditCard className="mr-2 h-4 w-4" />
-                    <span>Billing</span>
+                    <span>Payment</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => router.push("/admin/settings")}
+                  >
                     <Settings className="mr-2 h-4 w-4" />
                     <span>Settings</span>
                   </DropdownMenuItem>

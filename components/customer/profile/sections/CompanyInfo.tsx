@@ -286,7 +286,7 @@ export default function CompanyInfo({
     const isLocalPath =
       url.startsWith("/uploads/") || url.startsWith("uploads/");
     const downloadUrl = isLocalPath
-      ? `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}${
+      ? `${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000"}${
           url.startsWith("/") ? "" : "/"
         }${url}`
       : url;
@@ -441,161 +441,193 @@ export default function CompanyInfo({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div>
               <Label>Industry</Label>
-              <Select
-                value={value.customerProfile?.industry || ""}
-                onValueChange={(v) =>
-                  onChange({
-                    ...value,
-                    customerProfile: {
-                      ...(value.customerProfile || {}),
-                      industry: v,
-                    },
-                  })
-                }
-                disabled={!isEditing}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select industry" />
-                </SelectTrigger>
-                <SelectContent>
-                  {[
-                    "Technology",
-                    "Finance",
-                    "Healthcare",
-                    "Education",
-                    "Manufacturing",
-                    "Retail",
-                    "Government",
-                    "Consulting",
-                    "Real Estate",
-                    "Other",
-                  ].map((i) => (
-                    <SelectItem key={i} value={i}>
-                      {i}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {isEditing ? (
+                <Select
+                  value={value.customerProfile?.industry || ""}
+                  onValueChange={(v) =>
+                    onChange({
+                      ...value,
+                      customerProfile: {
+                        ...(value.customerProfile || {}),
+                        industry: v,
+                      },
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select industry" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[
+                      "Technology",
+                      "Finance",
+                      "Healthcare",
+                      "Education",
+                      "Manufacturing",
+                      "Retail",
+                      "Government",
+                      "Consulting",
+                      "Real Estate",
+                      "Other",
+                    ].map((i) => (
+                      <SelectItem key={i} value={i}>
+                        {i}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <p className="text-sm sm:text-base text-gray-900 mt-2">
+                  {value.customerProfile?.industry || "N/A"}
+                </p>
+              )}
             </div>
             <div>
               <Label>Company Size</Label>
-              <Select
-                value={value.customerProfile?.companySize || ""}
-                onValueChange={(v) =>
-                  onChange({
-                    ...value,
-                    customerProfile: {
-                      ...(value.customerProfile || {}),
-                      companySize: v,
-                    },
-                  })
-                }
-                disabled={!isEditing}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select company size" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1-10">Startup (1-10 employees)</SelectItem>
-                  <SelectItem value="11-50">Small (11-50 employees)</SelectItem>
-                  <SelectItem value="51-200">
-                    Medium (51-200 employees)
-                  </SelectItem>
-                  <SelectItem value="201-1000">
-                    Large (201-1000 employees)
-                  </SelectItem>
-                  <SelectItem value="1000+">
-                    Enterprise (1000+ employees)
-                  </SelectItem>
-                  <SelectItem value="150">150 employees</SelectItem>
-                </SelectContent>
-              </Select>
+              {isEditing ? (
+                <Select
+                  value={value.customerProfile?.companySize || ""}
+                  onValueChange={(v) =>
+                    onChange({
+                      ...value,
+                      customerProfile: {
+                        ...(value.customerProfile || {}),
+                        companySize: v,
+                      },
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select company size" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1-10">Startup (1-10 employees)</SelectItem>
+                    <SelectItem value="11-50">Small (11-50 employees)</SelectItem>
+                    <SelectItem value="51-200">
+                      Medium (51-200 employees)
+                    </SelectItem>
+                    <SelectItem value="201-1000">
+                      Large (201-1000 employees)
+                    </SelectItem>
+                    <SelectItem value="1000+">
+                      Enterprise (1000+ employees)
+                    </SelectItem>
+                    <SelectItem value="150">150 employees</SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : (
+                <p className="text-sm sm:text-base text-gray-900 mt-2">
+                  {value.customerProfile?.companySize || "N/A"}
+                </p>
+              )}
             </div>
             <div>
               <Label>Employee Count</Label>
-              <Input
-                type="number"
-                value={value.customerProfile?.employeeCount || ""}
-                disabled={!isEditing}
-                onChange={(e) =>
-                  onChange({
-                    ...value,
-                    customerProfile: {
-                      ...(value.customerProfile || {}),
-                      employeeCount: parseInt(e.target.value) || 0,
-                    },
-                  })
-                }
-                placeholder="150"
-              />
+              {isEditing ? (
+                <Input
+                  type="number"
+                  value={value.customerProfile?.employeeCount || ""}
+                  onChange={(e) =>
+                    onChange({
+                      ...value,
+                      customerProfile: {
+                        ...(value.customerProfile || {}),
+                        employeeCount: parseInt(e.target.value) || 0,
+                      },
+                    })
+                  }
+                  placeholder="150"
+                />
+              ) : (
+                <p className="text-sm sm:text-base text-gray-900 mt-2">
+                  {value.customerProfile?.employeeCount || "N/A"}
+                </p>
+              )}
             </div>
             <div>
               <Label>Established Year</Label>
-              <Input
-                type="number"
-                min="1800"
-                max={new Date().getFullYear()}
-                value={value.customerProfile?.establishedYear || ""}
-                disabled={!isEditing}
-                onChange={(e) =>
-                  onChange({
-                    ...value,
-                    customerProfile: {
-                      ...(value.customerProfile || {}),
-                      establishedYear: parseInt(e.target.value) || 0,
-                    },
-                  })
-                }
-                placeholder="2025"
-              />
+              {isEditing ? (
+                <Input
+                  type="number"
+                  min="1800"
+                  max={new Date().getFullYear()}
+                  value={value.customerProfile?.establishedYear || ""}
+                  onChange={(e) =>
+                    onChange({
+                      ...value,
+                      customerProfile: {
+                        ...(value.customerProfile || {}),
+                        establishedYear: parseInt(e.target.value) || 0,
+                      },
+                    })
+                  }
+                  placeholder="2025"
+                />
+              ) : (
+                <p className="text-sm sm:text-base text-gray-900 mt-2">
+                  {value.customerProfile?.establishedYear || "N/A"}
+                </p>
+              )}
             </div>
             <div>
               <Label>Annual Revenue</Label>
-              <Input
-                type="text"
-                value={value.customerProfile?.annualRevenue || ""}
-                disabled={!isEditing}
-                onChange={(e) =>
-                  onChange({
-                    ...value,
-                    customerProfile: {
-                      ...(value.customerProfile || {}),
-                      annualRevenue: e.target.value,
-                    },
-                  })
-                }
-                placeholder="500000"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Enter revenue in your currency
-              </p>
+              {isEditing ? (
+                <>
+                  <Input
+                    type="text"
+                    value={value.customerProfile?.annualRevenue || ""}
+                    onChange={(e) =>
+                      onChange({
+                        ...value,
+                        customerProfile: {
+                          ...(value.customerProfile || {}),
+                          annualRevenue: e.target.value,
+                        },
+                      })
+                    }
+                    placeholder="500000"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Enter revenue in your currency
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm sm:text-base text-gray-900 mt-2">
+                  {value.customerProfile?.annualRevenue || "N/A"}
+                </p>
+              )}
             </div>
             <div>
               <Label>Funding Stage</Label>
-              <Select
-                value={value.customerProfile?.fundingStage || ""}
-                onValueChange={(v) =>
-                  onChange({
-                    ...value,
-                    customerProfile: {
-                      ...(value.customerProfile || {}),
-                      fundingStage: v,
-                    },
-                  })
-                }
-                disabled={!isEditing}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select funding stage" />
-                </SelectTrigger>
-                <SelectContent>
-                  {fundingStageOptions.map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {option}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {isEditing ? (
+                <Select
+                  value={value.customerProfile?.fundingStage || ""}
+                  onValueChange={(v) =>
+                    onChange({
+                      ...value,
+                      customerProfile: {
+                        ...(value.customerProfile || {}),
+                        fundingStage: v,
+                      },
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select funding stage" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {fundingStageOptions.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <p className="text-sm sm:text-base text-gray-900 mt-2">
+                  {value.customerProfile?.fundingStage || "N/A"}
+                </p>
+              )}
             </div>
           </div>
         </CardContent>
@@ -613,78 +645,95 @@ export default function CompanyInfo({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label>Average Budget Range</Label>
-              <Input
-                type="text"
-                value={value.customerProfile?.averageBudgetRange || ""}
-                disabled={!isEditing}
-                onChange={(e) =>
-                  onChange({
-                    ...value,
-                    customerProfile: {
-                      ...(value.customerProfile || {}),
-                      averageBudgetRange: e.target.value,
-                    },
-                  })
-                }
-                placeholder="20000"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Average project budget
-              </p>
+              {isEditing ? (
+                <>
+                  <Input
+                    type="text"
+                    value={value.customerProfile?.averageBudgetRange || ""}
+                    onChange={(e) =>
+                      onChange({
+                        ...value,
+                        customerProfile: {
+                          ...(value.customerProfile || {}),
+                          averageBudgetRange: e.target.value,
+                        },
+                      })
+                    }
+                    placeholder="20000"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Average project budget
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm sm:text-base text-gray-900 mt-2">
+                  {value.customerProfile?.averageBudgetRange || "N/A"}
+                </p>
+              )}
             </div>
             <div>
               <Label>Remote Policy</Label>
-              <Select
-                value={value.customerProfile?.remotePolicy || ""}
-                onValueChange={(v) =>
-                  onChange({
-                    ...value,
-                    customerProfile: {
-                      ...(value.customerProfile || {}),
-                      remotePolicy: v,
-                    },
-                  })
-                }
-                disabled={!isEditing}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select remote policy" />
-                </SelectTrigger>
-                <SelectContent>
-                  {remotePolicyOptions.map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {option}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {isEditing ? (
+                <Select
+                  value={value.customerProfile?.remotePolicy || ""}
+                  onValueChange={(v) =>
+                    onChange({
+                      ...value,
+                      customerProfile: {
+                        ...(value.customerProfile || {}),
+                        remotePolicy: v,
+                      },
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select remote policy" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {remotePolicyOptions.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <p className="text-sm sm:text-base text-gray-900 mt-2">
+                  {value.customerProfile?.remotePolicy || "N/A"}
+                </p>
+              )}
             </div>
             <div>
               <Label>Hiring Frequency</Label>
-              <Select
-                value={value.customerProfile?.hiringFrequency || ""}
-                onValueChange={(v) =>
-                  onChange({
-                    ...value,
-                    customerProfile: {
-                      ...(value.customerProfile || {}),
-                      hiringFrequency: v,
-                    },
-                  })
-                }
-                disabled={!isEditing}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select hiring frequency" />
-                </SelectTrigger>
-                <SelectContent>
-                  {hiringFrequencyOptions.map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {option}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {isEditing ? (
+                <Select
+                  value={value.customerProfile?.hiringFrequency || ""}
+                  onValueChange={(v) =>
+                    onChange({
+                      ...value,
+                      customerProfile: {
+                        ...(value.customerProfile || {}),
+                        hiringFrequency: v,
+                      },
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select hiring frequency" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {hiringFrequencyOptions.map((option) => (
+                      <SelectItem key={option} value={option}>
+                        {option}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <p className="text-sm sm:text-base text-gray-900 mt-2">
+                  {value.customerProfile?.hiringFrequency || "N/A"}
+                </p>
+              )}
             </div>
           </div>
 
@@ -860,22 +909,27 @@ export default function CompanyInfo({
         <CardContent className="space-y-4">
           <div>
             <Label htmlFor="mission">Mission</Label>
-            <Textarea
-              id="mission"
-              rows={4}
-              value={value.customerProfile?.mission || ""}
-              disabled={!isEditing}
-              onChange={(e) =>
-                onChange({
-                  ...value,
-                  customerProfile: {
-                    ...(value.customerProfile || {}),
-                    mission: e.target.value,
-                  },
-                })
-              }
-              placeholder="Describe your company's mission..."
-            />
+            {isEditing ? (
+              <Textarea
+                id="mission"
+                rows={4}
+                value={value.customerProfile?.mission || ""}
+                onChange={(e) =>
+                  onChange({
+                    ...value,
+                    customerProfile: {
+                      ...(value.customerProfile || {}),
+                      mission: e.target.value,
+                    },
+                  })
+                }
+                placeholder="Describe your company's mission..."
+              />
+            ) : (
+              <p className="text-sm sm:text-base text-gray-900 mt-2 whitespace-pre-wrap">
+                {value.customerProfile?.mission || "N/A"}
+              </p>
+            )}
           </div>
 
           <Separator />
@@ -978,31 +1032,42 @@ export default function CompanyInfo({
 
           <div>
             <Label htmlFor="benefits">Benefits</Label>
-            <Textarea
-              id="benefits"
-              rows={4}
-              value={
-                typeof value.customerProfile?.benefits === "string"
+            {isEditing ? (
+              <>
+                <Textarea
+                  id="benefits"
+                  rows={4}
+                  value={
+                    typeof value.customerProfile?.benefits === "string"
+                      ? value.customerProfile.benefits
+                      : value.customerProfile?.benefits
+                      ? JSON.stringify(value.customerProfile.benefits, null, 2)
+                      : ""
+                  }
+                  onChange={(e) =>
+                    onChange({
+                      ...value,
+                      customerProfile: {
+                        ...(value.customerProfile || {}),
+                        benefits: e.target.value,
+                      },
+                    })
+                  }
+                  placeholder="Describe employee benefits or company benefits..."
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Can be plain text or JSON format
+                </p>
+              </>
+            ) : (
+              <p className="text-sm sm:text-base text-gray-900 mt-2 whitespace-pre-wrap">
+                {typeof value.customerProfile?.benefits === "string"
                   ? value.customerProfile.benefits
                   : value.customerProfile?.benefits
                   ? JSON.stringify(value.customerProfile.benefits, null, 2)
-                  : ""
-              }
-              disabled={!isEditing}
-              onChange={(e) =>
-                onChange({
-                  ...value,
-                  customerProfile: {
-                    ...(value.customerProfile || {}),
-                    benefits: e.target.value,
-                  },
-                })
-              }
-              placeholder="Describe employee benefits or company benefits..."
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Can be plain text or JSON format
-            </p>
+                  : "N/A"}
+              </p>
+            )}
           </div>
 
           <Separator />

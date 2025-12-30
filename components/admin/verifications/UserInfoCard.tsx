@@ -38,9 +38,6 @@ export function UserInfoCard({ user }: UserInfoCardProps) {
           <p>
             <span className="font-medium">Role:</span> {user.role}
           </p>
-          <p>
-            <span className="font-medium">KYC Status:</span> {user.kycStatus}
-          </p>
           {profileCreatedAt && (
             <p>
               <span className="font-medium">Joined:</span>{" "}

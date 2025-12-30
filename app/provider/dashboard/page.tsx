@@ -226,25 +226,25 @@ export default function ProviderDashboard() {
 
   return (
     <ProviderLayout>
-      <div className="space-y-8">
+      <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-            <p className="text-gray-600">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Dashboard</h1>
+            <p className="text-sm sm:text-base text-gray-600">
               Welcome back! Here&apos;s your business overview.
             </p>
           </div>
-          <div className="flex gap-3">
-            <Link href="/provider/profile">
-              <Button variant="outline">
-                <Eye className="w-4 h-4 mr-2" />
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
+            <Link href="/provider/profile" className="w-full sm:w-auto">
+              <Button variant="outline" className="w-full sm:w-auto text-xs sm:text-sm">
+                <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                 View Profile
               </Button>
             </Link>
-            <Link href="/provider/opportunities">
-              <Button>
-                <Target className="w-4 h-4 mr-2" />
+            <Link href="/provider/opportunities" className="w-full sm:w-auto">
+              <Button className="w-full sm:w-auto text-xs sm:text-sm">
+                <Target className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                 Browse Jobs
               </Button>
             </Link>
@@ -252,91 +252,91 @@ export default function ProviderDashboard() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">
                     Active Projects
                   </p>
-                  <p className="text-2xl font-bold text-gray-900">
+                  <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">
                     {statsLoading ? (
-                      <div className="animate-pulse bg-gray-200 h-8 w-16 rounded"></div>
+                      <div className="animate-pulse bg-gray-200 h-6 sm:h-8 w-12 sm:w-16 rounded"></div>
                     ) : (
                       stats.activeProjects
                     )}
                   </p>
                 </div>
-                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <Briefcase className="w-6 h-6 text-blue-600" />
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
+                  <Briefcase className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
                 </div>
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">
                     Total Earnings
                   </p>
-                  <p className="text-2xl font-bold text-gray-900">
+                  <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1 break-words">
                     {statsLoading ? (
-                      <div className="animate-pulse bg-gray-200 h-8 w-24 rounded"></div>
+                      <div className="animate-pulse bg-gray-200 h-6 sm:h-8 w-20 sm:w-24 rounded"></div>
                     ) : (
                       `RM${stats.totalEarnings.toLocaleString()}`
                     )}
                   </p>
                 </div>
-                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                  <DollarSign className="w-6 h-6 text-green-600" />
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
+                  <DollarSign className="w-5 h-5 sm:w-6 sm:h-6 text-green-600" />
                 </div>
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Rating</p>
-                  <div className="flex items-center gap-1">
-                    <p className="text-2xl font-bold text-gray-900">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">Rating</p>
+                  <div className="flex items-center gap-1 mt-1">
+                    <p className="text-xl sm:text-2xl font-bold text-gray-900">
                       {statsLoading ? (
-                        <div className="animate-pulse bg-gray-200 h-8 w-12 rounded"></div>
+                        <div className="animate-pulse bg-gray-200 h-6 sm:h-8 w-10 sm:w-12 rounded"></div>
                       ) : (
                         stats.rating
                       )}
                     </p>
-                    <Star className="w-5 h-5 text-yellow-400 fill-current" />
+                    <Star className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-400 fill-current flex-shrink-0" />
                   </div>
                 </div>
-                <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                  <Award className="w-6 h-6 text-yellow-600" />
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-yellow-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
+                  <Award className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-600" />
                 </div>
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">
                     Completed Projects
                   </p>
-                  <p className="text-2xl font-bold text-gray-900">
+                  <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">
                     {statsLoading ? (
-                      <div className="animate-pulse bg-gray-200 h-8 w-16 rounded"></div>
+                      <div className="animate-pulse bg-gray-200 h-6 sm:h-8 w-12 sm:w-16 rounded"></div>
                     ) : (
                       stats.completedProjects
                     )}
                   </p>
                 </div>
-                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                  <CheckCircle className="w-6 h-6 text-green-600" />
+                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
+                  <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-green-600" />
                 </div>
               </div>
             </CardContent>
@@ -348,18 +348,18 @@ export default function ProviderDashboard() {
           <div className="lg:col-span-2 space-y-4 sm:space-y-6">
             {/* Active Projects */}
             <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>Active Projects</CardTitle>
-                  <Link href="/provider/projects">
-                    <Button variant="outline" size="sm">
+              <CardHeader className="p-4 sm:p-6">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+                  <CardTitle className="text-lg sm:text-xl">Active Projects</CardTitle>
+                  <Link href="/provider/projects" className="w-full sm:w-auto">
+                    <Button variant="outline" size="sm" className="w-full sm:w-auto text-xs sm:text-sm">
                       View All
                     </Button>
                   </Link>
                 </div>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
+              <CardContent className="p-4 sm:p-6">
+                <div className="space-y-3 sm:space-y-4">
                   {activeProjectsLoading ? (
                     // Loading skeletons
                     Array.from({ length: 2 }).map((_, index) => (
@@ -388,9 +388,9 @@ export default function ProviderDashboard() {
                         href={`/provider/projects/${project.id}`}
                         className="block"
                       >
-                        <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors cursor-pointer">
-                          <div className="flex items-center space-x-4">
-                            <Avatar>
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 p-3 sm:p-4 border rounded-lg active:bg-gray-50 sm:hover:bg-gray-50 transition-colors cursor-pointer">
+                          <div className="flex items-start sm:items-center space-x-3 sm:space-x-4 flex-1 min-w-0">
+                            <Avatar className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0">
                               <AvatarImage
                                 src={getProfileImageUrl(
                                   project.customer?.customerProfile
@@ -401,8 +401,8 @@ export default function ProviderDashboard() {
                                 {project.customer?.name?.charAt(0) || "C"}
                               </AvatarFallback>
                             </Avatar>
-                            <div>
-                              <h4 className="font-semibold text-gray-900">
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-semibold text-sm sm:text-base text-gray-900 break-words">
                                 {project.title}
                               </h4>
                               <Link
@@ -410,12 +410,12 @@ export default function ProviderDashboard() {
                                   project.customer?.id || ""
                                 }`}
                                 onClick={(e) => e.stopPropagation()}
-                                className="text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                                className="text-xs sm:text-sm text-blue-600 active:text-blue-800 sm:hover:text-blue-800 sm:hover:underline"
                               >
                                 {project.customer?.name || "Unknown Client"}
                               </Link>
-                              <div className="flex items-center gap-2 mt-1">
-                                <Badge className="bg-blue-100 text-blue-800">
+                              <div className="flex flex-wrap items-center gap-2 mt-1">
+                                <Badge className="bg-blue-100 text-blue-800 text-xs">
                                   In Progress
                                 </Badge>
                                 <span className="text-xs text-gray-500">
@@ -430,17 +430,19 @@ export default function ProviderDashboard() {
                               )}
                             </div>
                           </div>
-                          <div className="text-right">
-                            <p className="font-semibold text-gray-900">
-                              {project.approvedPrice
-                                ? `RM${project.approvedPrice.toLocaleString()}`
-                                : `RM${
-                                    project.budgetMin?.toLocaleString() || "0"
-                                  } - RM${
-                                    project.budgetMax?.toLocaleString() || "0"
-                                  }`}
-                            </p>
-                            <div className="mt-2 w-24">
+                          <div className="text-left sm:text-right w-full sm:w-auto flex sm:block items-center sm:items-end justify-between sm:justify-end gap-3">
+                            <div>
+                              <p className="font-semibold text-sm sm:text-base text-gray-900">
+                                {project.approvedPrice
+                                  ? `RM${project.approvedPrice.toLocaleString()}`
+                                  : `RM${
+                                      project.budgetMin?.toLocaleString() || "0"
+                                    } - RM${
+                                      project.budgetMax?.toLocaleString() || "0"
+                                    }`}
+                              </p>
+                            </div>
+                            <div className="w-20 sm:w-24">
                               <Progress
                                 value={project.progress || 0}
                                 className="h-2"
@@ -555,7 +557,7 @@ export default function ProviderDashboard() {
                       return (
                         <div
                           key={opportunity.id}
-                          className="group relative p-3 sm:p-4 md:p-5 border-2 border-gray-200 rounded-lg sm:rounded-xl hover:border-blue-400 hover:shadow-lg transition-all duration-300 bg-white"
+                          className="group relative p-3 sm:p-4 md:p-5 border-2 border-gray-200 rounded-lg sm:rounded-xl active:border-blue-400 active:shadow-md sm:hover:border-blue-400 sm:hover:shadow-lg transition-all duration-300 bg-white"
                         >
                           {/* AI Badge Indicator - Desktop hover only */}
                           {opportunity.aiExplanation && (
@@ -572,7 +574,7 @@ export default function ProviderDashboard() {
                           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-3 mb-3 pr-0 sm:pr-20">
                             <div className="flex-1 min-w-0">
                               <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-2 flex-wrap">
-                                <h4 className="font-semibold text-gray-900 group-hover:text-blue-700 transition-colors text-base sm:text-lg break-words">
+                                <h4 className="font-semibold text-gray-900 sm:group-hover:text-blue-700 transition-colors text-base sm:text-lg break-words">
                                   {opportunity.title}
                                 </h4>
                                 {opportunity.matchScore !== undefined &&
@@ -704,7 +706,7 @@ export default function ProviderDashboard() {
                                 <Badge
                                   key={skill}
                                   variant="secondary"
-                                  className="text-xs group-hover:bg-blue-100 group-hover:text-blue-700 transition-colors border"
+                                  className="text-xs sm:group-hover:bg-blue-100 sm:group-hover:text-blue-700 transition-colors border"
                                 >
                                   {skill}
                                 </Badge>
@@ -719,7 +721,7 @@ export default function ProviderDashboard() {
                             )}
                           </div>
 
-                          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 pt-3 border-t border-gray-200 group-hover:border-blue-200 transition-colors">
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 pt-3 border-t border-gray-200 sm:group-hover:border-blue-200 transition-colors">
                             <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs text-gray-600 w-full sm:w-auto">
                               <span className="capitalize font-medium">
                                 {opportunity.category || ""}
@@ -745,10 +747,10 @@ export default function ProviderDashboard() {
                             >
                               <Button
                                 size="sm"
-                                className="w-full sm:w-auto group-hover:bg-blue-600 group-hover:text-white transition-all duration-300 shadow-sm group-hover:shadow-md"
+                                className="w-full sm:w-auto sm:group-hover:bg-blue-600 sm:group-hover:text-white transition-all duration-300 shadow-sm sm:group-hover:shadow-md"
                               >
                                 <span>View Details</span>
-                                <ChevronRight className="w-4 h-4 ml-1.5 group-hover:translate-x-1 transition-transform" />
+                                <ChevronRight className="w-4 h-4 ml-1.5 sm:group-hover:translate-x-1 transition-transform" />
                               </Button>
                             </Link>
                           </div>
@@ -762,13 +764,13 @@ export default function ProviderDashboard() {
           </div>
 
           {/* Sidebar */}
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             {/* Quick Stats */}
             <Card>
-              <CardHeader>
-                <CardTitle>Performance Metrics</CardTitle>
+              <CardHeader className="p-4 sm:p-6">
+                <CardTitle className="text-base sm:text-lg">Performance Metrics</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="p-4 sm:p-6 space-y-3 sm:space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-600">Total Projects</span>
                   <span className="font-semibold">

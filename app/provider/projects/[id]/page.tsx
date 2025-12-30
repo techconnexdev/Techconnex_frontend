@@ -68,6 +68,7 @@ import {
 import { formatTimeline } from "@/lib/timeline-utils";
 import { MarkdownViewer } from "@/components/markdown/MarkdownViewer";
 import { Separator } from "@/components/separator";
+import Image from "next/image";
 
 type ProjectCustomer = {
   id: string;
@@ -636,6 +637,19 @@ export default function ProviderProjectDetailsPage() {
   // Ensure a value is an array before mapping
   const asArray = <T,>(v: unknown): T[] => (Array.isArray(v) ? v : []);
 
+  // Helper functions for file handling
+  const isImage = (file: string) => /\.(jpg|jpeg|png|gif|webp)$/i.test(file);
+  const isPDF = (file: string) => /\.pdf$/i.test(file);
+
+  const getFullUrl = (path: string) => {
+    const normalized = path.replace(/\\/g, "/");
+    return normalized.startsWith("http://") || normalized.startsWith("https://")
+      ? normalized
+      : `${
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"
+        }/${normalized.replace(/^\//, "")}`;
+  };
+
   const handleMilestoneUpdate = async (status: string) => {
     try {
       setUpdating(true);
@@ -723,6 +737,25 @@ export default function ProviderProjectDetailsPage() {
         variant: "destructive",
       });
       return;
+    }
+
+    // Validate that selected milestone is not approved or paid
+    if (selectedMilestoneForDispute) {
+      const selectedMilestone = projectMilestones.find(
+        (m: Milestone) => m.id === selectedMilestoneForDispute
+      );
+      if (
+        selectedMilestone &&
+        (selectedMilestone.status === "APPROVED" ||
+          selectedMilestone.status === "PAID")
+      ) {
+        toast({
+          title: "Validation Error",
+          description: `Cannot create a dispute for milestone "${selectedMilestone.title}" as it has already been approved or paid.`,
+          variant: "destructive",
+        });
+        return;
+      }
     }
 
     try {
@@ -987,13 +1020,13 @@ export default function ProviderProjectDetailsPage() {
   if (loading) {
     return (
       <ProviderLayout>
-        <div className="flex items-center justify-center min-h-[400px]">
+        <div className="flex items-center justify-center min-h-[400px] px-4">
           <div className="text-center">
-            <Loader2 className="w-12 h-12 text-gray-400 mx-auto mb-4 animate-spin" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            <Loader2 className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-4 animate-spin" />
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
               Loading project...
             </h3>
-            <p className="text-gray-600">
+            <p className="text-sm sm:text-base text-gray-600">
               Please wait while we fetch the project details.
             </p>
           </div>
@@ -1005,16 +1038,22 @@ export default function ProviderProjectDetailsPage() {
   if (error || !project) {
     return (
       <ProviderLayout>
-        <div className="flex items-center justify-center min-h-[400px]">
+        <div className="flex items-center justify-center min-h-[400px] px-4">
           <div className="text-center">
-            <div className="w-12 h-12 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
-              <AlertCircle className="w-6 h-6 text-red-600" />
+            <div className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
+              <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 text-red-600" />
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
               Error loading project
             </h3>
-            <p className="text-gray-600 mb-4">{error || "Project not found"}</p>
-            <Button onClick={() => router.back()} variant="outline">
+            <p className="text-sm sm:text-base text-gray-600 mb-4">
+              {error || "Project not found"}
+            </p>
+            <Button
+              onClick={() => router.back()}
+              variant="outline"
+              className="text-xs sm:text-sm"
+            >
               Go Back
             </Button>
           </div>
@@ -1030,51 +1069,56 @@ export default function ProviderProjectDetailsPage() {
   const msgsToRender =
     projectMessages && projectMessages.length > 0 ? projectMessages : messages;
 
-  const provider = project?.customer;
-
-  const handleContact = () => {
-    if (!provider || !provider.id) return;
-
-    const profileImageUrl = provider.customerProfile?.profileImageUrl;
-    const avatarUrl =
-      profileImageUrl &&
-      profileImageUrl !== "/placeholder.svg" &&
-      !profileImageUrl.includes("/placeholder.svg")
-        ? `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}${
-            profileImageUrl.startsWith("/") ? "" : "/"
-          }${profileImageUrl}`
-        : "";
-
+  const handleContact = (
+    customerId?: string,
+    customerName?: string,
+    customerAvatar?: string
+  ) => {
+    if (!customerId || !customerName) return;
     router.push(
-      `/provider/messages?userId=${provider.id}&name=${encodeURIComponent(
-        provider.name || ""
-      )}&avatar=${encodeURIComponent(avatarUrl)}`
+      `/provider/messages?userId=${customerId}&name=${encodeURIComponent(
+        customerName
+      )}&avatar=${encodeURIComponent(customerAvatar || "")}`
     );
   };
 
   return (
     <ProviderLayout>
-      <div className="space-y-8">
+      <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
         {/* Header */}
-        <div className="flex items-center gap-4">
-          <div className="flex-1">
-            <h1 className="text-3xl font-bold text-gray-900">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 break-words">
               {project.title}
             </h1>
-            <p className="text-gray-600">{project.description}</p>
+            <p className="text-sm sm:text-base text-gray-600 mt-1 break-words">
+              {project.description}
+            </p>
           </div>
-          <div className="flex gap-3">
-            <Button variant="outline">
-              <MessageSquare className="w-4 h-4 mr-2" />
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
+            <Button
+              variant="outline"
+              className="w-full sm:w-auto text-xs sm:text-sm"
+              onClick={() =>
+                handleContact(
+                  project.customer?.id,
+                  project.customer?.name,
+                  (project.customer as { profileImageUrl?: string } | undefined)
+                    ?.profileImageUrl ||
+                    project.customer?.customerProfile?.profileImageUrl
+                )
+              }
+            >
+              <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
               Message Client
             </Button>
             {currentDispute ? (
               <Button
                 variant="outline"
-                className="bg-orange-50 hover:bg-orange-100 text-orange-700 border-orange-300"
+                className="bg-orange-50 active:bg-orange-100 sm:hover:bg-orange-100 text-orange-700 border-orange-300 w-full sm:w-auto text-xs sm:text-sm"
                 onClick={handleViewDispute}
               >
-                <Eye className="w-4 h-4 mr-2" />
+                <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                 View Dispute
               </Button>
             ) : (
@@ -1090,12 +1134,12 @@ export default function ProviderProjectDetailsPage() {
                         (currentDispute as DisputeData).status === "CLOSED"
                     )
                   }
-                  className="bg-red-600 hover:bg-red-700 text-white"
+                  className="bg-red-600 active:bg-red-700 sm:hover:bg-red-700 text-white w-full sm:w-auto text-xs sm:text-sm"
                 >
                   {creatingDispute ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 animate-spin" />
                   ) : (
-                    <AlertCircle className="w-4 h-4 mr-2" />
+                    <AlertCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                   )}
                   Report Dispute
                 </Button>
@@ -1105,73 +1149,103 @@ export default function ProviderProjectDetailsPage() {
         </div>
 
         {/* Project Overview */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
           {/* Main Content */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="lg:col-span-2 space-y-4 sm:space-y-6">
             <Tabs
               value={activeTab}
               onValueChange={setActiveTab}
-              className="space-y-6"
+              className="space-y-4 sm:space-y-6"
             >
-              <TabsList>
-                <TabsTrigger value="overview">Overview</TabsTrigger>
-                <TabsTrigger value="milestones">Milestones</TabsTrigger>
-                <TabsTrigger value="files">Files</TabsTrigger>
-                <TabsTrigger value="messages">Messages</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-4 h-auto">
+                <TabsTrigger
+                  value="overview"
+                  className="text-xs sm:text-sm px-2 sm:px-4"
+                >
+                  Overview
+                </TabsTrigger>
+                <TabsTrigger
+                  value="milestones"
+                  className="text-xs sm:text-sm px-2 sm:px-4"
+                >
+                  Milestones
+                </TabsTrigger>
+                <TabsTrigger
+                  value="files"
+                  className="text-xs sm:text-sm px-2 sm:px-4"
+                >
+                  Files
+                </TabsTrigger>
+                <TabsTrigger
+                  value="messages"
+                  className="text-xs sm:text-sm px-2 sm:px-4"
+                >
+                  Messages
+                </TabsTrigger>
               </TabsList>
 
-              <TabsContent value="overview" className="space-y-6">
+              <TabsContent value="overview" className="space-y-4 sm:space-y-6">
                 {/* Project Details */}
                 <Card>
-                  <CardHeader>
-                    <CardTitle>Project Details</CardTitle>
+                  <CardHeader className="p-4 sm:p-6">
+                    <CardTitle className="text-lg sm:text-xl">
+                      Project Details
+                    </CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
+                  <CardContent className="p-4 sm:p-6 space-y-3 sm:space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                       <div>
-                        <Label className="text-sm font-medium text-gray-500">
+                        <Label className="text-xs sm:text-sm font-medium text-gray-500">
                           Category
                         </Label>
-                        <p className="text-lg">{project.category}</p>
+                        <p className="text-base sm:text-lg mt-1">
+                          {project.category}
+                        </p>
                       </div>
                       <div>
-                        <Label className="text-sm font-medium text-gray-500">
+                        <Label className="text-xs sm:text-sm font-medium text-gray-500">
                           Status
                         </Label>
-                        <Badge className={getStatusColor(project.status)}>
-                          {getStatusText(project.status)}
-                        </Badge>
+                        <div className="mt-1">
+                          <Badge
+                            className={`${getStatusColor(
+                              project.status
+                            )} text-xs`}
+                          >
+                            {getStatusText(project.status)}
+                          </Badge>
+                        </div>
                       </div>
                       <div>
-                        <Label className="text-sm font-medium text-gray-500">
+                        <Label className="text-xs sm:text-sm font-medium text-gray-500">
                           Budget Range
                         </Label>
-                        <p className="text-lg">
+                        <p className="text-base sm:text-lg mt-1 break-words">
                           {formatCurrency(project.budgetMin)} -{" "}
                           {formatCurrency(project.budgetMax)}
                         </p>
                       </div>
                       {project.approvedPrice && (
                         <div>
-                          <Label className="text-sm font-medium text-gray-500">
+                          <Label className="text-xs sm:text-sm font-medium text-gray-500">
                             Approved Price
                           </Label>
-                          <p className="text-lg font-semibold text-green-600">
+                          <p className="text-base sm:text-lg font-semibold text-green-600 mt-1">
                             {formatCurrency(project.approvedPrice)}
                           </p>
                         </div>
                       )}
-                      <div>
-                        <Label className="text-sm font-medium text-gray-500">
+                      <div className="sm:col-span-2">
+                        <Label className="text-xs sm:text-sm font-medium text-gray-500">
                           Timeline
                         </Label>
-                        <div className="space-y-2">
+                        <div className="space-y-2 mt-1">
                           {project.originalTimeline && (
                             <div>
                               <p className="text-xs text-gray-500 mb-1">
                                 Original Timeline (Company):
                               </p>
-                              <p className="text-sm text-gray-900 font-medium">
+                              <p className="text-sm text-gray-900 font-medium break-words">
                                 {formatTimeline(project.originalTimeline)}
                               </p>
                             </div>
@@ -1181,7 +1255,7 @@ export default function ProviderProjectDetailsPage() {
                               <p className="text-xs text-gray-500 mb-1">
                                 Your Proposed Timeline:
                               </p>
-                              <p className="text-sm text-gray-900 font-medium">
+                              <p className="text-sm text-gray-900 font-medium break-words">
                                 {formatTimeline(
                                   project.providerProposedTimeline,
                                   "day"
@@ -1201,13 +1275,17 @@ export default function ProviderProjectDetailsPage() {
 
                     {project.skills && project.skills.length > 0 && (
                       <div>
-                        <Label className="text-sm font-medium text-gray-500">
+                        <Label className="text-xs sm:text-sm font-medium text-gray-500">
                           Required Skills
                         </Label>
                         <div className="flex flex-wrap gap-2 mt-2">
                           {project.skills.map(
                             (skill: string, index: number) => (
-                              <Badge key={index} variant="secondary">
+                              <Badge
+                                key={index}
+                                variant="secondary"
+                                className="text-xs"
+                              >
                                 {skill}
                               </Badge>
                             )
@@ -1218,7 +1296,7 @@ export default function ProviderProjectDetailsPage() {
 
                     {project.requirements && (
                       <div>
-                        <Label className="text-sm font-medium text-gray-500">
+                        <Label className="text-xs sm:text-sm font-medium text-gray-500">
                           Requirements
                         </Label>
                         <div className="mt-2 space-y-3">
@@ -1253,7 +1331,7 @@ export default function ProviderProjectDetailsPage() {
 
                     {project.deliverables && (
                       <div>
-                        <Label className="text-sm font-medium text-gray-500">
+                        <Label className="text-xs sm:text-sm font-medium text-gray-500">
                           Deliverables
                         </Label>
                         <div className="mt-2 space-y-3">
@@ -1291,20 +1369,22 @@ export default function ProviderProjectDetailsPage() {
                 {/* Progress */}
                 {project.status === "IN_PROGRESS" && (
                   <Card>
-                    <CardHeader>
-                      <CardTitle>Project Progress</CardTitle>
+                    <CardHeader className="p-4 sm:p-6">
+                      <CardTitle className="text-lg sm:text-xl">
+                        Project Progress
+                      </CardTitle>
                     </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        <div className="flex justify-between text-sm">
+                    <CardContent className="p-4 sm:p-6">
+                      <div className="space-y-3 sm:space-y-4">
+                        <div className="flex justify-between text-xs sm:text-sm">
                           <span>Overall Progress</span>
                           <span>{project.progress || 0}%</span>
                         </div>
                         <Progress
                           value={project.progress || 0}
-                          className="h-3"
+                          className="h-2 sm:h-3"
                         />
-                        <div className="flex justify-between text-sm text-gray-600">
+                        <div className="flex justify-between text-xs sm:text-sm text-gray-600">
                           <span>
                             {project.completedMilestones || 0} of{" "}
                             {project.totalMilestones || 0} milestones completed
@@ -1316,15 +1396,20 @@ export default function ProviderProjectDetailsPage() {
                 )}
               </TabsContent>
 
-              <TabsContent value="milestones" className="space-y-6">
+              <TabsContent
+                value="milestones"
+                className="space-y-4 sm:space-y-6"
+              >
                 <Card>
-                  <CardHeader>
-                    <CardTitle>Project Milestones</CardTitle>
-                    <CardDescription>
+                  <CardHeader className="p-4 sm:p-6">
+                    <CardTitle className="text-lg sm:text-xl">
+                      Project Milestones
+                    </CardTitle>
+                    <CardDescription className="text-xs sm:text-sm">
                       Track and manage project milestones
                     </CardDescription>
-                    <div className="flex flex-wrap items-center gap-2 mt-4">
-                      <Badge variant="outline">
+                    <div className="flex flex-wrap items-center gap-2 mt-3 sm:mt-4">
+                      <Badge variant="outline" className="text-xs">
                         Company{" "}
                         {milestoneApprovalState.companyApproved ? "✓" : "✗"} ·
                         Provider{" "}
@@ -1336,6 +1421,7 @@ export default function ProviderProjectDetailsPage() {
                           <Button
                             variant="outline"
                             size="sm"
+                            className="text-xs sm:text-sm"
                             onClick={() => {
                               // Store original milestones when opening editor
                               setOriginalProjectMilestones(
@@ -1348,6 +1434,7 @@ export default function ProviderProjectDetailsPage() {
                           </Button>
                           <Button
                             size="sm"
+                            className="text-xs sm:text-sm"
                             onClick={handleApproveProjectMilestones}
                           >
                             Approve
@@ -1356,54 +1443,54 @@ export default function ProviderProjectDetailsPage() {
                       )}
                     </div>
                   </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
+                  <CardContent className="p-4 sm:p-6">
+                    <div className="space-y-3 sm:space-y-4">
                       {projectMilestones && projectMilestones.length > 0 ? (
                         projectMilestones.map(
                           (milestone: Milestone, index: number) => {
                             return (
                               <div
                                 key={milestone.id}
-                                className="border rounded-lg p-4"
+                                className="border rounded-lg p-3 sm:p-4"
                               >
-                                <div className="flex items-center justify-between mb-2">
-                                  <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-sm font-medium">
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 mb-2">
+                                  <div className="flex items-center gap-2 sm:gap-3">
+                                    <div className="w-7 h-7 sm:w-8 sm:h-8 bg-blue-100 rounded-full flex items-center justify-center text-xs sm:text-sm font-medium flex-shrink-0">
                                       {milestone.order}
                                     </div>
-                                    <div>
-                                      <h4 className="font-medium">
+                                    <div className="min-w-0 flex-1">
+                                      <h4 className="font-medium text-sm sm:text-base break-words">
                                         {milestone.title}
                                       </h4>
-                                      <p className="text-sm text-gray-600">
+                                      <p className="text-xs sm:text-sm text-gray-600 break-words">
                                         {milestone.description}
                                       </p>
                                     </div>
                                   </div>
-                                  <div className="flex items-center gap-3">
+                                  <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
                                     <Badge
-                                      className={getMilestoneStatusColor(
+                                      className={`${getMilestoneStatusColor(
                                         milestone.status || ""
-                                      )}
+                                      )} text-xs shrink-0`}
                                     >
                                       {getMilestoneStatusText(
                                         milestone.status || ""
                                       )}
                                     </Badge>
-                                    <span className="text-sm font-medium">
+                                    <span className="text-xs sm:text-sm font-medium">
                                       {formatCurrency(milestone.amount)}
                                     </span>
                                   </div>
                                 </div>
-                                <div className="flex items-center justify-between text-sm text-gray-600">
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 text-xs sm:text-sm text-gray-600">
                                   <span>
                                     Due: {formatDate(milestone.dueDate)}
                                   </span>
                                   <div className="flex items-center gap-2">
                                     {milestone.status === "PAID" && (
                                       <div className="flex items-center gap-1 text-green-600">
-                                        <DollarSign className="w-4 h-4" />
-                                        <span className="text-sm font-medium">
+                                        <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                                        <span className="text-xs sm:text-sm font-medium">
                                           Paid
                                         </span>
                                       </div>
@@ -1411,7 +1498,11 @@ export default function ProviderProjectDetailsPage() {
                                     {milestone.status === "LOCKED" &&
                                       project.status === "IN_PROGRESS" && (
                                         <div>
-                                          <Button size="sm" disabled={true}>
+                                          <Button
+                                            size="sm"
+                                            disabled={true}
+                                            className="text-xs sm:text-sm"
+                                          >
                                             Start Work
                                           </Button>
                                         </div>
@@ -1423,12 +1514,13 @@ export default function ProviderProjectDetailsPage() {
                                           m.status === "LOCKED" &&
                                           project?.status === "IN_PROGRESS"
                                       ) === index && (
-                                        <AlertCircle className="w-4 h-4 text-amber-600" />
+                                        <AlertCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-600" />
                                       )}
                                     {milestone.status === "IN_PROGRESS" &&
                                       project.status === "ESCROWED" && (
                                         <Button
                                           size="sm"
+                                          className="text-xs sm:text-sm"
                                           onClick={() => {
                                             setSelectedMilestone(milestone);
                                             setIsMilestoneDialogOpen(true);
@@ -1440,6 +1532,7 @@ export default function ProviderProjectDetailsPage() {
                                     {milestone.status === "IN_PROGRESS" && (
                                       <Button
                                         size="sm"
+                                        className="text-xs sm:text-sm"
                                         onClick={() => {
                                           setSelectedMilestone(milestone);
                                           setIsMilestoneDialogOpen(true);
@@ -1459,9 +1552,9 @@ export default function ProviderProjectDetailsPage() {
                                     m.status === "LOCKED" &&
                                     project?.status === "IN_PROGRESS"
                                 ) === index ? (
-                                  <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
-                                    <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
-                                    <p className="text-sm text-amber-800">
+                                  <div className="mt-3 p-2 sm:p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
+                                    <AlertCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                                    <p className="text-xs sm:text-sm text-amber-800 break-words">
                                       {index > 0 &&
                                       projectMilestones[index - 1].status !==
                                         "APPROVED"
@@ -1498,12 +1591,12 @@ export default function ProviderProjectDetailsPage() {
                                   if (!displayText) return null;
 
                                   return (
-                                    <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
-                                      <p className="text-sm font-medium text-green-900 mb-1">
+                                    <div className="mt-3 p-2 sm:p-3 bg-green-50 border border-green-200 rounded-lg">
+                                      <p className="text-xs sm:text-sm font-medium text-green-900 mb-1">
                                         📋 Plan / Deliverables (When Starting
                                         Work):
                                       </p>
-                                      <p className="text-sm text-green-800 whitespace-pre-wrap">
+                                      <p className="text-xs sm:text-sm text-green-800 whitespace-pre-wrap break-words">
                                         {displayText}
                                       </p>
                                     </div>
@@ -1513,12 +1606,12 @@ export default function ProviderProjectDetailsPage() {
                                 {/* FIX 2: Submit Deliverables (Main Loop) */}
                                 {/* Added !! to force boolean check to avoid returning 'unknown' */}
                                 {!!milestone.submitDeliverables && (
-                                  <div className="mt-3 p-3 bg-purple-50 border border-purple-200 rounded-lg">
-                                    <p className="text-sm font-medium text-purple-900 mb-1">
+                                  <div className="mt-3 p-2 sm:p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                                    <p className="text-xs sm:text-sm font-medium text-purple-900 mb-1">
                                       ✅ Deliverables / Completion Notes (When
                                       Submitting):
                                     </p>
-                                    <p className="text-sm text-purple-800 whitespace-pre-wrap">
+                                    <p className="text-xs sm:text-sm text-purple-800 whitespace-pre-wrap break-words">
                                       {((): React.ReactNode => {
                                         const sd = milestone.submitDeliverables;
                                         let text: string = "";
@@ -1548,11 +1641,11 @@ export default function ProviderProjectDetailsPage() {
                                 {/* Show submission note if available */}
                                 {/* Added !! to force boolean check */}
                                 {!!milestone.submissionNote && (
-                                  <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                                    <p className="text-sm font-medium text-blue-900 mb-1">
+                                  <div className="mt-3 p-2 sm:p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                    <p className="text-xs sm:text-sm font-medium text-blue-900 mb-1">
                                       📝 Submission Note:
                                     </p>
-                                    <p className="text-sm text-blue-800 whitespace-pre-wrap">
+                                    <p className="text-xs sm:text-sm text-blue-800 whitespace-pre-wrap break-words">
                                       {milestone.submissionNote}
                                     </p>
                                   </div>
@@ -1944,16 +2037,18 @@ export default function ProviderProjectDetailsPage() {
                 </Card>
               </TabsContent>
 
-              <TabsContent value="files" className="space-y-6">
+              <TabsContent value="files" className="space-y-4 sm:space-y-6">
                 {/* Proposal Attachments Section */}
                 <Card>
-                  <CardHeader>
-                    <CardTitle>Proposal Attachments</CardTitle>
-                    <CardDescription>
+                  <CardHeader className="p-4 sm:p-6">
+                    <CardTitle className="text-lg sm:text-xl">
+                      Proposal Attachments
+                    </CardTitle>
+                    <CardDescription className="text-xs sm:text-sm">
                       Files attached to your accepted proposal
                     </CardDescription>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="p-4 sm:p-6">
                     {(() => {
                       // Get attachments from the provider's proposal
                       const proposalAttachments: string[] = [];
@@ -1977,7 +2072,7 @@ export default function ProviderProjectDetailsPage() {
 
                       if (proposalAttachments.length === 0) {
                         return (
-                          <p className="text-sm text-gray-500 text-center py-8">
+                          <p className="text-xs sm:text-sm text-gray-500 text-center py-6 sm:py-8">
                             No proposal attachments found
                           </p>
                         );
@@ -2035,13 +2130,13 @@ export default function ProviderProjectDetailsPage() {
                                       }
                                     : undefined
                                 }
-                                className="flex items-start gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2 hover:bg-gray-50 hover:shadow-sm transition"
+                                className="flex items-start gap-2 sm:gap-3 rounded-lg border border-gray-200 bg-white px-2 sm:px-3 py-2 active:bg-gray-50 sm:hover:bg-gray-50 sm:hover:shadow-sm transition"
                               >
-                                <div className="flex h-9 w-9 flex-none items-center justify-center rounded-md border border-gray-300 bg-gray-100 text-gray-700 text-xs font-medium">
+                                <div className="flex h-8 w-8 sm:h-9 sm:w-9 flex-none items-center justify-center rounded-md border border-gray-300 bg-gray-100 text-gray-700 text-xs font-medium">
                                   PDF
                                 </div>
                                 <div className="flex flex-col min-w-0 flex-1">
-                                  <span className="text-sm font-medium text-gray-900 break-all leading-snug">
+                                  <span className="text-xs sm:text-sm font-medium text-gray-900 break-all leading-snug">
                                     {fileName}
                                   </span>
                                   <span className="text-xs text-gray-500 leading-snug">
@@ -2059,8 +2154,8 @@ export default function ProviderProjectDetailsPage() {
                                     </span>
                                   </span>
                                 </div>
-                                <div className="ml-auto flex items-center text-gray-500 hover:text-gray-700">
-                                  <Download className="w-4 h-4" />
+                                <div className="ml-auto flex items-center text-gray-500 active:text-gray-700 sm:hover:text-gray-700">
+                                  <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                                 </div>
                               </a>
                             );
@@ -2073,13 +2168,15 @@ export default function ProviderProjectDetailsPage() {
 
                 {/* Milestone Attachments Section */}
                 <Card>
-                  <CardHeader>
-                    <CardTitle>Milestone Attachments</CardTitle>
-                    <CardDescription>
+                  <CardHeader className="p-4 sm:p-6">
+                    <CardTitle className="text-lg sm:text-xl">
+                      Milestone Attachments
+                    </CardTitle>
+                    <CardDescription className="text-xs sm:text-sm">
                       Files attached to milestone submissions
                     </CardDescription>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="p-4 sm:p-6">
                     {(() => {
                       // Get attachments from milestones
                       const milestoneAttachments: Array<{
@@ -2143,7 +2240,7 @@ export default function ProviderProjectDetailsPage() {
 
                       if (milestoneAttachments.length === 0) {
                         return (
-                          <p className="text-sm text-gray-500 text-center py-8">
+                          <p className="text-xs sm:text-sm text-gray-500 text-center py-6 sm:py-8">
                             No milestone attachments found
                           </p>
                         );
@@ -2208,13 +2305,13 @@ export default function ProviderProjectDetailsPage() {
                                       }
                                     : undefined
                                 }
-                                className="flex items-start gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2 hover:bg-gray-50 hover:shadow-sm transition"
+                                className="flex items-start gap-2 sm:gap-3 rounded-lg border border-gray-200 bg-white px-2 sm:px-3 py-2 active:bg-gray-50 sm:hover:bg-gray-50 sm:hover:shadow-sm transition"
                               >
-                                <div className="flex h-9 w-9 flex-none items-center justify-center rounded-md border border-gray-300 bg-gray-100 text-gray-700 text-xs font-medium">
+                                <div className="flex h-8 w-8 sm:h-9 sm:w-9 flex-none items-center justify-center rounded-md border border-gray-300 bg-gray-100 text-gray-700 text-xs font-medium">
                                   PDF
                                 </div>
                                 <div className="flex flex-col min-w-0 flex-1">
-                                  <span className="text-sm font-medium text-gray-900 break-all leading-snug">
+                                  <span className="text-xs sm:text-sm font-medium text-gray-900 break-all leading-snug">
                                     {fileName}
                                   </span>
                                   <span className="text-xs text-gray-500 leading-snug">
@@ -2228,8 +2325,8 @@ export default function ProviderProjectDetailsPage() {
                                     </span>
                                   </span>
                                 </div>
-                                <div className="ml-auto flex items-center text-gray-500 hover:text-gray-700">
-                                  <Download className="w-4 h-4" />
+                                <div className="ml-auto flex items-center text-gray-500 active:text-gray-700 sm:hover:text-gray-700">
+                                  <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                                 </div>
                               </a>
                             );
@@ -2242,32 +2339,137 @@ export default function ProviderProjectDetailsPage() {
 
                 {/* Message Attachments Section */}
                 <Card>
-                  <CardHeader>
-                    <CardTitle>Message Attachments</CardTitle>
-                    <CardDescription>
+                  <CardHeader className="p-4 sm:p-6">
+                    <CardTitle className="text-lg sm:text-xl">
+                      Message Attachments
+                    </CardTitle>
+                    <CardDescription className="text-xs sm:text-sm">
                       Files attached to project messages
                     </CardDescription>
                   </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-gray-500 text-center py-8">
-                      Message attachments will be available here once
-                      implemented
-                    </p>
+                  <CardContent className="p-4 sm:p-6">
+                    {(() => {
+                      const messageAttachments = msgsToRender.flatMap(
+                        (message: MessageData) =>
+                          Array.isArray(message.attachments)
+                            ? message.attachments.map((url: string) => ({
+                                url,
+                                senderName:
+                                  (message.sender?.name as string) ||
+                                  (message.senderName as string) ||
+                                  "User",
+                                messageId: message.id as string,
+                                timestamp:
+                                  (message.createdAt as string) ||
+                                  (message.timestamp as string),
+                              }))
+                            : []
+                      );
+                      if (messageAttachments.length === 0) {
+                        return (
+                          <p className="text-xs sm:text-sm text-gray-500 text-center py-6 sm:py-8">
+                            No message attachments found
+                          </p>
+                        );
+                      }
+                      return (
+                        <div className="space-y-2">
+                          {messageAttachments.map((attachment, idx) => {
+                            const normalized = attachment.url.replace(
+                              /\\/g,
+                              "/"
+                            );
+                            const fileName =
+                              normalized.split("/").pop() || `file-${idx + 1}`;
+
+                            // Use getAttachmentUrl helper for consistent URL handling
+                            const attachmentUrl = getAttachmentUrl(
+                              attachment.url
+                            );
+                            const isR2Key =
+                              attachmentUrl === "#" ||
+                              (!attachmentUrl.startsWith("http") &&
+                                !attachmentUrl.startsWith("/uploads/") &&
+                                !attachmentUrl.includes(
+                                  process.env.NEXT_PUBLIC_API_URL || "localhost"
+                                ));
+
+                            return (
+                              <a
+                                key={idx}
+                                href={
+                                  attachmentUrl === "#"
+                                    ? undefined
+                                    : attachmentUrl
+                                }
+                                download={fileName}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={
+                                  isR2Key
+                                    ? async (e) => {
+                                        e.preventDefault();
+                                        try {
+                                          const downloadUrl =
+                                            await getR2DownloadUrl(
+                                              attachment.url
+                                            ); // Use original URL/key
+                                          window.open(
+                                            downloadUrl.downloadUrl,
+                                            "_blank"
+                                          );
+                                        } catch (error) {
+                                          console.error(
+                                            "Failed to get download URL:",
+                                            error
+                                          );
+                                          toastHook({
+                                            title: "Error",
+                                            description:
+                                              "Failed to download attachment",
+                                            variant: "destructive",
+                                          });
+                                        }
+                                      }
+                                    : undefined
+                                }
+                                className="flex items-start gap-2 sm:gap-3 rounded-lg border border-gray-200 bg-white px-2 sm:px-3 py-2 active:bg-gray-50 sm:hover:bg-gray-50 sm:hover:shadow-sm transition"
+                              >
+                                <div className="flex h-8 w-8 sm:h-9 sm:w-9 flex-none items-center justify-center rounded-md border border-gray-300 bg-gray-100 text-gray-700 text-xs font-medium">
+                                  PDF
+                                </div>
+                                <div className="flex flex-col min-w-0 flex-1">
+                                  <span className="text-xs sm:text-sm font-medium text-gray-900 break-all leading-snug">
+                                    {fileName}
+                                  </span>
+                                  <span className="text-xs text-gray-500 leading-snug">
+                                    From: {attachment.senderName} • Click to
+                                    preview / download
+                                  </span>
+                                </div>
+                              </a>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
                   </CardContent>
                 </Card>
               </TabsContent>
 
               {/* Messages Tab */}
-              <TabsContent value="messages" className="space-y-6">
+              <TabsContent value="messages" className="space-y-4 sm:space-y-6">
                 <Card>
-                  <CardHeader>
-                    <CardTitle>Project Messages</CardTitle>
-                    <CardDescription>
+                  <CardHeader className="p-4 sm:p-6">
+                    <CardTitle className="text-lg sm:text-xl">
+                      Project Messages
+                    </CardTitle>
+                    <CardDescription className="text-xs sm:text-sm">
                       Communication with your assigned provider
                     </CardDescription>
                   </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4 max-h-96 overflow-y-auto">
+                  <CardContent className="p-4 sm:p-6">
+                    <div className="space-y-3 sm:space-y-4 max-h-96 overflow-y-auto">
                       {msgsToRender.map((message: MessageData) => {
                         const isCurrentUser =
                           String(message.senderId || message.sender?.id) ===
@@ -2284,38 +2486,200 @@ export default function ProviderProjectDetailsPage() {
                         return (
                           <div
                             key={message.id}
-                            className={`flex gap-3 ${
+                            className={`flex gap-2 sm:gap-3 ${
                               isCurrentUser ? "flex-row-reverse" : ""
                             }`}
                           >
-                            <Avatar className="w-8 h-8">
-                              <AvatarFallback>{avatarChar}</AvatarFallback>
+                            <Avatar className="w-7 h-7 sm:w-8 sm:h-8 flex-shrink-0">
+                              <AvatarFallback className="text-xs">
+                                {avatarChar}
+                              </AvatarFallback>
                             </Avatar>
                             <div
-                              className={`flex-1 max-w-[14rem] ${
+                              className={`flex-1 min-w-0 max-w-[70%] sm:max-w-[14rem] ${
                                 isCurrentUser ? "text-right" : ""
                               }`}
                             >
                               <div
-                                className={`p-3 rounded-lg ${
+                                className={`p-2 sm:p-3 rounded-lg ${
                                   isCurrentUser
                                     ? "bg-blue-600 text-white"
                                     : "bg-gray-100"
                                 }`}
                               >
-                                <p className="text-sm">{text}</p>
+                                <p className="text-xs sm:text-sm break-words">
+                                  {text}
+                                </p>
                                 {message.attachments &&
+                                  Array.isArray(message.attachments) &&
                                   message.attachments.length > 0 && (
-                                    <div className="mt-2 pt-2 border-t border-opacity-20">
-                                      {asArray<string>(message.attachments).map(
-                                        (attachment, index) => (
-                                          <div
-                                            key={index}
-                                            className="text-xs opacity-75"
-                                          >
-                                            📎 {attachment}
-                                          </div>
-                                        )
+                                    <div className="mt-2 pt-2 border-t border-opacity-20 space-y-2">
+                                      {(message.attachments as unknown[]).map(
+                                        (
+                                          attachment: unknown,
+                                          index: number
+                                        ) => {
+                                          const attachmentStr =
+                                            typeof attachment === "string"
+                                              ? attachment
+                                              : String(attachment);
+                                          const url = getFullUrl(attachmentStr);
+                                          const attachmentUrl =
+                                            getAttachmentUrl(attachmentStr);
+                                          const name =
+                                            url.split("/").pop() ||
+                                            `file-${index}`;
+                                          const isR2Key =
+                                            attachmentUrl === "#" ||
+                                            (!attachmentUrl.startsWith(
+                                              "http"
+                                            ) &&
+                                              !attachmentUrl.startsWith(
+                                                "/uploads/"
+                                              ) &&
+                                              !attachmentUrl.includes(
+                                                process.env
+                                                  .NEXT_PUBLIC_API_URL ||
+                                                  "localhost"
+                                              ));
+
+                                          return (
+                                            <div
+                                              key={index}
+                                              className="text-xs"
+                                            >
+                                              {isImage(url) ? (
+                                                <div className="relative w-32 h-auto rounded border cursor-pointer">
+                                                  <Image
+                                                    src={url}
+                                                    alt={name}
+                                                    width={128}
+                                                    height={128}
+                                                    className="w-32 h-auto rounded border"
+                                                    unoptimized
+                                                    onError={async (e) => {
+                                                      const target =
+                                                        e.target as HTMLImageElement;
+                                                      // If image fails to load and it's an R2 key, try to get download URL
+                                                      if (isR2Key) {
+                                                        try {
+                                                          const downloadUrl =
+                                                            await getR2DownloadUrl(
+                                                              attachmentStr
+                                                            );
+                                                          target.src =
+                                                            downloadUrl.downloadUrl;
+                                                        } catch (error) {
+                                                          console.error(
+                                                            "Failed to get download URL:",
+                                                            error
+                                                          );
+                                                          target.style.display =
+                                                            "none";
+                                                        }
+                                                      } else {
+                                                        target.style.display =
+                                                          "none";
+                                                      }
+                                                    }}
+                                                  />
+                                                </div>
+                                              ) : isPDF(url) ? (
+                                                <a
+                                                  href={
+                                                    attachmentUrl !== "#"
+                                                      ? attachmentUrl
+                                                      : url
+                                                  }
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  onClick={
+                                                    isR2Key
+                                                      ? async (e) => {
+                                                          e.preventDefault();
+                                                          try {
+                                                            const downloadUrl =
+                                                              await getR2DownloadUrl(
+                                                                attachmentStr
+                                                              );
+                                                            window.open(
+                                                              downloadUrl.downloadUrl,
+                                                              "_blank"
+                                                            );
+                                                          } catch (error) {
+                                                            console.error(
+                                                              "Failed to get download URL:",
+                                                              error
+                                                            );
+                                                            toastHook({
+                                                              title: "Error",
+                                                              description:
+                                                                "Failed to download attachment",
+                                                              variant:
+                                                                "destructive",
+                                                            });
+                                                          }
+                                                        }
+                                                      : undefined
+                                                  }
+                                                  className={`flex items-center gap-2 ${
+                                                    isCurrentUser
+                                                      ? "text-blue-200 underline"
+                                                      : "text-blue-500 underline"
+                                                  }`}
+                                                >
+                                                  📄 {name}
+                                                </a>
+                                              ) : (
+                                                <a
+                                                  href={
+                                                    attachmentUrl !== "#"
+                                                      ? attachmentUrl
+                                                      : url
+                                                  }
+                                                  target="_blank"
+                                                  rel="noopener noreferrer"
+                                                  onClick={
+                                                    isR2Key
+                                                      ? async (e) => {
+                                                          e.preventDefault();
+                                                          try {
+                                                            const downloadUrl =
+                                                              await getR2DownloadUrl(
+                                                                attachmentStr
+                                                              );
+                                                            window.open(
+                                                              downloadUrl.downloadUrl,
+                                                              "_blank"
+                                                            );
+                                                          } catch (error) {
+                                                            console.error(
+                                                              "Failed to get download URL:",
+                                                              error
+                                                            );
+                                                            toastHook({
+                                                              title: "Error",
+                                                              description:
+                                                                "Failed to download attachment",
+                                                              variant:
+                                                                "destructive",
+                                                            });
+                                                          }
+                                                        }
+                                                      : undefined
+                                                  }
+                                                  className={`flex items-center gap-2 ${
+                                                    isCurrentUser
+                                                      ? "text-blue-200 underline"
+                                                      : "text-blue-500 underline"
+                                                  }`}
+                                                >
+                                                  📎 {name}
+                                                </a>
+                                              )}
+                                            </div>
+                                          );
+                                        }
                                       )}
                                     </div>
                                   )}
@@ -2326,9 +2690,25 @@ export default function ProviderProjectDetailsPage() {
                         );
                       })}
                     </div>
-                    <Separator className="my-4" />
+                    <Separator className="my-3 sm:my-4" />
                     <div className="flex justify-center gap-2">
-                      <Button onClick={handleContact}>Contact</Button>
+                      <Button
+                        className="w-full sm:w-auto text-xs sm:text-sm"
+                        onClick={() =>
+                          handleContact(
+                            project.customer?.id,
+                            project.customer?.name,
+                            (
+                              project.customer as
+                                | { profileImageUrl?: string }
+                                | undefined
+                            )?.profileImageUrl ||
+                              project.customer?.customerProfile?.profileImageUrl
+                          )
+                        }
+                      >
+                        Contact
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
@@ -2337,15 +2717,17 @@ export default function ProviderProjectDetailsPage() {
           </div>
 
           {/* Sidebar */}
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             {/* Client Info */}
             <Card>
-              <CardHeader>
-                <CardTitle>Client Information</CardTitle>
+              <CardHeader className="p-4 sm:p-6">
+                <CardTitle className="text-base sm:text-lg">
+                  Client Information
+                </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <Avatar>
+              <CardContent className="p-4 sm:p-6 space-y-3 sm:space-y-4">
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <Avatar className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0">
                     <AvatarImage
                       src={getProfileImageUrl(
                         project.customer?.customerProfile?.profileImageUrl
@@ -2355,45 +2737,51 @@ export default function ProviderProjectDetailsPage() {
                       {project.customer?.name?.charAt(0) || "C"}
                     </AvatarFallback>
                   </Avatar>
-                  <div>
+                  <div className="min-w-0 flex-1">
                     {project.customer?.id ? (
                       <Link
                         href={`/provider/companies/${project.customer.id}`}
-                        className="font-medium text-blue-600 hover:text-blue-800 hover:underline block"
+                        className="font-medium text-sm sm:text-base text-blue-600 active:text-blue-800 sm:hover:text-blue-800 sm:hover:underline block break-words"
                       >
                         {project.customer?.name}
                       </Link>
                     ) : (
-                      <p className="font-medium">{project.customer?.name}</p>
+                      <p className="font-medium text-sm sm:text-base break-words">
+                        {project.customer?.name}
+                      </p>
                     )}
-                    <p className="text-sm text-gray-600">
+                    <p className="text-xs sm:text-sm text-gray-600 break-words">
                       {project.customer?.email}
                     </p>
                   </div>
                 </div>
 
                 {project.customer?.customerProfile && (
-                  <div className="space-y-2 text-sm">
+                  <div className="space-y-2 text-xs sm:text-sm">
                     {project.customer.customerProfile.industry && (
                       <div className="flex items-center gap-2">
-                        <User className="w-4 h-4 text-gray-400" />
-                        <span>{project.customer.customerProfile.industry}</span>
+                        <User className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400 flex-shrink-0" />
+                        <span className="break-words">
+                          {project.customer.customerProfile.industry}
+                        </span>
                       </div>
                     )}
                     {project.customer.customerProfile.location && (
                       <div className="flex items-center gap-2">
-                        <MapPin className="w-4 h-4 text-gray-400" />
-                        <span>{project.customer.customerProfile.location}</span>
+                        <MapPin className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400 flex-shrink-0" />
+                        <span className="break-words">
+                          {project.customer.customerProfile.location}
+                        </span>
                       </div>
                     )}
                     {project.customer.customerProfile.website && (
                       <div className="flex items-center gap-2">
-                        <Globe className="w-4 h-4 text-gray-400" />
+                        <Globe className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400 flex-shrink-0" />
                         <a
                           href={project.customer.customerProfile.website}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-blue-600 hover:underline"
+                          className="text-blue-600 active:text-blue-800 sm:hover:underline break-all"
                         >
                           Website
                         </a>
@@ -2406,31 +2794,41 @@ export default function ProviderProjectDetailsPage() {
 
             {/* Project Stats */}
             <Card>
-              <CardHeader>
-                <CardTitle>Project Statistics</CardTitle>
+              <CardHeader className="p-4 sm:p-6">
+                <CardTitle className="text-base sm:text-lg">
+                  Project Statistics
+                </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="p-4 sm:p-6 space-y-3 sm:space-y-4">
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">
+                  <span className="text-xs sm:text-sm text-gray-600">
                     Total Milestones
                   </span>
-                  <span className="font-medium">
+                  <span className="font-medium text-sm sm:text-base">
                     {project.totalMilestones || 0}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Completed</span>
-                  <span className="font-medium text-green-600">
+                  <span className="text-xs sm:text-sm text-gray-600">
+                    Completed
+                  </span>
+                  <span className="font-medium text-sm sm:text-base text-green-600">
                     {project.completedMilestones || 0}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Progress</span>
-                  <span className="font-medium">{project.progress || 0}%</span>
+                  <span className="text-xs sm:text-sm text-gray-600">
+                    Progress
+                  </span>
+                  <span className="font-medium text-sm sm:text-base">
+                    {project.progress || 0}%
+                  </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Created</span>
-                  <span className="font-medium">
+                  <span className="text-xs sm:text-sm text-gray-600">
+                    Created
+                  </span>
+                  <span className="font-medium text-sm sm:text-base">
                     {formatDate(project.createdAt)}
                   </span>
                 </div>
@@ -2876,16 +3274,30 @@ export default function ProviderProjectDetailsPage() {
                       <SelectValue placeholder="Select a milestone (optional)" />
                     </SelectTrigger>
                     <SelectContent>
-                      {projectMilestones.map((m: Milestone) => (
-                        <SelectItem key={m.id || ""} value={m.id || ""}>
-                          {m.title} - RM{m.amount?.toLocaleString() || 0}
+                      {projectMilestones
+                        .filter(
+                          (m: Milestone) =>
+                            m.status !== "APPROVED" && m.status !== "PAID"
+                        )
+                        .map((m: Milestone) => (
+                          <SelectItem key={m.id || ""} value={m.id || ""}>
+                            {m.title} - RM{m.amount?.toLocaleString() || 0} (
+                            {m.status})
+                          </SelectItem>
+                        ))}
+                      {projectMilestones.filter(
+                        (m: Milestone) =>
+                          m.status !== "APPROVED" && m.status !== "PAID"
+                      ).length === 0 && (
+                        <SelectItem value="" disabled>
+                          No milestones available for dispute
                         </SelectItem>
-                      ))}
+                      )}
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-gray-500 mt-1">
                     If selected, this milestone will be frozen until the dispute
-                    is resolved.
+                    is resolved. Approved or paid milestones cannot be disputed.
                   </p>
                 </div>
               )}

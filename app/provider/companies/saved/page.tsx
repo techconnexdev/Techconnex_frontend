@@ -5,8 +5,9 @@ import { ProviderLayout } from "@/components/provider-layout";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
-import { Eye, MapPin, Star, Trash2, Building2 } from "lucide-react";
+import { Eye, MapPin, Star, Trash2, Building2, AlertTriangle } from "lucide-react";
 import type { Company } from "@/components/provider/companies/types";
 import { getProfileImageUrl } from "@/lib/api";
 
@@ -72,7 +73,7 @@ export default function SavedCompaniesPage() {
       if (!userId || !token) return;
       const res = await fetch(
         `${
-          process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"
+          process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000"
         }/companies/${companyId}/save?userId=${encodeURIComponent(userId)}`,
         {
           method: "DELETE",
@@ -122,9 +123,17 @@ export default function SavedCompaniesPage() {
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-gray-900 truncate">
-                        {company.name}
-                      </h3>
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <h3 className="font-semibold text-gray-900 truncate">
+                          {company.name}
+                        </h3>
+                        {!company.verified && (
+                          <Badge className="bg-gray-100 text-gray-700 border-gray-300 text-xs">
+                            <AlertTriangle className="w-3 h-3 mr-1" />
+                            Not Verified
+                          </Badge>
+                        )}
+                      </div>
                       <p className="text-sm text-gray-600">
                         {company.industry}
                       </p>

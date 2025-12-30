@@ -47,12 +47,12 @@ export function ProviderProfileCard({
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Provider Profile</CardTitle>
+      <CardHeader className="p-4 sm:p-6">
+        <CardTitle className="text-lg sm:text-xl">Provider Profile</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="p-4 sm:p-6 space-y-3 sm:space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="bio">Bio</Label>
+          <Label htmlFor="bio" className="text-xs sm:text-sm">Bio</Label>
           {isEditing ? (
             <Textarea
               id="bio"
@@ -60,26 +60,28 @@ export function ProviderProfileCard({
               onChange={(e) => onFieldChange("bio", e.target.value)}
               placeholder="Enter bio"
               rows={4}
+              className="text-sm sm:text-base"
             />
           ) : (
-            <p>{getStringValue(profile.bio) || "—"}</p>
+            <p className="text-sm sm:text-base break-words">{getStringValue(profile.bio) || "—"}</p>
           )}
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
           <div className="space-y-2">
-            <Label htmlFor="location">Location</Label>
+            <Label htmlFor="location" className="text-xs sm:text-sm">Location</Label>
             {isEditing ? (
               <Input
                 id="location"
                 value={getStringValue(formData.location)}
                 onChange={(e) => onFieldChange("location", e.target.value)}
+                className="text-sm sm:text-base"
               />
             ) : (
-              <p>{getStringValue(profile.location) || "—"}</p>
+              <p className="text-sm sm:text-base break-words">{getStringValue(profile.location) || "—"}</p>
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="hourlyRate">Hourly Rate (RM)</Label>
+            <Label htmlFor="hourlyRate" className="text-xs sm:text-sm">Hourly Rate (RM)</Label>
             {isEditing ? (
               <Input
                 id="hourlyRate"
@@ -88,13 +90,14 @@ export function ProviderProfileCard({
                 onChange={(e) =>
                   onFieldChange("hourlyRate", e.target.value ? Number.parseFloat(e.target.value) : null)
                 }
+                className="text-sm sm:text-base"
               />
             ) : (
-              <p>{profile.hourlyRate ? `RM ${profile.hourlyRate}` : "—"}</p>
+              <p className="text-sm sm:text-base">{profile.hourlyRate ? `RM ${profile.hourlyRate}` : "—"}</p>
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="website">Website</Label>
+            <Label htmlFor="website" className="text-xs sm:text-sm">Website</Label>
             {isEditing ? (
               <Input
                 id="website"
@@ -102,13 +105,14 @@ export function ProviderProfileCard({
                 value={getStringValue(formData.website)}
                 onChange={(e) => onFieldChange("website", e.target.value)}
                 placeholder="https://..."
+                className="text-sm sm:text-base"
               />
             ) : (
-              <p>{getStringValue(profile.website) || "—"}</p>
+              <p className="text-sm sm:text-base break-words">{getStringValue(profile.website) || "—"}</p>
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="yearsExperience">Years Experience</Label>
+            <Label htmlFor="yearsExperience" className="text-xs sm:text-sm">Years Experience</Label>
             {isEditing ? (
               <Input
                 id="yearsExperience"
@@ -117,19 +121,20 @@ export function ProviderProfileCard({
                 onChange={(e) =>
                   onFieldChange("yearsExperience", e.target.value ? Number.parseInt(e.target.value) : null)
                 }
+                className="text-sm sm:text-base"
               />
             ) : (
-              <p>{getStringValue(profile.yearsExperience) || "—"}</p>
+              <p className="text-sm sm:text-base">{getStringValue(profile.yearsExperience) || "—"}</p>
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="availability">Availability</Label>
+            <Label htmlFor="availability" className="text-xs sm:text-sm">Availability</Label>
             {isEditing ? (
               <Select
                 value={getStringValue(formData.availability) || "available"}
                 onValueChange={(value) => onFieldChange("availability", value)}
               >
-                <SelectTrigger>
+                <SelectTrigger className="text-sm sm:text-base">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -139,17 +144,17 @@ export function ProviderProfileCard({
                 </SelectContent>
               </Select>
             ) : (
-              <p>{getStringValue(profile.availability) || "—"}</p>
+              <p className="text-sm sm:text-base">{getStringValue(profile.availability) || "—"}</p>
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="workPreference">Work Preference</Label>
+            <Label htmlFor="workPreference" className="text-xs sm:text-sm">Work Preference</Label>
             {isEditing ? (
               <Select
                 value={getStringValue(formData.workPreference) || "remote"}
                 onValueChange={(value) => onFieldChange("workPreference", value)}
               >
-                <SelectTrigger>
+                <SelectTrigger className="text-sm sm:text-base">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -159,24 +164,25 @@ export function ProviderProfileCard({
                 </SelectContent>
               </Select>
             ) : (
-              <p>{getStringValue(profile.workPreference) || "—"}</p>
+              <p className="text-sm sm:text-base">{getStringValue(profile.workPreference) || "—"}</p>
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="teamSize">Team Size</Label>
+            <Label htmlFor="teamSize" className="text-xs sm:text-sm">Team Size</Label>
             {isEditing ? (
               <Input
                 id="teamSize"
                 type="number"
                 value={formData.teamSize || 1}
                 onChange={(e) => onFieldChange("teamSize", e.target.value ? Number.parseInt(e.target.value) : 1)}
+                className="text-sm sm:text-base"
               />
             ) : (
-              <p>{profile.teamSize || "—"}</p>
+              <p className="text-sm sm:text-base">{profile.teamSize || "—"}</p>
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="minimumProjectBudget">Minimum Project Budget (RM)</Label>
+            <Label htmlFor="minimumProjectBudget" className="text-xs sm:text-sm">Minimum Project Budget (RM)</Label>
             {isEditing ? (
               <Input
                 id="minimumProjectBudget"
@@ -185,13 +191,14 @@ export function ProviderProfileCard({
                 onChange={(e) =>
                   onFieldChange("minimumProjectBudget", e.target.value ? Number.parseFloat(e.target.value) : null)
                 }
+                className="text-sm sm:text-base"
               />
             ) : (
-              <p>{profile.minimumProjectBudget ? `RM ${profile.minimumProjectBudget}` : "—"}</p>
+              <p className="text-sm sm:text-base">{profile.minimumProjectBudget ? `RM ${profile.minimumProjectBudget}` : "—"}</p>
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="maximumProjectBudget">Maximum Project Budget (RM)</Label>
+            <Label htmlFor="maximumProjectBudget" className="text-xs sm:text-sm">Maximum Project Budget (RM)</Label>
             {isEditing ? (
               <Input
                 id="maximumProjectBudget"
@@ -200,27 +207,29 @@ export function ProviderProfileCard({
                 onChange={(e) =>
                   onFieldChange("maximumProjectBudget", e.target.value ? Number.parseFloat(e.target.value) : null)
                 }
+                className="text-sm sm:text-base"
               />
             ) : (
-              <p>{profile.maximumProjectBudget ? `RM ${profile.maximumProjectBudget}` : "—"}</p>
+              <p className="text-sm sm:text-base">{profile.maximumProjectBudget ? `RM ${profile.maximumProjectBudget}` : "—"}</p>
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="preferredProjectDuration">Preferred Project Duration</Label>
+            <Label htmlFor="preferredProjectDuration" className="text-xs sm:text-sm">Preferred Project Duration</Label>
             {isEditing ? (
               <Input
                 id="preferredProjectDuration"
                 value={getStringValue(formData.preferredProjectDuration)}
                 onChange={(e) => onFieldChange("preferredProjectDuration", e.target.value)}
                 placeholder="e.g. 1-3 months"
+                className="text-sm sm:text-base"
               />
             ) : (
-              <p>{getStringValue(profile.preferredProjectDuration) || "—"}</p>
+              <p className="text-sm sm:text-base">{getStringValue(profile.preferredProjectDuration) || "—"}</p>
             )}
           </div>
         </div>
         <div className="space-y-2">
-          <Label>Skills</Label>
+          <Label className="text-xs sm:text-sm">Skills</Label>
           {isEditing ? (
             <div className="space-y-2">
               <div className="flex gap-2">
@@ -236,6 +245,7 @@ export function ProviderProfileCard({
                       }
                     }
                   }}
+                  className="text-sm sm:text-base"
                 />
               </div>
               <div className="flex flex-wrap gap-2">
@@ -243,7 +253,7 @@ export function ProviderProfileCard({
                   <Badge
                     key={index}
                     variant="secondary"
-                    className="cursor-pointer"
+                    className="cursor-pointer text-xs"
                     onClick={() => onArrayFieldChange("skills", skill, "remove")}
                   >
                     {skill} ×
@@ -255,18 +265,18 @@ export function ProviderProfileCard({
             <div className="flex flex-wrap gap-2">
               {getArrayValue(profile.skills).length > 0 ? (
                 getArrayValue(profile.skills).map((skill, index) => (
-                  <Badge key={index} variant="secondary">
+                  <Badge key={index} variant="secondary" className="text-xs">
                     {skill}
                   </Badge>
                 ))
               ) : (
-                <span className="text-gray-400">No skills</span>
+                <span className="text-xs sm:text-sm text-gray-400">No skills</span>
               )}
             </div>
           )}
         </div>
         <div className="space-y-2">
-          <Label>Languages</Label>
+          <Label className="text-xs sm:text-sm">Languages</Label>
           {isEditing ? (
             <div className="space-y-2">
               <div className="flex gap-2">
@@ -282,6 +292,7 @@ export function ProviderProfileCard({
                       }
                     }
                   }}
+                  className="text-sm sm:text-base"
                 />
               </div>
               <div className="flex flex-wrap gap-2">
@@ -289,7 +300,7 @@ export function ProviderProfileCard({
                   <Badge
                     key={index}
                     variant="secondary"
-                    className="cursor-pointer"
+                    className="cursor-pointer text-xs"
                     onClick={() => onArrayFieldChange("languages", lang, "remove")}
                   >
                     {lang} ×
@@ -301,12 +312,12 @@ export function ProviderProfileCard({
             <div className="flex flex-wrap gap-2">
               {getArrayValue(profile.languages).length > 0 ? (
                 getArrayValue(profile.languages).map((lang, index) => (
-                  <Badge key={index} variant="secondary">
+                  <Badge key={index} variant="secondary" className="text-xs">
                     {lang}
                   </Badge>
                 ))
               ) : (
-                <span className="text-gray-400">No languages</span>
+                <span className="text-xs sm:text-sm text-gray-400">No languages</span>
               )}
             </div>
           )}

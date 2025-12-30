@@ -97,7 +97,7 @@ export default function CustomerDashboard() {
             activeProjects: statsResponse.stats.activeProjects || 0,
             completedProjects: statsResponse.stats.completedProjects || 0,
             totalSpent: statsResponse.stats.totalSpent || 0,
-            rating: statsResponse.stats.averageRating || null,
+            rating: statsResponse.stats.averageRating ?? null,
             reviewCount: statsResponse.stats.reviewCount || 0,
           });
         } else {
@@ -161,7 +161,7 @@ export default function CustomerDashboard() {
               avatar:
                 provider.avatar && provider.avatar !== "/placeholder.svg"
                   ? `${
-                      process.env.NEXT_PUBLIC_API_URL ||
+                      process.env.NEXT_PUBLIC_API_BASE_URL ||
                       "http://localhost:4000"
                     }${(provider.avatar as string)?.startsWith("/") ? "" : "/"}${
                       provider.avatar as string
@@ -361,7 +361,11 @@ export default function CustomerDashboard() {
                   </p>
                   <div className="flex items-center gap-1 mt-1">
                     <p className="text-xl sm:text-2xl font-bold text-gray-900">
-                      {stats.rating !== null ? stats.rating.toFixed(1) : "-"}
+                      {stats.rating !== null && stats.rating !== undefined 
+                        ? stats.rating.toFixed(1) 
+                        : stats.reviewCount > 0 
+                        ? "0.0" 
+                        : "-"}
                     </p>
                     <Star className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-400 fill-current flex-shrink-0" />
                   </div>

@@ -100,6 +100,8 @@ export default function ProviderEarningsPage() {
   const [quickStats, setQuickStats] = useState<QuickStats | null>(null);
   const [recentPayments, setRecentPayments] = useState<Payment[]>([]);
   const [monthlyEarnings, setMonthlyEarnings] = useState<MonthlyEarning[]>([]);
+  const [selectedYear, setSelectedYear] = useState<number | null>(null);
+  const [availableYears, setAvailableYears] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingMethod, setEditingMethod] = useState<PayoutMethod | null>(null);
@@ -142,6 +144,27 @@ export default function ProviderEarningsPage() {
         setRecentPayments(data.recentPayments);
         setMonthlyEarnings(data.monthlyEarnings);
         setQuickStats(data.quickStats);
+
+        // Extract available years from monthly earnings
+        const years = new Set<number>();
+        data.monthlyEarnings?.forEach((earning: MonthlyEarning) => {
+          // Parse year from month string (e.g., "Nov 2025" -> 2025)
+          const yearMatch = earning.month.match(/\d{4}/);
+          if (yearMatch) {
+            years.add(parseInt(yearMatch[0], 10));
+          }
+        });
+        const sortedYears = Array.from(years).sort((a, b) => b - a);
+        setAvailableYears(sortedYears);
+
+        // Set default year to current year or most recent year with data
+        if (sortedYears.length > 0) {
+          const currentYear = new Date().getFullYear();
+          const defaultYear = sortedYears.includes(currentYear)
+            ? currentYear
+            : sortedYears[0];
+          setSelectedYear(defaultYear);
+        }
         // Use bankDetails returned from API
         // const _bd = data.bankDetails;
         // if (_bd && Object.values(_bd).some((val) => val)) {
@@ -377,7 +400,7 @@ export default function ProviderEarningsPage() {
       return {
         title: method.label || method.bankName || "Bank Account",
         subtitle: method.accountNumber
-          ? `•••• ${method.accountNumber.slice(-4)}`
+          ? `${method.accountNumber}`
           : "",
         details: method.accountHolder || "",
       };
@@ -587,15 +610,19 @@ export default function ProviderEarningsPage() {
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
-                <div>
+                <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-600">
                     Available Balance
                   </p>
                   <p className="text-2xl font-bold text-purple-600">
                     RM{earningsData.availableBalance.toLocaleString()}
                   </p>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Payments already transferred and should be received from
+                    TechConnect platform. Processing takes 3-14 working days.
+                  </p>
                 </div>
-                <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
+                <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
                   <CreditCard className="w-6 h-6 text-purple-600" />
                 </div>
               </div>
@@ -619,32 +646,81 @@ export default function ProviderEarningsPage() {
                 {/* Monthly Earnings Chart */}
                 <Card>
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <BarChart3 className="w-5 h-5" />
-                      Monthly Earnings Trend
-                    </CardTitle>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="flex items-center gap-2">
+                        <BarChart3 className="w-5 h-5" />
+                        Monthly Earnings Trend
+                      </CardTitle>
+                      {availableYears.length > 0 && (
+                        <Select
+                          value={selectedYear?.toString() || ""}
+                          onValueChange={(value) =>
+                            setSelectedYear(parseInt(value, 10))
+                          }
+                        >
+                          <SelectTrigger className="w-48">
+                            <SelectValue placeholder="Select Year" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableYears.map((year) => {
+                              const currentYear = new Date().getFullYear();
+                              const isOnlyYear = availableYears.length === 1;
+                              const isCurrentYear = year === currentYear;
+                              const label =
+                                isOnlyYear && isCurrentYear
+                                  ? `${year} (Only year with data)`
+                                  : year.toString();
+
+                              return (
+                                <SelectItem key={year} value={year.toString()}>
+                                  {label}
+                                </SelectItem>
+                              );
+                            })}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      {monthlyEarnings.map((month) => (
-                        <div
-                          key={month.month}
-                          className="flex items-center justify-between"
-                        >
-                          <div className="flex items-center space-x-3">
-                            <div className="w-3 h-3 bg-blue-500 rounded-full" />
-                            <span className="font-medium">{month.month}</span>
+                      {monthlyEarnings
+                        .filter((month) => {
+                          if (!selectedYear) return true;
+                          // Extract year from month string (e.g., "Nov 2025" -> 2025)
+                          const yearMatch = month.month.match(/\d{4}/);
+                          if (!yearMatch) return false;
+                          return parseInt(yearMatch[0], 10) === selectedYear;
+                        })
+                        .map((month) => (
+                          <div
+                            key={month.month}
+                            className="flex items-center justify-between"
+                          >
+                            <div className="flex items-center space-x-3">
+                              <div className="w-3 h-3 bg-blue-500 rounded-full" />
+                              <span className="font-medium">{month.month}</span>
+                            </div>
+                            <div className="flex items-center space-x-4">
+                              <span className="text-sm text-gray-500">
+                                {month.projects} projects
+                              </span>
+                              <span className="font-semibold">
+                                RM{month.amount.toLocaleString()}
+                              </span>
+                            </div>
                           </div>
-                          <div className="flex items-center space-x-4">
-                            <span className="text-sm text-gray-500">
-                              {month.projects} projects
-                            </span>
-                            <span className="font-semibold">
-                              RM{month.amount.toLocaleString()}
-                            </span>
-                          </div>
+                        ))}
+                      {monthlyEarnings.filter((month) => {
+                        if (!selectedYear) return false;
+                        const yearMatch = month.month.match(/\d{4}/);
+                        if (!yearMatch) return false;
+                        return parseInt(yearMatch[0], 10) === selectedYear;
+                      }).length === 0 && (
+                        <div className="text-center py-8 text-gray-500">
+                          No earnings data for {selectedYear}
                         </div>
-                      ))}
+                      )}
                     </div>
                   </CardContent>
                 </Card>

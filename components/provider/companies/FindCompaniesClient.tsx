@@ -19,7 +19,6 @@ import { getCompanyAiDrafts, getProfileImageUrl } from "@/lib/api";
 
 /** Props come from the server page */
 export default function FindCompaniesClient({
-  locations,
   ratings,
 }: {
   industries: Option[];
@@ -28,9 +27,6 @@ export default function FindCompaniesClient({
   ratings: Option[];
 }) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [locationFilter, setLocationFilter] = useState(
-    locations[0]?.value ?? "all"
-  );
   const [ratingFilter, setRatingFilter] = useState(ratings[0]?.value ?? "all");
   const [verifiedFilter, setVerifiedFilter] = useState("all"); // all | verified | unverified
   const [sortBy, setSortBy] = useState("rating");
@@ -51,7 +47,6 @@ export default function FindCompaniesClient({
     const params = new URLSearchParams();
     if (userId) params.append("userId", userId);
     if (searchQuery) params.append("search", searchQuery);
-    if (locationFilter !== "all") params.append("location", locationFilter);
     if (ratingFilter !== "all") params.append("rating", ratingFilter);
     if (verifiedFilter === "verified") params.append("verified", "true");
     if (verifiedFilter === "unverified") params.append("verified", "false");
@@ -120,7 +115,7 @@ export default function FindCompaniesClient({
     };
 
     fetchData();
-  }, [searchQuery, locationFilter, ratingFilter, verifiedFilter]);
+  }, [searchQuery, ratingFilter, verifiedFilter]);
 
   // Sort companies based on selected option
   const sortedCompanies = [...companies].sort((a, b) => {
@@ -129,8 +124,6 @@ export default function FindCompaniesClient({
         return (b.rating || 0) - (a.rating || 0);
       case "projects":
         return (b.projectsPosted || 0) - (a.projectsPosted || 0);
-      case "spend":
-        return (b.totalSpend || 0) - (a.totalSpend || 0);
       case "newest":
         // Backend already handles newest sorting, so just maintain order
         return 0;
@@ -147,54 +140,41 @@ export default function FindCompaniesClient({
   const filteredCompanies = sortedCompanies; // backend handles filtering, frontend handles sorting
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Find Companies</h1>
-          <p className="text-gray-600">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Find Companies</h1>
+          <p className="text-sm sm:text-base text-gray-600 mt-1">
             Discover companies looking for ICT professionals
           </p>
         </div>
-        <div className="flex gap-3">
-          <Link href="/provider/companies/saved">
-            <Button variant="outline">
-              <Heart className="w-4 h-4 mr-2" />
+        <div className="flex gap-2 sm:gap-3 w-full sm:w-auto">
+          <Link href="/provider/companies/saved" className="w-full sm:w-auto">
+            <Button variant="outline" className="w-full sm:w-auto text-xs sm:text-sm">
+              <Heart className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
               Saved Companies
             </Button>
           </Link>
         </div>
       </div>
 
-      {/* Filters (Search + Location + Rating + Verified) */}
+      {/* Filters (Search + Rating + Verified) */}
       <Card>
-        <CardContent className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <CardContent className="p-4 sm:p-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
               <Input
                 placeholder="Search by name, industry..."
-                className="pl-10"
+                className="pl-10 text-sm sm:text-base"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
 
-            <Select value={locationFilter} onValueChange={setLocationFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="All Locations" />
-              </SelectTrigger>
-              <SelectContent>
-                {locations.map((l) => (
-                  <SelectItem key={l.value} value={l.value}>
-                    {l.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
             <Select value={ratingFilter} onValueChange={setRatingFilter}>
-              <SelectTrigger>
+              <SelectTrigger className="text-sm sm:text-base">
                 <SelectValue placeholder="All Ratings" />
               </SelectTrigger>
               <SelectContent>
@@ -207,7 +187,7 @@ export default function FindCompaniesClient({
             </Select>
 
             <Select value={verifiedFilter} onValueChange={setVerifiedFilter}>
-              <SelectTrigger>
+              <SelectTrigger className="text-sm sm:text-base">
                 <SelectValue placeholder="Verification Status" />
               </SelectTrigger>
               <SelectContent>
@@ -221,19 +201,18 @@ export default function FindCompaniesClient({
       </Card>
 
       {/* Results header */}
-      <div className="flex items-center justify-between">
-        <p className="text-gray-600">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
+        <p className="text-sm sm:text-base text-gray-600">
           {filteredCompanies.length} companies found
         </p>
         <Select value={sortBy} onValueChange={setSortBy}>
-          <SelectTrigger className="w-48">
+          <SelectTrigger className="w-full sm:w-48 text-sm sm:text-base">
             <SelectValue placeholder="Sort by" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="rating">Highest Rated</SelectItem>
             <SelectItem value="verified">Verified First</SelectItem>
             <SelectItem value="projects">Most Projects</SelectItem>
-            <SelectItem value="spend">Highest Spender</SelectItem>
             <SelectItem value="newest">Newest</SelectItem>
           </SelectContent>
         </Select>
@@ -241,9 +220,11 @@ export default function FindCompaniesClient({
 
       {/* Grid */}
       {loading ? (
-        <p>Loading companies...</p>
+        <div className="text-center py-8 sm:py-12">
+          <p className="text-sm sm:text-base text-gray-600">Loading companies...</p>
+        </div>
       ) : (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           {filteredCompanies.map((c) => (
             <CompanyCard key={c.id} company={c} />
           ))}

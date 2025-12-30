@@ -28,8 +28,15 @@ import {
   Upload,
   FileText,
   X,
+  Receipt,
 } from "lucide-react";
-import { getAdminPaymentById, confirmAdminBankTransfer, getProfileImageUrl } from "@/lib/api";
+import {
+  getAdminPaymentById,
+  confirmAdminBankTransfer,
+  getProfileImageUrl,
+} from "@/lib/api";
+import { API_BASE } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 import {
   Dialog,
   DialogContent,
@@ -126,6 +133,7 @@ export default function PaymentDetailClient({
   paymentId: string;
 }) {
   const router = useRouter();
+  const { toast } = useToast();
   const [payment, setPayment] = useState<PaymentDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
@@ -253,7 +261,10 @@ export default function PaymentDetailClient({
       }
     } catch (error: unknown) {
       console.error("Failed to confirm transfer:", error);
-      const errorMessage = error instanceof Error ? error.message : "Failed to confirm bank transfer";
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Failed to confirm bank transfer";
       alert(errorMessage);
     } finally {
       setConfirming(false);
@@ -285,6 +296,56 @@ export default function PaymentDetailClient({
       hour: "2-digit",
       minute: "2-digit",
     });
+  };
+
+  const handleDownloadReceipt = async () => {
+    try {
+      const token =
+        typeof window !== "undefined"
+          ? localStorage.getItem("token")
+          : undefined;
+      if (!token) {
+        toast({
+          title: "Error",
+          description: "Not authenticated",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const res = await fetch(
+        `${API_BASE}/admin/payments/${paymentId}/receipt`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || "Failed to get receipt URL");
+      }
+
+      const data = await res.json();
+
+      if (data.success && data.downloadUrl) {
+        // Navigate to the R2 URL (opens in new tab/window)
+        window.open(data.downloadUrl, "_blank");
+      } else {
+        throw new Error("Invalid response from server");
+      }
+    } catch (error: unknown) {
+      console.error(error);
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to download receipt";
+      toast({
+        title: "Error downloading receipt",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    }
   };
 
   if (loading) {
@@ -334,15 +395,21 @@ export default function PaymentDetailClient({
             </p>
           </div>
         </div>
-        {isReadyToTransfer && (
-          <Button
-            onClick={() => setShowConfirmDialog(true)}
-            className="bg-blue-600 hover:bg-blue-700"
-          >
-            <CheckCircle2 className="w-4 h-4 mr-2" />
-            Confirm Bank Transfer
+        <div className="flex gap-3">
+          <Button variant="outline" onClick={handleDownloadReceipt}>
+            <Receipt className="w-4 h-4 mr-2" />
+            Download Receipt
           </Button>
-        )}
+          {isReadyToTransfer && (
+            <Button
+              onClick={() => setShowConfirmDialog(true)}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              <CheckCircle2 className="w-4 h-4 mr-2" />
+              Confirm Bank Transfer
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Ready to Transfer Alert */}
@@ -477,7 +544,8 @@ export default function PaymentDetailClient({
                       size="sm"
                       onClick={() => {
                         const avatar = getProfileImageUrl(
-                          payment.project.provider.providerProfile?.profileImageUrl
+                          payment.project.provider.providerProfile
+                            ?.profileImageUrl
                         );
                         router.push(
                           `/admin/messages?userId=${
@@ -728,7 +796,8 @@ export default function PaymentDetailClient({
                     size="sm"
                     onClick={() => {
                       const avatar = getProfileImageUrl(
-                        payment.project.customer.customerProfile?.profileImageUrl
+                        payment.project.customer.customerProfile
+                          ?.profileImageUrl
                       );
                       router.push(
                         `/admin/messages?userId=${
@@ -761,7 +830,9 @@ export default function PaymentDetailClient({
               <div className="flex items-center gap-3">
                 <Avatar className="w-12 h-12">
                   <AvatarImage
-                    src={getProfileImageUrl(payment.project.customer.customerProfile?.profileImageUrl)}
+                    src={getProfileImageUrl(
+                      payment.project.customer.customerProfile?.profileImageUrl
+                    )}
                   />
                   <AvatarFallback>
                     {payment.project.customer.name.charAt(0)}
@@ -869,7 +940,9 @@ export default function PaymentDetailClient({
               <div className="flex items-center gap-3">
                 <Avatar className="w-12 h-12">
                   <AvatarImage
-                    src={getProfileImageUrl(payment.project.provider.providerProfile?.profileImageUrl)}
+                    src={getProfileImageUrl(
+                      payment.project.provider.providerProfile?.profileImageUrl
+                    )}
                   />
                   <AvatarFallback>
                     {payment.project.provider.name.charAt(0)}
@@ -957,7 +1030,7 @@ export default function PaymentDetailClient({
                             </p>
                             {method.accountNumber && (
                               <p className="text-gray-500">
-                                Account: ****{method.accountNumber.slice(-4)}
+                                Account: {method.accountNumber}
                               </p>
                             )}
                             {method.accountHolder && (
@@ -1141,7 +1214,8 @@ export default function PaymentDetailClient({
                       size="sm"
                       onClick={() => {
                         const avatar = getProfileImageUrl(
-                          payment.project.provider.providerProfile?.profileImageUrl
+                          payment.project.provider.providerProfile
+                            ?.profileImageUrl
                         );
                         router.push(
                           `/admin/messages?userId=${

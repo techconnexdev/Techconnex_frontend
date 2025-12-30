@@ -185,6 +185,8 @@ export default function ProfileOverview({ value, onChange, isEditing, onCompleti
           <div className="flex-1 space-y-3 sm:space-y-4 w-full">
             <div>
               <Label htmlFor="companyName" className="text-sm sm:text-base">Company Name</Label>
+              {isEditing ? (
+                <>
               <Input
                 id="companyName"
                 value={value.name}
@@ -192,14 +194,18 @@ export default function ProfileOverview({ value, onChange, isEditing, onCompleti
                   className="bg-gray-50 text-sm sm:text-base"
               />
                 <p className="text-xs text-gray-500 mt-1">Contact support to change company name</p>
+                </>
+              ) : (
+                <p className="text-sm sm:text-base text-gray-900 mt-2">{value.name || "N/A"}</p>
+              )}
             </div>
             <div>
               <Label htmlFor="description" className="text-sm sm:text-base">Company Description</Label>
+              {isEditing ? (
               <Textarea
                 id="description"
                   rows={4}
                   value={value.customerProfile?.description || ""}
-                disabled={!isEditing}
                 onChange={(e) => onChange({ 
                   ...value, 
                   customerProfile: { 
@@ -210,6 +216,11 @@ export default function ProfileOverview({ value, onChange, isEditing, onCompleti
                 placeholder="Tell us about your company..."
                 className="text-sm sm:text-base"
               />
+              ) : (
+                <p className="text-sm sm:text-base text-gray-900 mt-2 whitespace-pre-wrap">
+                  {value.customerProfile?.description || "No description provided"}
+                </p>
+              )}
             </div>
               {memberSince && (
                 <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-600">
@@ -228,6 +239,8 @@ export default function ProfileOverview({ value, onChange, isEditing, onCompleti
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div>
               <Label htmlFor="email" className="text-sm sm:text-base">Email</Label>
+              {isEditing ? (
+                <>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <Input
@@ -239,9 +252,18 @@ export default function ProfileOverview({ value, onChange, isEditing, onCompleti
                 />
               </div>
                 <p className="text-xs text-gray-500 mt-1">Contact support to change email</p>
+                </>
+              ) : (
+                <div className="flex items-center gap-2 mt-2">
+                  <Mail className="text-gray-400 w-4 h-4" />
+                  <p className="text-sm sm:text-base text-gray-900">{value.email || "N/A"}</p>
+                </div>
+              )}
             </div>
             <div>
               <Label htmlFor="phone" className="text-sm sm:text-base">Phone</Label>
+              {isEditing ? (
+                <>
               <div className="relative">
                 <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <Input
@@ -252,6 +274,13 @@ export default function ProfileOverview({ value, onChange, isEditing, onCompleti
                 />
               </div>
                 <p className="text-xs text-gray-500 mt-1">Contact support to change phone</p>
+                </>
+              ) : (
+                <div className="flex items-center gap-2 mt-2">
+                  <Phone className="text-gray-400 w-4 h-4" />
+                  <p className="text-sm sm:text-base text-gray-900">{value.phone || "N/A"}</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -264,13 +293,13 @@ export default function ProfileOverview({ value, onChange, isEditing, onCompleti
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
           <div>
             <Label htmlFor="location" className="text-sm sm:text-base">Location</Label>
+            {isEditing ? (
             <div className="relative">
               <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
               <Input
                 id="location"
                 className="pl-10 text-sm sm:text-base"
                     value={value.customerProfile?.location || ""}
-                disabled={!isEditing}
                 onChange={(e) => onChange({ 
                   ...value, 
                   customerProfile: { 
@@ -281,9 +310,19 @@ export default function ProfileOverview({ value, onChange, isEditing, onCompleti
                     placeholder="Kuala Lumpur, Malaysia"
               />
             </div>
+            ) : (
+              <div className="flex items-center gap-2 mt-2">
+                <MapPin className="text-gray-400 w-4 h-4" />
+                <p className="text-sm sm:text-base text-gray-900">
+                  {value.customerProfile?.location || "N/A"}
+                </p>
+              </div>
+            )}
           </div>
               <div>
                 <Label htmlFor="website" className="text-sm sm:text-base">Website</Label>
+                {isEditing ? (
+                  <>
                 <div className="relative">
                   <Globe className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
                   <Input
@@ -291,7 +330,6 @@ export default function ProfileOverview({ value, onChange, isEditing, onCompleti
                     type="url"
                     className="pl-10 text-sm sm:text-base"
                     value={value.customerProfile?.website || ""}
-                    disabled={!isEditing}
                     onChange={(e) => onChange({ 
                       ...value, 
                       customerProfile: { 
@@ -301,8 +339,26 @@ export default function ProfileOverview({ value, onChange, isEditing, onCompleti
                     })}
                     placeholder="https://your-company.com"
                   />
+                    </div>
                   <p className="text-xs text-gray-500 mt-1">You can enter with or without https://</p>
+                  </>
+                ) : (
+                  <div className="flex items-center gap-2 mt-2">
+                    <Globe className="text-gray-400 w-4 h-4" />
+                    {value.customerProfile?.website ? (
+                      <a
+                        href={value.customerProfile.website}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm sm:text-base text-blue-600 hover:underline"
+                      >
+                        {value.customerProfile.website}
+                      </a>
+                    ) : (
+                      <p className="text-sm sm:text-base text-gray-900">N/A</p>
+                    )}
                 </div>
+                )}
               </div>
             </div>
           </div>

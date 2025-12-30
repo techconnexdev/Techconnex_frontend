@@ -37,7 +37,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import {
   CreditCard,
@@ -140,7 +139,6 @@ export default function CustomerBillingPage() {
     completedPayments: 0,
   });
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [budgets, setBudgets] = useState<Budget[]>([]);
   const [upcomingPayments, setUpcomingPayments] = useState<UpcomingPayment[]>(
     []
   );
@@ -244,19 +242,42 @@ export default function CustomerBillingPage() {
 
   const handleDownloadReceipt = async (transactionId: string) => {
     try {
+      const token =
+        typeof window !== "undefined"
+          ? localStorage.getItem("token")
+          : undefined;
+      if (!token) {
+        toast({
+          title: "Error",
+          description: "Not authenticated",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const res = await fetch(
-        `${API_BASE}/company/billing/${transactionId}/receipt`
+        `${API_BASE}/company/billing/${transactionId}/receipt`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
       );
-      if (!res.ok) throw new Error("Failed to download receipt");
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `receipt_${transactionId}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || "Failed to get receipt URL");
+      }
+
+      const data = await res.json();
+
+      if (data.success && data.downloadUrl) {
+        // Navigate to the R2 URL (opens in new tab/window)
+        window.open(data.downloadUrl, "_blank");
+      } else {
+        throw new Error("Invalid response from server");
+      }
     } catch (e: unknown) {
       console.error(e);
       const errorMessage =
@@ -352,28 +373,33 @@ export default function CustomerBillingPage() {
           averageTransaction: overviewRes.data.averageTransaction,
           completedPayments: overviewRes.data.recentTransactions.length,
         });
-        setBudgets(overviewRes.data.budgets || []);
+        // Budgets feature is commented out, so we don't set budgets state
         setTransactions(
-          (txnRes.transactions || []).map((txn: Record<string, unknown>) => ({
-            id: (txn.id as string) || "",
-            description:
-              ((txn.metadata as Record<string, unknown>)
-                ?.milestoneTitle as string) || "",
-            project:
-              ((txn.project as Record<string, unknown>)?.title as string) || "",
-            provider:
-              ((txn.metadata as Record<string, unknown>)
-                ?.providerEmail as string) || "",
-            milestone:
-              ((txn.milestone as Record<string, unknown>)?.title as string) ||
-              "",
-            method: (txn.method as string) || "",
-            reference: (txn.stripePaymentIntentId as string) || "",
-            status: ((txn.status as string) || "").toLowerCase(),
-            date: (txn.createdAt as string) || "",
-            amount: (txn.amount as number) || 0,
-            type: "payment",
-          }))
+          (txnRes.transactions || []).map((txn: Record<string, unknown>) => {
+            const status = ((txn.status as string) || "").toLowerCase();
+            const isRefunded = status === "refunded";
+            return {
+              id: (txn.id as string) || "",
+              description:
+                ((txn.metadata as Record<string, unknown>)
+                  ?.milestoneTitle as string) || "",
+              project:
+                ((txn.project as Record<string, unknown>)?.title as string) ||
+                "",
+              provider:
+                ((txn.metadata as Record<string, unknown>)
+                  ?.providerEmail as string) || "",
+              milestone:
+                ((txn.milestone as Record<string, unknown>)?.title as string) ||
+                "",
+              method: (txn.method as string) || "",
+              reference: (txn.stripePaymentIntentId as string) || "",
+              status: status,
+              date: (txn.createdAt as string) || "",
+              amount: (txn.amount as number) || 0,
+              type: isRefunded ? "refund" : "payment",
+            };
+          })
         );
         setUpcomingPayments(
           (upcomingRes.data || []).flatMap((project: Record<string, unknown>) =>
@@ -549,7 +575,7 @@ export default function CustomerBillingPage() {
             </div>
 
             {/* ===== Spending by Category ===== */}
-            <Card>
+            {/* <Card>
               <CardHeader>
                 <CardTitle>Spending by Category</CardTitle>
                 <CardDescription>
@@ -586,7 +612,7 @@ export default function CustomerBillingPage() {
                   })}
                 </div>
               </CardContent>
-            </Card>
+            </Card> */}
 
             {/* ===== Upcoming Payments ===== */}
             <Card>

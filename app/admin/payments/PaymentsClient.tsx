@@ -46,7 +46,11 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { getAdminPayments, getAdminPaymentStats, getProfileImageUrl } from "@/lib/api";
+import {
+  getAdminPayments,
+  getAdminPaymentStats,
+  getProfileImageUrl,
+} from "@/lib/api";
 
 type Payment = {
   id: string;
@@ -92,15 +96,23 @@ type PaymentStats = {
   totalPayments?: number;
   totalVolume?: number;
   totalFees?: number;
+  totalRevenue?: number;
   readyToTransfer?: number;
   failedPayments?: number;
+};
+
+const isReadyToTransfer = (payment: Payment) => {
+  return (
+    payment.status === "ESCROWED" && payment.milestone?.status === "APPROVED"
+  );
 };
 
 export default function PaymentsClient() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [methodFilter, setMethodFilter] = useState("all");
+  const [transferFilter, setTransferFilter] = useState("all");
+  const [allPayments, setAllPayments] = useState<Payment[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<PaymentStats | null>(null);
@@ -121,7 +133,6 @@ export default function PaymentsClient() {
       const response = await getAdminPayments({
         search: searchQuery || undefined,
         status: statusFilter !== "all" ? statusFilter : undefined,
-        method: methodFilter !== "all" ? methodFilter : undefined,
         page: pagination.page,
         limit: pagination.limit,
         sortBy: "createdAt",
@@ -129,7 +140,7 @@ export default function PaymentsClient() {
       });
 
       if (response.success) {
-        setPayments(response.data || []);
+        setAllPayments(response.data || []);
         setPagination((prev) => response.pagination || prev);
       }
     } catch (error) {
@@ -137,7 +148,18 @@ export default function PaymentsClient() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, statusFilter, methodFilter, pagination.page, pagination.limit]);
+  }, [searchQuery, statusFilter, pagination.page, pagination.limit]);
+
+  // Filter payments based on transfer status (client-side filtering)
+  useEffect(() => {
+    if (transferFilter === "all") {
+      setPayments(allPayments);
+    } else if (transferFilter === "ready-to-transfer") {
+      setPayments(allPayments.filter((payment) => isReadyToTransfer(payment)));
+    } else if (transferFilter === "normal") {
+      setPayments(allPayments.filter((payment) => !isReadyToTransfer(payment)));
+    }
+  }, [transferFilter, allPayments]);
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
@@ -192,12 +214,6 @@ export default function PaymentsClient() {
     }
   };
 
-  const isReadyToTransfer = (payment: Payment) => {
-    return (
-      payment.status === "ESCROWED" && payment.milestone?.status === "APPROVED"
-    );
-  };
-
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-US", {
       year: "numeric",
@@ -248,10 +264,10 @@ export default function PaymentsClient() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600">
-                    Platform Fees
+                    Total Revenue
                   </p>
                   <p className="text-2xl font-bold text-purple-600">
-                    RM{(stats.totalFees || 0).toLocaleString()}
+                    RM{(stats.totalRevenue || 0).toLocaleString()}
                   </p>
                 </div>
                 <TrendingUp className="w-8 h-8 text-purple-600" />
@@ -306,15 +322,16 @@ export default function PaymentsClient() {
                 />
               </div>
             </div>
-            <Select value={methodFilter} onValueChange={setMethodFilter}>
+            <Select value={transferFilter} onValueChange={setTransferFilter}>
               <SelectTrigger className="w-full sm:w-48">
-                <SelectValue placeholder="All Methods" />
+                <SelectValue placeholder="All Payments" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Methods</SelectItem>
-                <SelectItem value="STRIPE">Stripe</SelectItem>
-                <SelectItem value="FPX">FPX</SelectItem>
-                <SelectItem value="EWALLET">E-Wallet</SelectItem>
+                <SelectItem value="all">All Payments</SelectItem>
+                <SelectItem value="ready-to-transfer">
+                  Ready to Transfer
+                </SelectItem>
+                <SelectItem value="normal">Normal</SelectItem>
               </SelectContent>
             </Select>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -401,7 +418,10 @@ export default function PaymentsClient() {
                           <div className="flex items-center space-x-2">
                             <Avatar className="w-5 h-5">
                               <AvatarImage
-                                src={getProfileImageUrl(payment.project.customer.customerProfile?.profileImageUrl)}
+                                src={getProfileImageUrl(
+                                  payment.project.customer.customerProfile
+                                    ?.profileImageUrl
+                                )}
                               />
                               <AvatarFallback>
                                 {payment.project.customer.name.charAt(0)}
@@ -414,7 +434,10 @@ export default function PaymentsClient() {
                           <div className="flex items-center space-x-2">
                             <Avatar className="w-5 h-5">
                               <AvatarImage
-                                src={getProfileImageUrl(payment.project.provider.providerProfile?.profileImageUrl)}
+                                src={getProfileImageUrl(
+                                  payment.project.provider.providerProfile
+                                    ?.profileImageUrl
+                                )}
                               />
                               <AvatarFallback>
                                 {payment.project.provider.name.charAt(0)}

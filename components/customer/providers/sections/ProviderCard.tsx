@@ -14,6 +14,7 @@ import {
   Heart,
   Sparkles,
   ChevronRight,
+  AlertTriangle,
 } from "lucide-react";
 import type { Provider } from "../types";
 import { useRouter } from "next/navigation";
@@ -65,7 +66,7 @@ export default function ProviderCard({
       const method = saved ? "DELETE" : "POST";
       const response = await fetch(
         `${
-          process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"
+          process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000"
         }/providers/${provider.id}/save?userId=${encodeURIComponent(userId)}`,
         {
           method,
@@ -124,6 +125,12 @@ export default function ProviderCard({
               {provider.topRated && (
                 <Badge className="bg-yellow-100 text-yellow-800 text-[10px] sm:text-xs">
                   Top Rated
+                </Badge>
+              )}
+              {!provider.verified && (
+                <Badge className="bg-gray-100 text-gray-700 border-gray-300 text-[10px] sm:text-xs">
+                  <AlertTriangle className="w-3 h-3 mr-1" />
+                  Not Verified
                 </Badge>
               )}
             </div>

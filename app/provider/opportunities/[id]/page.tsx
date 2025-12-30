@@ -541,13 +541,13 @@ export default function OpportunityDetailsPage() {
   if (loading) {
     return (
       <ProviderLayout>
-        <div className="flex items-center justify-center min-h-[400px]">
+        <div className="flex items-center justify-center min-h-[400px] px-4">
           <div className="text-center">
-            <Loader2 className="w-12 h-12 text-gray-400 mx-auto mb-4 animate-spin" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            <Loader2 className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-4 animate-spin" />
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
               Loading opportunity...
             </h3>
-            <p className="text-gray-600">
+            <p className="text-sm sm:text-base text-gray-600">
               Please wait while we fetch the opportunity details.
             </p>
           </div>
@@ -559,16 +559,16 @@ export default function OpportunityDetailsPage() {
   if (error || !opportunity) {
     return (
       <ProviderLayout>
-        <div className="flex items-center justify-center min-h-[400px]">
+        <div className="flex items-center justify-center min-h-[400px] px-4">
           <div className="text-center">
-            <div className="w-12 h-12 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
-              <AlertCircle className="w-6 h-6 text-red-600" />
+            <div className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
+              <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 text-red-600" />
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
               Error loading opportunity
             </h3>
-            <p className="text-gray-600 mb-4">{error || "Opportunity not found"}</p>
-            <Button onClick={() => router.back()} variant="outline">
+            <p className="text-sm sm:text-base text-gray-600 mb-4">{error || "Opportunity not found"}</p>
+            <Button onClick={() => router.back()} variant="outline" className="text-xs sm:text-sm">
               Go Back
             </Button>
           </div>
@@ -605,26 +605,26 @@ export default function OpportunityDetailsPage() {
     opportunity.customer?.customerProfile?.profileImageUrl;
 
   const clientAvatarUrl = clientAvatar
-    ? `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}${clientAvatar.startsWith("/") ? "" : "/"}${clientAvatar}`
+    ? `${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000"}${clientAvatar.startsWith("/") ? "" : "/"}${clientAvatar}`
     : "/placeholder.svg";
 
   return (
     <ProviderLayout>
-      <div className="space-y-8">
+      <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
         {/* Header */}
-        <div className="flex items-center gap-4">
-          <Button variant="outline" onClick={() => router.back()}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
+          <Button variant="outline" onClick={() => router.back()} className="w-full sm:w-auto text-xs sm:text-sm">
+            <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
             Back
           </Button>
-          <div className="flex-1">
-            <h1 className="text-3xl font-bold text-gray-900">{opportunity.title}</h1>
-            <p className="text-gray-600">{opportunity.description}</p>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 break-words">{opportunity.title}</h1>
+            <p className="text-sm sm:text-base text-gray-600 mt-1 break-words">{opportunity.description}</p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-2 sm:gap-3 w-full sm:w-auto">
             {opportunity.hasProposed ? (
-              <Button variant="outline" disabled>
-                <CheckCircle className="w-4 h-4 mr-2" />
+              <Button variant="outline" disabled className="w-full sm:w-auto text-xs sm:text-sm">
+                <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                 Proposal Submitted
               </Button>
             ) : (
@@ -641,9 +641,9 @@ export default function OpportunityDetailsPage() {
                   });
                   setProposalErrors({});
                 }}
-                className="bg-blue-600 hover:bg-blue-700 text-white"
+                className="bg-blue-600 active:bg-blue-700 sm:hover:bg-blue-700 text-white w-full sm:w-auto text-xs sm:text-sm"
               >
-                <ThumbsUp className="w-4 h-4 mr-2" />
+                <ThumbsUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                 Submit Proposal
               </Button>
             )}
@@ -651,71 +651,75 @@ export default function OpportunityDetailsPage() {
         </div>
 
         {/* Project Overview */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
           {/* Main Content */}
-          <div className="lg:col-span-2 space-y-6">
-            <Tabs defaultValue="overview" className="space-y-6">
-              <TabsList>
-                <TabsTrigger value="overview">Overview</TabsTrigger>
+          <div className="lg:col-span-2 space-y-4 sm:space-y-6">
+            <Tabs defaultValue="overview" className="space-y-4 sm:space-y-6">
+              <TabsList className="grid w-full grid-cols-2 h-auto">
+                <TabsTrigger value="overview" className="text-xs sm:text-sm px-2 sm:px-4">Overview</TabsTrigger>
                 {opportunity.milestones && opportunity.milestones.length > 0 && (
-                  <TabsTrigger value="milestones">
+                  <TabsTrigger value="milestones" className="text-xs sm:text-sm px-2 sm:px-4">
                     Milestones ({opportunity.milestones.length})
                   </TabsTrigger>
                 )}
               </TabsList>
 
-              <TabsContent value="overview" className="space-y-6">
+              <TabsContent value="overview" className="space-y-4 sm:space-y-6">
                 {/* Project Details */}
                 <Card>
-                  <CardHeader>
-                    <CardTitle>Project Details</CardTitle>
+                  <CardHeader className="p-4 sm:p-6">
+                    <CardTitle className="text-lg sm:text-xl">Project Details</CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
+                  <CardContent className="p-4 sm:p-6 space-y-3 sm:space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                       <div>
-                        <Label className="text-sm font-medium text-gray-500">
+                        <Label className="text-xs sm:text-sm font-medium text-gray-500">
                           Category
                         </Label>
-                        <p className="text-lg">{opportunity.category}</p>
+                        <p className="text-base sm:text-lg mt-1">{opportunity.category}</p>
                       </div>
                       <div>
-                        <Label className="text-sm font-medium text-gray-500">
+                        <Label className="text-xs sm:text-sm font-medium text-gray-500">
                           Status
                         </Label>
-                        <Badge className="bg-green-100 text-green-800">
-                          Open
-                        </Badge>
+                        <div className="mt-1">
+                          <Badge className="bg-green-100 text-green-800 text-xs">
+                            Open
+                          </Badge>
+                        </div>
                       </div>
                       <div>
-                        <Label className="text-sm font-medium text-gray-500">
+                        <Label className="text-xs sm:text-sm font-medium text-gray-500">
                           Budget Range
                         </Label>
-                        <p className="text-lg">
+                        <p className="text-base sm:text-lg mt-1 break-words">
                           {formatCurrency(opportunity.budgetMin || 0)} -{" "}
                           {formatCurrency(opportunity.budgetMax || 0)}
                         </p>
                       </div>
                       <div>
-                        <Label className="text-sm font-medium text-gray-500">
+                        <Label className="text-xs sm:text-sm font-medium text-gray-500">
                           Timeline
                         </Label>
-                        <p className="text-lg">
+                        <p className="text-base sm:text-lg mt-1 break-words">
                           {formatTimeline(opportunity.timeline) || "Not specified"}
                         </p>
                       </div>
                       <div>
-                        <Label className="text-sm font-medium text-gray-500">
+                        <Label className="text-xs sm:text-sm font-medium text-gray-500">
                           Priority
                         </Label>
-                        <Badge>
-                          {opportunity.priority || "medium"}
-                        </Badge>
+                        <div className="mt-1">
+                          <Badge className="text-xs">
+                            {opportunity.priority || "medium"}
+                          </Badge>
+                        </div>
                       </div>
                       <div>
-                        <Label className="text-sm font-medium text-gray-500">
+                        <Label className="text-xs sm:text-sm font-medium text-gray-500">
                           Proposals
                         </Label>
-                        <p className="text-lg">
+                        <p className="text-base sm:text-lg mt-1">
                           {opportunity._count?.proposals || 0} proposals received
                         </p>
                       </div>
@@ -723,12 +727,12 @@ export default function OpportunityDetailsPage() {
 
                     {skills.length > 0 && (
                       <div>
-                        <Label className="text-sm font-medium text-gray-500">
+                        <Label className="text-xs sm:text-sm font-medium text-gray-500">
                           Required Skills
                         </Label>
-                        <div className="flex flex-wrap gap-2 mt-2">
+                        <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-2">
                           {skills.map((skill: string, index: number) => (
-                            <Badge key={index} variant="secondary">
+                            <Badge key={index} variant="secondary" className="text-xs">
                               {skill}
                             </Badge>
                           ))}
@@ -738,7 +742,7 @@ export default function OpportunityDetailsPage() {
 
                     {requirements && (
                       <div>
-                        <Label className="text-sm font-medium text-gray-500">
+                        <Label className="text-xs sm:text-sm font-medium text-gray-500">
                           Requirements
                         </Label>
                         <div className="mt-2 prose max-w-none text-gray-700">
@@ -753,7 +757,7 @@ export default function OpportunityDetailsPage() {
 
                     {deliverables && (
                       <div>
-                        <Label className="text-sm font-medium text-gray-500">
+                        <Label className="text-xs sm:text-sm font-medium text-gray-500">
                           Deliverables
                         </Label>
                         <div className="mt-2 prose max-w-none text-gray-700">
@@ -770,38 +774,38 @@ export default function OpportunityDetailsPage() {
               </TabsContent>
 
               {opportunity.milestones && opportunity.milestones.length > 0 && (
-                <TabsContent value="milestones" className="space-y-6">
+                <TabsContent value="milestones" className="space-y-4 sm:space-y-6">
                   <Card>
-                    <CardHeader>
-                      <CardTitle>Company Proposed Milestones</CardTitle>
-                      <CardDescription>
+                    <CardHeader className="p-4 sm:p-6">
+                      <CardTitle className="text-lg sm:text-xl">Company Proposed Milestones</CardTitle>
+                      <CardDescription className="text-xs sm:text-sm">
                         These are the milestones suggested by the company. You can use them or propose your own in your proposal.
                       </CardDescription>
                     </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
+                    <CardContent className="p-4 sm:p-6">
+                      <div className="space-y-3 sm:space-y-4">
                         {opportunity.milestones.map((milestone: OpportunityMilestone, index: number) => (
-                          <div key={milestone.id || index} className="border rounded-lg p-4">
-                            <div className="flex items-center justify-between mb-2">
-                              <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-sm font-medium">
+                          <div key={milestone.id || index} className="border rounded-lg p-3 sm:p-4">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 mb-2">
+                              <div className="flex items-center gap-2 sm:gap-3">
+                                <div className="w-7 h-7 sm:w-8 sm:h-8 bg-blue-100 rounded-full flex items-center justify-center text-xs sm:text-sm font-medium flex-shrink-0">
                                   {milestone.order || index + 1}
                                 </div>
-                                <div>
-                                  <h4 className="font-medium">{milestone.title}</h4>
+                                <div className="min-w-0 flex-1">
+                                  <h4 className="font-medium text-sm sm:text-base break-words">{milestone.title}</h4>
                                   {milestone.description && (
-                                    <p className="text-sm text-gray-600">
+                                    <p className="text-xs sm:text-sm text-gray-600 break-words">
                                       {milestone.description}
                                     </p>
                                   )}
                                 </div>
                               </div>
-                              <div className="text-right">
-                                <p className="text-lg font-semibold">
+                              <div className="text-left sm:text-right">
+                                <p className="text-base sm:text-lg font-semibold">
                                   {formatCurrency(milestone.amount || 0)}
                                 </p>
                                 {milestone.dueDate && (
-                                  <p className="text-sm text-gray-500">
+                                  <p className="text-xs sm:text-sm text-gray-500">
                                     Due: {new Date(milestone.dueDate).toLocaleDateString()}
                                   </p>
                                 )}
@@ -818,41 +822,41 @@ export default function OpportunityDetailsPage() {
           </div>
 
           {/* Sidebar */}
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             {/* Client Information */}
             <Card>
-              <CardHeader>
-                <CardTitle>Client Information</CardTitle>
+              <CardHeader className="p-4 sm:p-6">
+                <CardTitle className="text-base sm:text-lg">Client Information</CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="flex items-start gap-4">
-                  <Avatar className="w-16 h-16">
+              <CardContent className="p-4 sm:p-6">
+                <div className="flex items-start gap-3 sm:gap-4">
+                  <Avatar className="w-12 h-12 sm:w-16 sm:h-16 flex-shrink-0">
                     <AvatarImage src={clientAvatarUrl} />
                     <AvatarFallback>
                       {opportunity.customer?.name?.charAt(0) || "C"}
                     </AvatarFallback>
                   </Avatar>
-                  <div className="flex-1 space-y-2">
+                  <div className="flex-1 min-w-0 space-y-2">
                     <div>
-                      <p className="font-semibold text-lg">
+                      <p className="font-semibold text-sm sm:text-lg break-words">
                         {opportunity.customer?.name || "N/A"}
                       </p>
-                      <p className="text-sm text-gray-600">
+                      <p className="text-xs sm:text-sm text-gray-600 break-words">
                         {opportunity.customer?.email || ""}
                       </p>
                     </div>
-                    <div className="grid grid-cols-1 gap-2 text-sm">
+                    <div className="grid grid-cols-1 gap-2 text-xs sm:text-sm">
                       {opportunity.customer?.customerProfile?.location && (
                         <div className="flex items-center gap-2">
-                          <MapPin className="w-4 h-4 text-gray-400" />
-                          <span className="text-gray-600">
+                          <MapPin className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400 flex-shrink-0" />
+                          <span className="text-gray-600 break-words">
                             {opportunity.customer.customerProfile.location}
                           </span>
                         </div>
                       )}
                       {opportunity.customer?.customerProfile?.website && (
                         <div className="flex items-center gap-2">
-                          <Globe className="w-4 h-4 text-gray-400" />
+                          <Globe className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400 flex-shrink-0" />
                           <a
                             href={
                               opportunity.customer.customerProfile.website.startsWith("http")
@@ -861,7 +865,7 @@ export default function OpportunityDetailsPage() {
                             }
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-blue-600 hover:underline"
+                            className="text-blue-600 active:text-blue-800 sm:hover:underline break-all"
                           >
                             {opportunity.customer.customerProfile.website}
                           </a>
@@ -870,7 +874,7 @@ export default function OpportunityDetailsPage() {
                       {opportunity.customer?.customerProfile?.industry && (
                         <div>
                           <span className="text-gray-500">Industry: </span>
-                          <span className="text-gray-700">
+                          <span className="text-gray-700 break-words">
                             {opportunity.customer.customerProfile.industry}
                           </span>
                         </div>
@@ -878,7 +882,7 @@ export default function OpportunityDetailsPage() {
                       {opportunity.customer?.customerProfile?.companySize && (
                         <div>
                           <span className="text-gray-500">Company Size: </span>
-                          <span className="text-gray-700">
+                          <span className="text-gray-700 break-words">
                             {opportunity.customer.customerProfile.companySize}
                           </span>
                         </div>
@@ -893,9 +897,9 @@ export default function OpportunityDetailsPage() {
                       )}
                     </div>
                     {opportunity.customer?.id && (
-                      <Link href={`/provider/companies/${opportunity.customer.id}`}>
-                        <Button variant="outline" size="sm" className="w-full">
-                          <Eye className="w-4 h-4 mr-2" />
+                      <Link href={`/provider/companies/${opportunity.customer.id}`} className="block">
+                        <Button variant="outline" size="sm" className="w-full text-xs sm:text-sm">
+                          <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                           View Company
                         </Button>
                       </Link>
@@ -907,26 +911,26 @@ export default function OpportunityDetailsPage() {
 
             {/* Quick Stats */}
             <Card>
-              <CardHeader>
-                <CardTitle>Quick Stats</CardTitle>
+              <CardHeader className="p-4 sm:p-6">
+                <CardTitle className="text-base sm:text-lg">Quick Stats</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent className="p-4 sm:p-6 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-gray-600">Posted:</span>
-                  <span className="font-semibold">
+                  <span className="text-xs sm:text-sm text-gray-600">Posted:</span>
+                  <span className="font-semibold text-xs sm:text-sm">
                     {new Date(opportunity.createdAt).toLocaleDateString()}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-gray-600">Proposals:</span>
-                  <span className="font-semibold">
+                  <span className="text-xs sm:text-sm text-gray-600">Proposals:</span>
+                  <span className="font-semibold text-xs sm:text-sm">
                     {opportunity._count?.proposals || 0}
                   </span>
                 </div>
                 {opportunity.priority && (
                   <div className="flex items-center justify-between">
-                    <span className="text-gray-600">Priority:</span>
-                    <Badge>{opportunity.priority}</Badge>
+                    <span className="text-xs sm:text-sm text-gray-600">Priority:</span>
+                    <Badge className="text-xs">{opportunity.priority}</Badge>
                   </div>
                 )}
               </CardContent>
@@ -939,19 +943,19 @@ export default function OpportunityDetailsPage() {
           open={isProposalModalOpen}
           onOpenChange={setIsProposalModalOpen}
         >
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
             <DialogHeader>
-              <DialogTitle className="text-xl">Submit Proposal</DialogTitle>
-              <DialogDescription>
+              <DialogTitle className="text-lg sm:text-xl">Submit Proposal</DialogTitle>
+              <DialogDescription className="text-xs sm:text-sm">
                 Submit your proposal for &quot;{opportunity.title}&quot;
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-6">
+            <div className="space-y-4 sm:space-y-6">
               {/* Bid Amount */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
-                  <Label htmlFor="bidAmount">Your Bid Amount (RM) *</Label>
+                  <Label htmlFor="bidAmount" className="text-xs sm:text-sm">Your Bid Amount (RM) *</Label>
                   <Input
                     id="bidAmount"
                     type="number"
@@ -963,24 +967,24 @@ export default function OpportunityDetailsPage() {
                         bidAmount: e.target.value,
                       }))
                     }
-                    className={
+                    className={`text-sm sm:text-base ${
                       proposalErrors.bidAmount
                         ? "border-red-500 focus-visible:ring-red-500"
                         : ""
-                    }
+                    }`}
                   />
                   {proposalErrors.bidAmount && (
-                    <p className="text-xs text-red-600">
+                    <p className="text-xs text-red-600 mt-1">
                       {proposalErrors.bidAmount}
                     </p>
                   )}
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-gray-500 mt-1 break-words">
                     Client budget range: RM {opportunity.budgetMin?.toLocaleString() || "0"} - RM {opportunity.budgetMax?.toLocaleString() || "0"}
                   </p>
                 </div>
                 <div>
-                  <Label htmlFor="timeline">Delivery Timeline *</Label>
-                  <div className="flex gap-2">
+                  <Label htmlFor="timeline" className="text-xs sm:text-sm">Delivery Timeline *</Label>
+                  <div className="flex flex-col sm:flex-row gap-2">
                   <Input
                       id="timelineAmount"
                       type="number"
@@ -993,11 +997,11 @@ export default function OpportunityDetailsPage() {
                           timelineAmount: e.target.value,
                       }))
                     }
-                    className={
+                    className={`text-sm sm:text-base ${
                         proposalErrors.timelineAmount
                         ? "border-red-500 focus-visible:ring-red-500"
                         : ""
-                    }
+                    }`}
                   />
                     <Select
                       value={proposalData.timelineUnit}
@@ -1009,11 +1013,11 @@ export default function OpportunityDetailsPage() {
                       }
                     >
                       <SelectTrigger
-                        className={
+                        className={`text-sm sm:text-base ${
                           proposalErrors.timelineUnit
                             ? "border-red-500 focus:ring-red-500"
                             : ""
-                        }
+                        }`}
                       >
                         <SelectValue placeholder="Unit" />
                       </SelectTrigger>
@@ -1034,7 +1038,7 @@ export default function OpportunityDetailsPage() {
                       {proposalErrors.timelineUnit}
                     </p>
                   )}
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-gray-500 mt-1 break-words">
                     Company timeline: {opportunity.timeline ? formatTimeline(opportunity.timeline) : "Not specified"}
                   </p>
                   {proposalData.timelineAmount && proposalData.timelineUnit && (
@@ -1047,11 +1051,11 @@ export default function OpportunityDetailsPage() {
 
               {/* Cover Letter */}
               <div>
-                <Label htmlFor="coverLetter">Cover Letter *</Label>
+                <Label htmlFor="coverLetter" className="text-xs sm:text-sm">Cover Letter *</Label>
                 <Textarea
                   id="coverLetter"
                   placeholder="Introduce yourself and explain why you're the best fit for this project..."
-                  className={`min-h-[120px] ${
+                  className={`min-h-[120px] text-sm sm:text-base ${
                     proposalErrors.coverLetter
                       ? "border-red-500 focus-visible:ring-red-500"
                       : ""
@@ -1065,7 +1069,7 @@ export default function OpportunityDetailsPage() {
                   }
                 />
                 {proposalErrors.coverLetter && (
-                  <p className="text-xs text-red-600">
+                  <p className="text-xs text-red-600 mt-1">
                     {proposalErrors.coverLetter}
                   </p>
                 )}
@@ -1076,21 +1080,22 @@ export default function OpportunityDetailsPage() {
 
               {/* Project Milestones (Required) */}
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <Label>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0 mb-2">
+                  <Label className="text-xs sm:text-sm">
                     Project Milestones <span className="text-red-500">*</span>
                   </Label>
                   <Button
                     type="button"
                     variant="outline"
                     onClick={addMilestone}
+                    className="w-full sm:w-auto text-xs sm:text-sm"
                   >
                     + Add Milestone
                   </Button>
                 </div>
 
                 {proposalData.milestones.length === 0 && (
-                  <p className={`text-sm ${
+                  <p className={`text-xs sm:text-sm ${
                     proposalErrors.milestones ? "text-red-600 font-medium" : "text-gray-500"
                   }`}>
                     {proposalErrors.milestones || "At least one milestone is required. Click 'Add Milestone' to get started."}
@@ -1100,14 +1105,14 @@ export default function OpportunityDetailsPage() {
                 <div className="space-y-3">
                   {proposalData.milestones.map((m, i) => (
                     <Card key={i}>
-                      <CardContent className="p-4 space-y-3">
-                        <div className="grid md:grid-cols-12 gap-3">
-                          <div className="md:col-span-1">
-                            <label className="text-sm font-medium">Seq</label>
-                            <Input type="number" value={i + 1} disabled />
+                      <CardContent className="p-3 sm:p-4 space-y-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                          <div className="sm:col-span-1">
+                            <label className="text-xs sm:text-sm font-medium">Seq</label>
+                            <Input type="number" value={i + 1} disabled className="text-sm sm:text-base" />
                           </div>
-                          <div className="md:col-span-4">
-                            <label className="text-sm font-medium">
+                          <div className="sm:col-span-12 md:col-span-4">
+                            <label className="text-xs sm:text-sm font-medium">
                               Title <span className="text-red-500">*</span>
                             </label>
                             <Input
@@ -1131,11 +1136,11 @@ export default function OpportunityDetailsPage() {
                                 }
                               }}
                               placeholder="Milestone title (required)"
-                              className={
+                              className={`text-sm sm:text-base ${
                                 proposalErrors.milestoneFields?.[i]?.title
                                   ? "border-red-500 focus-visible:ring-red-500"
                                   : ""
-                              }
+                              }`}
                             />
                             {proposalErrors.milestoneFields?.[i]?.title && (
                               <p className="text-xs text-red-600 mt-1">
@@ -1143,8 +1148,8 @@ export default function OpportunityDetailsPage() {
                               </p>
                             )}
                           </div>
-                          <div className="md:col-span-3">
-                            <label className="text-sm font-medium">
+                          <div className="sm:col-span-12 md:col-span-3">
+                            <label className="text-xs sm:text-sm font-medium">
                               Amount (RM)
                             </label>
                             <Input
@@ -1168,11 +1173,11 @@ export default function OpportunityDetailsPage() {
                                   }));
                                 }
                               }}
-                              className={
+                              className={`text-sm sm:text-base ${
                                 proposalErrors.milestoneFields?.[i]?.amount
                                   ? "border-red-500 focus-visible:ring-red-500"
                                   : ""
-                              }
+                              }`}
                             />
                             {proposalErrors.milestoneFields?.[i]?.amount && (
                               <p className="text-xs text-red-600 mt-1">
@@ -1180,8 +1185,8 @@ export default function OpportunityDetailsPage() {
                               </p>
                             )}
                           </div>
-                          <div className="md:col-span-4">
-                            <label className="text-sm font-medium">
+                          <div className="sm:col-span-12 md:col-span-4">
+                            <label className="text-xs sm:text-sm font-medium">
                               Due Date <span className="text-red-500">*</span>
                             </label>
                             <Input
@@ -1212,11 +1217,11 @@ export default function OpportunityDetailsPage() {
                                   }));
                                 }
                               }}
-                              className={
+                              className={`text-sm sm:text-base ${
                                 proposalErrors.milestoneFields?.[i]?.dueDate
                                   ? "border-red-500 focus-visible:ring-red-500"
                                   : ""
-                              }
+                              }`}
                             />
                             {proposalErrors.milestoneFields?.[i]?.dueDate && (
                               <p className="text-xs text-red-600 mt-1">
@@ -1227,7 +1232,7 @@ export default function OpportunityDetailsPage() {
                         </div>
 
                         <div>
-                          <label className="text-sm font-medium">
+                          <label className="text-xs sm:text-sm font-medium">
                             Description <span className="text-red-500">*</span>
                           </label>
                           <Textarea
@@ -1252,11 +1257,11 @@ export default function OpportunityDetailsPage() {
                               }
                             }}
                             placeholder="Milestone description (required)"
-                            className={
+                            className={`text-sm sm:text-base ${
                               proposalErrors.milestoneFields?.[i]?.description
                                 ? "border-red-500 focus-visible:ring-red-500"
                                 : ""
-                            }
+                            }`}
                           />
                           {proposalErrors.milestoneFields?.[i]?.description && (
                             <p className="text-xs text-red-600 mt-1">
@@ -1270,6 +1275,7 @@ export default function OpportunityDetailsPage() {
                             type="button"
                             variant="outline"
                             onClick={() => removeMilestone(i)}
+                            className="text-xs sm:text-sm"
                           >
                             Remove
                           </Button>
@@ -1280,7 +1286,7 @@ export default function OpportunityDetailsPage() {
                 </div>
                 {/* Milestones total check */}
                 {proposalData.milestones.length > 0 && (
-                  <div className="mt-4 rounded-md border p-3 text-sm">
+                  <div className="mt-4 rounded-md border p-3 text-xs sm:text-sm">
                     {(() => {
                       const bidAmountNum = Number(proposalData.bidAmount || 0);
                       const sumMilestones = proposalData.milestones.reduce(
@@ -1296,7 +1302,7 @@ export default function OpportunityDetailsPage() {
                         bidAmountNum > 0 && sumMilestones === bidAmountNum;
 
                       return (
-                        <div className="flex justify-between flex-wrap gap-2">
+                        <div className="flex flex-col sm:flex-row sm:justify-between gap-2">
                           <div>
                             <div className="font-medium">
                               Milestones total: RM {sumMilestones || 0}
@@ -1327,9 +1333,9 @@ export default function OpportunityDetailsPage() {
 
               {/* File Attachments */}
               <div>
-                <Label>Attachments (Optional)</Label>
+                <Label className="text-xs sm:text-sm">Attachments (Optional)</Label>
                 <div
-                  className={`border-2 border-dashed rounded-lg p-6 text-center ${
+                  className={`border-2 border-dashed rounded-lg p-4 sm:p-6 text-center ${
                     proposalErrors.attachments
                       ? "border-red-500 bg-red-50"
                       : "border-gray-300"
@@ -1344,8 +1350,8 @@ export default function OpportunityDetailsPage() {
                     accept=".pdf,.doc,.docx,.txt,.jpg,.png"
                   />
                   <label htmlFor="file-upload" className="cursor-pointer">
-                    <Paperclip className="w-8 h-8 mx-auto text-gray-400 mb-2" />
-                    <p className="text-sm text-gray-600">
+                    <Paperclip className="w-6 h-6 sm:w-8 sm:h-8 mx-auto text-gray-400 mb-2" />
+                    <p className="text-xs sm:text-sm text-gray-600">
                       Click to upload portfolio, resume, or relevant documents
                     </p>
                     <p className="text-xs text-gray-500 mt-1">
@@ -1362,7 +1368,7 @@ export default function OpportunityDetailsPage() {
                         key={index}
                         className="flex items-center justify-between bg-gray-50 p-2 rounded"
                       >
-                        <span className="text-sm text-gray-700">
+                        <span className="text-xs sm:text-sm text-gray-700 truncate flex-1 mr-2">
                           {file.name}
                         </span>
                         <Button
@@ -1370,6 +1376,7 @@ export default function OpportunityDetailsPage() {
                           variant="ghost"
                           size="sm"
                           onClick={() => removeAttachment(index)}
+                          className="text-xs sm:text-sm flex-shrink-0"
                         >
                           Remove
                         </Button>
@@ -1386,9 +1393,9 @@ export default function OpportunityDetailsPage() {
 
               {/* Proposal Summary */}
               <Card className="bg-gray-50">
-                <CardContent className="p-4">
-                  <h4 className="font-semibold mb-2">Proposal Summary</h4>
-                  <div className="space-y-1 text-sm">
+                <CardContent className="p-3 sm:p-4">
+                  <h4 className="font-semibold text-sm sm:text-base mb-2">Proposal Summary</h4>
+                  <div className="space-y-1 text-xs sm:text-sm">
                     <div className="flex justify-between">
                       <span>Your Bid:</span>
                       <span className="font-semibold">
@@ -1397,7 +1404,7 @@ export default function OpportunityDetailsPage() {
                     </div>
                     <div className="flex justify-between">
                       <span>Timeline:</span>
-                      <span>{formatTimeline(proposalData.timelineAmount, proposalData.timelineUnit) || "Not specified"}</span>
+                      <span className="break-words">{formatTimeline(proposalData.timelineAmount, proposalData.timelineUnit) || "Not specified"}</span>
                     </div>
                     <div className="flex justify-between">
                       <span>Attachments:</span>
@@ -1408,21 +1415,23 @@ export default function OpportunityDetailsPage() {
               </Card>
             </div>
 
-            <DialogFooter>
+            <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
               <Button
                 variant="outline"
                 onClick={() => setIsProposalModalOpen(false)}
+                className="w-full sm:w-auto text-xs sm:text-sm"
               >
                 Cancel
               </Button>
               <Button
                 onClick={handleSubmitProposal}
                 disabled={submittingProposal}
+                className="w-full sm:w-auto text-xs sm:text-sm"
               >
                 {submittingProposal ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 animate-spin" />
                 ) : (
-                  <Send className="w-4 h-4 mr-2" />
+                  <Send className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                 )}
                 {submittingProposal ? "Submitting..." : "Submit Proposal"}
               </Button>

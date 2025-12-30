@@ -62,11 +62,14 @@ function CheckoutForm({ milestone, type }: MilestonePaymentProps) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <PaymentElement />
+    <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4 flex flex-col h-full">
+      <div className="flex-1 min-h-0 overflow-y-auto -mr-1 sm:mr-0 pr-1 sm:pr-0">
+        <PaymentElement />
+      </div>
 
+      <div className="flex-shrink-0 space-y-3 sm:space-y-4">
       {errorMessage && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+          <div className="bg-red-50 border border-red-200 text-red-700 px-3 sm:px-4 py-2 sm:py-3 rounded text-sm sm:text-base">
           {errorMessage}
         </div>
       )}
@@ -74,12 +77,13 @@ function CheckoutForm({ milestone, type }: MilestonePaymentProps) {
       <button
         type="submit"
         disabled={!stripe || isProcessing}
-        className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full bg-blue-600 text-white py-2.5 sm:py-3 px-3 sm:px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base font-medium"
       >
         {isProcessing
           ? "Processing..."
           : `Pay MYR ${milestone.amount.toFixed(2)}`}
       </button>
+      </div>
     </form>
   );
 }
@@ -124,16 +128,20 @@ export default function MilestonePayment({
 
   if (!clientSecret) {
     return (
-      <div className="bg-white p-6 rounded-lg shadow">
-        <h3 className="text-xl font-semibold mb-4">Pay for Milestone</h3>
-        <p className="text-gray-600 mb-4">{milestone.title}</p>
-        <p className="text-2xl font-bold mb-6">
+      <div className="bg-white p-4 sm:p-6 rounded-lg shadow max-w-full">
+        <h3 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4">
+          Pay for Milestone
+        </h3>
+        <p className="text-sm sm:text-base text-gray-600 mb-3 sm:mb-4 break-words">
+          {milestone.title}
+        </p>
+        <p className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6">
           MYR {milestone.amount.toFixed(2)}
         </p>
         <button
           onClick={initiatePayment}
           disabled={loading}
-          className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          className="w-full bg-blue-600 text-white py-2.5 sm:py-3 px-3 sm:px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm sm:text-base font-medium"
         >
           {loading ? "Loading..." : "Continue to Payment"}
         </button>
@@ -149,16 +157,24 @@ export default function MilestonePayment({
   };
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow">
-      <h3 className="text-xl font-semibold mb-4">Complete Payment</h3>
-      <p className="text-gray-600 mb-2">{milestone.title}</p>
-      <p className="text-2xl font-bold mb-6">
+    <div className="bg-white p-4 sm:p-6 rounded-lg shadow max-w-full max-h-[90vh] sm:max-h-[85vh] flex flex-col overflow-hidden">
+      <div className="flex-shrink-0 mb-3 sm:mb-4">
+        <h3 className="text-lg sm:text-xl font-semibold mb-2 sm:mb-3">
+        Complete Payment
+      </h3>
+        <p className="text-sm sm:text-base text-gray-600 mb-2 break-words">
+        {milestone.title}
+      </p>
+        <p className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6">
         MYR {milestone.amount.toFixed(2)}
       </p>
+      </div>
 
+      <div className="flex-1 min-h-0 overflow-hidden">
       <Elements stripe={stripePromise} options={options}>
         <CheckoutForm milestone={milestone} type={type} />
       </Elements>
+      </div>
     </div>
   );
 }

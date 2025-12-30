@@ -81,7 +81,8 @@ export default function TransactionDetailPage() {
         setTransaction(json.data);
       } catch (e: unknown) {
         console.error(e);
-        const errorMessage = e instanceof Error ? e.message : "Failed to load transaction";
+        const errorMessage =
+          e instanceof Error ? e.message : "Failed to load transaction";
         setError(errorMessage);
         toast({
           title: "Error",
@@ -153,25 +154,42 @@ export default function TransactionDetailPage() {
   const handleDownloadReceipt = async () => {
     try {
       const token =
-        typeof window !== "undefined" ? localStorage.getItem("token") : null;
+        typeof window !== "undefined"
+          ? localStorage.getItem("token")
+          : undefined;
+      if (!token) {
+        toast({
+          title: "Error",
+          description: "Not authenticated",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const res = await fetch(`${API_BASE}/provider/earnings/${id}/receipt`, {
         headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
         },
       });
-      if (!res.ok) throw new Error("Failed to download receipt");
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `receipt_${transaction?.stripePaymentIntentId || "receipt"}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || "Failed to get receipt URL");
+      }
+
+      const data = await res.json();
+
+      if (data.success && data.downloadUrl) {
+        // Navigate to the R2 URL (opens in new tab/window)
+        window.open(data.downloadUrl, "_blank");
+      } else {
+        throw new Error("Invalid response from server");
+      }
     } catch (e: unknown) {
       console.error(e);
-      const errorMessage = e instanceof Error ? e.message : "Failed to download receipt";
+      const errorMessage =
+        e instanceof Error ? e.message : "Failed to download receipt";
       toast({
         title: "Error downloading receipt",
         description: errorMessage,
@@ -199,9 +217,9 @@ export default function TransactionDetailPage() {
               <h1 className="text-3xl font-bold text-gray-900">
                 Transaction Details
               </h1>
-              <p className="text-gray-600">
+              {/* <p className="text-gray-600">
                 Transaction ID: {transaction.stripePaymentIntentId}
-              </p>
+              </p> */}
             </div>
           </div>
           <div className="flex gap-3">
@@ -265,10 +283,10 @@ export default function TransactionDetailPage() {
                     <p className="text-sm text-gray-500">Transaction Type</p>
                     <p className="font-medium capitalize">{transaction.type}</p>
                   </div> */}
-                  <div>
+                  {/* <div>
                     <p className="text-sm text-gray-500">Reference Number</p>
                     <p className="font-medium">{transaction.id}</p>
-                  </div>
+                  </div> */}
                   <div>
                     <p className="text-sm text-gray-500">Project</p>
                     <p className="font-medium">{transaction.project.title}</p>
@@ -313,7 +331,7 @@ export default function TransactionDetailPage() {
                         )}
                       </div>
                     )}
-                    
+
                   {/* <div>
                     <p className="text-sm text-gray-500">Invoice Number</p>
                     <p className="font-medium">{transaction.id}</p>
@@ -389,38 +407,43 @@ export default function TransactionDetailPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {timelineEvents.map((event: { status: string; timestamp: string }, index: number) => (
-                    <div key={index} className="flex gap-4">
-                      <div className="flex flex-col items-center">
-                        <div
-                          className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                            event.status === "completed"
-                              ? "bg-green-100"
-                              : event.status === "processing"
-                              ? "bg-blue-100"
-                              : "bg-gray-100"
-                          }`}
-                        >
-                          {event.status === "completed" ? (
-                            <CheckCircle className="w-4 h-4 text-green-600" />
-                          ) : (
-                            <Clock className="w-4 h-4 text-blue-600" />
+                  {timelineEvents.map(
+                    (
+                      event: { status: string; timestamp: string },
+                      index: number
+                    ) => (
+                      <div key={index} className="flex gap-4">
+                        <div className="flex flex-col items-center">
+                          <div
+                            className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                              event.status === "completed"
+                                ? "bg-green-100"
+                                : event.status === "processing"
+                                ? "bg-blue-100"
+                                : "bg-gray-100"
+                            }`}
+                          >
+                            {event.status === "completed" ? (
+                              <CheckCircle className="w-4 h-4 text-green-600" />
+                            ) : (
+                              <Clock className="w-4 h-4 text-blue-600" />
+                            )}
+                          </div>
+                          {index < timelineEvents.length - 1 && (
+                            <div className="w-0.5 h-12 bg-gray-200 my-1" />
                           )}
                         </div>
-                        {index < timelineEvents.length - 1 && (
-                          <div className="w-0.5 h-12 bg-gray-200 my-1" />
-                        )}
+                        <div className="flex-1 pb-8">
+                          <p className="font-medium capitalize">
+                            {getTimelineMessage(event.status)}
+                          </p>
+                          <p className="text-sm text-gray-500">
+                            {new Date(event.timestamp).toLocaleString()}
+                          </p>
+                        </div>
                       </div>
-                      <div className="flex-1 pb-8">
-                        <p className="font-medium capitalize">
-                          {getTimelineMessage(event.status)}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          {new Date(event.timestamp).toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  )}
                 </div>
               </CardContent>
             </Card>

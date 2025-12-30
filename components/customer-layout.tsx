@@ -42,7 +42,11 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { getProfileImageUrl } from "@/lib/api";
+import {
+  getProfileImageUrl,
+  getAdminUsersForSupport,
+  getUnreadMessageCount,
+} from "@/lib/api";
 
 interface CustomerLayoutProps {
   children: React.ReactNode;
@@ -69,6 +73,15 @@ type Notification = {
   createdAt: string | number | Date;
   isRead?: boolean;
   [key: string]: unknown;
+};
+
+type AdminUser = {
+  id: string;
+  name: string;
+  email: string;
+  customerProfile?: {
+    profileImageUrl?: string;
+  };
 };
 
 export function CustomerLayout({ children }: CustomerLayoutProps) {
@@ -141,6 +154,14 @@ export function CustomerLayout({ children }: CustomerLayoutProps) {
   const [selectedNotification, setSelectedNotification] =
     useState<Notification | null>(null);
 
+  // Support dialog state
+  const [supportDialogOpen, setSupportDialogOpen] = useState(false);
+  const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
+  const [adminUsersLoading, setAdminUsersLoading] = useState(false);
+
+  // Unread message count state
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
+
   useEffect(() => {
     if (typeof window !== "undefined") {
       const token = localStorage.getItem("token");
@@ -166,6 +187,65 @@ export function CustomerLayout({ children }: CustomerLayoutProps) {
 
   // Calculate unread notifications
   const unreadCount = notifications.filter((n) => !n.isRead).length;
+
+  // Fetch unread message count
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    const fetchUnreadCount = async () => {
+      try {
+        const response = await getUnreadMessageCount();
+        if (response.success) {
+          setUnreadMessageCount(response.count);
+        }
+      } catch (error) {
+        console.error("Failed to fetch unread message count:", error);
+        setUnreadMessageCount(0);
+      }
+    };
+
+    // Fetch immediately
+    fetchUnreadCount();
+
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchUnreadCount, 30000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Fetch admin users when support dialog opens
+  useEffect(() => {
+    if (supportDialogOpen && adminUsers.length === 0) {
+      const fetchAdminUsers = async () => {
+        setAdminUsersLoading(true);
+        try {
+          const response = await getAdminUsersForSupport();
+          if (response.success && response.data) {
+            setAdminUsers(response.data as AdminUser[]);
+          }
+        } catch (error) {
+          console.error("Failed to fetch admin users:", error);
+        } finally {
+          setAdminUsersLoading(false);
+        }
+      };
+      fetchAdminUsers();
+    }
+  }, [supportDialogOpen, adminUsers.length]);
+
+  // Handle admin selection and navigate to messages
+  const handleAdminSelect = (admin: AdminUser) => {
+    const adminName = admin.name || "Admin";
+    const adminAvatar = admin.customerProfile?.profileImageUrl || "";
+    router.push(
+      `/customer/messages?userId=${admin.id}&name=${encodeURIComponent(
+        adminName
+      )}&avatar=${encodeURIComponent(adminAvatar)}`
+    );
+    setSupportDialogOpen(false);
+  };
 
   // Handler to mark a notification as read
   const handleNotificationClick = async (id: string) => {
@@ -282,7 +362,7 @@ export function CustomerLayout({ children }: CustomerLayoutProps) {
               <Link
                 key={item.name}
                 href={item.href}
-                className={`flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                className={`flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors relative ${
                   isActive(item.href)
                     ? "bg-blue-100 text-blue-700"
                     : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
@@ -291,6 +371,11 @@ export function CustomerLayout({ children }: CustomerLayoutProps) {
               >
                 <item.icon className="w-5 h-5 mr-3" />
                 {item.name}
+                {item.name === "Messages" && unreadMessageCount > 0 && (
+                  <Badge className="ml-auto bg-red-500 text-white text-xs min-w-[20px] h-5 flex items-center justify-center px-1.5">
+                    {unreadMessageCount > 99 ? "99+" : unreadMessageCount}
+                  </Badge>
+                )}
               </Link>
             ))}
           </nav>
@@ -315,7 +400,7 @@ export function CustomerLayout({ children }: CustomerLayoutProps) {
               <Link
                 key={item.name}
                 href={item.href}
-                className={`flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                className={`flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors relative ${
                   isActive(item.href)
                     ? "bg-blue-100 text-blue-700"
                     : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
@@ -323,6 +408,11 @@ export function CustomerLayout({ children }: CustomerLayoutProps) {
               >
                 <item.icon className="w-5 h-5 mr-3" />
                 {item.name}
+                {item.name === "Messages" && unreadMessageCount > 0 && (
+                  <Badge className="ml-auto bg-red-500 text-white text-xs min-w-[20px] h-5 flex items-center justify-center px-1.5">
+                    {unreadMessageCount > 99 ? "99+" : unreadMessageCount}
+                  </Badge>
+                )}
               </Link>
             ))}
           </nav>
@@ -340,7 +430,12 @@ export function CustomerLayout({ children }: CustomerLayoutProps) {
               <p className="text-xs opacity-90 mb-3">
                 Contact our support team for assistance
               </p>
-              <Button size="sm" variant="secondary" className="w-full">
+              <Button
+                size="sm"
+                variant="secondary"
+                className="w-full"
+                onClick={() => setSupportDialogOpen(true)}
+              >
                 Get Support
               </Button>
             </div>
@@ -553,6 +648,81 @@ export function CustomerLayout({ children }: CustomerLayoutProps) {
               className="w-full"
             >
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Support Dialog - Select Admin */}
+      <Dialog open={supportDialogOpen} onOpenChange={setSupportDialogOpen}>
+        <DialogContent className="max-w-md p-6 mx-auto">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-semibold">
+              Contact Support
+            </DialogTitle>
+            <DialogDescription className="mt-2">
+              Select an admin to contact for support
+            </DialogDescription>
+            <DialogClose className="absolute right-4 top-4">
+              <X className="w-5 h-5" />
+            </DialogClose>
+          </DialogHeader>
+          <div className="mt-4 max-h-[400px] overflow-y-auto">
+            {adminUsersLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                  <p className="text-gray-600">Loading admins...</p>
+                </div>
+              </div>
+            ) : adminUsers.length > 0 ? (
+              <div className="space-y-2">
+                {adminUsers.map((admin) => (
+                  <button
+                    key={admin.id}
+                    onClick={() => handleAdminSelect(admin)}
+                    className="w-full flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-100 transition-colors text-left"
+                  >
+                    <Avatar className="h-10 w-10">
+                      <AvatarImage
+                        src={getProfileImageUrl(
+                          admin.customerProfile?.profileImageUrl
+                        )}
+                        alt={admin.name}
+                      />
+                      <AvatarFallback>
+                        {admin.name
+                          .split(" ")
+                          .map((n) => n[0])
+                          .join("")
+                          .toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">
+                        {admin.name}
+                      </p>
+                      <p className="text-xs text-gray-500 truncate">
+                        {admin.email}
+                      </p>
+                    </div>
+                    <MessageSquare className="w-5 h-5 text-gray-400" />
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="flex items-center justify-center py-8">
+                <p className="text-gray-600">No admins available</p>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="mt-4">
+            <Button
+              variant="outline"
+              onClick={() => setSupportDialogOpen(false)}
+              className="w-full"
+            >
+              Cancel
             </Button>
           </DialogFooter>
         </DialogContent>

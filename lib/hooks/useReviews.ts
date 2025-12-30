@@ -104,6 +104,7 @@ export interface CompletedProject {
   title: string;
   description: string;
   category: string;
+  status?: string;
   amount?: number;
   completedDate?: string;
   provider?: {
