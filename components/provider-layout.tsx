@@ -722,7 +722,7 @@ export function ProviderLayout({ children }: ProviderLayoutProps) {
                               ) {
                                 // It's likely an R2 key or path, construct the URL
                                 const API_URL =
-                                  process.env.NEXT_PUBLIC_API_BASE_URL ||
+                                  process.env.NEXT_PUBLIC_API_URL ||
                                   process.env.NEXT_PUBLIC_API_URL ||
                                   "http://localhost:4000";
                                 const cleanPath = photoUrl.startsWith("/")
@@ -732,7 +732,7 @@ export function ProviderLayout({ children }: ProviderLayoutProps) {
                               } else {
                                 // It's likely an R2 key, construct the URL
                                 const API_URL =
-                                  process.env.NEXT_PUBLIC_API_BASE_URL ||
+                                  process.env.NEXT_PUBLIC_API_URL ||
                                   process.env.NEXT_PUBLIC_API_URL ||
                                   "http://localhost:4000";
                                 window.open(

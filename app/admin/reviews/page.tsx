@@ -97,7 +97,6 @@ export default function AdminReviewsPage() {
         throw new Error("No authentication token found");
       }
       const API_URL =
-        process.env.NEXT_PUBLIC_API_BASE_URL ||
         process.env.NEXT_PUBLIC_API_URL ||
         "http://localhost:4000";
 
@@ -175,7 +174,6 @@ export default function AdminReviewsPage() {
     try {
       const token = localStorage.getItem("token");
       const API_URL =
-        process.env.NEXT_PUBLIC_API_BASE_URL ||
         process.env.NEXT_PUBLIC_API_URL ||
         "http://localhost:4000";
 

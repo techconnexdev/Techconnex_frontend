@@ -442,7 +442,7 @@ export default function AdminDashboard() {
                     pendingVerifications.map((verification, index) => {
                       const avatarUrl = verification.avatar
                         ? `${
-                            process.env.NEXT_PUBLIC_API_BASE_URL ||
+                            process.env.NEXT_PUBLIC_API_URL ||
                             "http://localhost:4000"
                           }${
                             String(verification.avatar).startsWith("/")
@@ -528,7 +528,7 @@ export default function AdminDashboard() {
                     topProviders.map((provider, index) => {
                       const avatarUrl = provider.avatar
                         ? `${
-                            process.env.NEXT_PUBLIC_API_BASE_URL ||
+                            process.env.NEXT_PUBLIC_API_URL ||
                             "http://localhost:4000"
                           }${
                             String(provider.avatar).startsWith("/") ? "" : "/"

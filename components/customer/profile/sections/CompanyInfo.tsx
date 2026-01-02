@@ -286,7 +286,7 @@ export default function CompanyInfo({
     const isLocalPath =
       url.startsWith("/uploads/") || url.startsWith("uploads/");
     const downloadUrl = isLocalPath
-      ? `${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000"}${
+      ? `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}${
           url.startsWith("/") ? "" : "/"
         }${url}`
       : url;

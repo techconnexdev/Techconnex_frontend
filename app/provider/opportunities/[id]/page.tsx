@@ -605,7 +605,7 @@ export default function OpportunityDetailsPage() {
     opportunity.customer?.customerProfile?.profileImageUrl;
 
   const clientAvatarUrl = clientAvatar
-    ? `${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000"}${clientAvatar.startsWith("/") ? "" : "/"}${clientAvatar}`
+    ? `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}${clientAvatar.startsWith("/") ? "" : "/"}${clientAvatar}`
     : "/placeholder.svg";
 
   return (

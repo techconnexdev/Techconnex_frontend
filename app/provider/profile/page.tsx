@@ -1330,41 +1330,6 @@ export default function ProviderProfilePage(_props: Props) {
     }));
   };
 
-  const reviews = [
-    {
-      id: 1,
-      client: "John Doe",
-      company: "TechStart Sdn Bhd",
-      rating: 5,
-      comment:
-        "Ahmad delivered exceptional work on our e-commerce platform. His technical expertise and attention to detail exceeded our expectations.",
-      project: "E-commerce Platform Development",
-      date: "2024-01-20",
-      avatar: "/placeholder.svg?height=40&width=40",
-    },
-    {
-      id: 2,
-      client: "Sarah Chen",
-      company: "Digital Solutions",
-      rating: 5,
-      comment:
-        "Outstanding developer! The mobile app was delivered on time and works flawlessly. Highly recommended!",
-      project: "Mobile Banking App",
-      date: "2023-12-25",
-      avatar: "/placeholder.svg?height=40&width=40",
-    },
-    {
-      id: 3,
-      client: "Mike Johnson",
-      company: "Manufacturing Corp",
-      rating: 4,
-      comment:
-        "Great work on the cloud infrastructure. Ahmad is very knowledgeable and professional.",
-      project: "Cloud Infrastructure Setup",
-      date: "2023-12-05",
-      avatar: "/placeholder.svg?height=40&width=40",
-    },
-  ];
 
   return (
     <ProviderLayout>
@@ -1472,11 +1437,10 @@ export default function ProviderProfilePage(_props: Props) {
         </Card>
 
         <Tabs defaultValue="overview" className="space-y-4 sm:space-y-6">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5 h-auto">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto">
             <TabsTrigger value="overview" className="text-xs sm:text-sm px-2 sm:px-4">Overview</TabsTrigger>
             <TabsTrigger value="portfolio" className="text-xs sm:text-sm px-2 sm:px-4">Portfolio</TabsTrigger>
             <TabsTrigger value="skills" className="text-xs sm:text-sm px-2 sm:px-4">Skills</TabsTrigger>
-            <TabsTrigger value="reviews" className="text-xs sm:text-sm px-2 sm:px-4">Reviews</TabsTrigger>
             <TabsTrigger value="verification" className="text-xs sm:text-sm px-2 sm:px-4">Verification</TabsTrigger>
           </TabsList>
 
@@ -2897,76 +2861,6 @@ export default function ProviderProfilePage(_props: Props) {
             </div>
           </TabsContent>
 
-          {/* Reviews */}
-          <TabsContent value="reviews">
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-2xl font-bold">Client Reviews</h2>
-                  <p className="text-gray-600">
-                    What clients say about working with you
-                  </p>
-                </div>
-                <div className="text-right">
-                  <div className="flex items-center gap-2">
-                    <Star className="w-5 h-5 text-yellow-400 fill-current" />
-                    <span className="text-2xl font-bold">
-                      {profileStats.rating}
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-500">
-                    {profileStats.totalReviews} reviews
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-6">
-                {reviews.map((review) => (
-                  <Card key={review.id}>
-                    <CardContent className="p-6">
-                      <div className="flex items-start space-x-4">
-                        <Avatar>
-                          <AvatarImage
-                            src={review.avatar || "/placeholder.svg"}
-                          />
-                          <AvatarFallback>
-                            {review.client.charAt(0)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between mb-2">
-                            <div>
-                              <p className="font-semibold">{review.client}</p>
-                              <p className="text-sm text-gray-600">
-                                {review.company}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              {[...Array(5)].map((_, i) => (
-                                <Star
-                                  key={i}
-                                  className={`w-4 h-4 ${
-                                    i < review.rating
-                                      ? "text-yellow-400 fill-current"
-                                      : "text-gray-300"
-                                  }`}
-                                />
-                              ))}
-                            </div>
-                          </div>
-                          <p className="text-gray-700 mb-2">{review.comment}</p>
-                          <div className="flex items-center justify-between text-sm text-gray-500">
-                            <span>{review.project}</span>
-                            <span>{review.date}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </div>
-          </TabsContent>
           <TabsContent value="verification" className="space-y-6">
             <VerificationSection
               documents={docs}

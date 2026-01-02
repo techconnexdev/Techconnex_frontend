@@ -79,7 +79,7 @@ export default function RequestsClient({
         return;
       }
       try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000"}/api/service-requests/${userId}`);
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/api/service-requests/${userId}`);
         const data = await res.json();
         const list: ProviderRequest[] = [];
         ((data.serviceRequests as ApiServiceRequest[]) || []).forEach((sr: ApiServiceRequest) => {
@@ -194,7 +194,9 @@ export default function RequestsClient({
     };
 
     try {
-      const r1 = await fetch("http://localhost:4000/api/projects/accept-provider", {
+      const r1 = await fetch(`${
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"
+        }/api/projects/accept-provider`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -203,7 +205,9 @@ export default function RequestsClient({
 
       // NOTE: original code used a likely-typo endpoint: /service-requests/dservice-request/{id}
       // If your API expects /service-requests/{id}, update here.
-      await fetch(`http://localhost:4000/api/service-requests/${req.serviceRequestId}`, {
+      await fetch(`${
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"
+        }/api/service-requests/${req.serviceRequestId}`, {
         method: "DELETE",
       });
 
@@ -220,7 +224,9 @@ export default function RequestsClient({
   };
 
   const downloadAttachment = async (attachmentUrl: string) => {
-    const full = `http://localhost:4000/api/${attachmentUrl}`;
+    const full = `${
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"
+        }/api/${attachmentUrl}`;
     try {
       const res = await fetch(full);
       if (!res.ok) throw new Error("Failed to download file");

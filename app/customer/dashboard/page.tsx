@@ -161,7 +161,7 @@ export default function CustomerDashboard() {
               avatar:
                 provider.avatar && provider.avatar !== "/placeholder.svg"
                   ? `${
-                      process.env.NEXT_PUBLIC_API_BASE_URL ||
+                      process.env.NEXT_PUBLIC_API_URL ||
                       "http://localhost:4000"
                     }${(provider.avatar as string)?.startsWith("/") ? "" : "/"}${
                       provider.avatar as string

@@ -31,7 +31,9 @@ export default function AdminSettingsPage() {
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const res = await fetch("http://localhost:4000/admin/settings");
+        const res = await fetch(`${
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"
+        }/admin/settings`);
         const data = await res.json();
 
         if (data.success && data.data) {
@@ -81,7 +83,9 @@ export default function AdminSettingsPage() {
     setSaving(true);
 
     try {
-      const res = await fetch("http://localhost:4000/admin/settings", {
+      const res = await fetch(`${
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"
+        }/admin/settings`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
