@@ -262,27 +262,45 @@ export default function CompanyCard({ company }: { company: Company }) {
           </div>
         )}
 
-        <div className="flex flex-col sm:flex-row gap-2 pt-2">
+        <div className="flex flex-col gap-2 pt-4 border-t border-gray-200">
           {company.allowMessages !== false && (
-            <Button size="sm" className="flex-1 w-full sm:w-auto text-xs sm:text-sm" onClick={handleContact}>
+            <Button
+              size="sm"
+              className="w-full bg-gray-900 text-white shadow-md hover:bg-gray-800 text-xs sm:text-sm"
+              onClick={handleContact}
+            >
               <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
               Contact
             </Button>
           )}
-          <Button
-            size="sm"
-            variant={saved ? "default" : "outline"}
-            onClick={handleSaveToggle}
-            className={`${saved ? "bg-red-600 active:bg-red-700 sm:hover:bg-red-700 text-white" : ""} text-xs sm:text-sm`}
-          >
-            <Heart className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${saved ? "fill-current" : ""}`} />
-          </Button>
-          <Link href={`/provider/companies/${company.id}`} className="flex-1 w-full sm:w-auto">
-            <Button size="sm" variant="outline" className="w-full text-xs sm:text-sm">
-              <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-              View Profile
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant={saved ? "default" : "outline"}
+              onClick={handleSaveToggle}
+              className={`flex-1 text-xs sm:text-sm ${
+                saved
+                  ? "bg-red-600 hover:bg-red-700 text-white"
+                  : "border-gray-300 text-gray-700 hover:bg-gray-50"
+              }`}
+            >
+              <Heart
+                className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${
+                  saved ? "fill-current text-white" : "text-gray-500"
+                }`}
+              />
             </Button>
-          </Link>
+            <Link href={`/provider/companies/${company.id}`} className="flex-1">
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full border-gray-300 text-gray-700 hover:bg-gray-50 text-xs sm:text-sm"
+              >
+                <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+                View Profile
+              </Button>
+            </Link>
+          </div>
         </div>
       </CardContent>
     </Card>

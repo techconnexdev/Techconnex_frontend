@@ -51,30 +51,32 @@ export function DocumentsCard({ documents }: DocumentsCardProps) {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-lg">Submitted Documents</CardTitle>
+      <CardHeader className="px-4 sm:px-6 pt-4 sm:pt-6">
+        <CardTitle className="text-base sm:text-lg">Submitted Documents</CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="grid md:grid-cols-2 gap-4">
+      <CardContent className="p-4 sm:p-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
           {documents.map((doc) => (
-            <div key={doc.id} className="border rounded-lg p-4">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <FileText className={`w-4 h-4 ${getDocumentStatusColor(doc.status)}`} />
-                  <span className="font-medium">{doc.type}</span>
+            <div key={doc.id} className="border rounded-lg p-3 sm:p-4">
+              <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <FileText className={`w-4 h-4 flex-shrink-0 ${getDocumentStatusColor(doc.status)}`} />
+                  <span className="font-medium text-sm sm:text-base truncate">{doc.type}</span>
                 </div>
-                <Badge variant="outline" className={getDocumentStatusColor(doc.status)}>
+                <Badge variant="outline" className={`text-xs flex-shrink-0 ${getDocumentStatusColor(doc.status)}`}>
                   {doc.status}
                 </Badge>
               </div>
-              <p className="text-sm text-gray-500 mb-3">Filename: {doc.filename}</p>
+              <p className="text-xs sm:text-sm text-gray-500 mb-3 truncate" title={doc.filename}>
+                Filename: {doc.filename}
+              </p>
               <Button
                 variant="outline"
                 size="sm"
-                className="w-full bg-transparent"
+                className="w-full bg-transparent text-xs sm:text-sm"
                 onClick={() => handleDownload(doc)}
               >
-                <Download className="w-4 h-4 mr-2" />
+                <Download className="w-3 h-3 sm:w-4 sm:h-4 mr-2" />
                 Download
               </Button>
             </div>

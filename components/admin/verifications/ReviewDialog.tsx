@@ -41,15 +41,17 @@ export function ReviewDialog({
 
   return (
     <Dialog open={!!user} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-w-4xl max-h-[85vh] sm:max-h-[80vh] overflow-y-auto w-[95vw] sm:w-full">
         <DialogHeader>
-          <DialogTitle>Verification Review - {user.name}</DialogTitle>
-          <DialogDescription>Review all submitted documents and user information</DialogDescription>
+          <DialogTitle className="text-lg sm:text-xl">Verification Review - {user.name}</DialogTitle>
+          <DialogDescription className="text-sm">
+            Review all submitted documents and user information
+          </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6">
           {/* User Info */}
-          <div className="grid md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
             <UserInfoCard user={user} />
             <VerificationStatusCard user={user} />
           </div>
@@ -69,22 +71,22 @@ export function ReviewDialog({
           )}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-3">
           {hasPendingDocuments && (
-            <div className="flex gap-3">
+            <>
               <Button
                 variant="outline"
                 onClick={() => onReject(user.id)}
-                className="text-red-600 border-red-300 hover:bg-red-50"
+                className="text-red-600 border-red-300 hover:bg-red-50 w-full sm:w-auto"
               >
                 <XCircle className="w-4 h-4 mr-2" />
                 Reject
               </Button>
-              <Button onClick={() => onApprove(user.id)} className="bg-green-600 hover:bg-green-700">
+              <Button onClick={() => onApprove(user.id)} className="bg-green-600 hover:bg-green-700 w-full sm:w-auto">
                 <CheckCircle className="w-4 h-4 mr-2" />
                 Approve
               </Button>
-            </div>
+            </>
           )}
         </DialogFooter>
       </DialogContent>

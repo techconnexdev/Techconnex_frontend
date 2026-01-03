@@ -517,18 +517,18 @@ export default function ProviderEarningsPage() {
 
   return (
     <ProviderLayout>
-      <div className="space-y-8">
+      <div className="space-y-6 md:space-y-8 px-4 md:px-0">
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Earnings</h1>
-            <p className="text-gray-600">
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Earnings</h1>
+            <p className="text-sm md:text-base text-gray-600">
               Track your income and payment history
             </p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
             <Select value={timeFilter} onValueChange={setTimeFilter}>
-              <SelectTrigger className="w-48">
+              <SelectTrigger className="w-full sm:w-48 text-sm md:text-base">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -538,41 +538,41 @@ export default function ProviderEarningsPage() {
                 <SelectItem value="this-year">This Year</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" onClick={handleExportReport}>
-              <Download className="w-4 h-4 mr-2" />
+            <Button variant="outline" onClick={handleExportReport} className="w-full sm:w-auto text-xs md:text-sm">
+              <Download className="w-3 h-3 md:w-4 md:h-4 mr-2" />
               Export Report
             </Button>
           </div>
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="p-4 md:p-6">
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs md:text-sm font-medium text-gray-600">
                     Total Earnings
                   </p>
-                  <p className="text-2xl font-bold text-gray-900">
+                  <p className="text-xl md:text-2xl font-bold text-gray-900">
                     RM{earningsData.totalEarnings.toLocaleString()}
                   </p>
                 </div>
-                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                  <DollarSign className="w-6 h-6 text-green-600" />
+                <div className="w-10 h-10 md:w-12 md:h-12 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
+                  <DollarSign className="w-5 h-5 md:w-6 md:h-6 text-green-600" />
                 </div>
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="p-4 md:p-6">
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs md:text-sm font-medium text-gray-600">
                     This Month
                   </p>
-                  <p className="text-2xl font-bold text-blue-600">
+                  <p className="text-xl md:text-2xl font-bold text-blue-600">
                     RM{earningsData.thisMonth.toLocaleString()}
                   </p>
                   <div className="flex items-center mt-1">
@@ -582,39 +582,39 @@ export default function ProviderEarningsPage() {
                     </span>
                   </div>
                 </div>
-                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <Calendar className="w-6 h-6 text-blue-600" />
+                <div className="w-10 h-10 md:w-12 md:h-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
+                  <Calendar className="w-5 h-5 md:w-6 md:h-6 text-blue-600" />
                 </div>
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="p-4 md:p-6">
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs md:text-sm font-medium text-gray-600">
                     Pending Payments
                   </p>
-                  <p className="text-2xl font-bold text-yellow-600">
+                  <p className="text-xl md:text-2xl font-bold text-yellow-600">
                     RM{earningsData.pendingPayments.toLocaleString()}
                   </p>
                 </div>
-                <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                  <Wallet className="w-6 h-6 text-yellow-600" />
+                <div className="w-10 h-10 md:w-12 md:h-12 bg-yellow-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
+                  <Wallet className="w-5 h-5 md:w-6 md:h-6 text-yellow-600" />
                 </div>
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardContent className="p-6">
+            <CardContent className="p-4 md:p-6">
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-600">
+                  <p className="text-xs md:text-sm font-medium text-gray-600">
                     Available Balance
                   </p>
-                  <p className="text-2xl font-bold text-purple-600">
+                  <p className="text-xl md:text-2xl font-bold text-purple-600">
                     RM{earningsData.availableBalance.toLocaleString()}
                   </p>
                   <p className="text-xs text-gray-500 mt-2">
@@ -622,8 +622,8 @@ export default function ProviderEarningsPage() {
                     TechConnect platform. Processing takes 3-14 working days.
                   </p>
                 </div>
-                <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
-                  <CreditCard className="w-6 h-6 text-purple-600" />
+                <div className="w-10 h-10 md:w-12 md:h-12 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
+                  <CreditCard className="w-5 h-5 md:w-6 md:h-6 text-purple-600" />
                 </div>
               </div>
             </CardContent>
@@ -631,24 +631,24 @@ export default function ProviderEarningsPage() {
         </div>
 
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList>
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="payments">Payment History</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="overview" className="text-xs md:text-sm">Overview</TabsTrigger>
+            <TabsTrigger value="payments" className="text-xs md:text-sm">Payment History</TabsTrigger>
             {/* <TabsTrigger value="analytics">Analytics</TabsTrigger> */}
             {/* <TabsTrigger value="withdraw">Withdraw</TabsTrigger> */}
-            <TabsTrigger value="methods">Payment Methods</TabsTrigger>
+            <TabsTrigger value="methods" className="text-xs md:text-sm">Payment Methods</TabsTrigger>
           </TabsList>
 
           {/* Overview */}
           <TabsContent value="overview">
-            <div className="grid lg:grid-cols-3 gap-6">
+            <div className="grid lg:grid-cols-3 gap-4 md:gap-6">
               <div className="lg:col-span-2 space-y-6">
                 {/* Monthly Earnings Chart */}
                 <Card>
                   <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="flex items-center gap-2">
-                        <BarChart3 className="w-5 h-5" />
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                      <CardTitle className="flex items-center gap-2 text-base md:text-lg">
+                        <BarChart3 className="w-4 h-4 md:w-5 md:h-5" />
                         Monthly Earnings Trend
                       </CardTitle>
                       {availableYears.length > 0 && (
@@ -658,7 +658,7 @@ export default function ProviderEarningsPage() {
                             setSelectedYear(parseInt(value, 10))
                           }
                         >
-                          <SelectTrigger className="w-48">
+                          <SelectTrigger className="w-full sm:w-48 text-sm md:text-base">
                             <SelectValue placeholder="Select Year" />
                           </SelectTrigger>
                           <SelectContent>
@@ -695,17 +695,17 @@ export default function ProviderEarningsPage() {
                         .map((month) => (
                           <div
                             key={month.month}
-                            className="flex items-center justify-between"
+                            className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2"
                           >
-                            <div className="flex items-center space-x-3">
-                              <div className="w-3 h-3 bg-blue-500 rounded-full" />
-                              <span className="font-medium">{month.month}</span>
+                            <div className="flex items-center space-x-2 md:space-x-3">
+                              <div className="w-2 h-2 md:w-3 md:h-3 bg-blue-500 rounded-full flex-shrink-0" />
+                              <span className="font-medium text-sm md:text-base">{month.month}</span>
                             </div>
-                            <div className="flex items-center space-x-4">
-                              <span className="text-sm text-gray-500">
+                            <div className="flex items-center space-x-2 md:space-x-4">
+                              <span className="text-xs md:text-sm text-gray-500">
                                 {month.projects} projects
                               </span>
-                              <span className="font-semibold">
+                              <span className="font-semibold text-sm md:text-base">
                                 RM{month.amount.toLocaleString()}
                               </span>
                             </div>
@@ -728,8 +728,8 @@ export default function ProviderEarningsPage() {
                 {/* Recent Payments */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Recent Payments</CardTitle>
-                    <CardDescription>
+                    <CardTitle className="text-base md:text-lg">Recent Payments</CardTitle>
+                    <CardDescription className="text-xs md:text-sm">
                       Your latest payment transactions
                     </CardDescription>
                   </CardHeader>
@@ -738,10 +738,10 @@ export default function ProviderEarningsPage() {
                       {recentPayments.slice(0, 4).map((payment) => (
                         <div
                           key={payment.id}
-                          className="flex items-center justify-between p-4 border rounded-lg"
+                          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 border rounded-lg"
                         >
-                          <div className="flex items-center space-x-4">
-                            <Avatar>
+                          <div className="flex items-center space-x-3 md:space-x-4 flex-1 min-w-0">
+                            <Avatar className="w-10 h-10 md:w-12 md:h-12 flex-shrink-0">
                               <AvatarImage
                                 src={payment.avatar || "/placeholder.svg"}
                               />
@@ -749,9 +749,9 @@ export default function ProviderEarningsPage() {
                                 {payment.client.charAt(0)}
                               </AvatarFallback>
                             </Avatar>
-                            <div>
-                              <p className="font-medium">{payment.project}</p>
-                              <p className="text-sm text-gray-600">
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium text-sm md:text-base truncate">{payment.project}</p>
+                              <p className="text-xs md:text-sm text-gray-600 truncate">
                                 {payment.client}
                               </p>
                               <p className="text-xs text-gray-500">
@@ -759,11 +759,11 @@ export default function ProviderEarningsPage() {
                               </p>
                             </div>
                           </div>
-                          <div className="text-right">
-                            <p className="font-semibold">
+                          <div className="text-left sm:text-right flex-shrink-0">
+                            <p className="font-semibold text-sm md:text-base">
                               RM{payment.amount.toLocaleString()}
                             </p>
-                            <Badge className={getStatusColor(payment.status)}>
+                            <Badge className={`${getStatusColor(payment.status)} text-xs mt-1`}>
                               {getStatusText(payment.status)}
                             </Badge>
                             <p className="text-xs text-gray-500 mt-1">
@@ -782,38 +782,38 @@ export default function ProviderEarningsPage() {
                 {/* Quick Stats */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Quick Stats</CardTitle>
+                    <CardTitle className="text-base md:text-lg">Quick Stats</CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-4">
+                  <CardContent className="space-y-3 md:space-y-4">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600">
+                      <span className="text-xs md:text-sm text-gray-600">
                         Average Project Value
                       </span>
-                      <span className="font-semibold">
+                      <span className="font-semibold text-sm md:text-base">
                         RM{earningsData.averageProjectValue.toLocaleString()}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600">
+                      <span className="text-xs md:text-sm text-gray-600">
                         Projects This Month
                       </span>
-                      <span className="font-semibold">
+                      <span className="font-semibold text-sm md:text-base">
                         {quickStats?.projectsThisMonth.toLocaleString() ?? 0}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600">
+                      <span className="text-xs md:text-sm text-gray-600">
                         Success Rate
                       </span>
-                      <span className="font-semibold">
+                      <span className="font-semibold text-sm md:text-base">
                         {quickStats?.successRate.toLocaleString() ?? 0}%
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600">
+                      <span className="text-xs md:text-sm text-gray-600">
                         Repeat Clients
                       </span>
-                      <span className="font-semibold">
+                      <span className="font-semibold text-sm md:text-base">
                         {quickStats?.repeatClientsPercent.toLocaleString() ?? 0}
                         %
                       </span>
@@ -890,10 +890,10 @@ export default function ProviderEarningsPage() {
                   {recentPayments.map((payment) => (
                     <div
                       key={payment.id}
-                      className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors"
+                      className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 border rounded-lg hover:bg-gray-50 transition-colors"
                     >
-                      <div className="flex items-center space-x-4">
-                        <Avatar>
+                      <div className="flex items-center space-x-3 md:space-x-4 flex-1 min-w-0">
+                        <Avatar className="w-10 h-10 md:w-12 md:h-12 flex-shrink-0">
                           <AvatarImage
                             src={payment.avatar || "/placeholder.svg"}
                           />
@@ -901,9 +901,9 @@ export default function ProviderEarningsPage() {
                             {payment.client.charAt(0)}
                           </AvatarFallback>
                         </Avatar>
-                        <div>
-                          <p className="font-medium">{payment.project}</p>
-                          <p className="text-sm text-gray-600">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-sm md:text-base truncate">{payment.project}</p>
+                          <p className="text-xs md:text-sm text-gray-600 truncate">
                             {payment.client}
                           </p>
                           <p className="text-xs text-gray-500">
@@ -911,25 +911,26 @@ export default function ProviderEarningsPage() {
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center space-x-4">
-                        <div className="text-right">
-                          <p className="font-semibold">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 flex-shrink-0">
+                        <div className="text-left sm:text-right">
+                          <p className="font-semibold text-sm md:text-base">
                             RM{payment.amount.toLocaleString()}
                           </p>
-                          <Badge className={getStatusColor(payment.status)}>
+                          <Badge className={`${getStatusColor(payment.status)} text-xs mt-1`}>
                             {getStatusText(payment.status)}
                           </Badge>
                         </div>
                         <Button
                           variant="outline"
                           size="sm"
+                          className="w-full sm:w-auto text-xs md:text-sm"
                           onClick={() =>
                             router.push(
                               `/provider/earnings/transactions/${payment.id}`
                             )
                           }
                         >
-                          <Eye className="w-4 h-4 mr-2" />
+                          <Eye className="w-3 h-3 md:w-4 md:h-4 mr-2" />
                           Details
                         </Button>
                       </div>
@@ -942,7 +943,7 @@ export default function ProviderEarningsPage() {
 
           {/* Analytics */}
           {/* <TabsContent value="analytics">
-            <div className="grid md:grid-cols-2 gap-6">
+            <div className="grid md:grid-cols-2 gap-4 md:gap-6">
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -1115,10 +1116,10 @@ export default function ProviderEarningsPage() {
           <TabsContent value="methods" className="space-y-6">
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <div>
-                    <CardTitle>Payout Methods</CardTitle>
-                    <CardDescription>
+                    <CardTitle className="text-base md:text-lg">Payout Methods</CardTitle>
+                    <CardDescription className="text-xs md:text-sm">
                       Manage your payout methods for withdrawals
                     </CardDescription>
                   </div>
@@ -1128,17 +1129,18 @@ export default function ProviderEarningsPage() {
                       resetForm();
                       setShowAddForm(true);
                     }}
+                    className="w-full sm:w-auto text-xs md:text-sm"
                   >
-                    <Plus className="w-4 h-4 mr-2" />
+                    <Plus className="w-3 h-3 md:w-4 md:h-4 mr-2" />
                     Add Method
                   </Button>
                 </div>
               </CardHeader>
               <CardContent>
                 {payoutMethods?.length === 0 ? (
-                  <div className="text-center py-12">
-                    <Wallet className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-500 mb-4">
+                  <div className="text-center py-8 md:py-12">
+                    <Wallet className="w-10 h-10 md:w-12 md:h-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-sm md:text-base text-gray-500 mb-4">
                       No payout methods added yet
                     </p>
                     <Button
@@ -1147,13 +1149,14 @@ export default function ProviderEarningsPage() {
                         resetForm();
                         setShowAddForm(true);
                       }}
+                      className="text-xs md:text-sm"
                     >
-                      <Plus className="w-4 h-4 mr-2" />
+                      <Plus className="w-3 h-3 md:w-4 md:h-4 mr-2" />
                       Add Your First Method
                     </Button>
                   </div>
                 ) : (
-                  <div className="grid md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {payoutMethods?.map((method) => {
                       const displayInfo = getPayoutDisplayText(method);
                       return (
@@ -1161,46 +1164,47 @@ export default function ProviderEarningsPage() {
                           key={method.id}
                           className="border-2 hover:border-primary/50 transition-colors"
                         >
-                          <CardContent className="p-6">
-                            <div className="flex items-start justify-between mb-4">
-                              <div className="flex items-center space-x-3">
-                                <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center text-primary">
+                          <CardContent className="p-4 md:p-6">
+                            <div className="flex items-start justify-between mb-4 gap-3">
+                              <div className="flex items-center space-x-2 md:space-x-3 flex-1 min-w-0">
+                                <div className="w-10 h-10 md:w-12 md:h-12 bg-primary/10 rounded-lg flex items-center justify-center text-primary flex-shrink-0">
                                   {getPayoutIcon(method.type)}
                                 </div>
-                                <div>
-                                  <p className="font-semibold text-lg">
+                                <div className="min-w-0 flex-1">
+                                  <p className="font-semibold text-base md:text-lg truncate">
                                     {displayInfo.title}
                                   </p>
-                                  <p className="text-sm text-muted-foreground">
+                                  <p className="text-xs md:text-sm text-muted-foreground truncate">
                                     {displayInfo.subtitle}
                                   </p>
                                 </div>
                               </div>
-                              <Badge variant="secondary">{method.type}</Badge>
+                              <Badge variant="secondary" className="text-xs flex-shrink-0">{method.type}</Badge>
                             </div>
                             {displayInfo.details && (
-                              <p className="text-sm text-gray-600 mb-4">
+                              <p className="text-xs md:text-sm text-gray-600 mb-4">
                                 {displayInfo.details}
                               </p>
                             )}
-                            <div className="flex gap-2">
+                            <div className="flex flex-col sm:flex-row gap-2">
                               <Button
                                 variant="outline"
                                 size="sm"
+                                className="w-full sm:w-auto text-xs md:text-sm"
                                 onClick={() => handleEditPayoutMethod(method)}
                               >
-                                <Edit className="w-4 h-4 mr-1" />
+                                <Edit className="w-3 h-3 md:w-4 md:h-4 mr-1" />
                                 Edit
                               </Button>
                               <Button
                                 variant="outline"
                                 size="sm"
-                                className="text-destructive hover:text-destructive bg-transparent"
+                                className="w-full sm:w-auto text-xs md:text-sm text-destructive hover:text-destructive bg-transparent"
                                 onClick={() =>
                                   handleDeletePayoutMethod(method.id)
                                 }
                               >
-                                <Trash2 className="w-4 h-4 mr-1" />
+                                <Trash2 className="w-3 h-3 md:w-4 md:h-4 mr-1" />
                                 Remove
                               </Button>
                             </div>

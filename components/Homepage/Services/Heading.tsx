@@ -17,7 +17,7 @@ const Heading = ({ className, title, text, tag }: HeadingProps) => {
       )}
       {title && (
         <div className="flex justify-center w-full overflow-hidden">
-          <h2 className="text-5xl md:text-6xl font-medium tracking-tighter whitespace-nowrap">
+          <h2 className="text-5xl md:text-6xl font-medium tracking-tighter md:whitespace-nowrap text-center">
             {title}
           </h2>
         </div>

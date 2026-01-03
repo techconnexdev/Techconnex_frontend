@@ -12,13 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -270,36 +264,35 @@ export default function AdminDisputesPage() {
 
         {/* Filters */}
         <Card>
-          <CardHeader>
-            <CardTitle>Filters</CardTitle>
+          <CardHeader className="p-4 sm:p-6">
+            <CardTitle className="text-lg sm:text-xl">Filters</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="flex-1">
+          <CardContent className="p-4 sm:p-6 pt-0">
+            <div className="flex flex-col gap-4">
+              <div className="flex-1 min-w-0">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                   <Input
                     placeholder="Search disputes..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10"
+                    className="pl-10 text-sm sm:text-base"
                   />
                 </div>
               </div>
-              <div className="w-full sm:w-48">
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Filter by status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="OPEN">Open</SelectItem>
-                    <SelectItem value="UNDER_REVIEW">Under Review</SelectItem>
-                  <SelectItem value="RESOLVED">Resolved</SelectItem>
-                  <SelectItem value="CLOSED">Closed</SelectItem>
-                </SelectContent>
-              </Select>
-              </div>
+              <Tabs
+                value={statusFilter}
+                onValueChange={setStatusFilter}
+                className="w-full"
+              >
+                <TabsList className="w-full sm:w-auto flex flex-col sm:flex-row h-auto sm:h-10">
+                  <TabsTrigger value="all" className="text-xs sm:text-sm w-full sm:w-auto">All Status</TabsTrigger>
+                  <TabsTrigger value="OPEN" className="text-xs sm:text-sm w-full sm:w-auto">Open</TabsTrigger>
+                  <TabsTrigger value="UNDER_REVIEW" className="text-xs sm:text-sm w-full sm:w-auto">Under Review</TabsTrigger>
+                  <TabsTrigger value="RESOLVED" className="text-xs sm:text-sm w-full sm:w-auto">Resolved</TabsTrigger>
+                  <TabsTrigger value="CLOSED" className="text-xs sm:text-sm w-full sm:w-auto">Closed</TabsTrigger>
+                </TabsList>
+              </Tabs>
             </div>
           </CardContent>
         </Card>
@@ -326,7 +319,7 @@ export default function AdminDisputesPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>ID</TableHead>
+                    <TableHead className="w-12">#</TableHead>
                     <TableHead>Reason</TableHead>
                     <TableHead>Project</TableHead>
                     <TableHead>Raised By</TableHead>
@@ -337,10 +330,10 @@ export default function AdminDisputesPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredDisputes.map((dispute) => (
+                  {filteredDisputes.map((dispute, index) => (
                       <TableRow key={dispute.id}>
-                      <TableCell className="font-mono text-xs">
-                        {dispute.id.slice(0, 8)}...
+                      <TableCell className="text-gray-600 font-medium">
+                        {index + 1}
                       </TableCell>
                         <TableCell>
                             <p className="font-medium">{dispute.reason}</p>

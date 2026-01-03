@@ -24,21 +24,21 @@ export function FiltersCard({
 }: FiltersCardProps) {
   return (
     <Card>
-      <CardContent className="p-6">
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="flex-1">
+      <CardContent className="p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+          <div className="flex-1 min-w-0">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
               <Input
                 placeholder="Search by name or email..."
-                className="pl-10"
+                className="pl-10 text-sm sm:text-base"
                 value={searchQuery}
                 onChange={(e) => onSearchChange(e.target.value)}
               />
             </div>
           </div>
           <Select value={typeFilter} onValueChange={onTypeFilterChange}>
-            <SelectTrigger className="w-full sm:w-48">
+            <SelectTrigger className="w-full sm:w-48 text-sm sm:text-base">
               <SelectValue placeholder="All Types" />
             </SelectTrigger>
             <SelectContent>
@@ -48,7 +48,7 @@ export function FiltersCard({
             </SelectContent>
           </Select>
           <Select value={statusFilter} onValueChange={onStatusFilterChange}>
-            <SelectTrigger className="w-full sm:w-48">
+            <SelectTrigger className="w-full sm:w-48 text-sm sm:text-base">
               <SelectValue placeholder="All Status" />
             </SelectTrigger>
             <SelectContent>

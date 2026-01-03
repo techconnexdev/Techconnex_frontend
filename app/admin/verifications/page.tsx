@@ -219,25 +219,27 @@ export default function AdminVerificationsPage() {
 
   return (
     <AdminLayout>
-      <div className="space-y-8">
+      <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="flex flex-col gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">User Verifications</h1>
-            <p className="text-gray-600">Review and approve user verification requests</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">User Verifications</h1>
+            <p className="text-sm sm:text-base text-gray-600 mt-1">Review and approve user verification requests</p>
           </div>
-          <div className="flex gap-3">
-            <Button variant="outline" onClick={() => fetchKyc()} disabled={loading}>
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+            <Button variant="outline" onClick={() => fetchKyc()} disabled={loading} className="w-full sm:w-auto">
               <RefreshCw className="w-4 h-4 mr-2" />
               Refresh
             </Button>
-            <Button variant="outline">
+            <Button variant="outline" className="w-full sm:w-auto">
               <Filter className="w-4 h-4 mr-2" />
-              Export Report
+              <span className="hidden sm:inline">Export Report</span>
+              <span className="sm:hidden">Export</span>
             </Button>
-            <Button>
+            <Button className="w-full sm:w-auto">
               <FileText className="w-4 h-4 mr-2" />
-              Verification Guidelines
+              <span className="hidden sm:inline">Verification Guidelines</span>
+              <span className="sm:hidden">Guidelines</span>
             </Button>
           </div>
         </div>
@@ -264,13 +266,13 @@ export default function AdminVerificationsPage() {
 
         {/* Verifications Table */}
         <Card>
-          <CardHeader>
-            <CardTitle>Verification Requests ({rows.length})</CardTitle>
-            <CardDescription>
+          <CardHeader className="px-4 sm:px-6">
+            <CardTitle className="text-lg sm:text-xl">Verification Requests ({rows.length})</CardTitle>
+            <CardDescription className="text-sm">
               Review user verification documents and approve or reject requests
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-0 sm:px-6">
             <VerificationsTable rows={rows} loading={loading} onSelectUser={setSelectedUser} />
           </CardContent>
         </Card>

@@ -20,10 +20,10 @@ export function UserInfoCard({ user }: UserInfoCardProps) {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-lg">User Information</CardTitle>
+      <CardHeader className="px-4 sm:px-6 pt-4 sm:pt-6">
+        <CardTitle className="text-base sm:text-lg">User Information</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-3 px-4 sm:px-6 pb-4 sm:pb-6">
         <div className="flex items-center gap-3">
           <Avatar className="w-12 h-12">
             <AvatarImage src="/placeholder.svg" />
@@ -34,7 +34,7 @@ export function UserInfoCard({ user }: UserInfoCardProps) {
             <p className="text-sm text-gray-500">{user.email}</p>
           </div>
         </div>
-        <div className="space-y-2 text-sm">
+        <div className="space-y-2 text-xs sm:text-sm">
           <p>
             <span className="font-medium">Role:</span> {user.role}
           </p>

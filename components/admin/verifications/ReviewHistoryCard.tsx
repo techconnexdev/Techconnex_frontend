@@ -26,25 +26,25 @@ export function ReviewHistoryCard({ documents }: ReviewHistoryCardProps) {
   if (reviewedDocs.length === 0) return null
 
   return (
-    <div className="bg-gray-50 border rounded-lg p-4 text-sm space-y-3">
-      <h3 className="font-semibold text-gray-800">Review History</h3>
+    <div className="bg-gray-50 border rounded-lg p-3 sm:p-4 text-xs sm:text-sm space-y-3">
+      <h3 className="font-semibold text-gray-800 text-sm sm:text-base">Review History</h3>
       <div className="divide-y">
         {reviewedDocs.map((doc) => (
-          <div key={doc.id} className="pt-2">
-            <p>
+          <div key={doc.id} className="pt-2 space-y-1.5 sm:space-y-2">
+            <p className="break-words">
               <span className="font-medium text-gray-700">📄 Document:</span> {doc.filename || doc.type}
             </p>
             <p>
               <span className="font-medium text-gray-700">🗂 Status:</span>{" "}
-              <Badge variant="outline" className={getDocumentStatusColor(doc.status)}>
+              <Badge variant="outline" className={`text-xs ${getDocumentStatusColor(doc.status)}`}>
                 {doc.status}
               </Badge>
             </p>
-            <p>
+            <p className="break-words">
               <span className="font-medium text-gray-700">📝 Review Notes:</span>{" "}
               {doc.reviewNotes || "—"}
             </p>
-            <p>
+            <p className="break-words">
               <span className="font-medium text-gray-700">👤 Reviewed By:</span> {doc.reviewedBy || "—"}
             </p>
             <p>

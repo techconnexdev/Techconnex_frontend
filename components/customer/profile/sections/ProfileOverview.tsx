@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Mail, Phone, MapPin, Camera, Globe, X, Plus, Loader2, Calendar } from "lucide-react";
+import { Mail, Phone, MapPin, Camera, Globe, X, Plus, Loader2, Calendar, Facebook, Instagram, Linkedin, Twitter, Youtube, Link2 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { useState, useRef } from "react";
 import type { ProfileData } from "../types";
@@ -65,6 +65,38 @@ export default function ProfileOverview({ value, onChange, isEditing, onCompleti
   const handleAddLanguage = () => {
     if (newLanguage.trim() && !value.customerProfile?.languages?.includes(newLanguage.trim())) {
       addArrayItem("languages", newLanguage.trim());
+    }
+  };
+
+  // Helper function to detect social media platform and return icon
+  const getSocialIcon = (url: string) => {
+    const lowerUrl = url.toLowerCase();
+    if (lowerUrl.includes("facebook")) return Facebook;
+    if (lowerUrl.includes("instagram")) return Instagram;
+    if (lowerUrl.includes("linkedin")) return Linkedin;
+    if (lowerUrl.includes("twitter") || lowerUrl.includes("x.com")) return Twitter;
+    if (lowerUrl.includes("youtube")) return Youtube;
+    return Link2;
+  };
+
+  // Helper function to get platform name
+  const getPlatformName = (url: string) => {
+    const lowerUrl = url.toLowerCase();
+    if (lowerUrl.includes("facebook")) return "Facebook";
+    if (lowerUrl.includes("instagram")) return "Instagram";
+    if (lowerUrl.includes("linkedin")) return "LinkedIn";
+    if (lowerUrl.includes("twitter") || lowerUrl.includes("x.com")) return "Twitter/X";
+    if (lowerUrl.includes("youtube")) return "YouTube";
+    return "Website";
+  };
+
+  // Helper function to format URL for display
+  const formatSocialUrl = (url: string) => {
+    try {
+      const urlObj = new URL(url.startsWith("http") ? url : `https://${url}`);
+      return urlObj.hostname.replace("www.", "");
+    } catch {
+      return url;
     }
   };
 
@@ -343,19 +375,25 @@ export default function ProfileOverview({ value, onChange, isEditing, onCompleti
                   <p className="text-xs text-gray-500 mt-1">You can enter with or without https://</p>
                   </>
                 ) : (
-                  <div className="flex items-center gap-2 mt-2">
-                    <Globe className="text-gray-400 w-4 h-4" />
+                  <div className="mt-2">
                     {value.customerProfile?.website ? (
                       <a
                         href={value.customerProfile.website}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-sm sm:text-base text-blue-600 hover:underline"
+                        className="flex items-center gap-2 sm:gap-3 p-3 sm:p-4 bg-gradient-to-r from-gray-50 to-gray-100 border border-gray-200 rounded-lg hover:shadow-lg hover:border-blue-300 transition-all duration-200 group"
                       >
-                        {value.customerProfile.website}
+                        <div className="flex-shrink-0 p-2 bg-white rounded-lg shadow-sm group-hover:shadow-md transition-shadow">
+                          <Globe className="w-5 h-5 sm:w-6 sm:h-6 text-gray-700 group-hover:text-blue-600 transition-colors" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm sm:text-base font-medium text-gray-900 truncate group-hover:text-blue-600 transition-colors">
+                            {value.customerProfile.website.replace(/^https?:\/\//, '').replace(/^www\./, '')}
+                          </p>
+                        </div>
                       </a>
                     ) : (
-                      <p className="text-sm sm:text-base text-gray-900">N/A</p>
+                      <p className="text-sm sm:text-base text-gray-500 italic">N/A</p>
                     )}
                 </div>
                 )}
@@ -368,10 +406,12 @@ export default function ProfileOverview({ value, onChange, isEditing, onCompleti
           {/* Social Links */}
           {isEditing && (
             <div className="space-y-3 sm:space-y-4">
-              <h3 className="text-base sm:text-lg font-semibold">Social Links</h3>
-              <p className="text-xs sm:text-sm text-gray-600">
-                Add links to LinkedIn, Twitter, or other social media profiles
-              </p>
+              <div>
+                <h3 className="text-base sm:text-lg font-semibold mb-1 sm:mb-2">Social Links</h3>
+                <p className="text-xs sm:text-sm text-gray-600">
+                  Add links to LinkedIn, Facebook, Instagram, Twitter, or other social media profiles
+                </p>
+              </div>
               <div className="flex flex-col sm:flex-row gap-2">
                 <Input
                   value={newSocialUrl}
@@ -390,47 +430,64 @@ export default function ProfileOverview({ value, onChange, isEditing, onCompleti
                   variant="outline"
                   className="text-xs sm:text-sm w-full sm:w-auto"
                 >
-                  <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+                  <span className="hidden sm:inline">Add</span>
                 </Button>
               </div>
 
               {value.customerProfile?.socialLinks && value.customerProfile.socialLinks.length > 0 && (
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">
+                <div className="space-y-2 sm:space-y-3">
+                  <Label className="text-sm sm:text-base font-medium">
                     Social Links ({value.customerProfile.socialLinks.length})
                   </Label>
-                  <div className="space-y-2">
-                    {value.customerProfile.socialLinks.map((url, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center justify-between p-3 bg-gray-50 border rounded-lg"
-                      >
-                        <a
-                          href={url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-blue-600 hover:text-blue-700 text-sm truncate flex-1"
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
+                    {value.customerProfile.socialLinks.map((url, index) => {
+                      const IconComponent = getSocialIcon(url);
+                      const platformName = getPlatformName(url);
+                      const displayUrl = formatSocialUrl(url);
+                      return (
+                        <div
+                          key={index}
+                          className="flex items-center justify-between p-3 sm:p-4 bg-gradient-to-r from-gray-50 to-gray-100 border border-gray-200 rounded-lg hover:shadow-md transition-all duration-200 group"
                         >
-                          {url}
-                        </a>
-                        <button
-                          type="button"
-                          onClick={() => removeArrayItem("socialLinks", index)}
-                          className="ml-2 text-red-500 hover:text-red-700"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0 group-hover:text-blue-600 transition-colors"
+                          >
+                            <div className="flex-shrink-0 p-1.5 sm:p-2 bg-white rounded-lg shadow-sm group-hover:shadow-md transition-shadow">
+                              <IconComponent className="w-4 h-4 sm:w-5 sm:h-5 text-gray-700 group-hover:text-blue-600" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs sm:text-sm font-medium text-gray-900 truncate">
+                                {platformName}
+                              </p>
+                              <p className="text-xs text-gray-500 truncate">
+                                {displayUrl}
+                              </p>
+                            </div>
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => removeArrayItem("socialLinks", index)}
+                            className="ml-2 sm:ml-3 flex-shrink-0 p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors"
+                            aria-label="Remove social link"
+                          >
+                            <X className="w-4 h-4 sm:w-5 sm:h-5" />
+                          </button>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
 
               {(!value.customerProfile?.socialLinks || value.customerProfile.socialLinks.length === 0) && (
-                <div className="text-center py-8 text-gray-500 border-2 border-dashed border-gray-200 rounded-lg">
-                  <Globe className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                  <p>No social links added yet</p>
-                  <p className="text-sm">
+                <div className="text-center py-6 sm:py-8 text-gray-500 border-2 border-dashed border-gray-200 rounded-lg">
+                  <Globe className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-3 sm:mb-4 text-gray-300" />
+                  <p className="text-sm sm:text-base font-medium mb-1">No social links added yet</p>
+                  <p className="text-xs sm:text-sm">
                     Add links to showcase your company&apos;s social media presence
                   </p>
                 </div>
@@ -440,20 +497,35 @@ export default function ProfileOverview({ value, onChange, isEditing, onCompleti
 
           {/* Display social links when not editing */}
           {!isEditing && value.customerProfile?.socialLinks && value.customerProfile.socialLinks.length > 0 && (
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold">Social Links</h3>
-              <div className="flex flex-wrap gap-2">
-                {value.customerProfile.socialLinks.map((link, index) => (
-                  <a
-                    key={index}
-                    href={link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:underline"
-                  >
-                    {link}
-                  </a>
-                ))}
+            <div className="space-y-3 sm:space-y-4">
+              <h3 className="text-base sm:text-lg font-semibold">Social Links</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                {value.customerProfile.socialLinks.map((link, index) => {
+                  const IconComponent = getSocialIcon(link);
+                  const platformName = getPlatformName(link);
+                  const displayUrl = formatSocialUrl(link);
+                  return (
+                    <a
+                      key={index}
+                      href={link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-3 p-3 sm:p-4 bg-gradient-to-r from-gray-50 to-gray-100 border border-gray-200 rounded-lg hover:shadow-lg hover:border-blue-300 transition-all duration-200 group"
+                    >
+                      <div className="flex-shrink-0 p-2 bg-white rounded-lg shadow-sm group-hover:shadow-md transition-shadow">
+                        <IconComponent className="w-5 h-5 sm:w-6 sm:h-6 text-gray-700 group-hover:text-blue-600 transition-colors" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm sm:text-base font-medium text-gray-900 truncate group-hover:text-blue-600 transition-colors">
+                          {platformName}
+                        </p>
+                        <p className="text-xs sm:text-sm text-gray-500 truncate">
+                          {displayUrl}
+                        </p>
+                      </div>
+                    </a>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -462,12 +534,14 @@ export default function ProfileOverview({ value, onChange, isEditing, onCompleti
 
           {/* Languages */}
           {isEditing && (
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold">Languages</h3>
-              <p className="text-sm text-gray-600">
-                Add languages spoken in your company
-              </p>
-              <div className="flex gap-2">
+            <div className="space-y-3 sm:space-y-4">
+              <div>
+                <h3 className="text-base sm:text-lg font-semibold mb-1 sm:mb-2">Languages</h3>
+                <p className="text-xs sm:text-sm text-gray-600">
+                  Add languages spoken in your company
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2">
                 <Input
                   value={newLanguage}
                   onChange={(e) => setNewLanguage(e.target.value)}
@@ -476,35 +550,39 @@ export default function ProfileOverview({ value, onChange, isEditing, onCompleti
                     e.key === "Enter" &&
                     (e.preventDefault(), handleAddLanguage())
                   }
+                  className="text-sm sm:text-base flex-1"
                 />
                 <Button
                   type="button"
                   onClick={handleAddLanguage}
                   variant="outline"
+                  className="text-xs sm:text-sm w-full sm:w-auto"
                 >
-                  <Plus className="w-4 h-4" />
+                  <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+                  <span className="hidden sm:inline">Add</span>
                 </Button>
               </div>
 
               {value.customerProfile?.languages && value.customerProfile.languages.length > 0 && (
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">
+                <div className="space-y-2 sm:space-y-3">
+                  <Label className="text-sm sm:text-base font-medium">
                     Languages ({value.customerProfile.languages.length})
                   </Label>
-                  <div className="flex flex-wrap gap-2 p-3 border rounded-lg bg-gray-50">
+                  <div className="flex flex-wrap gap-2 sm:gap-3 p-3 sm:p-4 border border-gray-200 rounded-lg bg-gray-50">
                     {value.customerProfile.languages.map((lang, index) => (
                       <Badge
                         key={index}
                         variant="secondary"
-                        className="flex items-center gap-1"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm bg-blue-100 text-blue-800 hover:bg-blue-200 transition-colors"
                       >
                         {lang}
                         <button
                           type="button"
                           onClick={() => removeArrayItem("languages", index)}
-                          className="ml-1 hover:text-red-600"
+                          className="ml-0.5 hover:text-red-600 transition-colors"
+                          aria-label="Remove language"
                         >
-                          <X className="w-3 h-3" />
+                          <X className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                         </button>
                       </Badge>
                     ))}
@@ -516,18 +594,22 @@ export default function ProfileOverview({ value, onChange, isEditing, onCompleti
 
           {/* Display languages when not editing */}
           {!isEditing && (
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold">Languages</h3>
+            <div className="space-y-3 sm:space-y-4">
+              <h3 className="text-base sm:text-lg font-semibold">Languages</h3>
               {value.customerProfile?.languages && value.customerProfile.languages.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 sm:gap-3">
                   {value.customerProfile.languages.map((lang, index) => (
-                    <Badge key={index} variant="secondary">
+                    <Badge 
+                      key={index} 
+                      variant="secondary"
+                      className="px-3 py-1.5 text-xs sm:text-sm bg-blue-100 text-blue-800"
+                    >
                       {lang}
                     </Badge>
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-gray-500 italic">No languages added yet</p>
+                <p className="text-sm sm:text-base text-gray-500 italic">No languages added yet</p>
               )}
             </div>
           )}

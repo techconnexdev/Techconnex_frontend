@@ -220,41 +220,41 @@ export default function AdminReviewsPage() {
 
   return (
     <AdminLayout>
-      <div className="space-y-6">
+      <div className="space-y-4 sm:space-y-6 px-4 sm:px-6 lg:px-0">
         {/* Header */}
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
             Reviews Management
           </h1>
-          <p className="text-gray-600 mt-2">
+          <p className="text-sm sm:text-base text-gray-600 mt-1 sm:mt-2">
             Manage and monitor all reviews from companies and providers
           </p>
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">
+            <CardHeader className="flex flex-row items-center justify-between pb-2 p-4 sm:p-6">
+              <CardTitle className="text-xs sm:text-sm font-medium text-gray-600">
                 Total Reviews
               </CardTitle>
-              <MessageSquare className="h-4 w-4 text-blue-600" />
+              <MessageSquare className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 flex-shrink-0" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.totalReviews}</div>
+            <CardContent className="p-4 sm:p-6 pt-0">
+              <div className="text-xl sm:text-2xl font-bold">{stats.totalReviews}</div>
               <p className="text-xs text-gray-600 mt-1">All time reviews</p>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">
+            <CardHeader className="flex flex-row items-center justify-between pb-2 p-4 sm:p-6">
+              <CardTitle className="text-xs sm:text-sm font-medium text-gray-600">
                 Average Rating
               </CardTitle>
-              <Star className="h-4 w-4 text-yellow-500 fill-current" />
+              <Star className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-500 fill-current flex-shrink-0" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
+            <CardContent className="p-4 sm:p-6 pt-0">
+              <div className="text-xl sm:text-2xl font-bold">
                 {stats.averageRating.toFixed(1)}
               </div>
               <p className="text-xs text-gray-600 mt-1">Platform average</p>
@@ -262,27 +262,27 @@ export default function AdminReviewsPage() {
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">
+            <CardHeader className="flex flex-row items-center justify-between pb-2 p-4 sm:p-6">
+              <CardTitle className="text-xs sm:text-sm font-medium text-gray-600">
                 Company Reviews
               </CardTitle>
-              <Building2 className="h-4 w-4 text-green-600" />
+              <Building2 className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 flex-shrink-0" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.companyReviews}</div>
+            <CardContent className="p-4 sm:p-6 pt-0">
+              <div className="text-xl sm:text-2xl font-bold">{stats.companyReviews}</div>
               <p className="text-xs text-gray-600 mt-1">By companies</p>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-gray-600">
+            <CardHeader className="flex flex-row items-center justify-between pb-2 p-4 sm:p-6">
+              <CardTitle className="text-xs sm:text-sm font-medium text-gray-600">
                 Provider Reviews
               </CardTitle>
-              <User className="h-4 w-4 text-purple-600" />
+              <User className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600 flex-shrink-0" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.providerReviews}</div>
+            <CardContent className="p-4 sm:p-6 pt-0">
+              <div className="text-xl sm:text-2xl font-bold">{stats.providerReviews}</div>
               <p className="text-xs text-gray-600 mt-1">By providers</p>
             </CardContent>
           </Card>
@@ -290,26 +290,26 @@ export default function AdminReviewsPage() {
 
         {/* Filters and Tabs */}
         <Card>
-          <CardHeader>
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <CardHeader className="p-4 sm:p-6">
+            <div className="flex flex-col gap-4">
               <div>
-                <CardTitle>All Reviews</CardTitle>
-                <CardDescription>
+                <CardTitle className="text-lg sm:text-xl">All Reviews</CardTitle>
+                <CardDescription className="text-sm">
                   View and manage all platform reviews
                 </CardDescription>
               </div>
-              <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                <div className="relative flex-1 sm:w-64">
+              <div className="flex flex-col sm:flex-row gap-3">
+                <div className="relative flex-1 min-w-0">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                   <Input
                     placeholder="Search reviews..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-9"
+                    className="pl-9 text-sm sm:text-base"
                   />
                 </div>
                 <Select value={ratingFilter} onValueChange={setRatingFilter}>
-                  <SelectTrigger className="w-full sm:w-32">
+                  <SelectTrigger className="w-full sm:w-32 text-sm sm:text-base">
                     <SelectValue placeholder="Rating" />
                   </SelectTrigger>
                   <SelectContent>
@@ -325,39 +325,39 @@ export default function AdminReviewsPage() {
             </div>
           </CardHeader>
 
-          <CardContent>
+          <CardContent className="p-4 sm:p-6 pt-0">
             <Tabs
               value={activeTab}
               onValueChange={(v) => setActiveTab(v as typeof activeTab)}
             >
-              <TabsList>
-                <TabsTrigger value="all">All Reviews</TabsTrigger>
-                <TabsTrigger value="company">Company Reviews</TabsTrigger>
-                <TabsTrigger value="provider">Provider Reviews</TabsTrigger>
+              <TabsList className="w-full sm:w-auto flex flex-col sm:flex-row h-auto sm:h-10">
+                <TabsTrigger value="all" className="text-xs sm:text-sm w-full sm:w-auto">All Reviews</TabsTrigger>
+                <TabsTrigger value="company" className="text-xs sm:text-sm w-full sm:w-auto">Company Reviews</TabsTrigger>
+                <TabsTrigger value="provider" className="text-xs sm:text-sm w-full sm:w-auto">Provider Reviews</TabsTrigger>
               </TabsList>
 
-              <TabsContent value={activeTab} className="mt-6">
+              <TabsContent value={activeTab} className="mt-4 sm:mt-6">
                 {loading ? (
-                  <div className="flex items-center justify-center py-12">
+                  <div className="flex items-center justify-center py-8 sm:py-12">
                     <div className="text-center">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                      <p className="text-gray-600">Loading reviews...</p>
+                      <p className="text-sm sm:text-base text-gray-600">Loading reviews...</p>
                     </div>
                   </div>
                 ) : filteredReviews.length === 0 ? (
-                  <div className="text-center py-12">
-                    <MessageSquare className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  <div className="text-center py-8 sm:py-12">
+                    <MessageSquare className="h-10 w-10 sm:h-12 sm:w-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-base sm:text-lg font-medium text-gray-900 mb-2">
                       No reviews found
                     </h3>
-                    <p className="text-gray-600">
+                    <p className="text-sm sm:text-base text-gray-600">
                       {searchTerm || ratingFilter !== "all"
                         ? "Try adjusting your filters"
                         : "No reviews have been submitted yet"}
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-4">
+                  <div className="space-y-3 sm:space-y-4">
                     {filteredReviews.map((review) => (
                       <ReviewCard
                         key={review.id}
@@ -387,40 +387,40 @@ function ReviewCard({
 
   return (
     <Card>
-      <CardContent className="p-6">
-        <div className="flex items-start justify-between">
-          <div className="flex items-start gap-4 flex-1">
-            <Avatar>
+      <CardContent className="p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row items-start gap-4">
+          <div className="flex items-start gap-3 sm:gap-4 flex-1 min-w-0 w-full">
+            <Avatar className="flex-shrink-0">
               <AvatarImage src="/placeholder.svg?height=40&width=40" />
               <AvatarFallback>{review.reviewer.name.charAt(0)}</AvatarFallback>
             </Avatar>
-            <div className="flex-1 space-y-2">
-              <div className="flex items-center justify-between">
-                <div>
+            <div className="flex-1 space-y-2 min-w-0">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div className="min-w-0">
                   <Link
                     href={`/admin/users/${review.reviewer.id}`}
-                    className="font-semibold text-gray-900 hover:text-blue-600 hover:underline inline-flex items-center gap-1"
+                    className="font-semibold text-sm sm:text-base text-gray-900 hover:text-blue-600 hover:underline inline-flex items-center gap-1 break-words"
                   >
                     {review.reviewer.name}
-                    <ExternalLink className="w-3 h-3" />
+                    <ExternalLink className="w-3 h-3 flex-shrink-0" />
                   </Link>
-                  <p className="text-sm text-gray-600">
+                  <p className="text-xs sm:text-sm text-gray-600 mt-1">
                     reviewed{" "}
                     <Link
                       href={`/admin/users/${review.recipient.id}`}
-                      className="text-gray-900 hover:text-blue-600 hover:underline font-medium inline-flex items-center gap-1"
+                      className="text-gray-900 hover:text-blue-600 hover:underline font-medium inline-flex items-center gap-1 break-words"
                     >
                       {review.recipient.name}
-                      <ExternalLink className="w-3 h-3" />
+                      <ExternalLink className="w-3 h-3 flex-shrink-0" />
                     </Link>
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-shrink-0">
                   <div className="flex">
                     {Array.from({ length: 5 }).map((_, i) => (
                       <Star
                         key={i}
-                        className={`w-4 h-4 ${
+                        className={`w-3 h-3 sm:w-4 sm:h-4 ${
                           i < Math.round(review.rating)
                             ? "text-yellow-400 fill-current"
                             : "text-gray-300"
@@ -428,30 +428,30 @@ function ReviewCard({
                       />
                     ))}
                   </div>
-                  <span className="text-sm font-medium">
+                  <span className="text-xs sm:text-sm font-medium">
                     {review.rating.toFixed(1)}
                   </span>
                 </div>
               </div>
 
-              <p className="text-sm text-gray-700">{review.content}</p>
+              <p className="text-xs sm:text-sm text-gray-700 break-words">{review.content}</p>
 
-              <div className="flex items-center gap-2 text-xs text-gray-500">
-                <span className="inline-flex items-center gap-1">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs text-gray-500">
+                <span className="inline-flex items-center gap-1 flex-wrap">
                   Project:{" "}
                   <Link
                     href={`/admin/projects/${review.project.id}`}
-                    className="text-gray-900 hover:text-blue-600 hover:underline font-medium inline-flex items-center gap-1"
+                    className="text-gray-900 hover:text-blue-600 hover:underline font-medium inline-flex items-center gap-1 break-words"
                   >
                     {review.project.title}
-                    <ExternalLink className="w-3 h-3" />
+                    <ExternalLink className="w-3 h-3 flex-shrink-0" />
                   </Link>
                 </span>
-                <span>•</span>
+                <span className="hidden sm:inline">•</span>
                 <span>{new Date(review.createdAt).toLocaleDateString()}</span>
                 {review.ReviewReply && review.ReviewReply.length > 0 && (
                   <>
-                    <span>•</span>
+                    <span className="hidden sm:inline">•</span>
                     <Badge variant="secondary" className="text-xs">
                       Has Reply
                     </Badge>
@@ -461,10 +461,10 @@ function ReviewCard({
 
               {showDetails && (
                 <div className="mt-4 space-y-2 border-t pt-4">
-                  <h4 className="text-sm font-medium text-gray-900">
+                  <h4 className="text-xs sm:text-sm font-medium text-gray-900">
                     Detailed Ratings
                   </h4>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs sm:text-sm">
                     {review.communicationRating && (
                       <div>
                         <span className="text-gray-600">Communication:</span>{" "}
@@ -503,21 +503,24 @@ function ReviewCard({
             </div>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex gap-2 self-start sm:self-auto sm:ml-2">
             <Button
               variant="ghost"
               size="sm"
               onClick={() => setShowDetails(!showDetails)}
+              className="h-8 w-8 sm:h-9 sm:w-auto sm:px-3"
             >
               <Eye className="w-4 h-4" />
+              <span className="hidden sm:inline ml-2">Details</span>
             </Button>
             <Button
               variant="ghost"
               size="sm"
               onClick={() => onDelete(review.id)}
-              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+              className="text-red-600 hover:text-red-700 hover:bg-red-50 h-8 w-8 sm:h-9 sm:w-auto sm:px-3"
             >
               <Trash2 className="w-4 h-4" />
+              <span className="hidden sm:inline ml-2">Delete</span>
             </Button>
           </div>
         </div>

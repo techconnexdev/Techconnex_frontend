@@ -41,16 +41,16 @@ export function VerificationStatusCard({ user }: VerificationStatusCardProps) {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-lg">Verification Status</CardTitle>
+      <CardHeader className="px-4 sm:px-6 pt-4 sm:pt-6">
+        <CardTitle className="text-base sm:text-lg">Verification Status</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-3 px-4 sm:px-6 pb-4 sm:pb-6">
         <div className="flex items-center gap-2">
           <Badge className={getStatusColor(status)}>
             {status.replace("_", " ")}
           </Badge>
         </div>
-        <div className="text-sm space-y-1">
+        <div className="text-xs sm:text-sm space-y-1">
           <p>
             <span className="font-medium">Latest Upload:</span>{" "}
             {latestDoc?.uploadedAt

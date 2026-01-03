@@ -48,6 +48,7 @@ import {
   type Review,
   type CompletedProject,
 } from "@/lib/hooks/useReviews";
+import { getProfileImageUrl } from "@/lib/api";
 
 type ReviewFormState = {
   projectId: string;
@@ -398,13 +399,13 @@ export default function CustomerReviewsPage() {
 
   return (
     <CustomerLayout>
-      <div className="space-y-8">
+      <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
               Company Reviews
             </h1>
-            <p className="text-muted-foreground">
+            <p className="text-sm sm:text-base text-gray-600 mt-1">
               Track the reviews you have written, feedback from providers, and
               any outstanding reviews for completed or disputed projects.
             </p>
@@ -414,13 +415,14 @@ export default function CustomerReviewsPage() {
             disabled={
               projectsLoading || availableProjectsForReview.length === 0
             }
+            className="w-full sm:w-auto"
           >
             <Plus className="mr-2 h-4 w-4" />
             Write Review
           </Button>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           <StatsCard
             title="Total Reviews"
             value={
@@ -450,41 +452,44 @@ export default function CustomerReviewsPage() {
         </div>
 
         <Card>
-          <CardContent className="flex flex-col gap-4 p-6 lg:flex-row lg:items-center">
-            <div className="flex flex-1 items-center gap-2">
-              <Search className="h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search by provider or project"
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-              />
-            </div>
-            <div className="flex flex-col gap-4 sm:flex-row">
-              <Select value={selectedRating} onValueChange={setSelectedRating}>
-                <SelectTrigger className="w-full sm:w-52">
-                  <Filter className="mr-2 h-4 w-4" />
-                  <SelectValue placeholder="Filter rating" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All ratings</SelectItem>
-                  {[5, 4, 3, 2, 1].map((rating) => (
-                    <SelectItem key={rating} value={rating.toString()}>
-                      {rating} stars
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger className="w-full sm:w-52">
-                  <SelectValue placeholder="Sort by" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="newest">Newest first</SelectItem>
-                  <SelectItem value="oldest">Oldest first</SelectItem>
-                  <SelectItem value="highest">Highest rating</SelectItem>
-                  <SelectItem value="lowest">Lowest rating</SelectItem>
-                </SelectContent>
-              </Select>
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex flex-col gap-3 sm:gap-4 lg:flex-row lg:items-center">
+              <div className="flex flex-1 items-center gap-2">
+                <Search className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                <Input
+                  placeholder="Search by provider or project"
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  className="text-sm sm:text-base"
+                />
+              </div>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <Select value={selectedRating} onValueChange={setSelectedRating}>
+                  <SelectTrigger className="w-full sm:w-48 text-sm sm:text-base">
+                    <Filter className="mr-2 h-4 w-4" />
+                    <SelectValue placeholder="Filter rating" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All ratings</SelectItem>
+                    {[5, 4, 3, 2, 1].map((rating) => (
+                      <SelectItem key={rating} value={rating.toString()}>
+                        {rating} stars
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={sortBy} onValueChange={setSortBy}>
+                  <SelectTrigger className="w-full sm:w-48 text-sm sm:text-base">
+                    <SelectValue placeholder="Sort by" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="newest">Newest first</SelectItem>
+                    <SelectItem value="oldest">Oldest first</SelectItem>
+                    <SelectItem value="highest">Highest rating</SelectItem>
+                    <SelectItem value="lowest">Lowest rating</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -495,14 +500,14 @@ export default function CustomerReviewsPage() {
             setActiveTab(value as "given" | "received" | "pending")
           }
         >
-          <TabsList className="flex w-full flex-col sm:flex-row">
-            <TabsTrigger value="given" className="flex-1">
+          <TabsList className="w-full sm:w-auto flex flex-col sm:flex-row h-auto sm:h-10 bg-gray-100 p-2 sm:p-3 rounded-lg">
+            <TabsTrigger value="given" className="text-xs sm:text-sm w-full sm:w-auto data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-md">
               Reviews Given
             </TabsTrigger>
-            <TabsTrigger value="received" className="flex-1">
+            <TabsTrigger value="received" className="text-xs sm:text-sm w-full sm:w-auto data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-md">
               Reviews Received
             </TabsTrigger>
-            <TabsTrigger value="pending" className="flex-1">
+            <TabsTrigger value="pending" className="text-xs sm:text-sm w-full sm:w-auto data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-md">
               Pending
             </TabsTrigger>
           </TabsList>
@@ -579,13 +584,13 @@ function StatsCard({
 }) {
   return (
     <Card>
-      <CardContent className="flex items-center justify-between p-6">
-        <div>
-          <p className="text-sm text-muted-foreground">{title}</p>
-          <p className="text-3xl font-semibold text-foreground">{value}</p>
-          <p className="text-xs text-muted-foreground">{helper}</p>
+      <CardContent className="flex items-center justify-between p-4 sm:p-6">
+        <div className="flex-1 min-w-0">
+          <p className="text-xs sm:text-sm font-medium text-gray-600">{title}</p>
+          <p className="text-2xl sm:text-3xl font-bold text-gray-900 mt-1">{value}</p>
+          <p className="text-xs text-gray-500 mt-1">{helper}</p>
         </div>
-        <div className="rounded-full bg-muted p-3">{icon}</div>
+        <div className="rounded-full bg-gray-100 p-3 flex-shrink-0 ml-2">{icon}</div>
       </CardContent>
     </Card>
   );
@@ -643,7 +648,7 @@ function ReviewList({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 sm:space-y-4">
       {reviews.map((review) => (
         <ReviewCard
           key={review.id}
@@ -673,35 +678,52 @@ function ReviewCard({
   const projectTitle = review.project?.title ?? "Project";
   const reply = review.ReviewReply?.[0];
 
+  // Get profile image URL from customerProfile or providerProfile
+  const profileImageUrl = getProfileImageUrl(
+    (counterparty as { customerProfile?: { profileImageUrl?: string } })?.customerProfile?.profileImageUrl ||
+    (counterparty as { providerProfile?: { profileImageUrl?: string } })?.providerProfile?.profileImageUrl ||
+    undefined
+  );
+
   return (
-    <Card>
-      <CardContent className="space-y-4 p-6">
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-          <div className="flex items-start gap-4">
-            <Avatar>
-              <AvatarImage src="/placeholder.svg?height=40&width=40" />
-              <AvatarFallback>
-                {counterparty?.name?.charAt(0) ?? "?"}
+    <Card className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+      <CardContent className="p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+          {/* Left side: User info */}
+          <div className="flex items-start gap-3 sm:gap-4 flex-1 min-w-0">
+            <Avatar className="w-12 h-12 sm:w-14 sm:h-14 flex-shrink-0">
+              <AvatarImage src={profileImageUrl} />
+              <AvatarFallback className="bg-gray-100 text-gray-600 text-base sm:text-lg font-semibold">
+                {counterparty?.name?.charAt(0)?.toUpperCase() ?? "?"}
               </AvatarFallback>
             </Avatar>
-            <div>
-              <h3 className="font-semibold text-foreground">
+            <div className="flex-1 min-w-0">
+              <h3 className="font-bold text-gray-900 text-base sm:text-lg mb-1">
                 {counterparty?.name ?? "Unknown"}
               </h3>
-              <p className="text-sm text-muted-foreground">{projectTitle}</p>
-              <p className="text-xs text-muted-foreground">
-                {new Date(review.createdAt).toLocaleDateString()}
+              <p className="text-sm text-gray-600 mb-1 truncate">{projectTitle}</p>
+              <p className="text-xs text-gray-500">
+                {new Date(review.createdAt).toLocaleDateString("en-US", {
+                  month: "2-digit",
+                  day: "2-digit",
+                  year: "numeric",
+                })}
               </p>
             </div>
           </div>
-          <div className="flex flex-col items-end gap-2">
+
+          {/* Right side: Rating */}
+          <div className="flex flex-col items-start sm:items-end gap-2 flex-shrink-0">
             <div className="flex items-center gap-2">
               <RatingStars rating={review.rating || 0} />
-              <span className="text-sm font-semibold text-foreground">
+              <span className="text-base sm:text-lg font-bold text-gray-900">
                 {(review.rating || 0).toFixed(1)}
               </span>
             </div>
-            <Badge variant="outline">
+            <Badge 
+              variant="outline" 
+              className="text-xs bg-gray-50 border-gray-200 text-gray-700"
+            >
               {type === "given"
                 ? "You reviewed this provider"
                 : "Provider review"}
@@ -709,11 +731,15 @@ function ReviewCard({
           </div>
         </div>
 
+        {/* Review content */}
         {review.content && (
-          <p className="text-sm text-foreground">{review.content}</p>
+          <p className="text-sm sm:text-base text-gray-700 mt-4 leading-relaxed">
+            {review.content}
+          </p>
         )}
 
-        <div className="grid gap-3 text-sm text-muted-foreground sm:grid-cols-2">
+        {/* Category ratings */}
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 mt-4">
           {review.communicationRating ? (
             <CategoryScore
               label="Communication"
@@ -734,52 +760,39 @@ function ReviewCard({
           ) : null}
         </div>
 
+        {/* Reply section */}
         {reply && (
-          <div className="rounded-lg bg-muted p-4">
-            <p className="text-sm font-medium text-foreground">Your reply</p>
-            <p className="text-xs text-muted-foreground">
-              {new Date(reply.createdAt).toLocaleDateString()}
+          <div className="rounded-lg bg-gray-50 border border-gray-200 p-3 sm:p-4 mt-4">
+            <p className="text-sm font-semibold text-gray-900 mb-1">Your reply</p>
+            <p className="text-xs text-gray-500 mb-2">
+              {new Date(reply.createdAt).toLocaleDateString("en-US", {
+                month: "2-digit",
+                day: "2-digit",
+                year: "numeric",
+              })}
             </p>
-            <p className="mt-2 text-sm text-foreground">{reply.content}</p>
+            <p className="text-sm text-gray-700 leading-relaxed">{reply.content}</p>
           </div>
         )}
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between relative z-10">
-          <Badge variant="secondary">
+        {/* Action buttons */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mt-4 pt-4 border-t border-gray-200">
+          <Badge 
+            variant="secondary" 
+            className="text-xs bg-gray-100 text-gray-700"
+          >
             {type === "given" ? "Published" : "Received"}
           </Badge>
-          <div className="flex flex-wrap gap-2 relative z-10">
-            {type === "given" && (
-              <>
-                {/* <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onEdit?.(review)}
-                  className="relative z-50 pointer-events-auto"
-                >
-                  <Pencil className="mr-2 h-4 w-4" />
-                  Edit
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onDelete?.(review)}
-                  className="relative z-50 pointer-events-auto"
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete
-                </Button> */}
-              </>
-            )}
+          <div className="flex gap-2">
             {type === "received" && (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => onReply?.(review)}
                 disabled={Boolean(reply)}
-                className="relative z-10"
+                className="text-xs sm:text-sm border-gray-300 text-gray-700 hover:bg-gray-50"
               >
-                <Reply className="mr-2 h-4 w-4" />
+                <Reply className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 {reply ? "Replied" : "Reply"}
               </Button>
             )}
@@ -820,30 +833,37 @@ function PendingProjectsList({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 sm:space-y-4">
       {projects.map((project) => (
-        <Card key={project.id}>
-          <CardContent className="flex flex-col gap-4 p-6 md:flex-row md:items-center md:justify-between">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <h3 className="font-semibold text-foreground">{project.title}</h3>
+        <Card key={project.id} className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+          <CardContent className="flex flex-col gap-4 p-4 sm:p-6 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                <h3 className="font-semibold text-gray-900 text-sm sm:text-base">{project.title}</h3>
                 {project.status === "DISPUTED" && (
                   <Badge variant="destructive" className="text-xs">
                     Disputed
                   </Badge>
                 )}
               </div>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-gray-600 mb-1">
                 {project.provider?.name ?? "Provider"}
               </p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-gray-500">
                 {project.completedDate
-                  ? new Date(project.completedDate).toLocaleDateString()
+                  ? new Date(project.completedDate).toLocaleDateString("en-US", {
+                      month: "2-digit",
+                      day: "2-digit",
+                      year: "numeric",
+                    })
                   : "Completion date unavailable"}
               </p>
             </div>
-            <Button onClick={() => onWriteReview(project.id)}>
-              <Plus className="mr-2 h-4 w-4" />
+            <Button 
+              onClick={() => onWriteReview(project.id)}
+              className="w-full sm:w-auto text-xs sm:text-sm"
+            >
+              <Plus className="mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
               Write Review
             </Button>
           </CardContent>
@@ -1079,25 +1099,31 @@ function RatingStars({
   onSelect?: (value: number) => void;
 }) {
   return (
-    <div className="flex gap-1">
-      {[1, 2, 3, 4, 5].map((value) => (
-        <Star
-          key={value}
-          className={`h-5 w-5 ${
-            value <= rating ? "text-yellow-400" : "text-muted-foreground"
-          } ${interactive ? "cursor-pointer" : ""}`}
-          onClick={() => interactive && onSelect?.(value)}
-        />
-      ))}
+    <div className="flex gap-0.5 sm:gap-1">
+      {[1, 2, 3, 4, 5].map((value) => {
+        const isFilled = value <= Math.floor(rating);
+        const isHalfFilled = value === Math.ceil(rating) && rating % 1 !== 0 && value > rating;
+        return (
+          <Star
+            key={value}
+            className={`h-4 w-4 sm:h-5 sm:w-5 ${
+              isFilled || isHalfFilled
+                ? "text-yellow-400 fill-yellow-400"
+                : "text-gray-300"
+            } ${interactive ? "cursor-pointer hover:scale-110 transition-transform" : ""}`}
+            onClick={() => interactive && onSelect?.(value)}
+          />
+        );
+      })}
     </div>
   );
 }
 
 function CategoryScore({ label, value }: { label: string; value: number }) {
   return (
-    <div className="flex items-center justify-between rounded border p-2">
-      <span>{label}</span>
-      <span className="font-medium text-foreground">{value.toFixed(1)}</span>
+    <div className="flex items-center justify-between rounded-md border border-gray-200 bg-white p-2 sm:p-2.5">
+      <span className="text-xs sm:text-sm text-gray-600">{label}</span>
+      <span className="text-sm sm:text-base font-semibold text-gray-900">{value.toFixed(1)}</span>
     </div>
   );
 }

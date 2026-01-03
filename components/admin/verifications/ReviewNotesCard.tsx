@@ -11,15 +11,15 @@ interface ReviewNotesCardProps {
 export function ReviewNotesCard({ reviewNotes, onNotesChange }: ReviewNotesCardProps) {
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-lg">Review Notes</CardTitle>
+      <CardHeader className="px-4 sm:px-6 pt-4 sm:pt-6">
+        <CardTitle className="text-base sm:text-lg">Review Notes</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
         <Textarea
           placeholder="Add your review notes here..."
           value={reviewNotes}
           onChange={(e) => onNotesChange(e.target.value)}
-          className="min-h-[100px]"
+          className="min-h-[100px] text-sm sm:text-base"
         />
       </CardContent>
     </Card>

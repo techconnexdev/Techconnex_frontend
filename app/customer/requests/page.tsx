@@ -37,6 +37,7 @@ import {
   RefreshCw,
   Loader2,
   CheckCircle,
+  Plus,
 } from "lucide-react";
 import { CustomerLayout } from "@/components/customer-layout";
 import { useToast } from "@/hooks/use-toast";
@@ -641,13 +642,17 @@ export default function CustomerRequestsPage() {
                   });
                 }
               }}
-              className="text-xs sm:text-sm w-full sm:w-auto"
+              className="w-full sm:w-auto border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 text-gray-700 font-medium transition-all duration-200"
             >
-              <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+              <Download className="w-4 h-4 mr-2" />
               Export
             </Button>
-            <Button variant="outline" className="text-xs sm:text-sm w-full sm:w-auto">
-              <RefreshCw className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+            <Button 
+              variant="outline" 
+              className="w-full sm:w-auto border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 text-gray-700 font-medium transition-all duration-200"
+              onClick={() => window.location.reload()}
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
               Refresh
             </Button>
           </div>
@@ -950,52 +955,54 @@ export default function CustomerRequestsPage() {
 
 
                       {/* Action Buttons */}
-                      <div className="flex flex-col sm:flex-row flex-wrap gap-2 pt-2">
-                        {/* View profile - always visible */}
-                        <Link
-                          href={`/customer/providers/${request.providerId}`}
-                          className="flex-1 min-w-[120px]"
-                        >
+                      <div className="flex flex-col gap-2.5 pt-3 border-t border-gray-100">
+                        {/* Primary action - Accept button (if pending) */}
+                        {request.status === "pending" && (
+                          <Button
+                            size="sm"
+                            onClick={() => handleAcceptRequest(request.id)}
+                            className="w-full bg-green-600 hover:bg-green-700 text-white font-medium shadow-sm transition-all duration-200 h-9 sm:h-10"
+                            disabled={processingId === request.id}
+                          >
+                            {processingId === request.id ? (
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            ) : (
+                              <Check className="w-4 h-4 mr-2" />
+                            )}
+                            {processingId === request.id ? "Accepting..." : "Accept Request"}
+                          </Button>
+                        )}
+
+                        {/* Secondary actions row */}
+                        <div className="flex gap-2">
+                          {/* View Profile */}
+                          <Link
+                            href={`/customer/providers/${request.providerId}`}
+                            className="flex-1"
+                          >
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="w-full h-9 sm:h-10 border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 text-gray-700 font-medium transition-all duration-200"
+                            >
+                              <Eye className="w-4 h-4 mr-2" />
+                              View Profile
+                            </Button>
+                          </Link>
+
+                          {/* View Details */}
                           <Button
                             variant="outline"
                             size="sm"
-                            className="w-full text-xs sm:text-sm"
+                            onClick={() => handleViewDetails(request)}
+                            className="flex-1 h-9 sm:h-10 border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 text-gray-700 font-medium transition-all duration-200"
                           >
-                            <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" />
-                            View Profile
+                            <MessageSquare className="w-4 h-4 mr-2" />
+                            Details
                           </Button>
-                        </Link>
 
-                        {/* View details dialog (proposal info) */}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleViewDetails(request)}
-                          className="flex-1 min-w-[120px] text-xs sm:text-sm"
-                        >
-                          <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" />
-                          View Details
-                        </Button>
-
-                        {/* Accept / Reject if pending */}
-                        {request.status === "pending" && (
-                          <>
-                            <Button
-                              size="sm"
-                              onClick={() => handleAcceptRequest(request.id)}
-                              className="bg-green-600 hover:bg-green-700 flex-1 min-w-[120px] text-xs sm:text-sm"
-                              disabled={processingId === request.id}
-                            >
-                              {processingId === request.id ? (
-                                <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 animate-spin" />
-                              ) : (
-                                <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" />
-                              )}
-                              {processingId === request.id
-                                ? "Accepting..."
-                                : "Accept"}
-                            </Button>
-
+                          {/* Reject button (if pending) */}
+                          {request.status === "pending" && (
                             <Button
                               variant="outline"
                               size="sm"
@@ -1003,14 +1010,14 @@ export default function CustomerRequestsPage() {
                                 setSelectedRequest(request);
                                 setRejectDialogOpen(true);
                               }}
-                              className="text-red-600 hover:text-red-700 flex-1 min-w-[120px] text-xs sm:text-sm"
+                              className="flex-1 h-9 sm:h-10 border-red-200 hover:border-red-300 bg-white hover:bg-red-50 text-red-600 hover:text-red-700 font-medium transition-all duration-200"
                               disabled={processingId === request.id}
                             >
-                              <X className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" />
+                              <X className="w-4 h-4 mr-2" />
                               Reject
                             </Button>
-                          </>
-                        )}
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1124,9 +1131,9 @@ export default function CustomerRequestsPage() {
                           <Button
                             variant="outline"
                             size="sm"
-                            className="flex items-center text-xs sm:text-sm w-full sm:w-auto"
+                            className="flex items-center text-xs sm:text-sm w-full sm:w-auto border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 text-gray-700 font-medium transition-all duration-200"
                           >
-                            <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" />
+                            <Eye className="w-4 h-4 mr-2" />
                             View Profile
                           </Button>
                         </Link>
@@ -1359,18 +1366,18 @@ export default function CustomerRequestsPage() {
                     )}
                 </div>
 
-                <DialogFooter className="flex-col sm:flex-row gap-2">
+                <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-3">
                   {selectedRequest.status === "pending" && (
-                    <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                    <>
                       <Button
                         variant="outline"
                         onClick={() => {
                           setRejectDialogOpen(true);
                           setViewDetailsOpen(false);
                         }}
-                        className="text-red-600 hover:text-red-700 text-xs sm:text-sm w-full sm:w-auto"
+                        className="w-full sm:w-auto border-red-200 hover:border-red-300 bg-white hover:bg-red-50 text-red-600 hover:text-red-700 font-medium transition-all duration-200"
                       >
-                        <X className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+                        <X className="w-4 h-4 mr-2" />
                         Reject
                       </Button>
                       <Button
@@ -1378,19 +1385,19 @@ export default function CustomerRequestsPage() {
                           handleAcceptRequest(selectedRequest.id);
                           setViewDetailsOpen(false);
                         }}
-                        className="bg-green-600 hover:bg-green-700 text-xs sm:text-sm w-full sm:w-auto"
+                        className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white font-medium shadow-sm transition-all duration-200"
                         disabled={processingId === selectedRequest.id}
                       >
                         {processingId === selectedRequest.id ? (
-                          <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 animate-spin" />
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                         ) : (
-                          <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+                          <Check className="w-4 h-4 mr-2" />
                         )}
                         {processingId === selectedRequest.id
                           ? "Accepting..."
                           : "Accept Request"}
                       </Button>
-                    </div>
+                    </>
                   )}
                 </DialogFooter>
               </>
@@ -1423,11 +1430,11 @@ export default function CustomerRequestsPage() {
               </div>
             </div>
 
-            <DialogFooter className="flex-col sm:flex-row gap-2">
+            <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-3">
               <Button
                 variant="outline"
                 onClick={() => setRejectDialogOpen(false)}
-                className="text-xs sm:text-sm w-full sm:w-auto"
+                className="w-full sm:w-auto border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 text-gray-700 font-medium transition-all duration-200"
               >
                 Cancel
               </Button>
@@ -1436,18 +1443,21 @@ export default function CustomerRequestsPage() {
                   selectedRequest &&
                   handleRejectRequest(selectedRequest.id, rejectReason)
                 }
-                className="bg-red-600 hover:bg-red-700 text-xs sm:text-sm w-full sm:w-auto"
+                className="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white font-medium shadow-sm transition-all duration-200"
                 disabled={
                   !rejectReason.trim() || processingId === selectedRequest?.id
                 }
               >
                 {processingId === selectedRequest?.id ? (
                   <>
-                    <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 animate-spin" />
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                     Rejecting...
                   </>
                 ) : (
-                  "Reject Request"
+                  <>
+                    <X className="w-4 h-4 mr-2" />
+                    Reject Request
+                  </>
                 )}
               </Button>
             </DialogFooter>
@@ -1610,18 +1620,30 @@ export default function CustomerRequestsPage() {
               </Card>
             ))}
 
-            <div className="flex flex-col sm:flex-row justify-between gap-2 sm:gap-0">
-              <Button variant="outline" onClick={addMilestone} className="text-xs sm:text-sm w-full sm:w-auto">
-                + Add Milestone
+            <div className="flex flex-col sm:flex-row justify-between gap-2 sm:gap-3 pt-2 border-t border-gray-200">
+              <Button 
+                variant="outline" 
+                onClick={addMilestone} 
+                className="w-full sm:w-auto border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 text-gray-700 font-medium transition-all duration-200"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Add Milestone
               </Button>
               <div className="flex flex-col sm:flex-row gap-2">
                 <Button
                   variant="outline"
                   onClick={handleSaveMilestones}
                   disabled={savingMilestones}
-                  className="text-xs sm:text-sm w-full sm:w-auto"
+                  className="w-full sm:w-auto border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 text-gray-700 font-medium transition-all duration-200"
                 >
-                  {savingMilestones ? "Saving..." : "Save Changes"}
+                  {savingMilestones ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    "Save Changes"
+                  )}
                 </Button>
                 <Button 
                   onClick={handleApproveAcceptedMilestones}
@@ -1629,8 +1651,9 @@ export default function CustomerRequestsPage() {
                     JSON.stringify(normalizeSequences(milestones)) !== 
                     JSON.stringify(normalizeSequences(originalMilestones))
                   }
-                  className="text-xs sm:text-sm w-full sm:w-auto"
+                  className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm transition-all duration-200"
                 >
+                  <CheckCircle className="w-4 h-4 mr-2" />
                   Approve
                 </Button>
               </div>
@@ -1724,7 +1747,10 @@ export default function CustomerRequestsPage() {
           </div>
 
           <DialogFooter className="pt-3 sm:pt-4">
-            <Button onClick={() => setMilestoneFinalizeOpen(false)} className="text-xs sm:text-sm w-full sm:w-auto">
+            <Button 
+              onClick={() => setMilestoneFinalizeOpen(false)} 
+              className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm transition-all duration-200"
+            >
               Done
             </Button>
           </DialogFooter>

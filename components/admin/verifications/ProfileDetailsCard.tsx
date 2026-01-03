@@ -26,15 +26,15 @@ export function ProfileDetailsCard({ user }: ProfileDetailsCardProps) {
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="text-lg">
+      <CardHeader className="px-4 sm:px-6 pt-4 sm:pt-6">
+        <CardTitle className="text-base sm:text-lg">
           {user.role === "PROVIDER" ? "Provider Profile Details" : "Customer Profile Details"}
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3 text-sm">
+      <CardContent className="space-y-3 text-xs sm:text-sm p-4 sm:p-6">
         {user.role === "PROVIDER" ? (
           <>
-            <p>
+            <p className="break-words">
               <span className="font-medium">Bio:</span> {getStringValue(profile.bio)}
             </p>
             <p>
@@ -71,7 +71,7 @@ export function ProfileDetailsCard({ user }: ProfileDetailsCardProps) {
           </>
         ) : (
           <>
-            <p>
+            <p className="break-words">
               <span className="font-medium">Description:</span> {getStringValue(profile.description)}
             </p>
             <p>
@@ -105,10 +105,10 @@ export function ProfileDetailsCard({ user }: ProfileDetailsCardProps) {
               <span className="font-medium">Hiring Categories:</span>{" "}
               {getArrayValue(profile.categoriesHiringFor).join(", ")}
             </p>
-            <p>
+            <p className="break-words">
               <span className="font-medium">Mission:</span> {getStringValue(profile.mission)}
             </p>
-            <p>
+            <p className="break-words">
               <span className="font-medium">Values:</span>{" "}
               {getArrayValue(profile.values).join(", ")}
             </p>

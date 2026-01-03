@@ -337,225 +337,231 @@ export default function AdminReportsPage() {
 
   return (
     <AdminLayout>
-      <div className="space-y-8">
+      <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="flex flex-col gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
               Reports & Analytics
             </h1>
-            <p className="text-gray-600">
+            <p className="text-sm sm:text-base text-gray-600 mt-1">
               Comprehensive platform performance insights
             </p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
             <Button
               variant="outline"
               onClick={handleRefresh}
               disabled={refreshing || loading}
+              className="w-full sm:w-auto"
             >
               <RefreshCw
                 className={`w-4 h-4 mr-2 ${refreshing ? "animate-spin" : ""}`}
               />
               Refresh
             </Button>
-            <Button variant="outline" onClick={handleExportReport}>
+            <Button variant="outline" onClick={handleExportReport} className="w-full sm:w-auto">
               <Download className="w-4 h-4 mr-2" />
-              Export Report
+              <span className="hidden sm:inline">Export Report</span>
+              <span className="sm:hidden">Export</span>
             </Button>
-            <Button>
+            <Button className="w-full sm:w-auto">
               <BarChart3 className="w-4 h-4 mr-2" />
-              Advanced Analytics
+              <span className="hidden sm:inline">Advanced Analytics</span>
+              <span className="sm:hidden">Analytics</span>
             </Button>
           </div>
         </div>
 
         {/* Report Filters */}
         <Card>
-          <CardContent className="p-6">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <Select value={reportType} onValueChange={setReportType}>
-                <SelectTrigger className="w-full sm:w-48">
-                  <SelectValue placeholder="Report Type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="overview">Platform Overview</SelectItem>
-                  <SelectItem value="financial">Financial Report</SelectItem>
-                  <SelectItem value="user_activity">User Activity</SelectItem>
-                  <SelectItem value="project_performance">
-                    Project Performance
-                  </SelectItem>
-                  <SelectItem value="provider_analytics">
-                    Provider Analytics
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={dateRange} onValueChange={setDateRange}>
-                <SelectTrigger className="w-full sm:w-48">
-                  <SelectValue placeholder="Date Range" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="last_7_days">Last 7 Days</SelectItem>
-                  <SelectItem value="last_30_days">Last 30 Days</SelectItem>
-                  <SelectItem value="last_3_months">Last 3 Months</SelectItem>
-                  <SelectItem value="last_6_months">Last 6 Months</SelectItem>
-                  <SelectItem value="last_year">Last Year</SelectItem>
-                  <SelectItem value="custom">Custom Range</SelectItem>
-                </SelectContent>
-              </Select>
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex flex-col gap-3 sm:gap-4">
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Select value={reportType} onValueChange={setReportType}>
+                  <SelectTrigger className="w-full sm:w-48 text-sm sm:text-base">
+                    <SelectValue placeholder="Report Type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="overview">Platform Overview</SelectItem>
+                    <SelectItem value="financial">Financial Report</SelectItem>
+                    <SelectItem value="user_activity">User Activity</SelectItem>
+                    <SelectItem value="project_performance">
+                      Project Performance
+                    </SelectItem>
+                    <SelectItem value="provider_analytics">
+                      Provider Analytics
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={dateRange} onValueChange={setDateRange}>
+                  <SelectTrigger className="w-full sm:w-48 text-sm sm:text-base">
+                    <SelectValue placeholder="Date Range" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="last_7_days">Last 7 Days</SelectItem>
+                    <SelectItem value="last_30_days">Last 30 Days</SelectItem>
+                    <SelectItem value="last_3_months">Last 3 Months</SelectItem>
+                    <SelectItem value="last_6_months">Last 6 Months</SelectItem>
+                    <SelectItem value="last_year">Last Year</SelectItem>
+                    <SelectItem value="custom">Custom Range</SelectItem>
+                  </SelectContent>
+                </Select>
+                {dateRange !== "custom" && (
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowCustomDatePicker(!showCustomDatePicker)}
+                    className="w-full sm:w-auto"
+                  >
+                    <Calendar className="w-4 h-4 mr-2" />
+                    Custom Date
+                  </Button>
+                )}
+              </div>
               {dateRange === "custom" && (
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <input
                     type="date"
                     value={customStartDate || ""}
                     onChange={(e) => setCustomStartDate(e.target.value)}
-                    className="px-3 py-2 border rounded-md"
+                    className="px-3 py-2 border rounded-md text-sm sm:text-base flex-1"
                   />
                   <input
                     type="date"
                     value={customEndDate || ""}
                     onChange={(e) => setCustomEndDate(e.target.value)}
-                    className="px-3 py-2 border rounded-md"
+                    className="px-3 py-2 border rounded-md text-sm sm:text-base flex-1"
                   />
-                  <Button onClick={handleCustomDateChange} size="sm">
+                  <Button onClick={handleCustomDateChange} size="sm" className="w-full sm:w-auto">
                     Apply
                   </Button>
                 </div>
-              )}
-              {dateRange !== "custom" && (
-                <Button
-                  variant="outline"
-                  onClick={() => setShowCustomDatePicker(!showCustomDatePicker)}
-                >
-                  <Calendar className="w-4 h-4 mr-2" />
-                  Custom Date
-                </Button>
               )}
             </div>
           </CardContent>
         </Card>
 
         {loading ? (
-          <div className="flex items-center justify-center py-12">
+          <div className="flex items-center justify-center py-8 sm:py-12">
             <RefreshCw className="w-8 h-8 animate-spin text-gray-400" />
           </div>
         ) : (
           <>
             {/* Key Metrics */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
               <Card>
-                <CardContent className="p-6">
+                <CardContent className="p-4 sm:p-6">
                   <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs sm:text-sm font-medium text-gray-600">
                         Total Revenue
                       </p>
-                      <p className="text-2xl font-bold text-gray-900">
+                      <p className="text-xl sm:text-2xl font-bold text-gray-900">
                         RM
                         {(overviewStats.totalRevenue / 1000000).toFixed(1)}M
                       </p>
                       <div className="flex items-center mt-1">
-                        <TrendingUp className="w-4 h-4 text-green-600 mr-1" />
-                        <span className="text-sm text-green-600">
+                        <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4 text-green-600 mr-1 flex-shrink-0" />
+                        <span className="text-xs sm:text-sm text-green-600">
                           {overviewStats.revenueGrowth >= 0 ? "+" : ""}
                           {overviewStats.revenueGrowth.toFixed(1)}%
                         </span>
                       </div>
                     </div>
-                    <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                      <DollarSign className="w-6 h-6 text-green-600" />
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
+                      <DollarSign className="w-5 h-5 sm:w-6 sm:h-6 text-green-600" />
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
               <Card>
-                <CardContent className="p-6">
+                <CardContent className="p-4 sm:p-6">
                   <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs sm:text-sm font-medium text-gray-600">
                         Total Users
                       </p>
-                      <p className="text-2xl font-bold text-gray-900">
+                      <p className="text-xl sm:text-2xl font-bold text-gray-900">
                         {overviewStats.totalUsers.toLocaleString()}
                       </p>
                       <div className="flex items-center mt-1">
-                        <TrendingUp className="w-4 h-4 text-blue-600 mr-1" />
-                        <span className="text-sm text-blue-600">
+                        <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4 text-blue-600 mr-1 flex-shrink-0" />
+                        <span className="text-xs sm:text-sm text-blue-600">
                           {overviewStats.userGrowth >= 0 ? "+" : ""}
                           {overviewStats.userGrowth.toFixed(1)}%
                         </span>
                       </div>
                     </div>
-                    <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <Users className="w-6 h-6 text-blue-600" />
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
+                      <Users className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
               <Card>
-                <CardContent className="p-6">
+                <CardContent className="p-4 sm:p-6">
                   <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs sm:text-sm font-medium text-gray-600">
                         Active Projects
                       </p>
-                      <p className="text-2xl font-bold text-gray-900">
+                      <p className="text-xl sm:text-2xl font-bold text-gray-900">
                         {overviewStats.totalProjects}
                       </p>
                       <div className="flex items-center mt-1">
-                        <TrendingUp className="w-4 h-4 text-purple-600 mr-1" />
-                        <span className="text-sm text-purple-600">
+                        <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4 text-purple-600 mr-1 flex-shrink-0" />
+                        <span className="text-xs sm:text-sm text-purple-600">
                           {overviewStats.projectGrowth >= 0 ? "+" : ""}
                           {overviewStats.projectGrowth.toFixed(1)}%
                         </span>
                       </div>
                     </div>
-                    <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                      <Briefcase className="w-6 h-6 text-purple-600" />
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
+                      <Briefcase className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600" />
                     </div>
                   </div>
                 </CardContent>
               </Card>
 
               <Card>
-                <CardContent className="p-6">
+                <CardContent className="p-4 sm:p-6">
                   <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-600">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs sm:text-sm font-medium text-gray-600">
                         Avg Rating
                       </p>
-                      <p className="text-2xl font-bold text-gray-900">
+                      <p className="text-xl sm:text-2xl font-bold text-gray-900">
                         {overviewStats.avgRating.toFixed(1)}
                       </p>
                       <div className="flex items-center mt-1">
-                        <TrendingUp className="w-4 h-4 text-yellow-600 mr-1" />
-                        <span className="text-sm text-yellow-600">
+                        <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4 text-yellow-600 mr-1 flex-shrink-0" />
+                        <span className="text-xs sm:text-sm text-yellow-600">
                           {overviewStats.ratingChange >= 0 ? "+" : ""}
                           {overviewStats.ratingChange.toFixed(1)}
                         </span>
                       </div>
                     </div>
-                    <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                      <Star className="w-6 h-6 text-yellow-600" />
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-yellow-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
+                      <Star className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-600" />
                     </div>
                   </div>
                 </CardContent>
               </Card>
             </div>
 
-            <div className="grid lg:grid-cols-3 gap-8">
+            <div className="grid lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
               {/* Monthly Performance */}
               <div className="lg:col-span-2">
                 <Card>
-                  <CardHeader>
-                    <CardTitle>Monthly Performance</CardTitle>
-                    <CardDescription>
+                  <CardHeader className="px-4 sm:px-6 pt-4 sm:pt-6">
+                    <CardTitle className="text-lg sm:text-xl">Monthly Performance</CardTitle>
+                    <CardDescription className="text-sm">
                       Revenue, projects, and user growth over time
                     </CardDescription>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
                     {monthlyData.length > 0 ? (
                       <div className="space-y-6">
                         {monthlyData.map((month, index) => {
@@ -606,13 +612,13 @@ export default function AdminReportsPage() {
               {/* Category Breakdown */}
               <div>
                 <Card>
-                  <CardHeader>
-                    <CardTitle>Revenue by Category</CardTitle>
-                    <CardDescription>
+                  <CardHeader className="px-4 sm:px-6 pt-4 sm:pt-6">
+                    <CardTitle className="text-lg sm:text-xl">Revenue by Category</CardTitle>
+                    <CardDescription className="text-sm">
                       Service category performance
                     </CardDescription>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
                     {categoryBreakdown.length > 0 ? (
                       <div className="space-y-4">
                         {categoryBreakdown.map((category) => {
@@ -661,16 +667,16 @@ export default function AdminReportsPage() {
               </div>
             </div>
 
-            <div className="grid md:grid-cols-2 gap-8">
+            <div className="grid md:grid-cols-2 gap-4 sm:gap-6 lg:gap-8">
               {/* Top Providers */}
               <Card>
-                <CardHeader>
-                  <CardTitle>Top Performing Providers</CardTitle>
-                  <CardDescription>
+                <CardHeader className="px-4 sm:px-6 pt-4 sm:pt-6">
+                  <CardTitle className="text-lg sm:text-xl">Top Performing Providers</CardTitle>
+                  <CardDescription className="text-sm">
                     Highest earning service providers
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
                   {topProviders.length > 0 ? (
                     <div className="space-y-4">
                       {topProviders.map((provider, index) => {
@@ -684,19 +690,19 @@ export default function AdminReportsPage() {
                           <Link
                             key={providerId || providerName || index}
                             href={`/admin/users/${providerId}`}
-                            className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 hover:border-blue-300 transition-colors cursor-pointer"
+                            className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 border rounded-lg hover:bg-gray-50 hover:border-blue-300 transition-colors cursor-pointer gap-2 sm:gap-0"
                           >
-                            <div className="flex items-center gap-3 flex-1">
-                              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                                <span className="text-sm font-bold text-blue-600">
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                                <span className="text-xs sm:text-sm font-bold text-blue-600">
                                   #{index + 1}
                                 </span>
                               </div>
-                              <div className="flex-1">
-                                <p className="font-medium hover:text-blue-600 transition-colors">
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium hover:text-blue-600 transition-colors text-sm sm:text-base truncate">
                                   {providerName}
                                 </p>
-                                <div className="flex items-center gap-2 text-sm text-gray-500">
+                                <div className="flex items-center gap-2 text-xs sm:text-sm text-gray-500 flex-wrap">
                                   <span>{providerProjects} projects</span>
                                   {providerRating > 0 && (
                                     <div className="flex items-center">
@@ -707,8 +713,8 @@ export default function AdminReportsPage() {
                                 </div>
                               </div>
                             </div>
-                            <div className="text-right">
-                              <p className="font-medium">
+                            <div className="text-left sm:text-right flex-shrink-0">
+                              <p className="font-medium text-sm sm:text-base">
                                 RM{(providerRevenue / 1000).toFixed(0)}K
                               </p>
                             </div>
@@ -726,11 +732,11 @@ export default function AdminReportsPage() {
 
               {/* Top Customers */}
               <Card>
-                <CardHeader>
-                  <CardTitle>Top Spending Customers</CardTitle>
-                  <CardDescription>Highest value customers</CardDescription>
+                <CardHeader className="px-4 sm:px-6 pt-4 sm:pt-6">
+                  <CardTitle className="text-lg sm:text-xl">Top Spending Customers</CardTitle>
+                  <CardDescription className="text-sm">Highest value customers</CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
                   {topCustomers.length > 0 ? (
                     <div className="space-y-4">
                       {topCustomers.map((customer, index) => {
@@ -743,25 +749,25 @@ export default function AdminReportsPage() {
                           <Link
                             key={customerId || customerName || index}
                             href={`/admin/users/${customerId}`}
-                            className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 hover:border-purple-300 transition-colors cursor-pointer"
+                            className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 border rounded-lg hover:bg-gray-50 hover:border-purple-300 transition-colors cursor-pointer gap-2 sm:gap-0"
                           >
-                            <div className="flex items-center gap-3 flex-1">
-                              <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center">
-                                <span className="text-sm font-bold text-purple-600">
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                              <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
+                                <span className="text-xs sm:text-sm font-bold text-purple-600">
                                   #{index + 1}
                                 </span>
                               </div>
-                              <div className="flex-1">
-                                <p className="font-medium hover:text-purple-600 transition-colors">
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium hover:text-purple-600 transition-colors text-sm sm:text-base truncate">
                                   {customerName}
                                 </p>
-                                <p className="text-sm text-gray-500">
+                                <p className="text-xs sm:text-sm text-gray-500">
                                   {customerProjects} projects
                                 </p>
                               </div>
                             </div>
-                            <div className="text-right">
-                              <p className="font-medium">
+                            <div className="text-left sm:text-right flex-shrink-0">
+                              <p className="font-medium text-sm sm:text-base">
                                 RM{(customerSpent / 1000).toFixed(0)}K
                               </p>
                             </div>
@@ -780,45 +786,45 @@ export default function AdminReportsPage() {
 
             {/* Quick Reports */}
             <Card>
-              <CardHeader>
-                <CardTitle>Quick Report Generation</CardTitle>
-                <CardDescription>
+              <CardHeader className="px-4 sm:px-6 pt-4 sm:pt-6">
+                <CardTitle className="text-lg sm:text-xl">Quick Report Generation</CardTitle>
+                <CardDescription className="text-sm">
                   Generate specific reports for different stakeholders
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                   <Button
                     variant="outline"
-                    className="h-20 flex-col gap-2 bg-transparent"
+                    className="h-auto sm:h-20 flex-col gap-2 bg-transparent py-4 sm:py-0"
                     onClick={() => handleQuickReport("financial")}
                   >
-                    <FileText className="w-6 h-6" />
-                    <span>Financial Summary</span>
+                    <FileText className="w-5 h-5 sm:w-6 sm:h-6" />
+                    <span className="text-xs sm:text-sm">Financial Summary</span>
                   </Button>
                   <Button
                     variant="outline"
-                    className="h-20 flex-col gap-2 bg-transparent"
+                    className="h-auto sm:h-20 flex-col gap-2 bg-transparent py-4 sm:py-0"
                     onClick={() => handleQuickReport("user_activity")}
                   >
-                    <Users className="w-6 h-6" />
-                    <span>User Analytics</span>
+                    <Users className="w-5 h-5 sm:w-6 sm:h-6" />
+                    <span className="text-xs sm:text-sm">User Analytics</span>
                   </Button>
                   <Button
                     variant="outline"
-                    className="h-20 flex-col gap-2 bg-transparent"
+                    className="h-auto sm:h-20 flex-col gap-2 bg-transparent py-4 sm:py-0"
                     onClick={() => handleQuickReport("project_performance")}
                   >
-                    <Briefcase className="w-6 h-6" />
-                    <span>Project Report</span>
+                    <Briefcase className="w-5 h-5 sm:w-6 sm:h-6" />
+                    <span className="text-xs sm:text-sm">Project Report</span>
                   </Button>
                   <Button
                     variant="outline"
-                    className="h-20 flex-col gap-2 bg-transparent"
+                    className="h-auto sm:h-20 flex-col gap-2 bg-transparent py-4 sm:py-0"
                     onClick={() => handleQuickReport("provider_analytics")}
                   >
-                    <PieChart className="w-6 h-6" />
-                    <span>Performance Metrics</span>
+                    <PieChart className="w-5 h-5 sm:w-6 sm:h-6" />
+                    <span className="text-xs sm:text-sm">Performance Metrics</span>
                   </Button>
                 </div>
               </CardContent>
@@ -829,12 +835,12 @@ export default function AdminReportsPage() {
 
       {/* Category Detail Modal */}
       <Dialog open={categoryModalOpen} onOpenChange={setCategoryModalOpen}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto w-[95vw] sm:w-full">
           <DialogHeader>
-            <DialogTitle className="text-2xl">
+            <DialogTitle className="text-lg sm:text-2xl">
               {selectedCategory} - Category Details
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-sm">
               Comprehensive analytics and project information for this category
             </DialogDescription>
           </DialogHeader>
@@ -846,57 +852,57 @@ export default function AdminReportsPage() {
             </div>
           ) : categoryDetails ? (
             <Tabs defaultValue="overview" className="w-full">
-              <TabsList className="grid w-full grid-cols-4">
-                <TabsTrigger value="overview">Overview</TabsTrigger>
-                <TabsTrigger value="projects">Projects</TabsTrigger>
-                <TabsTrigger value="providers">Providers</TabsTrigger>
-                <TabsTrigger value="customers">Customers</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto">
+                <TabsTrigger value="overview" className="text-xs sm:text-sm">Overview</TabsTrigger>
+                <TabsTrigger value="projects" className="text-xs sm:text-sm">Projects</TabsTrigger>
+                <TabsTrigger value="providers" className="text-xs sm:text-sm">Providers</TabsTrigger>
+                <TabsTrigger value="customers" className="text-xs sm:text-sm">Customers</TabsTrigger>
               </TabsList>
 
-              <TabsContent value="overview" className="space-y-6 mt-6">
+              <TabsContent value="overview" className="space-y-4 sm:space-y-6 mt-4 sm:mt-6">
                 {/* Statistics Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                   <Card>
-                    <CardContent className="p-6">
+                    <CardContent className="p-4 sm:p-6">
                       <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-gray-600">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs sm:text-sm font-medium text-gray-600">
                             Total Revenue
                           </p>
-                          <p className="text-2xl font-bold mt-1">
+                          <p className="text-xl sm:text-2xl font-bold mt-1">
                             RM{((typeof categoryDetails.totalRevenue === "number" ? categoryDetails.totalRevenue : 0) / 1000).toFixed(0)}
                             K
                           </p>
                         </div>
-                        <DollarSign className="w-8 h-8 text-green-600" />
+                        <DollarSign className="w-6 h-6 sm:w-8 sm:h-8 text-green-600 flex-shrink-0 ml-2" />
                       </div>
                     </CardContent>
                   </Card>
 
                   <Card>
-                    <CardContent className="p-6">
+                    <CardContent className="p-4 sm:p-6">
                       <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-gray-600">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs sm:text-sm font-medium text-gray-600">
                             Projects
                           </p>
-                          <p className="text-2xl font-bold mt-1">
+                          <p className="text-xl sm:text-2xl font-bold mt-1">
                             {typeof categoryDetails.projectCount === "number" ? categoryDetails.projectCount : 0}
                           </p>
                         </div>
-                        <Briefcase className="w-8 h-8 text-blue-600" />
+                        <Briefcase className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600 flex-shrink-0 ml-2" />
                       </div>
                     </CardContent>
                   </Card>
 
                   <Card>
-                    <CardContent className="p-6">
+                    <CardContent className="p-4 sm:p-6">
                       <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-gray-600">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs sm:text-sm font-medium text-gray-600">
                             Avg Project Value
                           </p>
-                          <p className="text-2xl font-bold mt-1">
+                          <p className="text-xl sm:text-2xl font-bold mt-1">
                             RM
                             {(
                               (typeof categoryDetails.averageProjectValue === "number" ? categoryDetails.averageProjectValue : 0) / 1000
@@ -904,23 +910,23 @@ export default function AdminReportsPage() {
                             K
                           </p>
                         </div>
-                        <TrendingUp className="w-8 h-8 text-purple-600" />
+                        <TrendingUp className="w-6 h-6 sm:w-8 sm:h-8 text-purple-600 flex-shrink-0 ml-2" />
                       </div>
                     </CardContent>
                   </Card>
 
                   <Card>
-                    <CardContent className="p-6">
+                    <CardContent className="p-4 sm:p-6">
                       <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-medium text-gray-600">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs sm:text-sm font-medium text-gray-600">
                             Providers
                           </p>
-                          <p className="text-2xl font-bold mt-1">
+                          <p className="text-xl sm:text-2xl font-bold mt-1">
                             {Array.isArray(categoryDetails.providers) ? categoryDetails.providers.length : 0}
                           </p>
                         </div>
-                        <Users className="w-8 h-8 text-orange-600" />
+                        <Users className="w-6 h-6 sm:w-8 sm:h-8 text-orange-600 flex-shrink-0 ml-2" />
                       </div>
                     </CardContent>
                   </Card>
@@ -930,13 +936,13 @@ export default function AdminReportsPage() {
                 {Array.isArray(categoryDetails.monthlyTrends) &&
                   categoryDetails.monthlyTrends.length > 0 && (
                     <Card>
-                      <CardHeader>
-                        <CardTitle>Monthly Performance Trends</CardTitle>
-                        <CardDescription>
+                      <CardHeader className="px-4 sm:px-6 pt-4 sm:pt-6">
+                        <CardTitle className="text-base sm:text-lg">Monthly Performance Trends</CardTitle>
+                        <CardDescription className="text-sm">
                           Revenue and project count over time
                         </CardDescription>
                       </CardHeader>
-                      <CardContent>
+                      <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
                         <div className="space-y-4">
                           {(() => {
                             const trends = categoryDetails.monthlyTrends as Array<Record<string, unknown>>;
@@ -982,15 +988,15 @@ export default function AdminReportsPage() {
                   )}
               </TabsContent>
 
-              <TabsContent value="projects" className="mt-6">
+              <TabsContent value="projects" className="mt-4 sm:mt-6">
                 <Card>
-                  <CardHeader>
-                    <CardTitle>
+                  <CardHeader className="px-4 sm:px-6 pt-4 sm:pt-6">
+                    <CardTitle className="text-base sm:text-lg">
                       All Projects ({Array.isArray(categoryDetails.projects) ? categoryDetails.projects.length : 0})
                     </CardTitle>
-                    <CardDescription>Projects in this category</CardDescription>
+                    <CardDescription className="text-sm">Projects in this category</CardDescription>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
                     {Array.isArray(categoryDetails.projects) &&
                     categoryDetails.projects.length > 0 ? (
                       <div className="space-y-3">
@@ -1029,26 +1035,26 @@ export default function AdminReportsPage() {
                             <Link
                               key={projectId}
                               href={`/admin/projects/${projectId}`}
-                              className="block p-4 border rounded-lg hover:bg-gray-50 hover:border-blue-300 transition-colors"
+                              className="block p-3 sm:p-4 border rounded-lg hover:bg-gray-50 hover:border-blue-300 transition-colors"
                             >
-                              <div className="flex items-center justify-between">
-                                <div className="flex-1">
-                                  <p className="font-medium">{projectTitle}</p>
-                                  <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
+                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0">
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium text-sm sm:text-base truncate">{projectTitle}</p>
+                                  <div className="flex flex-wrap items-center gap-2 sm:gap-4 mt-2 text-xs sm:text-sm text-gray-500">
                                     {providerName && (
-                                      <span>
+                                      <span className="truncate">
                                         Provider: {providerName}
                                       </span>
                                     )}
                                     {customerName && (
-                                      <span>
+                                      <span className="truncate">
                                         Customer: {customerName}
                                       </span>
                                     )}
                                     <span>{createdDateStr}</span>
                                   </div>
                                 </div>
-                                <div className="text-right">
+                                <div className="text-left sm:text-right flex-shrink-0 w-full sm:w-auto flex sm:flex-col items-start sm:items-end gap-2">
                                   <Badge
                                     variant={
                                       projectStatus === "COMPLETED"
@@ -1057,11 +1063,11 @@ export default function AdminReportsPage() {
                                         ? "secondary"
                                         : "outline"
                                     }
-                                    className="mb-2"
+                                    className="text-xs"
                                   >
                                     {projectStatus}
                                   </Badge>
-                                  <p className="font-medium">
+                                  <p className="font-medium text-sm sm:text-base">
                                     RM{(projectRevenue / 1000).toFixed(0)}K
                                   </p>
                                 </div>
@@ -1079,17 +1085,17 @@ export default function AdminReportsPage() {
                 </Card>
               </TabsContent>
 
-              <TabsContent value="providers" className="mt-6">
+              <TabsContent value="providers" className="mt-4 sm:mt-6">
                 <Card>
-                  <CardHeader>
-                    <CardTitle>
+                  <CardHeader className="px-4 sm:px-6 pt-4 sm:pt-6">
+                    <CardTitle className="text-base sm:text-lg">
                       Providers ({Array.isArray(categoryDetails.providers) ? categoryDetails.providers.length : 0})
                     </CardTitle>
-                    <CardDescription>
+                    <CardDescription className="text-sm">
                       Service providers working in this category
                     </CardDescription>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
                     {Array.isArray(categoryDetails.providers) &&
                     categoryDetails.providers.length > 0 ? (
                       <div className="space-y-3">
@@ -1104,15 +1110,15 @@ export default function AdminReportsPage() {
                             <Link
                               key={providerId}
                               href={`/admin/users/${providerId}`}
-                              className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 hover:border-blue-300 transition-colors"
+                              className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 sm:p-4 border rounded-lg hover:bg-gray-50 hover:border-blue-300 transition-colors gap-2 sm:gap-0"
                             >
-                              <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                                  <Users className="w-5 h-5 text-blue-600" />
+                              <div className="flex items-center gap-3 flex-1 min-w-0">
+                                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                                  <Users className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
                                 </div>
-                                <div>
-                                  <p className="font-medium">{providerName}</p>
-                                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium text-sm sm:text-base truncate">{providerName}</p>
+                                  <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm text-gray-500">
                                     {providerRating > 0 && (
                                       <div className="flex items-center">
                                         <Star className="w-3 h-3 text-yellow-400 fill-current mr-1" />
@@ -1122,13 +1128,13 @@ export default function AdminReportsPage() {
                                       </div>
                                     )}
                                     {providerLocation && (
-                                      <span>• {providerLocation}</span>
+                                      <span className="truncate">• {providerLocation}</span>
                                     )}
                                   </div>
                                 </div>
                               </div>
-                              <div className="text-right">
-                                <p className="text-sm text-gray-500">
+                              <div className="text-left sm:text-right flex-shrink-0 w-full sm:w-auto">
+                                <p className="text-xs sm:text-sm text-gray-500 truncate">
                                   {providerEmail}
                                 </p>
                               </div>
@@ -1145,17 +1151,17 @@ export default function AdminReportsPage() {
                 </Card>
               </TabsContent>
 
-              <TabsContent value="customers" className="mt-6">
+              <TabsContent value="customers" className="mt-4 sm:mt-6">
                 <Card>
-                  <CardHeader>
-                    <CardTitle>
+                  <CardHeader className="px-4 sm:px-6 pt-4 sm:pt-6">
+                    <CardTitle className="text-base sm:text-lg">
                       Customers ({Array.isArray(categoryDetails.customers) ? categoryDetails.customers.length : 0})
                     </CardTitle>
-                    <CardDescription>
+                    <CardDescription className="text-sm">
                       Companies using this category
                     </CardDescription>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
                     {Array.isArray(categoryDetails.customers) &&
                     categoryDetails.customers.length > 0 ? (
                       <div className="space-y-3">
@@ -1170,17 +1176,17 @@ export default function AdminReportsPage() {
                             <Link
                               key={customerId}
                               href={`/admin/users/${customerId}`}
-                              className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 hover:border-purple-300 transition-colors"
+                              className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 sm:p-4 border rounded-lg hover:bg-gray-50 hover:border-purple-300 transition-colors gap-2 sm:gap-0"
                             >
-                              <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
-                                  <Users className="w-5 h-5 text-purple-600" />
+                              <div className="flex items-center gap-3 flex-1 min-w-0">
+                                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0">
+                                  <Users className="w-4 h-4 sm:w-5 sm:h-5 text-purple-600" />
                                 </div>
-                                <div>
-                                  <p className="font-medium">{customerName}</p>
-                                  <div className="flex items-center gap-2 text-sm text-gray-500">
+                                <div className="flex-1 min-w-0">
+                                  <p className="font-medium text-sm sm:text-base truncate">{customerName}</p>
+                                  <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm text-gray-500">
                                     {customerIndustry && (
-                                      <span>{customerIndustry}</span>
+                                      <span className="truncate">{customerIndustry}</span>
                                     )}
                                     {customerCompanySize && (
                                       <span>• {customerCompanySize}</span>
@@ -1188,8 +1194,8 @@ export default function AdminReportsPage() {
                                   </div>
                                 </div>
                               </div>
-                              <div className="text-right">
-                                <p className="text-sm text-gray-500">
+                              <div className="text-left sm:text-right flex-shrink-0 w-full sm:w-auto">
+                                <p className="text-xs sm:text-sm text-gray-500 truncate">
                                   {customerEmail}
                                 </p>
                               </div>

@@ -74,102 +74,181 @@ export function VerificationsTable({ rows, loading, onSelectUser }: Verification
     }
   }
 
+  if (!loading && rows.length === 0) {
+    return (
+      <div className="text-center text-sm text-gray-500 py-12 px-4">
+        No verification requests found.
+      </div>
+    )
+  }
+
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>User</TableHead>
-          <TableHead>Type</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead>Documents</TableHead>
-          <TableHead>Submitted</TableHead>
-          <TableHead className="text-right">Actions</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
+    <>
+      {/* Mobile Card Layout */}
+      <div className="block md:hidden space-y-4 px-4 pb-4">
         {rows.map((u) => (
-          <TableRow key={u.id}>
-            <TableCell>
-              <div className="flex items-center space-x-3">
-                <Avatar>
+          <div key={u.id} className="border rounded-lg p-4 space-y-3 bg-white">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center space-x-3 flex-1 min-w-0">
+                <Avatar className="flex-shrink-0">
                   <AvatarImage src="/placeholder.svg" />
                   <AvatarFallback>{u.name?.charAt(0) || "U"}</AvatarFallback>
                 </Avatar>
-                <div>
-                  <p className="font-medium">{u.name || "Unnamed"}</p>
-                  <p className="text-sm text-gray-500">{u.email}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium truncate">{u.name || "Unnamed"}</p>
+                  <p className="text-xs sm:text-sm text-gray-500 truncate">{u.email}</p>
                 </div>
               </div>
-            </TableCell>
-            <TableCell>
-              <div className="flex items-center gap-2">
-                {u._uiType === "provider" ? (
-                  <User className="w-4 h-4 text-blue-600" />
-                ) : (
-                  <Building className="w-4 h-4 text-purple-600" />
-                )}
-                <Badge
-                  className={
-                    u._uiType === "provider"
-                      ? "bg-blue-100 text-blue-800"
-                      : "bg-purple-100 text-purple-800"
-                  }
-                >
-                  {u._uiType.charAt(0).toUpperCase() + u._uiType.slice(1)}
-                </Badge>
-              </div>
-            </TableCell>
-            <TableCell>
               <Badge className={getStatusColor(u._uiStatus)}>
                 {u._uiStatus.charAt(0).toUpperCase() + u._uiStatus.slice(1)}
               </Badge>
-            </TableCell>
-            <TableCell>
-              <div className="space-y-1 max-w-[260px]">
-                {u.documents?.map((doc) => (
-                  <div key={doc.id} className="flex items-center gap-2 text-sm">
-                    <FileText className={`w-3 h-3 ${getDocumentStatusColor(doc.status)}`} />
-                    <a
-                      className="truncate underline decoration-dotted cursor-pointer"
-                      href="#"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        handleDocumentClick(doc)
-                      }}
-                      title={doc.filename}
+            </div>
+
+            <div className="flex items-center gap-2 flex-wrap">
+              {u._uiType === "provider" ? (
+                <User className="w-4 h-4 text-blue-600" />
+              ) : (
+                <Building className="w-4 h-4 text-purple-600" />
+              )}
+              <Badge
+                className={
+                  u._uiType === "provider"
+                    ? "bg-blue-100 text-blue-800"
+                    : "bg-purple-100 text-purple-800"
+                }
+              >
+                {u._uiType.charAt(0).toUpperCase() + u._uiType.slice(1)}
+              </Badge>
+              <span className="text-xs text-gray-500">•</span>
+              <span className="text-xs text-gray-500">{u.submittedDate}</span>
+            </div>
+
+            {u.documents && u.documents.length > 0 && (
+              <div className="space-y-2 pt-2 border-t">
+                <p className="text-xs font-medium text-gray-700">Documents:</p>
+                <div className="space-y-1.5">
+                  {u.documents.map((doc) => (
+                    <div key={doc.id} className="flex items-center gap-2 text-xs sm:text-sm">
+                      <FileText className={`w-3 h-3 flex-shrink-0 ${getDocumentStatusColor(doc.status)}`} />
+                      <a
+                        className="truncate underline decoration-dotted cursor-pointer flex-1 min-w-0"
+                        href="#"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          handleDocumentClick(doc)
+                        }}
+                        title={doc.filename}
+                      >
+                        {doc.type}
+                      </a>
+                      <Badge variant="outline" className={`text-xs flex-shrink-0 ${getDocumentStatusColor(doc.status)}`}>
+                        {doc.status}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <Button variant="outline" size="sm" className="w-full" onClick={() => onSelectUser(u)}>
+              <Eye className="w-4 h-4 mr-2" />
+              Review
+            </Button>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop Table Layout */}
+      <div className="hidden md:block overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>User</TableHead>
+              <TableHead>Type</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Documents</TableHead>
+              <TableHead>Submitted</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((u) => (
+              <TableRow key={u.id}>
+                <TableCell>
+                  <div className="flex items-center space-x-3">
+                    <Avatar>
+                      <AvatarImage src="/placeholder.svg" />
+                      <AvatarFallback>{u.name?.charAt(0) || "U"}</AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="font-medium">{u.name || "Unnamed"}</p>
+                      <p className="text-sm text-gray-500">{u.email}</p>
+                    </div>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    {u._uiType === "provider" ? (
+                      <User className="w-4 h-4 text-blue-600" />
+                    ) : (
+                      <Building className="w-4 h-4 text-purple-600" />
+                    )}
+                    <Badge
+                      className={
+                        u._uiType === "provider"
+                          ? "bg-blue-100 text-blue-800"
+                          : "bg-purple-100 text-purple-800"
+                      }
                     >
-                      {doc.type}
-                    </a>
-                    <Badge variant="outline" className={`text-xs ${getDocumentStatusColor(doc.status)}`}>
-                      {doc.status}
+                      {u._uiType.charAt(0).toUpperCase() + u._uiType.slice(1)}
                     </Badge>
                   </div>
-                ))}
-              </div>
-            </TableCell>
-            <TableCell>
-              <div>
-                <p className="text-sm">{u.submittedDate}</p>
-              </div>
-            </TableCell>
-            <TableCell className="text-right">
-              <Button variant="outline" size="sm" onClick={() => onSelectUser(u)}>
-                <Eye className="w-4 h-4 mr-2" />
-                Review
-              </Button>
-            </TableCell>
-          </TableRow>
-        ))}
-
-        {!loading && rows.length === 0 && (
-          <TableRow>
-            <TableCell colSpan={6} className="text-center text-sm text-gray-500 py-12">
-              No verification requests found.
-            </TableCell>
-          </TableRow>
-        )}
-      </TableBody>
-    </Table>
+                </TableCell>
+                <TableCell>
+                  <Badge className={getStatusColor(u._uiStatus)}>
+                    {u._uiStatus.charAt(0).toUpperCase() + u._uiStatus.slice(1)}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <div className="space-y-1 max-w-[260px]">
+                    {u.documents?.map((doc) => (
+                      <div key={doc.id} className="flex items-center gap-2 text-sm">
+                        <FileText className={`w-3 h-3 ${getDocumentStatusColor(doc.status)}`} />
+                        <a
+                          className="truncate underline decoration-dotted cursor-pointer"
+                          href="#"
+                          onClick={(e) => {
+                            e.preventDefault()
+                            handleDocumentClick(doc)
+                          }}
+                          title={doc.filename}
+                        >
+                          {doc.type}
+                        </a>
+                        <Badge variant="outline" className={`text-xs ${getDocumentStatusColor(doc.status)}`}>
+                          {doc.status}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div>
+                    <p className="text-sm">{u.submittedDate}</p>
+                  </div>
+                </TableCell>
+                <TableCell className="text-right">
+                  <Button variant="outline" size="sm" onClick={() => onSelectUser(u)}>
+                    <Eye className="w-4 h-4 mr-2" />
+                    Review
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </>
   )
 }
 

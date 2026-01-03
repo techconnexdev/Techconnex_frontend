@@ -7,7 +7,7 @@ export function WobbleCardDemo() {
   return (
     <div
       id="about"
-      className="bg-gradient-to-b from bg-blue-700 to-blue-900 py-20"
+      className="bg-gradient-to-b from bg-blue-700 to-blue-900 py-20 px-4"
     >
       {/* Subtle gradient overlays for blue and orange accents */}
       <div className="absolute inset-0 bg-gradient-to-tr from-blue-500/5 via-transparent to-orange-500/5 pointer-events-none"></div>

@@ -14,14 +14,14 @@ export default function LandingPage() {
     <ReactLenis root>
       <div className="relative isolate">
         <Header></Header>
-        <main>
+        <main className="overflow-x-hidden">
           <Hero />
           <Brand />
           <Features />
           <Services />
           <WorldMapDemo />
           <Milestone />
-          <WobbleCardDemo/>
+          <WobbleCardDemo />
           <Footer />
         </main>
       </div>

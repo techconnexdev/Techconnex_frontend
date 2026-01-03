@@ -84,6 +84,7 @@ export default function CustomerDashboard() {
     nextRefreshAt: number | null;
   }>({ cachedAt: null, nextRefreshAt: null });
   const [error, setError] = useState<string | null>(null);
+  const [expandedProviderId, setExpandedProviderId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -158,15 +159,10 @@ export default function CustomerDashboard() {
               completedJobs: provider.completedJobs || 0,
               hourlyRate: provider.hourlyRate || 0,
               location: provider.location || "Malaysia",
-              avatar:
-                provider.avatar && provider.avatar !== "/placeholder.svg"
-                  ? `${
-                      process.env.NEXT_PUBLIC_API_URL ||
-                      "http://localhost:4000"
-                    }${(provider.avatar as string)?.startsWith("/") ? "" : "/"}${
-                      provider.avatar as string
-                    }`
-                  : "/placeholder.svg?height=60&width=60",
+              avatar: getProfileImageUrl(
+                (provider.avatar as string | undefined) || 
+                (provider.profileImageUrl as string | undefined)
+              ),
               skills: provider.skills || [],
               verified: provider.isVerified || false,
               matchScore: provider.matchScore,
@@ -672,30 +668,62 @@ export default function CustomerDashboard() {
                           </div>
                         </div>
 
-                        {/* AI Explanation - Expandable on Hover */}
+                        {/* AI Explanation - Responsive: Hover on desktop, Click on mobile */}
                         {Boolean(provider.aiExplanation) && typeof provider.aiExplanation === "string" && (
-                          <div className="mt-4 overflow-hidden">
-                            {/* Collapsed State - Always Visible */}
-                            <div className="group-hover:hidden transition-all duration-300">
-                              <button className="flex items-center gap-2 text-xs text-blue-600 hover:text-blue-700 font-medium">
-                                <Sparkles className="w-3.5 h-3.5" />
-                                <span>Hover to see AI insights</span>
-                                <ChevronRight className="w-3 h-3" />
+                          <div className="mt-3 sm:mt-4 overflow-hidden">
+                            {/* Collapsed State - Desktop hover, Mobile click */}
+                            <div
+                              className={`lg:group-hover:hidden ${
+                                expandedProviderId === String(provider.id) ? "hidden" : "block"
+                              } transition-all duration-300`}
+                            >
+                              <button
+                                onClick={() =>
+                                  setExpandedProviderId(
+                                    expandedProviderId === String(provider.id) ? null : String(provider.id)
+                                  )
+                                }
+                                className="flex items-center gap-2 text-xs text-blue-600 hover:text-blue-700 active:text-blue-800 font-medium touch-manipulation"
+                              >
+                                <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                                <span className="hidden sm:inline">
+                                  Hover to see AI insights
+                                </span>
+                                <span className="sm:hidden">
+                                  Tap to see AI insights
+                                </span>
+                                <ChevronRight
+                                  className={`w-3 h-3 shrink-0 transition-transform ${
+                                    expandedProviderId === String(provider.id) ? "rotate-90" : ""
+                                  }`}
+                                />
                               </button>
                             </div>
 
-                            {/* Expanded State - Shows on Hover */}
-                            <div className="hidden group-hover:block animate-in fade-in slide-in-from-top-2 duration-300">
-                              <div className="p-4 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 rounded-lg border-2 border-blue-200 shadow-md">
-                                <div className="flex items-center gap-2 mb-3">
-                                  <div className="p-1.5 bg-blue-100 rounded-lg">
-                                    <Sparkles className="w-4 h-4 text-blue-600" />
+                            {/* Expanded State - Shows on hover (desktop) or click (mobile) */}
+                            <div
+                              className={`lg:group-hover:block ${
+                                expandedProviderId === String(provider.id) ? "block" : "hidden"
+                              } animate-in fade-in slide-in-from-top-2 duration-300`}
+                            >
+                              <div className="p-3 sm:p-4 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 rounded-lg border-2 border-blue-200 shadow-md">
+                                <div className="flex items-center gap-2 mb-2 sm:mb-3">
+                                  <div className="p-1.5 bg-blue-100 rounded-lg shrink-0">
+                                    <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600" />
                                   </div>
-                                  <p className="text-sm font-semibold text-blue-900">
+                                  <p className="text-xs sm:text-sm font-semibold text-blue-900">
                                     Why this provider is recommended:
                                   </p>
+                                  {/* Close button for mobile */}
+                                  <button
+                                    onClick={() => setExpandedProviderId(null)}
+                                    className="ml-auto lg:hidden text-blue-600 hover:text-blue-800 p-1"
+                                    aria-label="Close insights"
+                                  >
+                                    <span className="text-lg">×</span>
+                                  </button>
                                 </div>
-                                <div className="text-sm text-blue-800 space-y-2">
+                                <div className="text-xs sm:text-sm text-blue-800 space-y-1.5 sm:space-y-2">
                                   {(provider.aiExplanation as string)
                                     .split("\n")
                                     .filter((line: string) => line.trim())
@@ -709,7 +737,7 @@ export default function CustomerDashboard() {
                                       return cleanLine ? (
                                         <div
                                           key={index}
-                                          className={`flex items-start gap-3 ${
+                                          className={`flex items-start gap-2 sm:gap-3 ${
                                             isWarning
                                               ? "bg-red-50 p-2 rounded border border-red-200"
                                               : ""
@@ -725,7 +753,7 @@ export default function CustomerDashboard() {
                                             •
                                           </span>
                                           <span
-                                            className={`leading-relaxed ${
+                                            className={`leading-relaxed break-words ${
                                               isWarning
                                                 ? "text-red-800 font-medium"
                                                 : ""

@@ -2280,34 +2280,34 @@ export default function ProjectDetailsPage({
           onValueChange={setActiveTab}
           className="space-y-4 sm:space-y-6"
         >
-          <TabsList className="grid w-full grid-cols-5 h-auto">
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 h-auto p-2 sm:p-3 bg-gray-100 rounded-lg">
             <TabsTrigger
               value="overview"
-              className="text-xs sm:text-sm px-2 sm:px-4"
+              className="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md bg-gray-100 text-gray-600 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-md transition-all duration-200 font-medium"
             >
               Overview
             </TabsTrigger>
             <TabsTrigger
               value="milestones"
-              className="text-xs sm:text-sm px-2 sm:px-4"
+              className="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md bg-gray-100 text-gray-600 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-md transition-all duration-200 font-medium"
             >
               Milestones
             </TabsTrigger>
             <TabsTrigger
               value="bids"
-              className="text-xs sm:text-sm px-2 sm:px-4"
+              className="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md bg-gray-100 text-gray-600 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-md transition-all duration-200 font-medium"
             >
               Bids
             </TabsTrigger>
             <TabsTrigger
               value="files"
-              className="text-xs sm:text-sm px-2 sm:px-4"
+              className="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md bg-gray-100 text-gray-600 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-md transition-all duration-200 font-medium"
             >
               Files
             </TabsTrigger>
             <TabsTrigger
               value="messages"
-              className="text-xs sm:text-sm px-2 sm:px-4"
+              className="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md bg-gray-100 text-gray-600 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-md transition-all duration-200 font-medium"
             >
               Messages
             </TabsTrigger>

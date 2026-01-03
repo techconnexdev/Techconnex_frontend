@@ -436,20 +436,20 @@ export default function CustomerBillingPage() {
 
   return (
     <CustomerLayout>
-      <div className="space-y-8">
+      <div className="space-y-6 md:space-y-8 px-4 md:px-0">
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
               Billing & Finance
             </h1>
-            <p className="text-gray-600">
+            <p className="text-sm md:text-base text-gray-600">
               Manage your payments, invoices, and financial overview
             </p>
           </div>
-          <div className="flex gap-3">
-            <Button variant="outline" onClick={handleExportReport}>
-              <Download className="w-4 h-4 mr-2" />
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
+            <Button variant="outline" onClick={handleExportReport} className="w-full sm:w-auto text-xs md:text-sm">
+              <Download className="w-3 h-3 md:w-4 md:h-4 mr-2" />
               Export Report
             </Button>
             <Dialog
@@ -481,8 +481,8 @@ export default function CustomerBillingPage() {
           className="space-y-6"
         >
           <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="transactions">Transactions</TabsTrigger>
+            <TabsTrigger value="overview" className="text-xs md:text-sm">Overview</TabsTrigger>
+            <TabsTrigger value="transactions" className="text-xs md:text-sm">Transactions</TabsTrigger>
             {/* <TabsTrigger value="invoices">Invoices</TabsTrigger>
             <TabsTrigger value="methods">Payment Methods</TabsTrigger>
             <TabsTrigger value="budgets">Budgets</TabsTrigger> */}
@@ -491,35 +491,35 @@ export default function CustomerBillingPage() {
           {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-6">
             {/* ===== Stats Cards ===== */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
               <Card>
-                <CardContent className="p-6">
+                <CardContent className="p-4 md:p-6">
                   <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-500">Total Spent</p>
-                      <p className="text-2xl font-bold">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs md:text-sm text-gray-500">Total Spent</p>
+                      <p className="text-xl md:text-2xl font-bold">
                         RM{(stats?.totalSpent || 0).toLocaleString()}
                       </p>
-                      <div className="flex items-center mt-2 text-green-600 text-sm">
-                        <TrendingUp className="w-4 h-4 mr-1" />
+                      <div className="flex items-center mt-2 text-green-600 text-xs md:text-sm">
+                        <TrendingUp className="w-3 h-3 md:w-4 md:h-4 mr-1" />
                         <span>12% vs last month</span>
                       </div>
                     </div>
-                    <DollarSign className="w-8 h-8 text-green-600" />
+                    <DollarSign className="w-6 h-6 md:w-8 md:h-8 text-green-600 flex-shrink-0 ml-2" />
                   </div>
                 </CardContent>
               </Card>
 
               <Card>
-                <CardContent className="p-6">
+                <CardContent className="p-4 md:p-6">
                   <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-500">Pending Payments</p>
-                      <p className="text-2xl font-bold">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs md:text-sm text-gray-500">Pending Payments</p>
+                      <p className="text-xl md:text-2xl font-bold">
                         RM{(stats?.pendingPayments || 0).toLocaleString()}
                       </p>
-                      <div className="flex items-center mt-2 text-yellow-600 text-sm">
-                        <Clock className="w-4 h-4 mr-1" />
+                      <div className="flex items-center mt-2 text-yellow-600 text-xs md:text-sm">
+                        <Clock className="w-3 h-3 md:w-4 md:h-4 mr-1" />
                         <span>
                           {
                             transactions.filter((t) => t.status === "pending")
@@ -529,46 +529,46 @@ export default function CustomerBillingPage() {
                         </span>
                       </div>
                     </div>
-                    <Clock className="w-8 h-8 text-yellow-600" />
+                    <Clock className="w-6 h-6 md:w-8 md:h-8 text-yellow-600 flex-shrink-0 ml-2" />
                   </div>
                 </CardContent>
               </Card>
 
               <Card>
-                <CardContent className="p-6">
+                <CardContent className="p-4 md:p-6">
                   <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-500">This Month</p>
-                      <p className="text-2xl font-bold">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs md:text-sm text-gray-500">This Month</p>
+                      <p className="text-xl md:text-2xl font-bold">
                         RM{(stats?.thisMonth || 0).toLocaleString()}
                       </p>
-                      <div className="flex items-center mt-2 text-blue-600 text-sm">
-                        <Calendar className="w-4 h-4 mr-1" />
+                      <div className="flex items-center mt-2 text-blue-600 text-xs md:text-sm">
+                        <Calendar className="w-3 h-3 md:w-4 md:h-4 mr-1" />
                         <span>January 2024</span>
                       </div>
                     </div>
-                    <Calendar className="w-8 h-8 text-blue-600" />
+                    <Calendar className="w-6 h-6 md:w-8 md:h-8 text-blue-600 flex-shrink-0 ml-2" />
                   </div>
                 </CardContent>
               </Card>
 
               <Card>
-                <CardContent className="p-6">
+                <CardContent className="p-4 md:p-6">
                   <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-500">Avg. Transaction</p>
-                      <p className="text-2xl font-bold">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs md:text-sm text-gray-500">Avg. Transaction</p>
+                      <p className="text-xl md:text-2xl font-bold">
                         RM
                         {Math.round(
                           stats?.averageTransaction || 0
                         ).toLocaleString()}
                       </p>
-                      <div className="flex items-center mt-2 text-purple-600 text-sm">
-                        <Receipt className="w-4 h-4 mr-1" />
+                      <div className="flex items-center mt-2 text-purple-600 text-xs md:text-sm">
+                        <Receipt className="w-3 h-3 md:w-4 md:h-4 mr-1" />
                         <span>{stats.completedPayments} completed</span>
                       </div>
                     </div>
-                    <Receipt className="w-8 h-8 text-purple-600" />
+                    <Receipt className="w-6 h-6 md:w-8 md:h-8 text-purple-600 flex-shrink-0 ml-2" />
                   </div>
                 </CardContent>
               </Card>
@@ -617,8 +617,8 @@ export default function CustomerBillingPage() {
             {/* ===== Upcoming Payments ===== */}
             <Card>
               <CardHeader>
-                <CardTitle>Upcoming Payments</CardTitle>
-                <CardDescription>
+                <CardTitle className="text-base md:text-lg">Upcoming Payments</CardTitle>
+                <CardDescription className="text-xs md:text-sm">
                   Scheduled and pending payments
                 </CardDescription>
               </CardHeader>
@@ -627,22 +627,22 @@ export default function CustomerBillingPage() {
                   {upcomingPayments.map((payment) => (
                     <div
                       key={payment.id}
-                      className="flex items-center justify-between p-4 border rounded-lg"
+                      className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 border rounded-lg"
                     >
-                      <div className="flex items-center space-x-4">
-                        <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                          <Wallet className="w-6 h-6 text-blue-600" />
+                      <div className="flex items-center space-x-3 md:space-x-4 flex-1 min-w-0">
+                        <div className="w-10 h-10 md:w-12 md:h-12 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                          <Wallet className="w-5 h-5 md:w-6 md:h-6 text-blue-600" />
                         </div>
-                        <div>
-                          <h3 className="font-semibold">
+                        <div className="min-w-0 flex-1">
+                          <h3 className="font-semibold text-sm md:text-base">
                             <Link
                               href={`/customer/projects/${payment.projectId}`}
-                              className="text-blue-600 hover:underline"
+                              className="text-blue-600 hover:underline truncate block"
                             >
                               {payment.project}
                             </Link>
                           </h3>
-                          <p className="text-sm text-gray-500">
+                          <p className="text-xs md:text-sm text-gray-500">
                             {payment.milestone}
                           </p>
                           <p className="text-xs text-gray-400">
@@ -651,14 +651,14 @@ export default function CustomerBillingPage() {
                           </p>
                         </div>
                       </div>
-                      <div className="text-right">
+                      <div className="text-left sm:text-right flex-shrink-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="text-lg font-bold text-gray-900">
+                          <span className="text-base md:text-lg font-bold text-gray-900">
                             RM{(payment.amount ?? 0).toLocaleString()}
                           </span>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Badge className={getStatusColor(payment.status)}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Badge className={`${getStatusColor(payment.status)} text-xs`}>
                             {getStatusIcon(payment.status)}
                             <span className="ml-1 capitalize">
                               {payment.status}
@@ -673,7 +673,7 @@ export default function CustomerBillingPage() {
                           )?.status === "APPROVED") && (
                           <Button
                             size="sm"
-                            className="mt-2"
+                            className="w-full sm:w-auto text-xs md:text-sm"
                             onClick={() => handlePayMilestone(payment.id)}
                           >
                             <Send className="w-3 h-3 mr-1" />
@@ -690,19 +690,20 @@ export default function CustomerBillingPage() {
             {/* ===== Recent Transactions ===== */}
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div>
-                    <CardTitle>Recent Transactions</CardTitle>
-                    <CardDescription>
+                    <CardTitle className="text-base md:text-lg">Recent Transactions</CardTitle>
+                    <CardDescription className="text-xs md:text-sm">
                       Your latest payment activities
                     </CardDescription>
                   </div>
                   <Button
                     variant="outline"
                     onClick={() => setActiveTab("transactions")}
+                    className="w-full sm:w-auto text-xs md:text-sm"
                   >
                     View All
-                    <ArrowUpRight className="w-4 h-4 ml-2" />
+                    <ArrowUpRight className="w-3 h-3 md:w-4 md:h-4 ml-2" />
                   </Button>
                 </div>
               </CardHeader>
@@ -711,21 +712,21 @@ export default function CustomerBillingPage() {
                   {transactions.slice(0, 5).map((transaction) => (
                     <div
                       key={transaction.id}
-                      className="flex items-center justify-between p-4 border rounded-lg"
+                      className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 border rounded-lg"
                     >
-                      <div className="flex items-center space-x-4">
-                        <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                      <div className="flex items-center space-x-3 md:space-x-4 flex-1 min-w-0">
+                        <div className="w-10 h-10 md:w-12 md:h-12 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
                           {transaction.type === "payment" ? (
-                            <ArrowUpRight className="w-6 h-6 text-blue-600" />
+                            <ArrowUpRight className="w-5 h-5 md:w-6 md:h-6 text-blue-600" />
                           ) : (
-                            <ArrowDownRight className="w-6 h-6 text-green-600" />
+                            <ArrowDownRight className="w-5 h-5 md:w-6 md:h-6 text-green-600" />
                           )}
                         </div>
-                        <div>
-                          <h3 className="font-semibold">
+                        <div className="min-w-0 flex-1">
+                          <h3 className="font-semibold text-sm md:text-base truncate">
                             {transaction.description}
                           </h3>
-                          <p className="text-sm text-gray-500">
+                          <p className="text-xs md:text-sm text-gray-500 truncate">
                             {transaction.project}
                           </p>
                           <p className="text-xs text-gray-400">
@@ -733,9 +734,9 @@ export default function CustomerBillingPage() {
                           </p>
                         </div>
                       </div>
-                      <div className="text-right">
+                      <div className="text-left sm:text-right flex-shrink-0">
                         <span
-                          className={`text-lg font-bold ${
+                          className={`text-base md:text-lg font-bold ${
                             transaction.type === "refund"
                               ? "text-green-600"
                               : "text-gray-900"
@@ -745,7 +746,7 @@ export default function CustomerBillingPage() {
                           {transaction.amount.toLocaleString() ?? "0.00"}
                         </span>
                         <div className="flex items-center gap-2 mt-1">
-                          <Badge className={getStatusColor(transaction.status)}>
+                          <Badge className={`${getStatusColor(transaction.status)} text-xs`}>
                             {getStatusIcon(transaction.status)}
                             <span className="ml-1 capitalize">
                               {transaction.status}
@@ -764,8 +765,8 @@ export default function CustomerBillingPage() {
           <TabsContent value="transactions" className="space-y-6">
             {/* Filters */}
             <Card>
-              <CardContent className="p-6">
-                <div className="flex flex-col lg:flex-row gap-4">
+              <CardContent className="p-4 md:p-6">
+                <div className="flex flex-col sm:flex-row gap-3 md:gap-4">
                   <div className="flex-1">
                     <div className="relative">
                       <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -773,7 +774,7 @@ export default function CustomerBillingPage() {
                         placeholder="Search transactions..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-10"
+                        className="pl-10 text-sm md:text-base"
                       />
                     </div>
                   </div>
@@ -791,7 +792,7 @@ export default function CustomerBillingPage() {
                     </SelectContent>
                   </Select> */}
                   <Select value={filterPeriod} onValueChange={setFilterPeriod}>
-                    <SelectTrigger className="w-full lg:w-48">
+                    <SelectTrigger className="w-full sm:w-auto lg:w-48 text-sm md:text-base">
                       <Calendar className="w-4 h-4 mr-2" />
                       <SelectValue />
                     </SelectTrigger>
@@ -810,33 +811,33 @@ export default function CustomerBillingPage() {
             <div className="space-y-4">
               {filteredTransactions.map((transaction) => (
                 <Card key={transaction.id}>
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
-                        <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                  <CardContent className="p-4 md:p-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                      <div className="flex items-center space-x-3 md:space-x-4 flex-1 min-w-0">
+                        <div className="w-10 h-10 md:w-12 md:h-12 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
                           {transaction.type === "payment" ? (
-                            <CreditCard className="w-6 h-6 text-blue-600" />
+                            <CreditCard className="w-5 h-5 md:w-6 md:h-6 text-blue-600" />
                           ) : (
-                            <DollarSign className="w-6 h-6 text-green-600" />
+                            <DollarSign className="w-5 h-5 md:w-6 md:h-6 text-green-600" />
                           )}
                         </div>
-                        <div>
-                          <h3 className="font-semibold">
+                        <div className="min-w-0 flex-1">
+                          <h3 className="font-semibold text-sm md:text-base truncate">
                             {transaction.description}
                           </h3>
-                          <p className="text-sm text-gray-500">
+                          <p className="text-xs md:text-sm text-gray-500 truncate">
                             {transaction.project}
                           </p>
-                          <p className="text-xs text-gray-400">
+                          <p className="text-xs text-gray-400 line-clamp-1">
                             {transaction.milestone} • {transaction.method} •{" "}
                             {transaction.reference}
                           </p>
                         </div>
                       </div>
-                      <div className="text-right">
+                      <div className="text-left sm:text-right flex-shrink-0">
                         <div className="flex items-center gap-2 mb-1">
                           <span
-                            className={`text-lg font-bold ${
+                            className={`text-base md:text-lg font-bold ${
                               transaction.type === "refund"
                                 ? "text-green-600"
                                 : "text-gray-900"
@@ -847,7 +848,7 @@ export default function CustomerBillingPage() {
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Badge className={getStatusColor(transaction.status)}>
+                          <Badge className={`${getStatusColor(transaction.status)} text-xs`}>
                             {getStatusIcon(transaction.status)}
                             <span className="ml-1 capitalize">
                               {transaction.status}
@@ -859,27 +860,27 @@ export default function CustomerBillingPage() {
                         </p>
                       </div>
                     </div>
-                    <div className="flex justify-end mt-4 pt-4 border-t">
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            handleViewTransactionDetails(transaction.id)
-                          }
-                        >
-                          <Eye className="w-4 h-4 mr-2" />
-                          View Details
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDownloadReceipt(transaction.id)}
-                        >
-                          <Download className="w-4 h-4 mr-2" />
-                          Receipt
-                        </Button>
-                      </div>
+                    <div className="flex flex-col sm:flex-row sm:justify-end gap-2 mt-4 pt-4 border-t">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full sm:w-auto text-xs md:text-sm"
+                        onClick={() =>
+                          handleViewTransactionDetails(transaction.id)
+                        }
+                      >
+                        <Eye className="w-3 h-3 md:w-4 md:h-4 mr-2" />
+                        View Details
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full sm:w-auto text-xs md:text-sm"
+                        onClick={() => handleDownloadReceipt(transaction.id)}
+                      >
+                        <Download className="w-3 h-3 md:w-4 md:h-4 mr-2" />
+                        Receipt
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>

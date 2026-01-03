@@ -13,6 +13,7 @@ import {
   Paperclip,
   Loader2,
   FileText,
+  ArrowLeft,
 } from "lucide-react";
 import io, { Socket } from "socket.io-client";
 import { useSearchParams } from "next/navigation";
@@ -86,6 +87,7 @@ export default function CustomerMessagesPage() {
   const [pendingAttachmentUrl, setPendingAttachmentUrl] = useState<
     string | null
   >(null);
+  const [showConversationsList, setShowConversationsList] = useState(true);
 
   // Get user data and token on mount
   useEffect(() => {
@@ -386,6 +388,11 @@ export default function CustomerMessagesPage() {
       selectedChatRef.current = userIdParam;
       setSelectedChat(userIdParam);
 
+      // Hide conversations list on mobile when chat is selected via URL
+      if (typeof window !== "undefined" && window.innerWidth < 768) {
+        setShowConversationsList(false);
+      }
+
       // Add to conversations if not already there
       const exists = conversations.some((c) => c.userId === userIdParam);
       if (!exists) {
@@ -417,6 +424,10 @@ export default function CustomerMessagesPage() {
     selectedChatRef.current = conversation.userId;
     setSelectedChat(conversation.userId);
     fetchMessages(conversation.userId);
+    // Hide conversations list on mobile when chat is selected
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      setShowConversationsList(false);
+    }
   };
 
   const handleFileSelect = async (
@@ -599,29 +610,35 @@ export default function CustomerMessagesPage() {
 
   return (
     <ProviderLayout>
-      <div className="h-[calc(100vh-8rem)] flex gap-6">
+      <div className="h-[calc(100vh-8rem)] flex flex-col md:flex-row gap-4 md:gap-6">
         {/* 🧾 Conversations List */}
-        <div className="w-1/3">
-          <Card className="h-full">
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
+        <div
+          className={`${
+            showConversationsList ? "flex" : "hidden"
+          } md:flex w-full md:w-1/3 flex-col`}
+        >
+          <Card className="h-full flex flex-col overflow-hidden">
+            <CardHeader className="pb-3 flex-shrink-0">
+              <CardTitle className="flex items-center justify-between text-base md:text-lg">
                 <span>Messages</span>
                 <Badge
                   variant={isConnected ? "default" : "secondary"}
-                  className={isConnected ? "bg-green-500" : "bg-gray-500"}
+                  className={`text-xs ${
+                    isConnected ? "bg-green-500" : "bg-gray-500"
+                  }`}
                 >
                   {isConnected ? "Online" : "Offline"}
                 </Badge>
               </CardTitle>
-              <div className="relative">
+              <div className="relative mt-2">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <Input
                   placeholder="Search conversations..."
-                  className="pl-10"
+                  className="pl-10 text-sm"
                 />
               </div>
             </CardHeader>
-            <CardContent className="p-0">
+            <CardContent className="p-0 flex-1 overflow-y-auto">
               {loading && conversations.length === 0 ? (
                 <div className="flex justify-center py-8">
                   <Loader2 className="w-6 h-6 animate-spin" />
@@ -631,16 +648,16 @@ export default function CustomerMessagesPage() {
                   {conversations.map((conversation) => (
                     <div
                       key={conversation.userId}
-                      className={`p-4 cursor-pointer hover:bg-gray-50 transition-colors ${
+                      className={`p-3 md:p-4 cursor-pointer hover:bg-gray-50 transition-colors ${
                         selectedChat === conversation.userId
                           ? "bg-blue-50 border-r-2 border-blue-500"
                           : ""
                       }`}
                       onClick={() => handleSelectConversation(conversation)}
                     >
-                      <div className="flex items-start space-x-3">
-                        <div className="relative">
-                          <Avatar>
+                      <div className="flex items-start space-x-2 md:space-x-3">
+                        <div className="relative flex-shrink-0">
+                          <Avatar className="w-10 h-10 md:w-12 md:h-12">
                             <AvatarImage
                               src={getProfileImageUrl(conversation.avatar)}
                             />
@@ -649,15 +666,15 @@ export default function CustomerMessagesPage() {
                             </AvatarFallback>
                           </Avatar>
                           {conversation.online && (
-                            <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white" />
+                            <div className="absolute bottom-0 right-0 w-2.5 h-2.5 md:w-3 md:h-3 bg-green-500 rounded-full border-2 border-white" />
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between mb-1">
-                            <p className="font-medium text-gray-900 truncate">
+                            <p className="font-medium text-gray-900 truncate text-sm md:text-base">
                               {conversation.name}
                             </p>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1 md:gap-2 flex-shrink-0 ml-2">
                               <span className="text-xs text-gray-500">
                                 {new Date(
                                   conversation.lastMessageAt
@@ -667,13 +684,13 @@ export default function CustomerMessagesPage() {
                                 })}
                               </span>
                               {conversation.unreadCount > 0 && (
-                                <Badge className="bg-blue-500 text-white text-xs px-2 py-1 rounded-full">
+                                <Badge className="bg-blue-500 text-white text-xs px-1.5 py-0.5 md:px-2 md:py-1 rounded-full">
                                   {conversation.unreadCount}
                                 </Badge>
                               )}
                             </div>
                           </div>
-                          <p className="text-sm text-gray-600 line-clamp-2">
+                          <p className="text-xs md:text-sm text-gray-600 line-clamp-2">
                             {conversation.lastMessage || "No messages yet"}
                           </p>
                         </div>
@@ -683,7 +700,7 @@ export default function CustomerMessagesPage() {
                 </div>
               )}
               {conversations.length === 0 && !loading && (
-                <div className="text-center py-8 text-gray-500">
+                <div className="text-center py-8 text-gray-500 text-sm">
                   No conversations yet
                 </div>
               )}
@@ -692,16 +709,31 @@ export default function CustomerMessagesPage() {
         </div>
 
         {/* 💬 Chat Area */}
-        <div className="flex-1">
-          <Card className="h-full flex flex-col">
+        <div
+          className={`${
+            !showConversationsList || selectedChat ? "flex" : "hidden"
+          } md:flex flex-1 flex-col min-h-0`}
+        >
+          <Card className="h-full flex flex-col overflow-hidden">
             {/* Header */}
-            <CardHeader className="border-b">
+            <CardHeader className="border-b pb-3 flex-shrink-0">
               <div className="flex items-center justify-between">
                 {selectedConversation ? (
                   <>
-                    <div className="flex items-center space-x-3">
-                      <div className="relative">
-                        <Avatar>
+                    <div className="flex items-center space-x-2 md:space-x-3 flex-1 min-w-0">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="md:hidden mr-1"
+                        onClick={() => {
+                          setShowConversationsList(true);
+                          setSelectedChat(null);
+                        }}
+                      >
+                        <ArrowLeft className="w-5 h-5" />
+                      </Button>
+                      <div className="relative flex-shrink-0">
+                        <Avatar className="w-10 h-10 md:w-12 md:h-12">
                           <AvatarImage
                             src={getProfileImageUrl(selectedConversation.avatar)}
                           />
@@ -710,13 +742,13 @@ export default function CustomerMessagesPage() {
                           </AvatarFallback>
                         </Avatar>
                         {selectedConversation.online && (
-                          <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white" />
+                          <div className="absolute bottom-0 right-0 w-2.5 h-2.5 md:w-3 md:h-3 bg-green-500 rounded-full border-2 border-white" />
                         )}
                       </div>
-                      <div>
+                      <div className="min-w-0 flex-1">
                         <Link
                           href={`/provider/companies/${selectedConversation.userId}`}
-                          className="font-semibold text-lg hover:underline"
+                          className="font-semibold text-base md:text-lg hover:underline truncate block"
                         >
                           {selectedConversation.name}
                         </Link>
@@ -727,7 +759,7 @@ export default function CustomerMessagesPage() {
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-shrink-0">
                       {/* <Button variant="outline" size="sm">
                         <Phone className="w-4 h-4" />
                       </Button>
@@ -741,7 +773,7 @@ export default function CustomerMessagesPage() {
                   </>
                 ) : (
                   <div className="text-center w-full py-4">
-                    <p className="text-gray-500">
+                    <p className="text-gray-500 text-sm md:text-base">
                       Select a conversation to start chatting
                     </p>
                   </div>
@@ -750,7 +782,7 @@ export default function CustomerMessagesPage() {
             </CardHeader>
 
             {/* Messages */}
-            <CardContent className="flex-1 overflow-y-auto p-4 space-y-4">
+            <CardContent className="flex-1 overflow-y-auto p-2 md:p-4 space-y-3 md:space-y-4">
               {loading ? (
                 <div className="flex justify-center py-8">
                   <Loader2 className="w-6 h-6 animate-spin" />
@@ -773,12 +805,12 @@ export default function CustomerMessagesPage() {
                         }`}
                       >
                         <div
-                          className={`flex items-end space-x-2 max-w-[14rem] ${
+                          className={`flex items-end space-x-2 max-w-[85%] sm:max-w-xs md:max-w-sm lg:max-w-md ${
                             isOwn ? "flex-row-reverse space-x-reverse" : ""
                           }`}
                         >
                           {!isOwn && (
-                            <Avatar className="w-8 h-8">
+                            <Avatar className="w-6 h-6 md:w-8 md:h-8 flex-shrink-0">
                               <AvatarImage src={message.sender.avatar} />
                               <AvatarFallback>
                                 {message.sender.name.charAt(0)}
@@ -786,7 +818,7 @@ export default function CustomerMessagesPage() {
                             </Avatar>
                           )}
                           <div
-                            className={`px-4 py-2 rounded-lg ${
+                            className={`px-3 py-1.5 md:px-4 md:py-2 rounded-lg ${
                               isOwn
                                 ? "bg-blue-500 text-white"
                                 : "bg-gray-100 text-gray-900"
@@ -811,11 +843,11 @@ export default function CustomerMessagesPage() {
                                         rel="noopener noreferrer"
                                       >
                                         <Image
-                                          src={fileUrl}
+                                          src={attachmentUrl}
                                           alt="Attachment"
                                           width={200}
                                           height={200}
-                                          className="rounded-lg max-w-[200px] border object-contain"
+                                          className="rounded-lg max-w-[150px] md:max-w-[200px] border object-contain"
                                           unoptimized
                                         />
                                       </a>
@@ -850,7 +882,7 @@ export default function CustomerMessagesPage() {
                                 );
                               })
                             ) : message.messageType === "proposal" ? (
-                              <div className="flex flex-col bg-gray-50 border border-gray-200 rounded-lg shadow-sm p-4 space-y-2 max-w-xs">
+                              <div className="flex flex-col bg-gray-50 border border-gray-200 rounded-lg shadow-sm p-3 md:p-4 space-y-2 max-w-[280px] md:max-w-xs">
                                 <div className="flex items-center space-x-2">
                                   <FileText className="w-5 h-5 text-blue-500" />
                                   <h4 className="text-sm font-semibold text-gray-900">
@@ -865,10 +897,12 @@ export default function CustomerMessagesPage() {
                                 </a>
                               </div>
                             ) : (
-                              <p className="text-sm">{message.content}</p>
+                              <p className="text-xs md:text-sm break-words">
+                                {message.content}
+                              </p>
                             )}
                             <p
-                              className={`text-xs mt-1 ${
+                              className={`text-[10px] md:text-xs mt-1 ${
                                 isOwn ? "text-blue-100" : "text-gray-500"
                               }`}
                             >
@@ -896,25 +930,26 @@ export default function CustomerMessagesPage() {
             </CardContent>
             {/* Input */}
             {selectedChat && (
-              <div className="border-t p-4 relative">
-                <div className="flex items-end space-x-2">
-                  <div className="flex items-center gap-2">
+              <div className="border-t p-2 md:p-4 relative flex-shrink-0">
+                <div className="flex items-end gap-1 md:gap-2">
+                  <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
                     <Button
                       variant="ghost"
                       size="icon"
+                      className="h-8 w-8 md:h-10 md:w-10"
                       onClick={() => fileInputRef.current?.click()}
                     >
-                      <Paperclip className="w-5 h-5" />
+                      <Paperclip className="w-4 h-4 md:w-5 md:h-5" />
                     </Button>
                     <input
                       type="file"
                       ref={fileInputRef}
-                      className="sr-only"
+                      className="hidden"
                       onChange={handleFileSelect}
                     />
                   </div>
 
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     <Textarea
                       placeholder="Type your message..."
                       value={newMessage}
@@ -922,7 +957,7 @@ export default function CustomerMessagesPage() {
                         console.log("Typed:", e.target.value);
                         setNewMessage(e.target.value);
                       }}
-                      className="min-h-[40px] max-h-32 resize-none"
+                      className="min-h-[36px] md:min-h-[40px] max-h-24 md:max-h-32 resize-none text-sm md:text-base"
                       onKeyDown={(e) => {
                         if (e.key === "Enter" && !e.shiftKey) {
                           e.preventDefault();
@@ -934,13 +969,13 @@ export default function CustomerMessagesPage() {
                   <Button
                     onClick={handleSendMessage}
                     disabled={!newMessage.trim() || !selectedChat}
-                    className="bg-blue-500 hover:bg-blue-600 text-white"
+                    className="bg-blue-500 hover:bg-blue-600 text-white h-8 w-8 md:h-10 md:w-10 flex-shrink-0 p-0"
                   >
                     <Send className="w-4 h-4" />
                   </Button>
                 </div>
                 {showAttachmentPicker && (
-                  <div className="absolute bottom-16 left-4 bg-white border rounded-lg p-2 max-h-60 overflow-y-auto shadow-lg z-10 w-64">
+                  <div className="absolute bottom-14 md:bottom-16 left-2 md:left-4 bg-white border rounded-lg p-2 max-h-60 overflow-y-auto shadow-lg z-10 w-[calc(100%-1rem)] md:w-64">
                     <div className="p-2 text-sm text-gray-700">
                       This file is associated with a project. Please select a
                       project to continue:

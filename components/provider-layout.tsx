@@ -56,6 +56,11 @@ type ProviderProfile = {
   id?: string;
   name?: string;
   email?: string;
+  profileImageUrl?: string;
+  user?: {
+    name?: string;
+    email?: string;
+  };
   resume?: {
     fileUrl?: string;
   };
@@ -246,9 +251,11 @@ export function ProviderLayout({ children }: ProviderLayoutProps) {
           throw new Error("Failed to fetch profile");
         }
 
-        const data = await res.json();
-        console.log("✅ Profile fetched successfully:", data.name);
-        setProfile(data as ProviderProfile);
+        const response = await res.json();
+        // The API returns { success: true, data: profile }
+        const profileData = response.data || response;
+        console.log("✅ Profile fetched successfully:", profileData?.user?.name || profileData?.name);
+        setProfile(profileData as ProviderProfile);
       } catch (error) {
         console.error("❌ Error fetching profile:", error);
         // Don't redirect immediately on fetch error, just set profile to null
@@ -560,23 +567,16 @@ export function ProviderLayout({ children }: ProviderLayoutProps) {
                     className="relative h-8 w-8 rounded-full"
                   >
                     <Avatar className="h-8 w-8">
-                      {profile && profile.resume && profile.resume.fileUrl ? (
-                        <AvatarImage
-                          src={`/${String(profile.resume.fileUrl).replace(
-                            /\\/g,
-                            "/"
-                          )}`}
-                          alt={profile.data?.user?.name || "User"}
-                        />
-                      ) : (
-                        <AvatarImage
-                          src="/placeholder.svg?height=32&width=32"
-                          alt="User"
-                        />
-                      )}
-                      <AvatarFallback>
-                        {profile && profile.data?.user?.name
-                          ? String(profile.data.user.name)
+                      <AvatarImage
+                        src={getProfileImageUrl(
+                          profile?.profileImageUrl ||
+                          undefined
+                        )}
+                        alt={profile?.user?.name || profile?.name || "User"}
+                      />
+                      <AvatarFallback className="bg-gray-100 text-gray-600 text-xs font-semibold">
+                        {profile && (profile.user?.name || profile.name)
+                          ? String(profile.user?.name || profile.name)
                               .split(" ")
                               .map((n: string) => n[0])
                               .join("")
@@ -592,15 +592,15 @@ export function ProviderLayout({ children }: ProviderLayoutProps) {
                       <p className="text-sm font-medium leading-none">
                         {profileLoading
                           ? "Loading..."
-                          : profile && profile.data?.user?.name
-                          ? profile.data.user.name
+                          : profile && (profile.user?.name || profile.name)
+                          ? (profile.user?.name || profile.name)
                           : "Unknown User"}
                       </p>
                       <p className="text-xs leading-none text-muted-foreground">
                         {profileLoading
                           ? "Loading..."
-                          : profile && profile.data?.user?.email
-                          ? profile.data.user.email
+                          : profile && (profile.user?.email || profile.email)
+                          ? (profile.user?.email || profile.email)
                           : "-"}
                       </p>
                     </div>
