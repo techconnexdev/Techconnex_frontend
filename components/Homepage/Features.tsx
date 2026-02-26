@@ -91,17 +91,17 @@ const FeatureTab = (
     <div
       ref={tabRef}
       onMouseEnter={handleTabHover}
-      className="relative border border-blue-700/15 flex p-2.5 rounded-xl gap-2.5 items-center lg:flex-1 overflow-hidden"
+      className="relative flex p-3 sm:p-3.5 rounded-xl gap-3 items-center lg:flex-1 overflow-hidden bg-white/60 backdrop-blur-md border border-white/60 shadow-[0_2px_12px_rgba(59,130,246,0.08)] hover:bg-white/80 hover:border-blue-200/60 hover:shadow-[0_4px_20px_rgba(59,130,246,0.12)] transition-all duration-300 cursor-pointer"
       onClick={probs.onClick}
     >
       {probs.selected && (
         <motion.div
           style={{ maskImage: maskImage }}
-          className="absolute inset-0 -m-px border-2 border-blue-700 rounded-xl pointer-events-none"
+          className="absolute inset-0 -m-px border-2 border-blue-400/70 rounded-xl pointer-events-none"
         ></motion.div>
       )}
 
-      <div className="h-12 w-12 border-blue-700/15 rounded-lg inline-flex items-center justify-center">
+      <div className="h-12 w-12 rounded-lg inline-flex items-center justify-center bg-white/50 border border-white/60 shrink-0">
         <DotLottieReact
           dotLottieRefCallback={(dotLottie) => {
             dotlottieRef.current = dotLottie;
@@ -111,9 +111,9 @@ const FeatureTab = (
           autoplay
         ></DotLottieReact>
       </div>
-      <div className="font-medium ">{probs.title}</div>
+      <div className="font-medium text-gray-900">{probs.title}</div>
       {probs.isNew && (
-        <div className="text-xs rounded-full px-2 py-0.5 bg-blue-300 text-blue font-semibold">
+        <div className="text-xs rounded-full px-2 py-0.5 bg-blue-400/20 text-blue-700 font-semibold border border-blue-300/40">
           New
         </div>
       )}
@@ -159,12 +159,22 @@ export const Features = () => {
   };
 
   return (
-    <section id="features" className="py-60">
-      <div className="container">
-        <h2 className="text-5xl md:text-6xl font-medium text-center tracking-tighter">
+    <section id="features" className="relative py-24 md:py-60 overflow-hidden ">
+      {/* Blurred background circles */}
+      <div
+        className="absolute bottom-1/4 right-0 w-[400px] h-[400px] rounded-full bg-blue-500/20 blur-[80px] pointer-events-none"
+        aria-hidden
+      />
+      <div
+        className="absolute top-1/2 left-0 w-[320px] h-[320px] rounded-full bg-blue-700/15 blur-[70px] pointer-events-none"
+        aria-hidden
+      />
+
+      <div className="container relative">
+        <h2 className="text-4xl font-semibold !leading-tight mb-4 md:text-5xl md:mb-5 lg:text-6xl text-center text-gray-900 tracking-tight">
           Focus on the Work, Not the Hustle.
         </h2>
-        <p className="text-gray-950 text-lg md:text-xl max-w-2xl mx-auto tracking-tight text-center mt-5">
+        <p className="text-center text-gray-600 md:text-xl mx-auto mt-8 md:mt-12 leading-relaxed">
           Stop fighting for attention in bidding wars. Our AI finds the projects
           that fit your skills, while our smart dashboard handles the admin,
           earnings, and milestones for you.
@@ -179,9 +189,9 @@ export const Features = () => {
             />
           ))}
         </div>
-        <div className="border border-blue-700/20 p-2.5 rounded-xl mt-3">
+        <div className="mt-6 p-3 rounded-2xl bg-white/50 backdrop-blur-xl border border-white/70 shadow-[0_4px_24px_rgba(59,130,246,0.1)]">
           <motion.div
-            className="aspect-video bg-cover border-blue-700/20 rounded-lg"
+            className="aspect-video bg-cover rounded-xl border border-white/60 shadow-inner overflow-hidden"
             style={{
               backgroundPosition,
               backgroundSize,

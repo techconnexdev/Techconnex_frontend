@@ -26,7 +26,14 @@ interface MilestonePaymentProps {
 export const API_BASE =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
-function CheckoutForm({ milestone, type }: MilestonePaymentProps) {
+// Must match backend: 5% platform fee charged to customer
+const CUSTOMER_FEE_PERCENTAGE = 0.05;
+
+function CheckoutForm({
+  milestone,
+  type,
+  totalAmount,
+}: MilestonePaymentProps & { totalAmount: number }) {
   const stripe = useStripe();
   const elements = useElements();
   const [isProcessing, setIsProcessing] = useState(false);
@@ -81,7 +88,7 @@ function CheckoutForm({ milestone, type }: MilestonePaymentProps) {
       >
         {isProcessing
           ? "Processing..."
-          : `Pay MYR ${milestone.amount.toFixed(2)}`}
+          : `Pay MYR ${totalAmount.toFixed(2)}`}
       </button>
       </div>
     </form>
@@ -93,6 +100,7 @@ export default function MilestonePayment({
   type,
 }: MilestonePaymentProps) {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [totalAmount, setTotalAmount] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
 
   const initiatePayment = async () => {
@@ -115,6 +123,7 @@ export default function MilestonePayment({
 
       if (data.success) {
         setClientSecret(data.data.clientSecret);
+        setTotalAmount(data.data.amount ?? null);
       } else {
         alert(data.message || "Failed to initiate payment");
       }
@@ -126,6 +135,9 @@ export default function MilestonePayment({
     }
   };
 
+  const displayTotal =
+    totalAmount ?? milestone.amount * (1 + CUSTOMER_FEE_PERCENTAGE);
+
   if (!clientSecret) {
     return (
       <div className="bg-white p-4 sm:p-6 rounded-lg shadow max-w-full">
@@ -135,9 +147,14 @@ export default function MilestonePayment({
         <p className="text-sm sm:text-base text-gray-600 mb-3 sm:mb-4 break-words">
           {milestone.title}
         </p>
-        <p className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6">
-          MYR {milestone.amount.toFixed(2)}
-        </p>
+        <div className="mb-4 sm:mb-6 space-y-1">
+          <p className="text-sm text-gray-600">
+            Milestone: MYR {milestone.amount.toFixed(2)} + 5% platform fee
+          </p>
+          <p className="text-xl sm:text-2xl font-bold">
+            Total: MYR {displayTotal.toFixed(2)}
+          </p>
+        </div>
         <button
           onClick={initiatePayment}
           disabled={loading}
@@ -166,13 +183,13 @@ export default function MilestonePayment({
         {milestone.title}
       </p>
         <p className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6">
-        MYR {milestone.amount.toFixed(2)}
+        MYR {displayTotal.toFixed(2)}
       </p>
       </div>
 
       <div className="flex-1 min-h-0 overflow-hidden">
       <Elements stripe={stripePromise} options={options}>
-        <CheckoutForm milestone={milestone} type={type} />
+        <CheckoutForm milestone={milestone} type={type} totalAmount={displayTotal} />
       </Elements>
       </div>
     </div>

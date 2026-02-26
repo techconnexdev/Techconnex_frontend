@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import Link from "next/link";
 
 interface AdminSettings {
   platformName?: string;
@@ -42,13 +43,15 @@ const Footer = () => {
   const contactPhone = settings?.contactPhone || "+1 (234) 567-890";
 
   return (
-    <footer className="py-8 bg-blue-900 text-white border-t border-white/20">
-      <div className="container mx-auto px-4">
+    <footer className="relative py-8 bg-gradient-to-b from-blue-50/60 to-blue-100/80 text-gray-900 overflow-hidden border-t border-blue-200/40">
+      {/* Soft top edge to blend from WobbleCard */}
+      <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-200/50 to-transparent" aria-hidden />
+      <div className="container mx-auto px-4 relative z-10">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-6">
           {/* Platform Name and Description */}
           <div className="col-span-1 md:col-span-2 lg:col-span-2">
             <h3 className="text-2xl font-bold mb-3">{platformName}</h3>
-            <p className="text-white/70 text-sm leading-relaxed max-w-md">
+            <p className="text-gray-600 text-sm leading-relaxed max-w-md">
               {platformDescription}
             </p>
           </div>
@@ -56,13 +59,13 @@ const Footer = () => {
           {/* Contact Information */}
           <div className="col-span-1 md:col-span-2 lg:col-span-2 space-y-4">
             <div>
-              <h4 className="text-sm font-semibold mb-2 text-white/90">
+              <h4 className="text-sm font-semibold mb-2 text-gray-900">
                 Contact Us
               </h4>
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <svg
-                    className="w-4 h-4 text-white/70"
+                    className="w-4 h-4 text-gray-500"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -76,14 +79,14 @@ const Footer = () => {
                   </svg>
                   <a
                     href={`mailto:${supportEmail}`}
-                    className="text-white/70 hover:text-white transition text-sm"
+                    className="text-gray-600 hover:text-gray-900 transition text-sm"
                   >
                     {supportEmail}
                   </a>
                 </div>
                 <div className="flex items-center gap-2">
                   <svg
-                    className="w-4 h-4 text-white/70"
+                    className="w-4 h-4 text-gray-500"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -97,7 +100,7 @@ const Footer = () => {
                   </svg>
                   <a
                     href={`tel:${contactPhone.replace(/\s/g, "")}`}
-                    className="text-white/70 hover:text-white transition text-sm"
+                    className="text-gray-600 hover:text-gray-900 transition text-sm"
                   >
                     {contactPhone}
                   </a>
@@ -107,10 +110,23 @@ const Footer = () => {
           </div>
         </div>
 
-        {/* Copyright */}
-        <div className="border-t border-white/20 pt-6">
-          <div className="text-center text-white/70 text-sm">
-            © {new Date().getFullYear()} {platformName}, Inc. All rights
+        {/* Legal links & Copyright */}
+        <div className="border-t border-blue-200/40 pt-6">
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm text-gray-600 mb-3">
+            <Link href="/privacy" className="hover:text-gray-900 transition">
+              Privacy Policy
+            </Link>
+            <span aria-hidden>·</span>
+            <Link href="/terms" className="hover:text-gray-900 transition">
+              Terms of Service
+            </Link>
+            <span aria-hidden>·</span>
+            <Link href="/cookies" className="hover:text-gray-900 transition">
+              Cookie Policy
+            </Link>
+          </div>
+          <div className="text-center text-gray-600 text-sm">
+            © {new Date().getFullYear()} CYBERNET CONSULTING SDN. BHD. All rights
             reserved.
           </div>
         </div>

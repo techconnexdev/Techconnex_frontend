@@ -881,6 +881,7 @@ export default function NewProjectPage() {
                       </Badge>
                     )}
                   </div>
+                  <p className="text-xs text-gray-500">by max</p>
                   <div className="flex flex-col sm:flex-row gap-2">
                     <Input
                       id="timelineAmount"

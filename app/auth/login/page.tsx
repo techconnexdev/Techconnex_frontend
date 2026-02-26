@@ -17,8 +17,9 @@ import {
 } from "@/components/ui/card";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Zap, Mail, Lock, Eye, EyeOff, Building, User } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, Building, User } from "lucide-react";
 import Cookies from "js-cookie"; // install via `npm i js-cookie`
+import Image from "next/image";
 
 const fadeInUp = {
   initial: { opacity: 0, y: 30 },
@@ -202,15 +203,15 @@ const LogoSection = () => (
     animate="animate"
   >
     <Link href="/" className="inline-flex items-center space-x-2 group">
-      <motion.div
-        className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center"
-        whileHover={{ scale: 1.1, rotate: 5 }}
-        transition={{ type: "spring", stiffness: 400, damping: 10 }}
-      >
-        <Zap className="w-6 h-6 text-white" />
-      </motion.div>
+      <Image
+        src="/logo.png"
+        alt="TechConnex"
+        width={40}
+        height={40}
+        className="h-10 w-10 rounded-xl object-contain"
+      />
       <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-        TechConnex
+        Techconnex
       </span>
     </Link>
   </motion.div>
@@ -294,7 +295,6 @@ const LoadingSpinner = () => (
     className="w-4 h-4 border-2 border-white border-t-transparent rounded-full mx-auto"
   />
 );
-
 
 const SignUpLink = () => (
   <div className="mt-6 text-center">

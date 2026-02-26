@@ -464,20 +464,20 @@ export default function ProviderDashboard() {
               </CardContent>
             </Card>
 
-            {/* Recommended Opportunities */}
+            {/* Recommended Opportunities - top 5 on dashboard; full list on Find Opportunities */}
             <Card>
               <CardHeader className="p-4 sm:p-6">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
                   <div className="flex-1">
                     <CardTitle className="text-lg sm:text-xl">
-                      Recommended Opportunities
+                      AI Recommendations
                     </CardTitle>
                     <CardDescription className="text-xs sm:text-sm mt-1">
-                      AI-matched projects based on your skills and preferences
+                      Top matched projects based on your skills and preferences
                     </CardDescription>
                   </div>
                   <Link
-                    href="/provider/opportunities"
+                    href="/provider/opportunities?tab=recommended"
                     className="w-full sm:w-auto"
                   >
                     <Button
@@ -485,7 +485,7 @@ export default function ProviderDashboard() {
                       size="sm"
                       className="w-full sm:w-auto"
                     >
-                      Browse All
+                      View All
                     </Button>
                   </Link>
                 </div>
@@ -551,10 +551,12 @@ export default function ProviderDashboard() {
                       No recommended opportunities found. Check back later!
                     </div>
                   ) : (
-                    recommendedOpportunities.map((opportunity) => {
-                      const isExpanded =
-                        expandedOpportunityId === opportunity.id;
-                      return (
+                    recommendedOpportunities
+                      .slice(0, 5)
+                      .map((opportunity) => {
+                        const isExpanded =
+                          expandedOpportunityId === opportunity.id;
+                        return (
                         <div
                           key={opportunity.id}
                           className="group relative p-3 sm:p-4 md:p-5 border-2 border-gray-200 rounded-lg sm:rounded-xl active:border-blue-400 active:shadow-md sm:hover:border-blue-400 sm:hover:shadow-lg transition-all duration-300 bg-white"

@@ -65,7 +65,7 @@ import {
   getR2DownloadUrl,
   type Milestone,
 } from "@/lib/api";
-import { formatTimeline } from "@/lib/timeline-utils";
+import { formatTimeline, formatDurationDays, timelineToDays } from "@/lib/timeline-utils";
 import { MarkdownViewer } from "@/components/markdown/MarkdownViewer";
 import { Separator } from "@/components/separator";
 import Image from "next/image";
@@ -194,6 +194,9 @@ export default function ProviderProjectDetailsPage() {
         title?: string;
         description?: string;
         dueDate?: string;
+        daysFromStart?: string;
+        durationAmount?: string;
+        durationUnit?: string;
       }
     >
   >({});
@@ -284,29 +287,40 @@ export default function ProviderProjectDetailsPage() {
       if (!project?.id) return;
       try {
         const milestoneData = await getProviderProjectMilestones(project.id);
-        setProjectMilestones(
-          Array.isArray(milestoneData.milestones)
-            ? milestoneData.milestones.map(
-                (m) =>
-                  ({
-                    ...m,
-                    sequence:
-                      (m as Milestone & { order?: number }).order ??
-                      (m as Milestone).sequence ??
-                      0,
-                    // Ensure all milestone fields are included
-                    submissionAttachmentUrl: (m as Milestone)
-                      .submissionAttachmentUrl,
-                    submissionNote: (m as Milestone).submissionNote,
-                    submittedAt: (m as Milestone).submittedAt,
-                    startDeliverables: (m as Milestone).startDeliverables,
-                    submitDeliverables: (m as Milestone).submitDeliverables,
-                    revisionNumber: (m as Milestone).revisionNumber,
-                    submissionHistory: (m as Milestone).submissionHistory,
-                  } as Milestone)
-              )
-            : []
+        const raw = Array.isArray(milestoneData.milestones)
+          ? milestoneData.milestones.map(
+              (m) =>
+                ({
+                  ...m,
+                  sequence:
+                    (m as Milestone & { order?: number }).order ??
+                    (m as Milestone).sequence ??
+                    0,
+                  submissionAttachmentUrl: (m as Milestone).submissionAttachmentUrl,
+                  submissionNote: (m as Milestone).submissionNote,
+                  submittedAt: (m as Milestone).submittedAt,
+                  startDeliverables: (m as Milestone).startDeliverables,
+                  submitDeliverables: (m as Milestone).submitDeliverables,
+                  revisionNumber: (m as Milestone).revisionNumber,
+                  submissionHistory: (m as Milestone).submissionHistory,
+                } as Milestone)
+            )
+          : [];
+        const sorted = [...raw].sort(
+          (a, b) => ((a.order as number) ?? 0) - ((b.order as number) ?? 0),
         );
+        const withDuration = sorted.map((m, i) => {
+          const prev = sorted[i - 1] as { daysFromStart?: number } | undefined;
+          const currDays = (m as Milestone & { daysFromStart?: number }).daysFromStart ?? 0;
+          const prevDays = prev?.daysFromStart ?? 0;
+          const durationDays = currDays - prevDays;
+          return {
+            ...m,
+            durationAmount: durationDays > 0 ? String(durationDays) : "",
+            durationUnit: (durationDays > 0 ? "day" : "") as "day" | "week" | "month" | "",
+          } as Milestone & { durationAmount?: string; durationUnit?: string };
+        });
+        setProjectMilestones(withDuration);
         setMilestoneApprovalState({
           milestonesLocked: milestoneData.milestonesLocked,
           companyApproved: milestoneData.companyApproved,
@@ -334,8 +348,9 @@ export default function ProviderProjectDetailsPage() {
           title: "",
           description: "",
           amount: 0,
-          dueDate: new Date().toISOString().slice(0, 10), // yyyy-mm-dd
-        },
+          durationAmount: "",
+          durationUnit: "" as "day" | "week" | "month" | "",
+        } as Milestone & { durationAmount?: string; durationUnit?: string },
       ])
     );
   };
@@ -395,48 +410,31 @@ export default function ProviderProjectDetailsPage() {
   const handleSaveProjectMilestones = async () => {
     if (!project?.id) return;
 
-    // Validate milestones
-    const errors: Record<
-      number,
-      { title?: string; description?: string; dueDate?: string }
-    > = {};
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    type Err = { title?: string; description?: string; dueDate?: string; daysFromStart?: string; durationAmount?: string; durationUnit?: string };
+    const errors: Record<number, Err> = {};
     let hasErrors = false;
-
     projectMilestones.forEach((m, idx) => {
-      const milestoneErrors: {
-        title?: string;
-        description?: string;
-        dueDate?: string;
-      } = {};
-
+      const milestoneErrors: Err = {};
+      const mm = m as Milestone & { durationAmount?: string; durationUnit?: string };
       if (!m.title || !m.title.trim()) {
         milestoneErrors.title = "Title is required.";
         hasErrors = true;
       }
-
       if (!m.description || !m.description.trim()) {
         milestoneErrors.description = "Description is required.";
         hasErrors = true;
       }
-
-      if (!m.dueDate) {
-        milestoneErrors.dueDate = "Due date is required.";
+      const durAmount = mm.durationAmount != null ? String(mm.durationAmount).trim() : "";
+      const durUnit = mm.durationUnit || "";
+      if (!durAmount || Number(durAmount) <= 0) {
+        milestoneErrors.durationAmount = "Duration amount is required and must be > 0.";
         hasErrors = true;
-      } else {
-        const dueDate = new Date(m.dueDate);
-        dueDate.setHours(0, 0, 0, 0);
-        if (dueDate < today) {
-          milestoneErrors.dueDate =
-            "Due date cannot be in the past. Please select today or a future date.";
-          hasErrors = true;
-        }
       }
-
-      if (Object.keys(milestoneErrors).length > 0) {
-        errors[idx] = milestoneErrors;
+      if (!durUnit) {
+        milestoneErrors.durationUnit = "Unit is required.";
+        hasErrors = true;
       }
+      if (Object.keys(milestoneErrors).length > 0) errors[idx] = milestoneErrors;
     });
 
     // Validate milestone sum equals bid amount
@@ -453,7 +451,7 @@ export default function ProviderProjectDetailsPage() {
 
       if (sumMilestones !== bidAmount) {
         const msg = `Total of milestones (RM ${sumMilestones.toLocaleString()}) must equal the bid amount (RM ${bidAmount.toLocaleString()}).`;
-        errors[-1] = { title: msg }; // Use -1 as a special index for general error
+        errors[-1] = { ...errors[-1], title: errors[-1]?.title ?? msg };
         hasErrors = true;
       }
     }
@@ -463,7 +461,7 @@ export default function ProviderProjectDetailsPage() {
       toast({
         title: "Validation Error",
         description:
-          "Please fill in all required milestone fields (title, description, due date) and ensure dates are not in the past. Also ensure milestone amounts sum equals the bid amount.",
+          "Please fill required fields. Milestone durations must total the delivery timeline and amounts must equal the bid.",
         variant: "destructive",
       });
       return;
@@ -473,13 +471,20 @@ export default function ProviderProjectDetailsPage() {
 
     try {
       setSavingMilestones(true);
-      const payload = normalizeMilestoneSequences(projectMilestones).map(
-        (m) => ({
-          ...m,
+      const sorted = normalizeMilestoneSequences(projectMilestones);
+      let cum = 0;
+      const payload = sorted.map((m) => {
+        const mm = m as Milestone & { durationAmount?: string; durationUnit?: string };
+        const d = timelineToDays(Number(mm.durationAmount || 0), mm.durationUnit || "");
+        cum += d;
+        return {
+          sequence: m.sequence ?? m.order,
+          title: m.title,
+          description: m.description ?? "",
           amount: Number(m.amount),
-          dueDate: new Date(m.dueDate).toISOString(), // ensure ISO
-        })
-      );
+          daysFromStart: cum,
+        };
+      });
       const res = await updateProviderProjectMilestones(project.id, payload);
       setMilestoneApprovalState({
         milestonesLocked: res.milestonesLocked,
@@ -488,9 +493,8 @@ export default function ProviderProjectDetailsPage() {
         milestonesApprovedAt: res.milestonesApprovedAt,
       });
 
-      // Refresh milestones from API
       const milestoneData = await getProviderProjectMilestones(project.id);
-      const refreshedMilestones = Array.isArray(milestoneData.milestones)
+      const rawRefreshed = Array.isArray(milestoneData.milestones)
         ? milestoneData.milestones.map(
             (m) =>
               ({
@@ -499,8 +503,7 @@ export default function ProviderProjectDetailsPage() {
                   (m as Milestone & { order?: number }).order ??
                   (m as Milestone).sequence ??
                   0,
-                submissionAttachmentUrl: (m as Milestone)
-                  .submissionAttachmentUrl,
+                submissionAttachmentUrl: (m as Milestone).submissionAttachmentUrl,
                 submissionNote: (m as Milestone).submissionNote,
                 submittedAt: (m as Milestone).submittedAt,
                 startDeliverables: (m as Milestone).startDeliverables,
@@ -510,12 +513,23 @@ export default function ProviderProjectDetailsPage() {
               } as Milestone)
           )
         : [];
-
-      // Update both current and original milestones with fresh data
-      setProjectMilestones(refreshedMilestones);
-      setOriginalProjectMilestones(
-        JSON.parse(JSON.stringify(refreshedMilestones))
+      const sortedRef = [...rawRefreshed].sort(
+        (a, b) => ((a.order as number) ?? 0) - ((b.order as number) ?? 0),
       );
+      const withDurationRef = sortedRef.map((m, i) => {
+        const prev = sortedRef[i - 1] as { daysFromStart?: number } | undefined;
+        const currDays = (m as Milestone & { daysFromStart?: number }).daysFromStart ?? 0;
+        const prevDays = prev?.daysFromStart ?? 0;
+        const durationDays = currDays - prevDays;
+        return {
+          ...m,
+          durationAmount: durationDays > 0 ? String(durationDays) : "",
+          durationUnit: (durationDays > 0 ? "day" : "") as "day" | "week" | "month" | "",
+        } as Milestone & { durationAmount?: string; durationUnit?: string };
+      });
+
+      setProjectMilestones(withDurationRef);
+      setOriginalProjectMilestones(JSON.parse(JSON.stringify(withDurationRef)));
 
       // Refresh project data to get updated milestones
       await refreshProjectData();
@@ -1263,8 +1277,43 @@ export default function ProviderProjectDetailsPage() {
                               </p>
                             </div>
                           )}
+                          {milestoneApprovalState.milestonesLocked &&
+                            projectMilestones &&
+                            projectMilestones.length > 0 && (() => {
+                              const sorted = [...projectMilestones].sort(
+                                (a, b) => (a.order ?? a.sequence ?? 0) - (b.order ?? b.sequence ?? 0),
+                              );
+                              const last = sorted[sorted.length - 1] as Milestone & { daysFromStart?: number };
+                              const totalDays = last?.daysFromStart ?? 0;
+                              const lastDueDate = last?.dueDate;
+                              return (
+                                <>
+                                  {totalDays > 0 && (
+                                    <div>
+                                      <p className="text-xs text-gray-500 mb-1">
+                                        Approved Timeline:
+                                      </p>
+                                      <p className="text-sm font-semibold text-green-600 break-words">
+                                        {formatDurationDays(totalDays)}
+                                      </p>
+                                    </div>
+                                  )}
+                                  {lastDueDate && (
+                                    <div>
+                                      <p className="text-xs text-gray-500 mb-1">
+                                        Due date (project):
+                                      </p>
+                                      <p className="text-sm font-semibold text-green-600 break-words">
+                                        {formatDate(lastDueDate)}
+                                      </p>
+                                    </div>
+                                  )}
+                                </>
+                              );
+                            })()}
                           {!project.originalTimeline &&
-                            !project.providerProposedTimeline && (
+                            !project.providerProposedTimeline &&
+                            !(milestoneApprovalState.milestonesLocked && projectMilestones?.length) && (
                               <p className="text-sm text-gray-600">
                                 Not specified
                               </p>
@@ -1416,6 +1465,20 @@ export default function ProviderProjectDetailsPage() {
                         {milestoneApprovalState.providerApproved ? "✓" : "✗"}
                         {milestoneApprovalState.milestonesLocked && " · LOCKED"}
                       </Badge>
+                      {milestoneApprovalState.milestonesLocked &&
+                        projectMilestones &&
+                        projectMilestones.length > 0 && (() => {
+                          const sorted = [...projectMilestones].sort(
+                            (a, b) => (a.order ?? a.sequence ?? 0) - (b.order ?? b.sequence ?? 0),
+                          );
+                          const last = sorted[sorted.length - 1] as { daysFromStart?: number } | undefined;
+                          const totalDays = last?.daysFromStart ?? 0;
+                          return totalDays > 0 ? (
+                            <span className="text-xs sm:text-sm text-green-600 font-medium">
+                              Approved timeline: {formatDurationDays(totalDays)}
+                            </span>
+                          ) : null;
+                        })()}
                       {!milestoneApprovalState.milestonesLocked && (
                         <>
                           <Button
@@ -1484,7 +1547,23 @@ export default function ProviderProjectDetailsPage() {
                                 </div>
                                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 text-xs sm:text-sm text-gray-600">
                                   <span>
-                                    Due: {formatDate(milestone.dueDate)}
+                                    {(() => {
+                                      const sorted = [...(projectMilestones || [])].sort(
+                                        (a, b) => (a.order ?? a.sequence ?? 0) - (b.order ?? b.sequence ?? 0),
+                                      );
+                                      const idx = sorted.findIndex((x) => x.id === milestone.id);
+                                      if (idx < 0) return milestone.dueDate ? `Due: ${formatDate(milestone.dueDate)}` : "—";
+                                      const prev = sorted[idx - 1] as { daysFromStart?: number } | undefined;
+                                      const currDays = (milestone as Milestone & { daysFromStart?: number }).daysFromStart ?? 0;
+                                      const prevDays = prev?.daysFromStart ?? 0;
+                                      const durationDays = currDays - prevDays;
+                                      const durationStr = durationDays > 0 ? `Duration: ${formatDurationDays(durationDays)}` : "";
+                                      const dueStr = milestone.dueDate ? `Due: ${formatDate(milestone.dueDate)}` : "";
+                                      if (milestoneApprovalState.milestonesLocked && dueStr) {
+                                        return [durationStr, dueStr].filter(Boolean).join(" · ");
+                                      }
+                                      return durationStr || dueStr || "—";
+                                    })()}
                                   </span>
                                   <div className="flex items-center gap-2">
                                     {milestone.status === "PAID" && (
@@ -3038,45 +3117,59 @@ export default function ProviderProjectDetailsPage() {
                       </div>
                       <div className="md:col-span-4">
                         <Label className="text-sm font-medium">
-                          Due Date <span className="text-red-500">*</span>
+                          Duration <span className="text-red-500">*</span>
                         </Label>
-                        <Input
-                          type="date"
-                          min={new Date().toISOString().split("T")[0]}
-                          value={(m.dueDate || "").slice(0, 10)}
-                          onChange={(e) => {
-                            const selectedDate = e.target.value;
-                            const today = new Date()
-                              .toISOString()
-                              .split("T")[0];
-                            if (selectedDate < today) {
-                              toast({
-                                title: "Invalid Date",
-                                description:
-                                  "Due date cannot be in the past. Please select today or a future date.",
-                                variant: "destructive",
-                              });
-                              return;
-                            }
-                            updateProjectMilestone(i, {
-                              dueDate: selectedDate,
-                            });
-                            if (milestoneErrors[i]?.dueDate) {
-                              setMilestoneErrors((prev) => ({
-                                ...prev,
-                                [i]: { ...prev[i], dueDate: undefined },
-                              }));
-                            }
-                          }}
-                          className={
-                            milestoneErrors[i]?.dueDate
-                              ? "border-red-500 focus-visible:ring-red-500"
-                              : ""
-                          }
-                        />
-                        {milestoneErrors[i]?.dueDate && (
+                        <div className="flex gap-2 mt-1">
+                          <Input
+                            type="number"
+                            min={1}
+                            placeholder="e.g. 1"
+                            value={(m as Milestone & { durationAmount?: string }).durationAmount ?? ""}
+                            onChange={(e) => {
+                              updateProjectMilestone(i, {
+                                durationAmount: e.target.value,
+                                durationUnit: (m as Milestone & { durationUnit?: string }).durationUnit || "",
+                              } as Partial<Milestone>);
+                              if (milestoneErrors[i]?.durationAmount || milestoneErrors[i]?.durationUnit) {
+                                setMilestoneErrors((prev) => ({
+                                  ...prev,
+                                  [i]: { ...prev[i], durationAmount: undefined, durationUnit: undefined },
+                                }));
+                              }
+                              if (milestoneErrors[-1]) {
+                                setMilestoneErrors((prev) => { const next = { ...prev }; delete next[-1]; return next; });
+                              }
+                            }}
+                            className={`flex-1 ${milestoneErrors[i]?.durationAmount ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                          />
+                          <Select
+                            value={(m as Milestone & { durationUnit?: string }).durationUnit || ""}
+                            onValueChange={(value: "day" | "week" | "month") => {
+                              updateProjectMilestone(i, {
+                                durationAmount: (m as Milestone & { durationAmount?: string }).durationAmount ?? "",
+                                durationUnit: value,
+                              } as Partial<Milestone>);
+                              if (milestoneErrors[i]?.durationUnit) {
+                                setMilestoneErrors((prev) => ({ ...prev, [i]: { ...prev[i], durationUnit: undefined } }));
+                              }
+                              if (milestoneErrors[-1]) {
+                                setMilestoneErrors((prev) => { const next = { ...prev }; delete next[-1]; return next; });
+                              }
+                            }}
+                          >
+                            <SelectTrigger className={`w-[100px] ${milestoneErrors[i]?.durationUnit ? "border-red-500 focus:ring-red-500" : ""}`}>
+                              <SelectValue placeholder="Unit" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="day">Day(s)</SelectItem>
+                              <SelectItem value="week">Week(s)</SelectItem>
+                              <SelectItem value="month">Month(s)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {(milestoneErrors[i]?.durationAmount || milestoneErrors[i]?.durationUnit) && (
                           <p className="text-xs text-red-600 mt-1">
-                            {milestoneErrors[i].dueDate}
+                            {milestoneErrors[i].durationAmount || milestoneErrors[i].durationUnit}
                           </p>
                         )}
                       </div>

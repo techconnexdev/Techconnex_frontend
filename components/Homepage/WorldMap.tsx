@@ -3,13 +3,16 @@ import WorldMap from "@/components/ui/world-map";
 
 export function WorldMapDemo() {
   return (
-    <div className="py-16 md:py-60 dark:bg-black bg-white w-full">
-      <h2 className="text-5xl md:text-6xl font-medium text-center tracking-tighter">
-      Tech for the Process. Connect for the Purpose.
-        </h2>
-        <p className="text-gray-950 text-lg md:text-xl max-w-2xl mx-auto tracking-tight text-center mt-5">
-        Transcending borders to link ambition with opportunity, no matter where you are on the map.        </p>
-      <div className="max-w-5xl mx-auto mt-8 md:mt-12">
+    <div className="relative py-16 md:py-60 bg-gradient-to-b from-blue-50/60 via-white to-blue-50/50 w-full overflow-hidden">
+      {/* Bottom gradient: blend into WobbleCard */}
+      <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-blue-100/40 to-transparent pointer-events-none" aria-hidden />
+      <h2 className="text-4xl font-semibold !leading-tight mb-4 md:text-5xl md:mb-5 lg:text-6xl text-center text-gray-900 tracking-tight">
+        Tech for the Process. Connect for the Purpose.
+      </h2>
+      <p className="text-center text-gray-600 md:text-xl mx-auto mt-8 md:mt-12 leading-relaxed">
+        Transcending borders to link ambition with opportunity, no matter where you are on the map.
+      </p>
+      <div className="relative max-w-5xl mx-auto mt-8 md:mt-12">
         <WorldMap
           dots={[
             {

@@ -30,6 +30,7 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import CustomerRegistration from "./components/company";
 import ProviderRegistration from "./components/Provider";
+import Image from "next/image";
 
 const fadeInUp = {
   initial: { opacity: 0, y: 30 },
@@ -146,7 +147,10 @@ export default function SignupPage() {
     useState<Certification | null>(null);
 
   const [isProcessingCV, setIsProcessingCV] = useState(false);
-  const [cvExtractedData, setCvExtractedData] = useState<Record<string, unknown> | null>(null);
+  const [cvExtractedData, setCvExtractedData] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
   const [showAIResults, setShowAIResults] = useState(false);
   const [aiProcessingComplete, setAiProcessingComplete] = useState(false);
 
@@ -212,7 +216,7 @@ export default function SignupPage() {
   // Helper functions
   const isStrongPassword = (pwd: string) =>
     /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_\-+={}[\]|;:'",.<>/?`~]).{8,}$/.test(
-      pwd
+      pwd,
     );
 
   const checkEmailAvailability = async (email: string) => {
@@ -222,7 +226,7 @@ export default function SignupPage() {
       const timestamp = Date.now();
       const res = await fetch(
         `${API_BASE}/auth/check-email?email=${encodeURIComponent(
-          email
+          email,
         )}&_t=${timestamp}`,
         {
           method: "GET",
@@ -230,7 +234,7 @@ export default function SignupPage() {
             "Cache-Control": "no-cache",
             Pragma: "no-cache",
           },
-        }
+        },
       );
       const data = await res.json();
       console.log(`🔍 Checking email availability for: ${email}`);
@@ -239,7 +243,7 @@ export default function SignupPage() {
         throw new Error(data?.error || "Failed");
       setEmailStatus(data.available ? "available" : "used");
       console.log(
-        `✅ Email status set to: ${data.available ? "available" : "used"}`
+        `✅ Email status set to: ${data.available ? "available" : "used"}`,
       );
       return data.available;
     } catch (error) {
@@ -256,19 +260,23 @@ export default function SignupPage() {
   const uploadResume = async (userId: string, file: File) => {
     // Validate file type
     if (file.type !== "application/pdf") {
-      throw new Error("Invalid file type: Only PDF files are allowed for resumes.");
+      throw new Error(
+        "Invalid file type: Only PDF files are allowed for resumes.",
+      );
     }
 
     // Validate file size (50MB max for documents)
     const maxSize = 50 * 1024 * 1024; // 50 MB
     if (file.size > maxSize) {
-      throw new Error(`File size exceeds limit. Maximum size is ${(maxSize / (1024 * 1024)).toFixed(0)} MB`);
+      throw new Error(
+        `File size exceeds limit. Maximum size is ${(maxSize / (1024 * 1024)).toFixed(0)} MB`,
+      );
     }
 
     try {
       // Upload to R2 first
       const { uploadFile } = await import("@/lib/upload");
-      
+
       let uploadResult;
       try {
         uploadResult = await uploadFile({
@@ -279,9 +287,17 @@ export default function SignupPage() {
         });
       } catch (uploadError: unknown) {
         // Handle R2 upload errors
-        const errorMessage = uploadError instanceof Error ? uploadError.message : String(uploadError);
-        if (errorMessage.includes("network") || errorMessage.includes("fetch")) {
-          throw new Error("Network error: Unable to connect to upload service. Please check your internet connection and try again.");
+        const errorMessage =
+          uploadError instanceof Error
+            ? uploadError.message
+            : String(uploadError);
+        if (
+          errorMessage.includes("network") ||
+          errorMessage.includes("fetch")
+        ) {
+          throw new Error(
+            "Network error: Unable to connect to upload service. Please check your internet connection and try again.",
+          );
         }
         if (errorMessage.includes("size") || errorMessage.includes("limit")) {
           throw new Error(`File size error: ${errorMessage}`);
@@ -289,7 +305,9 @@ export default function SignupPage() {
         if (errorMessage.includes("type") || errorMessage.includes("format")) {
           throw new Error(`File type error: ${errorMessage}`);
         }
-        throw new Error(`Upload failed: ${errorMessage || "Unknown error occurred during file upload"}`);
+        throw new Error(
+          `Upload failed: ${errorMessage || "Unknown error occurred during file upload"}`,
+        );
       }
 
       if (!uploadResult.success) {
@@ -298,12 +316,15 @@ export default function SignupPage() {
 
       // Send R2 key/URL to backend
       // Token is optional (for registration flows)
-      const token = typeof window !== "undefined" ? localStorage.getItem("token") : undefined;
+      const token =
+        typeof window !== "undefined"
+          ? localStorage.getItem("token")
+          : undefined;
 
       const headers: HeadersInit = {
         "Content-Type": "application/json",
       };
-      
+
       // Add authorization header only if token exists
       if (token) {
         headers["Authorization"] = `Bearer ${token}`;
@@ -322,12 +343,21 @@ export default function SignupPage() {
         });
       } catch (fetchError: unknown) {
         // Handle network errors
-        const errorMessage = fetchError instanceof Error ? fetchError.message : String(fetchError);
+        const errorMessage =
+          fetchError instanceof Error ? fetchError.message : String(fetchError);
         const errorName = fetchError instanceof Error ? fetchError.name : "";
-        if (errorMessage.includes("network") || errorMessage.includes("fetch") || errorName === "TypeError") {
-          throw new Error("Network error: Unable to connect to server. Please check your internet connection and try again.");
+        if (
+          errorMessage.includes("network") ||
+          errorMessage.includes("fetch") ||
+          errorName === "TypeError"
+        ) {
+          throw new Error(
+            "Network error: Unable to connect to server. Please check your internet connection and try again.",
+          );
         }
-        throw new Error(`Server connection failed: ${errorMessage || "Unknown error"}`);
+        throw new Error(
+          `Server connection failed: ${errorMessage || "Unknown error"}`,
+        );
       }
 
       if (!res.ok) {
@@ -344,7 +374,9 @@ export default function SignupPage() {
         } else if (res.status === 401 || res.status === 403) {
           throw new Error(`Authorization error: ${errorMessage}`);
         } else if (res.status >= 500) {
-          throw new Error(`Server error: ${errorMessage}. Please try again later.`);
+          throw new Error(
+            `Server error: ${errorMessage}. Please try again later.`,
+          );
         }
         throw new Error(errorMessage);
       }
@@ -358,7 +390,7 @@ export default function SignupPage() {
 
   const uploadCertifications = async (
     userId: string,
-    certs: Certification[]
+    certs: Certification[],
   ) => {
     return fetch(`${API_BASE}/certifications/upload`, {
       method: "POST",
@@ -372,7 +404,8 @@ export default function SignupPage() {
 
     // ✅ Check if user accidentally selected a folder
     if (kycFile.type === "" && kycFile.size === 0) {
-      const errorMsg = "You cannot upload a folder. Please select a valid file.";
+      const errorMsg =
+        "You cannot upload a folder. Please select a valid file.";
       setError(errorMsg);
       return { ok: false, error: errorMsg };
     }
@@ -389,7 +422,7 @@ export default function SignupPage() {
       // Upload to R2 first
       // Category will be auto-detected from file type (image, document, or video)
       const { uploadFile } = await import("@/lib/upload");
-      
+
       let uploadResult;
       try {
         uploadResult = await uploadFile({
@@ -400,9 +433,17 @@ export default function SignupPage() {
         });
       } catch (uploadError: unknown) {
         // Handle R2 upload errors
-        const errorMessage = uploadError instanceof Error ? uploadError.message : String(uploadError);
-        if (errorMessage.includes("network") || errorMessage.includes("fetch")) {
-          throw new Error("Network error: Unable to connect to upload service. Please check your internet connection and try again.");
+        const errorMessage =
+          uploadError instanceof Error
+            ? uploadError.message
+            : String(uploadError);
+        if (
+          errorMessage.includes("network") ||
+          errorMessage.includes("fetch")
+        ) {
+          throw new Error(
+            "Network error: Unable to connect to upload service. Please check your internet connection and try again.",
+          );
         }
         if (errorMessage.includes("size") || errorMessage.includes("limit")) {
           throw new Error(`File size error: ${errorMessage}`);
@@ -410,21 +451,28 @@ export default function SignupPage() {
         if (errorMessage.includes("type") || errorMessage.includes("format")) {
           throw new Error(`File type error: ${errorMessage}`);
         }
-        throw new Error(`Upload failed: ${errorMessage || "Unknown error occurred during file upload"}`);
+        throw new Error(
+          `Upload failed: ${errorMessage || "Unknown error occurred during file upload"}`,
+        );
       }
 
       if (!uploadResult.success) {
-        throw new Error(uploadResult.error || "Failed to upload KYC document to R2");
+        throw new Error(
+          uploadResult.error || "Failed to upload KYC document to R2",
+        );
       }
 
       // Send R2 key/URL to backend
       // Token is optional (for registration flows)
-      const token = typeof window !== "undefined" ? localStorage.getItem("token") : undefined;
+      const token =
+        typeof window !== "undefined"
+          ? localStorage.getItem("token")
+          : undefined;
 
       const headers: HeadersInit = {
         "Content-Type": "application/json",
       };
-      
+
       // Add authorization header only if token exists
       if (token) {
         headers["Authorization"] = `Bearer ${token}`;
@@ -446,23 +494,37 @@ export default function SignupPage() {
         });
       } catch (fetchError: unknown) {
         // Handle network errors
-        const errorMessage = fetchError instanceof Error ? fetchError.message : String(fetchError);
+        const errorMessage =
+          fetchError instanceof Error ? fetchError.message : String(fetchError);
         const errorName = fetchError instanceof Error ? fetchError.name : "";
-        if (errorMessage.includes("network") || errorMessage.includes("fetch") || errorName === "TypeError") {
-          throw new Error("Network error: Unable to connect to server. Please check your internet connection and try again.");
+        if (
+          errorMessage.includes("network") ||
+          errorMessage.includes("fetch") ||
+          errorName === "TypeError"
+        ) {
+          throw new Error(
+            "Network error: Unable to connect to server. Please check your internet connection and try again.",
+          );
         }
-        throw new Error(`Server connection failed: ${errorMessage || "Unknown error"}`);
+        throw new Error(
+          `Server connection failed: ${errorMessage || "Unknown error"}`,
+        );
       }
 
       let payload;
       try {
         payload = await res.json();
       } catch {
-        throw new Error(`Server response error: Invalid response from server. Please try again.`);
+        throw new Error(
+          `Server response error: Invalid response from server. Please try again.`,
+        );
       }
 
       if (!res.ok) {
-        const errorMsg = payload?.error || payload?.message || `KYC upload failed (${res.status})`;
+        const errorMsg =
+          payload?.error ||
+          payload?.message ||
+          `KYC upload failed (${res.status})`;
         if (res.status === 400) {
           throw new Error(`Validation error: ${errorMsg}`);
         } else if (res.status === 401 || res.status === 403) {
@@ -476,7 +538,8 @@ export default function SignupPage() {
       return { ok: true, data: payload.data };
     } catch (e: unknown) {
       console.error("KYC upload error:", e);
-      const errorMessage = e instanceof Error ? e.message : "KYC upload failed. Please try again.";
+      const errorMessage =
+        e instanceof Error ? e.message : "KYC upload failed. Please try again.";
       setError(errorMessage);
       return { ok: false, error: errorMessage };
     }
@@ -523,12 +586,12 @@ export default function SignupPage() {
 
   const handleInputChange = (
     key: keyof RegistrationFormData,
-    value: string
+    value: string,
   ) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
     if (key === "email") {
       console.log(
-        `🔄 Email field changed to: ${value}, resetting email status to idle`
+        `🔄 Email field changed to: ${value}, resetting email status to idle`,
       );
       setEmailStatus("idle");
       setFieldErrors((p) => ({ ...p, email: undefined }));
@@ -537,7 +600,7 @@ export default function SignupPage() {
   };
   const handleBooleanInputChange = (
     key: keyof RegistrationFormData,
-    value: boolean
+    value: boolean,
   ) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
   };
@@ -615,7 +678,7 @@ export default function SignupPage() {
                   cert.serialNumber.trim().toLowerCase() !== "n/a") ||
                   (!!cert.sourceUrl?.trim() &&
                     cert.sourceUrl.trim().toLowerCase() !== "not specified" &&
-                    cert.sourceUrl.trim().toLowerCase() !== "n/a"))
+                    cert.sourceUrl.trim().toLowerCase() !== "n/a")),
             );
 
           const newCertValid =
@@ -700,7 +763,7 @@ export default function SignupPage() {
       const requestData: Record<string, unknown> = {
         email: formData.email,
         password: formData.password,
-        name: userRole === "customer" ? formData.companyName: formData.name,
+        name: userRole === "customer" ? formData.companyName : formData.name,
         phone: formData.phone || null,
       };
 
@@ -833,15 +896,15 @@ export default function SignupPage() {
             animate="animate"
           >
             <Link href="/" className="inline-flex items-center space-x-2 group">
-              <motion.div
-                className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center"
-                whileHover={{ scale: 1.1, rotate: 5 }}
-                transition={{ type: "spring", stiffness: 400, damping: 10 }}
-              >
-                <Zap className="w-6 h-6 text-white" />
-              </motion.div>
+            <Image
+              src="/logo.png"
+              alt="TechConnex"
+              width={40}
+              height={40}
+              className="h-10 w-10 rounded-xl object-contain"
+            />
               <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                TechConnect
+                Techconnex
               </span>
             </Link>
           </motion.div>
@@ -855,7 +918,7 @@ export default function SignupPage() {
             <Card className="bg-white/80 backdrop-blur-sm border-white/20 shadow-xl">
               <CardHeader className="text-center">
                 <CardTitle className="text-3xl font-bold text-gray-900 mb-2">
-                  Join TechConnect
+                  Join Techconnex
                 </CardTitle>
                 <CardDescription className="text-lg text-gray-600">
                   Choose how you want to use our platform
@@ -939,8 +1002,8 @@ export default function SignupPage() {
                             Work as Freelancer
                           </h3>
                           <p className="text-gray-600 mb-6 leading-relaxed">
-                            I&apos;m a freelancer offering ICT services and want to
-                            find exciting projects
+                            I&apos;m a freelancer offering ICT services and want
+                            to find exciting projects
                           </p>
                           <div className="space-y-3 mb-6">
                             <div className="flex items-center text-sm text-gray-600">
@@ -982,8 +1045,8 @@ export default function SignupPage() {
                     {userRole === "customer"
                       ? "Company"
                       : userRole === "provider"
-                      ? "Freelancer"
-                      : "..."}
+                        ? "Freelancer"
+                        : "..."}
                     <ArrowRight className="w-5 h-5 ml-2" />
                   </Button>
                 </div>
@@ -1044,15 +1107,15 @@ export default function SignupPage() {
           animate="animate"
         >
           <Link href="/" className="inline-flex items-center space-x-2 group">
-            <motion.div
-              className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-xl flex items-center justify-center"
-              whileHover={{ scale: 1.1, rotate: 5 }}
-              transition={{ type: "spring", stiffness: 400, damping: 10 }}
-            >
-              <Zap className="w-6 h-6 text-white" />
-            </motion.div>
+          <Image
+              src="/logo.png"
+              alt="TechConnex"
+              width={40}
+              height={40}
+              className="h-10 w-10 rounded-xl object-contain"
+            />
             <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-              TechConnect
+              Techconnex
             </span>
           </Link>
         </motion.div>
@@ -1111,8 +1174,8 @@ export default function SignupPage() {
                         step.id < currentStep
                           ? "bg-blue-600 text-white"
                           : step.id === currentStep
-                          ? "bg-blue-100 text-blue-600 border-2 border-blue-600"
-                          : "bg-gray-200 text-gray-400"
+                            ? "bg-blue-100 text-blue-600 border-2 border-blue-600"
+                            : "bg-gray-200 text-gray-400"
                       }`}
                     >
                       {step.id < currentStep ? (

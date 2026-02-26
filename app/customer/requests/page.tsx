@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -38,11 +38,15 @@ import {
   Loader2,
   CheckCircle,
   Plus,
+  Sparkles,
+  HelpCircle,
 } from "lucide-react";
 import { CustomerLayout } from "@/components/customer-layout";
 import { useToast } from "@/hooks/use-toast";
+import { formatDurationDays, timelineToDays } from "@/lib/timeline-utils";
 import {
   getCompanyProjectRequests,
+  getBidExplanation,
   acceptProjectRequest,
   rejectProjectRequest,
   getProjectRequestStats,
@@ -57,7 +61,9 @@ import {
   approveCompanyMilestones,
   type Milestone,
 } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
 interface ProviderRequest {
   id: string;
@@ -71,6 +77,7 @@ interface ProviderRequest {
   projectTitle: string;
   bidAmount: number;
   proposedTimeline: string;
+  deliveryTime?: number; // days, for milestone duration validation
   coverLetter: string;
   status: "pending" | "accepted" | "rejected";
   submittedAt: string;
@@ -85,6 +92,7 @@ interface ProviderRequest {
     dueDate: string;
     order: number;
   }>;
+  aiFitExplanation?: string | null;
 }
 
 interface ApiProposal {
@@ -121,10 +129,19 @@ interface ApiProposal {
 
 export default function CustomerRequestsPage() {
   const { toast: toastHook } = useToast();
+  const searchParams = useSearchParams();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [projectFilter, setProjectFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
+
+  // Apply ?project= serviceRequestId from URL (e.g. from "Show all proposals" on project page)
+  useEffect(() => {
+    const projectId = searchParams.get("project");
+    if (projectId && projectId.trim()) {
+      setProjectFilter(projectId.trim());
+    }
+  }, [searchParams]);
   const [selectedRequest, setSelectedRequest] =
     useState<ProviderRequest | null>(null);
   const [viewDetailsOpen, setViewDetailsOpen] = useState(false);
@@ -145,6 +162,24 @@ export default function CustomerRequestsPage() {
     Array<{ id: string; title: string }>
   >([]);
   const [processingId, setProcessingId] = useState<string | null>(null);
+
+  // AI summary panel (same design as customer project bids)
+  const [openExplanationId, setOpenExplanationId] = useState<string | null>(null);
+  const [explanationCache, setExplanationCache] = useState<Record<string, string>>({});
+  const [explanationLoading, setExplanationLoading] = useState<Record<string, boolean>>({});
+  const [cardSummaryViewId, setCardSummaryViewId] = useState<string | null>(null);
+  const [panelTopOffset, setPanelTopOffset] = useState(0);
+  const cardRefsMap = React.useRef<Record<string, HTMLDivElement | null>>({});
+  const rightPanelColumnRef = React.useRef<HTMLDivElement | null>(null);
+  const panelLeaveTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const fetchedExplanationIds = React.useRef<Set<string>>(new Set());
+
+  const DEFAULT_BID_SUMMARY =
+    "Review this proposal's bid amount, timeline, and milestones. Check the provider's profile and cover letter to assess how well they match your project.";
+  const getBidSummary = (stored: string | null | undefined, cached: string | undefined) => {
+    const text = (stored && stored.trim()) || (cached && cached.trim());
+    return text || DEFAULT_BID_SUMMARY;
+  };
 
   const asArray = <T,>(v: unknown): T[] => (Array.isArray(v) ? v : []);
   const fmt = (v: unknown, fallback = "0") => {
@@ -168,6 +203,8 @@ export default function CustomerRequestsPage() {
     title?: string;
     description?: string;
     dueDate?: string;
+    durationAmount?: string;
+    durationUnit?: string;
   }>>({});
   const [originalMilestones, setOriginalMilestones] = useState<Milestone[]>([]);
 
@@ -185,7 +222,8 @@ export default function CustomerRequestsPage() {
           title: "",
           description: "",
           amount: 0,
-          dueDate: new Date().toISOString().slice(0, 10), // yyyy-mm-dd
+          durationAmount: "",
+          durationUnit: "" as "day" | "week" | "month" | "",
         },
       ])
     );
@@ -251,6 +289,7 @@ export default function CustomerRequestsPage() {
               projectTitle: proposal.serviceRequest.title,
               bidAmount: proposal.bidAmount,
               proposedTimeline: `${proposal.deliveryTime} days`,
+              deliveryTime: typeof proposal.deliveryTime === "number" ? proposal.deliveryTime : undefined,
               coverLetter: proposal.coverLetter,
               status: proposal.status.toLowerCase() as
                 | "pending"
@@ -274,6 +313,7 @@ export default function CustomerRequestsPage() {
               milestones: Array.isArray(proposal.milestones)
                 ? proposal.milestones
                 : [],
+              aiFitExplanation: (proposal as unknown as Record<string, unknown>).aiFitExplanation as string | undefined ?? null,
             };
           }
         );
@@ -288,7 +328,7 @@ export default function CustomerRequestsPage() {
             }
         );
 
-        // Build project options from unique service requests using the safe proposals array
+        // Build project options from this response and merge with existing so dropdown always shows all projects (even when filtered)
         const uniqueProjects = proposals.reduce(
           (
             acc: Array<{ id: string; title: string }>,
@@ -307,7 +347,13 @@ export default function CustomerRequestsPage() {
           },
           []
         );
-        setProjectOptions(uniqueProjects);
+        setProjectOptions((prev) => {
+          const merged = [...prev];
+          for (const p of uniqueProjects) {
+            if (!merged.some((m) => m.id === p.id)) merged.push(p);
+          }
+          return merged;
+        });
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to fetch data");
         console.error("Error fetching data:", err);
@@ -318,6 +364,52 @@ export default function CustomerRequestsPage() {
 
     fetchData();
   }, [searchQuery, statusFilter, projectFilter, sortBy]);
+
+  // Align right panel with hovered card (desktop)
+  useEffect(() => {
+    if (!openExplanationId || !rightPanelColumnRef.current) {
+      setPanelTopOffset(0);
+      return;
+    }
+    const cardEl = cardRefsMap.current[openExplanationId];
+    if (!cardEl) {
+      setPanelTopOffset(0);
+      return;
+    }
+    const updatePosition = () => {
+      const col = rightPanelColumnRef.current;
+      if (!cardEl || !col) return;
+      const cardRect = cardEl.getBoundingClientRect();
+      const colRect = col.getBoundingClientRect();
+      setPanelTopOffset(Math.max(0, cardRect.top - colRect.top));
+    };
+    updatePosition();
+    window.addEventListener("scroll", updatePosition, true);
+    window.addEventListener("resize", updatePosition);
+    return () => {
+      window.removeEventListener("scroll", updatePosition, true);
+      window.removeEventListener("resize", updatePosition);
+    };
+  }, [openExplanationId]);
+
+  // Fetch AI explanation for proposals without stored aiFitExplanation
+  useEffect(() => {
+    if (!openExplanationId) return;
+    const hasStored = requests.find((r) => r.id === openExplanationId)?.aiFitExplanation;
+    if (hasStored) return;
+    if (fetchedExplanationIds.current.has(openExplanationId)) return;
+    fetchedExplanationIds.current.add(openExplanationId);
+    setExplanationLoading((prev) => ({ ...prev, [openExplanationId]: true }));
+    getBidExplanation(openExplanationId)
+      .then((r) => {
+        if (r.success && r.explanation)
+          setExplanationCache((prev) => ({ ...prev, [openExplanationId]: r.explanation! }));
+      })
+      .catch(() => {})
+      .finally(() =>
+        setExplanationLoading((prev) => ({ ...prev, [openExplanationId]: false }))
+      );
+  }, [openExplanationId, requests]);
 
   // Since we're filtering on the server side, we can use requests directly
   const filteredRequests = requests.sort((a, b) => {
@@ -356,14 +448,26 @@ export default function CustomerRequestsPage() {
         )
       );
 
-      // Immediately load project milestones for edit
+      // Immediately load project milestones for edit (convert daysFromStart → duration)
       if (projectId) {
         const milestoneData = await getCompanyProjectMilestones(projectId);
-        const loadedMilestones = Array.isArray(milestoneData.milestones)
+        const raw = Array.isArray(milestoneData.milestones)
           ? milestoneData.milestones.map((m) => ({ ...m, sequence: m.order }))
           : [];
-        setMilestones(loadedMilestones);
-        setOriginalMilestones(JSON.parse(JSON.stringify(loadedMilestones))); // Deep copy
+        const sorted = [...raw].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        const withDuration = sorted.map((m, i) => {
+          const prev = sorted[i - 1] as { daysFromStart?: number } | undefined;
+          const currDays = (m as { daysFromStart?: number }).daysFromStart ?? 0;
+          const prevDays = prev?.daysFromStart ?? 0;
+          const durationDays = currDays - prevDays;
+          return {
+            ...m,
+            durationAmount: durationDays > 0 ? String(durationDays) : "",
+            durationUnit: (durationDays > 0 ? "day" : "") as "day" | "week" | "month" | "",
+          };
+        });
+        setMilestones(withDuration);
+        setOriginalMilestones(JSON.parse(JSON.stringify(withDuration)));
         setMilestoneApprovalState({
           milestonesLocked: milestoneData.milestonesLocked,
           companyApproved: milestoneData.companyApproved,
@@ -393,43 +497,34 @@ export default function CustomerRequestsPage() {
   const handleSaveMilestones = async () => {
     if (!activeProjectId) return;
 
-    // Validate milestones
-    const errors: Record<number, { title?: string; description?: string; dueDate?: string }> = {};
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    type Err = { title?: string; description?: string; dueDate?: string; durationAmount?: string; durationUnit?: string };
+    const errors: Record<number, Err> = {};
     let hasErrors = false;
-
     milestones.forEach((m, idx) => {
-      const milestoneErrors: { title?: string; description?: string; dueDate?: string } = {};
-      
+      const milestoneErrors: Err = {};
+      const mm = m as Milestone & { durationAmount?: string; durationUnit?: string };
+
       if (!m.title || !m.title.trim()) {
         milestoneErrors.title = "Title is required.";
         hasErrors = true;
       }
-      
       if (!m.description || !m.description.trim()) {
         milestoneErrors.description = "Description is required.";
         hasErrors = true;
       }
-      
-      if (!m.dueDate) {
-        milestoneErrors.dueDate = "Due date is required.";
+      const durAmount = mm.durationAmount != null ? String(mm.durationAmount).trim() : "";
+      const durUnit = mm.durationUnit || "";
+      if (!durAmount || Number(durAmount) <= 0) {
+        milestoneErrors.durationAmount = "Duration amount is required and must be > 0.";
         hasErrors = true;
-      } else {
-        const dueDate = new Date(m.dueDate);
-        dueDate.setHours(0, 0, 0, 0);
-        if (dueDate < today) {
-          milestoneErrors.dueDate = "Due date cannot be in the past. Please select today or a future date.";
-          hasErrors = true;
-        }
       }
-      
-      if (Object.keys(milestoneErrors).length > 0) {
-        errors[idx] = milestoneErrors;
+      if (!durUnit) {
+        milestoneErrors.durationUnit = "Unit is required.";
+        hasErrors = true;
       }
+      if (Object.keys(milestoneErrors).length > 0) errors[idx] = milestoneErrors;
     });
 
-    // Validate milestone sum equals bid amount
     const bidAmount = selectedRequest?.bidAmount || 0;
     if (bidAmount > 0) {
       const sumMilestones = milestones.reduce(
@@ -440,10 +535,9 @@ export default function CustomerRequestsPage() {
         },
         0
       );
-
       if (sumMilestones !== bidAmount) {
         const msg = `Total of milestones (RM ${sumMilestones.toLocaleString()}) must equal the bid amount (RM ${bidAmount.toLocaleString()}).`;
-        errors[-1] = { title: msg }; // Use -1 as a special index for general error
+        errors[-1] = { ...errors[-1], title: errors[-1]?.title ?? msg };
         hasErrors = true;
       }
     }
@@ -452,7 +546,7 @@ export default function CustomerRequestsPage() {
       setMilestoneErrors(errors);
       toastHook({
         title: "Validation Error",
-        description: "Please fill in all required milestone fields (title, description, due date) and ensure dates are not in the past. Also ensure milestone amounts sum equals the bid amount.",
+        description: "Please fill required fields and ensure milestone durations total equals the delivery timeline and amounts equal the bid.",
         variant: "destructive",
       });
       return;
@@ -462,14 +556,23 @@ export default function CustomerRequestsPage() {
 
     try {
       setSavingMilestones(true);
-      const payload = normalizeSequences(milestones).map((m) => ({
-        ...m,
-        amount: Number(m.amount),
-        dueDate: new Date(m.dueDate).toISOString(),
-      }));
+      const sorted = normalizeSequences(milestones);
+      let cum = 0;
+      const payload = sorted.map((m) => {
+        const mm = m as Milestone & { durationAmount?: string; durationUnit?: string };
+        const d = timelineToDays(Number(mm.durationAmount || 0), mm.durationUnit || "");
+        cum += d;
+        return {
+          sequence: m.sequence ?? m.order,
+          title: m.title,
+          description: m.description ?? "",
+          amount: Number(m.amount),
+          daysFromStart: cum,
+        };
+      });
       const res = await updateCompanyProjectMilestones(
         activeProjectId,
-        payload
+        payload as Milestone[]
       );
       setMilestoneApprovalState({
         milestonesLocked: res.milestonesLocked,
@@ -478,16 +581,30 @@ export default function CustomerRequestsPage() {
         milestonesApprovedAt: res.milestonesApprovedAt,
       });
       
-      // Refresh milestones from API
+      // Refresh milestones from API and convert daysFromStart → duration for form
       const milestoneData = await getCompanyProjectMilestones(activeProjectId);
-      const refreshedMilestones = Array.isArray(milestoneData.milestones)
+      type MilestoneRecord = Record<string, unknown> & { sequence: number; order?: number; daysFromStart?: number };
+      const rawRefreshed: MilestoneRecord[] = Array.isArray(milestoneData.milestones)
         ? milestoneData.milestones.map((m: Record<string, unknown>) => ({
             ...m,
             sequence: (m.order as number) ?? (m.sequence as number) ?? 0,
-          } as Milestone))
+          })) as MilestoneRecord[]
         : [];
-      
-      // Update both current and original milestones with fresh data
+      const sortedRef = [...rawRefreshed].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      const refreshedMilestones: Milestone[] = sortedRef.map((m, i) => {
+        const prev = sortedRef[i - 1];
+        const currDays = m.daysFromStart ?? 0;
+        const prevDays = prev?.daysFromStart ?? 0;
+        const durationDays = currDays - prevDays;
+        return {
+          ...m,
+          title: (m.title as string) ?? "",
+          description: (m.description as string) ?? "",
+          amount: Number(m.amount ?? 0),
+          durationAmount: durationDays > 0 ? String(durationDays) : "",
+          durationUnit: (durationDays > 0 ? "day" : "") as "day" | "week" | "month" | "",
+        } as Milestone;
+      });
       setMilestones(refreshedMilestones);
       setOriginalMilestones(JSON.parse(JSON.stringify(refreshedMilestones)));
 
@@ -786,7 +903,7 @@ export default function CustomerRequestsPage() {
           </CardContent>
         </Card>
 
-        {/* Requests List */}
+        {/* Requests List + AI summary panel (same design as project Bids tab) */}
         <div className="space-y-3 sm:space-y-4">
           {loading ? (
             <Card>
@@ -831,199 +948,351 @@ export default function CustomerRequestsPage() {
               </CardContent>
             </Card>
           ) : (
-            filteredRequests.map((request) => (
-              <Card
-                key={request.id}
-                className="hover:shadow-md transition-shadow"
+            <div className="flex gap-0 lg:gap-4 relative">
+              {/* Left: list of request cards */}
+              <div
+                className="flex-1 min-w-0 space-y-3 sm:space-y-4"
+                onMouseLeave={() => {
+                  if (panelLeaveTimeoutRef.current) clearTimeout(panelLeaveTimeoutRef.current);
+                  panelLeaveTimeoutRef.current = setTimeout(() => setOpenExplanationId(null), 200);
+                }}
               >
-                <CardContent className="p-4 sm:p-5 lg:p-6">
-                  <div className="flex flex-col lg:flex-row gap-4 sm:gap-5 lg:gap-6">
-                    {/* Provider Info */}
-                    <div className="flex items-start space-x-3 sm:space-x-4 flex-1">
-                      <Avatar className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0">
-                        <AvatarImage
-                          src={
-                            request.providerAvatar && 
-                            request.providerAvatar !== "/placeholder.svg?height=40&width=40" &&
-                            !request.providerAvatar.includes("/placeholder.svg")
-                              ? request.providerAvatar
-                              : "/placeholder.svg"
-                          }
-                        />
-                        <AvatarFallback className="text-xs sm:text-sm">
-                          {String(request.providerName || "")
-                            .split(" ")
-                            .filter(Boolean)
-                            .map((n) => n[0])
-                            .join("")}
-                        </AvatarFallback>
-                      </Avatar>
-
-                      <div className="flex-1 min-w-0">
-                        {/* Name + rating */}
-                        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-1">
-                          <h3 className="font-semibold text-sm sm:text-base text-gray-900">
-                            {request.providerName}
-                          </h3>
-                          <div className="flex items-center gap-1">
-                            <Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-yellow-400 fill-current flex-shrink-0" />
-                            <span className="text-xs sm:text-sm text-gray-600">
-                              {request.providerRating}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Location + response time */}
-                        <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-1 text-xs sm:text-sm text-gray-600 mb-1.5 sm:mb-2">
-                          <div className="flex items-center gap-1">
-                            <MapPin className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
-                            <span className="truncate">{request.providerLocation || "—"}</span>
-                          </div>
-                        </div>
-
-                        {/* Project title */}
-                        <p className="text-xs sm:text-sm font-medium text-gray-900 mb-1 break-words">
-                          {request.projectTitle}
-                        </p>
-
-                        {/* Cover letter */}
-                        <p className="text-xs sm:text-sm text-gray-600 line-clamp-2 mb-1.5 sm:mb-2">
-                          {request.coverLetter}
-                        </p>
-
-                        {/* ⬅ NEW: skills preview */}
-                        <div className="flex flex-wrap gap-1">
-                          {asArray<string>(request.skills)
-                            .slice(0, 3)
-                            .map((skill) => (
-                              <Badge
-                                key={skill}
-                                variant="secondary"
-                                className="text-[10px] leading-tight"
+                {filteredRequests.map((request) => (
+                  <div
+                    key={request.id}
+                    ref={(el) => {
+                      cardRefsMap.current[request.id] = el;
+                    }}
+                    data-request-id={request.id}
+                    className="w-full"
+                  >
+                    <Card
+                      className="hover:shadow-md transition-shadow"
+                      onMouseEnter={() => {
+                        if (panelLeaveTimeoutRef.current) {
+                          clearTimeout(panelLeaveTimeoutRef.current);
+                          panelLeaveTimeoutRef.current = null;
+                        }
+                        setOpenExplanationId(request.id);
+                      }}
+                    >
+                      <CardContent className="p-4 sm:p-5 lg:p-6">
+                        {/* Small screens: in-card AI summary when this card is expanded */}
+                        {cardSummaryViewId === request.id && (
+                          <div className="lg:hidden rounded-xl border border-gray-200 bg-gradient-to-br from-blue-50/80 to-indigo-50/80 p-4 shadow-sm">
+                            <div className="flex items-center justify-between gap-2 mb-3">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className="p-1.5 rounded-lg bg-blue-100 flex-shrink-0">
+                                  <Sparkles className="w-4 h-4 text-blue-600" />
+                                </div>
+                                <span className="text-sm font-semibold text-gray-900 truncate">
+                                  {request.providerName || "Provider"}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setCardSummaryViewId(null);
+                                  setOpenExplanationId(null);
+                                }}
+                                className="shrink-0 p-1.5 rounded-md text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                aria-label="Close"
                               >
-                                {skill}
-                              </Badge>
-                            ))}
-                          {asArray<string>(request.skills).length > 3 && (
-                            <Badge
-                              variant="secondary"
-                              className="text-[10px] leading-tight"
-                            >
-                              +{asArray<string>(request.skills).length - 3} more
-                            </Badge>
-                          )}
-                        </div>
-
-                        {/* ⬅ NEW: short experience line */}
-                        {request.experience && (
-                          <p className="text-[11px] sm:text-[12px] text-gray-500 mt-1.5 sm:mt-2 line-clamp-1">
-                            {request.experience} experience
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Request Details */}
-                    <div className="lg:w-80 space-y-2.5 sm:space-y-3">
-                      <div className="flex justify-between items-center">
-                        <Badge className={`text-xs ${getStatusColor(request.status)}`}>
-                          {request.status.charAt(0).toUpperCase() +
-                            request.status.slice(1)}
-                        </Badge>
-                        <span className="text-xs sm:text-sm text-gray-500">
-                          {request.submittedAt && !isNaN(new Date(request.submittedAt).getTime())
-                            ? new Date(request.submittedAt).toLocaleDateString()
-                            : "—"}
-                        </span>
-                      </div>
-
-                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                        <div>
-                          <p className="text-xs sm:text-sm text-gray-600">Bid Amount</p>
-                          <p className="font-semibold text-base sm:text-lg">
-                            RM{fmt(request.bidAmount)}
-                          </p>
-                        </div>
-                        <div className="text-left sm:text-right">
-                          <p className="text-xs sm:text-sm text-gray-600">Timeline</p>
-                          <p className="font-medium text-sm sm:text-base">
-                            {request.proposedTimeline}
-                          </p>
-                        </div>
-                      </div>
-
-
-
-                      {/* Action Buttons */}
-                      <div className="flex flex-col gap-2.5 pt-3 border-t border-gray-100">
-                        {/* Primary action - Accept button (if pending) */}
-                        {request.status === "pending" && (
-                          <Button
-                            size="sm"
-                            onClick={() => handleAcceptRequest(request.id)}
-                            className="w-full bg-green-600 hover:bg-green-700 text-white font-medium shadow-sm transition-all duration-200 h-9 sm:h-10"
-                            disabled={processingId === request.id}
-                          >
-                            {processingId === request.id ? (
-                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+                              Why this bid fits
+                            </p>
+                            {!request.aiFitExplanation && explanationLoading[request.id] ? (
+                              <div className="flex items-center gap-2 text-sm text-gray-600">
+                                <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
+                                <span>Loading…</span>
+                              </div>
                             ) : (
-                              <Check className="w-4 h-4 mr-2" />
+                              <p className="text-sm text-gray-700 leading-relaxed">
+                                {getBidSummary(request.aiFitExplanation, explanationCache[request.id])}
+                              </p>
                             )}
-                            {processingId === request.id ? "Accepting..." : "Accept Request"}
-                          </Button>
+                          </div>
                         )}
 
-                        {/* Secondary actions row */}
-                        <div className="flex gap-2">
-                          {/* View Profile */}
-                          <Link
-                            href={`/customer/providers/${request.providerId}`}
-                            className="flex-1"
-                          >
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="w-full h-9 sm:h-10 border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 text-gray-700 font-medium transition-all duration-200"
-                            >
-                              <Eye className="w-4 h-4 mr-2" />
-                              View Profile
-                            </Button>
-                          </Link>
-
-                          {/* View Details */}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleViewDetails(request)}
-                            className="flex-1 h-9 sm:h-10 border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 text-gray-700 font-medium transition-all duration-200"
-                          >
-                            <MessageSquare className="w-4 h-4 mr-2" />
-                            Details
-                          </Button>
-
-                          {/* Reject button (if pending) */}
-                          {request.status === "pending" && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedRequest(request);
-                                setRejectDialogOpen(true);
-                              }}
-                              className="flex-1 h-9 sm:h-10 border-red-200 hover:border-red-300 bg-white hover:bg-red-50 text-red-600 hover:text-red-700 font-medium transition-all duration-200"
-                              disabled={processingId === request.id}
-                            >
-                              <X className="w-4 h-4 mr-2" />
-                              Reject
-                            </Button>
+                        {/* Normal card content (hidden on small when this card is showing summary) */}
+                        <div
+                          className={cn(
+                            "flex flex-col lg:flex-row gap-4 sm:gap-5 lg:gap-6",
+                            cardSummaryViewId === request.id && "hidden lg:flex"
                           )}
+                        >
+                          {/* Provider Info */}
+                          <div className="flex items-start space-x-3 sm:space-x-4 flex-1">
+                            <Avatar className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0">
+                              <AvatarImage
+                                src={
+                                  request.providerAvatar &&
+                                  request.providerAvatar !== "/placeholder.svg?height=40&width=40" &&
+                                  !request.providerAvatar.includes("/placeholder.svg")
+                                    ? request.providerAvatar
+                                    : "/placeholder.svg"
+                                }
+                              />
+                              <AvatarFallback className="text-xs sm:text-sm">
+                                {String(request.providerName || "")
+                                  .split(" ")
+                                  .filter(Boolean)
+                                  .map((n) => n[0])
+                                  .join("")}
+                              </AvatarFallback>
+                            </Avatar>
+
+                            <div className="flex-1 min-w-0">
+                              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-1">
+                                <h3 className="font-semibold text-sm sm:text-base text-gray-900">
+                                  {request.providerName}
+                                </h3>
+                                <div className="flex items-center gap-1">
+                                  <Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-yellow-400 fill-current flex-shrink-0" />
+                                  <span className="text-xs sm:text-sm text-gray-600">
+                                    {request.providerRating}
+                                  </span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setOpenExplanationId((prev) => (prev === request.id ? null : request.id));
+                                    setCardSummaryViewId((prev) => (prev === request.id ? null : request.id));
+                                  }}
+                                  className="lg:hidden inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-2 py-1"
+                                  aria-label="See why this bid fits"
+                                >
+                                  <HelpCircle className="w-3.5 h-3.5" />
+                                  Tap here to see
+                                </button>
+                              </div>
+
+                              <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-1 text-xs sm:text-sm text-gray-600 mb-1.5 sm:mb-2">
+                                <div className="flex items-center gap-1">
+                                  <MapPin className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
+                                  <span className="truncate">{request.providerLocation || "—"}</span>
+                                </div>
+                              </div>
+
+                              <p className="text-xs sm:text-sm font-medium text-gray-900 mb-1 break-words">
+                                {request.projectTitle}
+                              </p>
+
+                              <p className="text-xs sm:text-sm text-gray-600 line-clamp-2 mb-1.5 sm:mb-2">
+                                {request.coverLetter}
+                              </p>
+
+                              <div className="flex flex-wrap gap-1">
+                                {asArray<string>(request.skills)
+                                  .slice(0, 3)
+                                  .map((skill) => (
+                                    <Badge
+                                      key={skill}
+                                      variant="secondary"
+                                      className="text-[10px] leading-tight"
+                                    >
+                                      {skill}
+                                    </Badge>
+                                  ))}
+                                {asArray<string>(request.skills).length > 3 && (
+                                  <Badge
+                                    variant="secondary"
+                                    className="text-[10px] leading-tight"
+                                  >
+                                    +{asArray<string>(request.skills).length - 3} more
+                                  </Badge>
+                                )}
+                              </div>
+
+                              {request.experience && (
+                                <p className="text-[11px] sm:text-[12px] text-gray-500 mt-1.5 sm:mt-2 line-clamp-1">
+                                  {request.experience} experience
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Request Details */}
+                          <div className="lg:w-80 min-w-0 space-y-2.5 sm:space-y-3">
+                            <div className="flex justify-between items-center">
+                              <Badge className={`text-xs ${getStatusColor(request.status)}`}>
+                                {request.status.charAt(0).toUpperCase() +
+                                  request.status.slice(1)}
+                              </Badge>
+                              <span className="text-xs sm:text-sm text-gray-500">
+                                {request.submittedAt && !isNaN(new Date(request.submittedAt).getTime())
+                                  ? new Date(request.submittedAt).toLocaleDateString()
+                                  : "—"}
+                              </span>
+                            </div>
+
+                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                              <div>
+                                <p className="text-xs sm:text-sm text-gray-600">Bid Amount</p>
+                                <p className="font-semibold text-base sm:text-lg">
+                                  RM{fmt(request.bidAmount)}
+                                </p>
+                              </div>
+                              <div className="text-left sm:text-right">
+                                <p className="text-xs sm:text-sm text-gray-600">Timeline</p>
+                                <p className="font-medium text-sm sm:text-base">
+                                  {request.proposedTimeline}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-col gap-2.5 pt-3 border-t border-gray-100">
+                              {request.status === "pending" && (
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleAcceptRequest(request.id)}
+                                  className="w-full bg-green-600 hover:bg-green-700 text-white font-medium shadow-sm transition-all duration-200 h-9 sm:h-10"
+                                  disabled={processingId === request.id}
+                                >
+                                  {processingId === request.id ? (
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                  ) : (
+                                    <Check className="w-4 h-4 mr-2" />
+                                  )}
+                                  {processingId === request.id ? "Accepting..." : "Accept Request"}
+                                </Button>
+                              )}
+
+                              <div className="flex flex-wrap gap-2">
+                                <Link
+                                  href={`/customer/providers/${request.providerId}`}
+                                  className="flex-1 min-w-[100px]"
+                                >
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="w-full h-9 sm:h-10 border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 text-gray-700 font-medium transition-all duration-200"
+                                  >
+                                    <Eye className="w-4 h-4 mr-2 shrink-0" />
+                                    <span className="truncate">View Profile</span>
+                                  </Button>
+                                </Link>
+
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleViewDetails(request)}
+                                  className="flex-1 min-w-[100px] h-9 sm:h-10 border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 text-gray-700 font-medium transition-all duration-200"
+                                >
+                                  <MessageSquare className="w-4 h-4 mr-2 shrink-0" />
+                                  <span className="truncate">Details</span>
+                                </Button>
+
+                                {request.status === "pending" && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      setSelectedRequest(request);
+                                      setRejectDialogOpen(true);
+                                    }}
+                                    className="flex-1 min-w-[100px] h-9 sm:h-10 border-red-200 hover:border-red-300 bg-white hover:bg-red-50 text-red-600 hover:text-red-700 font-medium transition-all duration-200"
+                                    disabled={processingId === request.id}
+                                  >
+                                    <X className="w-4 h-4 mr-2 shrink-0" />
+                                    <span className="truncate">Reject</span>
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </div>
+                      </CardContent>
+                    </Card>
                   </div>
-                </CardContent>
-              </Card>
-            ))
+                ))}
+              </div>
+
+              {/* Right: AI summary panel (desktop hover; small screens use in-card or tap overlay) */}
+              {openExplanationId && !cardSummaryViewId && (
+                <div
+                  className="fixed inset-0 z-40 bg-black/20 lg:hidden"
+                  aria-hidden
+                  onClick={() => {
+                    setOpenExplanationId(null);
+                    setCardSummaryViewId(null);
+                  }}
+                />
+              )}
+              <div
+                ref={rightPanelColumnRef}
+                className={cn(
+                  "transition-all duration-300 ease-out",
+                  "hidden lg:block",
+                  "lg:overflow-hidden lg:flex-shrink-0",
+                  "fixed right-0 top-0 bottom-0 z-50 w-80 max-w-[85vw] lg:relative lg:top-auto lg:bottom-auto lg:right-auto lg:z-auto lg:max-w-none",
+                  openExplanationId ? "translate-x-0 lg:w-80" : "translate-x-full lg:translate-x-0 lg:w-0"
+                )}
+                onMouseEnter={() => {
+                  if (panelLeaveTimeoutRef.current) {
+                    clearTimeout(panelLeaveTimeoutRef.current);
+                    panelLeaveTimeoutRef.current = null;
+                  }
+                }}
+                onMouseLeave={() => setOpenExplanationId(null)}
+              >
+                {openExplanationId && panelTopOffset > 0 && (
+                  <div className="hidden lg:block shrink-0" style={{ height: panelTopOffset }} aria-hidden />
+                )}
+                <div
+                  className={cn(
+                    "h-full lg:h-auto w-80 max-w-[85vw] lg:max-w-none min-h-[140px] rounded-none lg:rounded-xl border-0 lg:border border-gray-200 bg-white shadow-xl lg:shadow-lg p-4 lg:ml-0",
+                    openExplanationId
+                      ? "translate-x-0 opacity-100"
+                      : "translate-x-4 opacity-0 lg:translate-x-0"
+                  )}
+                  style={{ transition: "opacity 0.3s ease-out, transform 0.3s ease-out" }}
+                >
+                  {openExplanationId && (
+                    <>
+                      <div className="flex items-center justify-between gap-2 mb-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="p-1.5 rounded-lg bg-blue-100 flex-shrink-0">
+                            <Sparkles className="w-4 h-4 text-blue-600" />
+                          </div>
+                          <span className="text-sm font-semibold text-gray-900 truncate">
+                            {filteredRequests.find((r) => r.id === openExplanationId)?.providerName || "Provider"}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setOpenExplanationId(null)}
+                          className="lg:hidden p-1.5 rounded-md text-gray-500 hover:bg-gray-100 focus:outline-none flex-shrink-0"
+                          aria-label="Close"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+                        Why this bid fits
+                      </p>
+                      {!filteredRequests.find((r) => r.id === openExplanationId)?.aiFitExplanation &&
+                      explanationLoading[openExplanationId] ? (
+                        <div className="flex items-center gap-2 text-sm text-gray-600">
+                          <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
+                          <span>Loading…</span>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-700 leading-relaxed">
+                          {getBidSummary(
+                            filteredRequests.find((r) => r.id === openExplanationId)?.aiFitExplanation,
+                            explanationCache[openExplanationId]
+                          )}
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
           )}
         </div>
 
@@ -1224,61 +1493,67 @@ export default function CustomerRequestsPage() {
                         </h4>
 
                         <div className="space-y-3 sm:space-y-4">
-                          {selectedRequest.milestones
-                            .sort((a, b) => a.order - b.order)
-                            .map((m, idx) => (
-                              <Card
-                                key={idx}
-                                className="border border-gray-200"
-                              >
-                                <CardContent className="p-3 sm:p-4 space-y-2">
-                                  {/* Top row: title + amount */}
-                                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
-                                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                                      <Badge variant="secondary" className="text-[10px] sm:text-xs flex-shrink-0">
-                                        #{m.order || idx + 1}
-                                      </Badge>
-                                      <span className="font-medium text-xs sm:text-sm text-gray-900 break-words">
-                                        {m.title || "Untitled milestone"}
-                                      </span>
+                          {(() => {
+                            const sorted = [...selectedRequest.milestones].sort(
+                              (a, b) => (a.order ?? 0) - (b.order ?? 0),
+                            );
+                            return sorted.map((m, idx) => {
+                              const prev = sorted[idx - 1] as { daysFromStart?: number } | undefined;
+                              const currDays = (m as { daysFromStart?: number }).daysFromStart ?? 0;
+                              const prevDays = prev?.daysFromStart ?? 0;
+                              const durationDays = currDays - prevDays;
+                              const durationLabel =
+                                durationDays > 0
+                                  ? formatDurationDays(durationDays)
+                                  : (m as { dueDate?: string }).dueDate
+                                    ? `Due: ${new Date((m as { dueDate: string }).dueDate).toLocaleDateString()}`
+                                    : "—";
+                              return (
+                                <Card
+                                  key={idx}
+                                  className="border border-gray-200"
+                                >
+                                  <CardContent className="p-3 sm:p-4 space-y-2">
+                                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                                        <Badge variant="secondary" className="text-[10px] sm:text-xs flex-shrink-0">
+                                          #{m.order || idx + 1}
+                                        </Badge>
+                                        <span className="font-medium text-xs sm:text-sm text-gray-900 break-words">
+                                          {m.title || "Untitled milestone"}
+                                        </span>
+                                      </div>
+                                      <div className="text-left sm:text-right">
+                                        <span className="text-xs sm:text-sm text-gray-500 block">
+                                          Amount
+                                        </span>
+                                        <span className="text-base sm:text-lg font-semibold text-gray-900">
+                                          RM{" "}
+                                          {Number(m.amount || 0).toLocaleString()}
+                                        </span>
+                                      </div>
                                     </div>
-
-                                    <div className="text-left sm:text-right">
-                                      <span className="text-xs sm:text-sm text-gray-500 block">
-                                        Amount
-                                      </span>
-                                      <span className="text-base sm:text-lg font-semibold text-gray-900">
-                                        RM{" "}
-                                        {Number(m.amount || 0).toLocaleString()}
-                                      </span>
+                                    {m.description &&
+                                      m.description.trim() !== "" && (
+                                        <p className="text-xs sm:text-sm text-gray-700 whitespace-pre-wrap break-words">
+                                          {m.description}
+                                        </p>
+                                      )}
+                                    <div className="text-xs sm:text-sm text-gray-600 flex flex-wrap gap-x-3 sm:gap-x-4 gap-y-1">
+                                      <div className="flex items-center gap-1">
+                                        <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
+                                        <span>
+                                          {durationDays > 0
+                                            ? `Duration: ${durationLabel}`
+                                            : durationLabel}
+                                        </span>
+                                      </div>
                                     </div>
-                                  </div>
-
-                                  {/* Description */}
-                                  {m.description &&
-                                    m.description.trim() !== "" && (
-                                      <p className="text-xs sm:text-sm text-gray-700 whitespace-pre-wrap break-words">
-                                        {m.description}
-                                      </p>
-                                    )}
-
-                                  {/* Dates */}
-                                  <div className="text-xs sm:text-sm text-gray-600 flex flex-wrap gap-x-3 sm:gap-x-4 gap-y-1">
-                                    <div className="flex items-center gap-1">
-                                      <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
-                                      <span>
-                                        Due:{" "}
-                                        {m.dueDate
-                                          ? new Date(
-                                              m.dueDate
-                                            ).toLocaleDateString()
-                                          : "—"}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </CardContent>
-                              </Card>
-                            ))}
+                                  </CardContent>
+                                </Card>
+                              );
+                            });
+                          })()}
                         </div>
                       </div>
                     )}
@@ -1540,41 +1815,63 @@ export default function CustomerRequestsPage() {
                     </div>
                     <div className="sm:col-span-4">
                       <Label className="text-xs sm:text-sm">
-                        Due Date <span className="text-red-500">*</span>
+                        Duration <span className="text-red-500">*</span>
                       </Label>
-                      <Input
-                        type="date"
-                        min={new Date().toISOString().split("T")[0]}
-                        value={(m.dueDate || "").slice(0, 10)}
-                        onChange={(e) => {
-                          const selectedDate = e.target.value;
-                          const today = new Date().toISOString().split("T")[0];
-                          if (selectedDate < today) {
-                            toastHook({
-                              title: "Invalid Date",
-                              description:
-                                "Due date cannot be in the past. Please select today or a future date.",
-                              variant: "destructive",
-                            });
-                            return;
-                          }
-                          updateMilestone(i, { dueDate: selectedDate });
-                          if (milestoneErrors[i]?.dueDate) {
-                            setMilestoneErrors(prev => ({
-                              ...prev,
-                              [i]: { ...prev[i], dueDate: undefined },
-                            }));
-                          }
-                        }}
-                        className={`text-xs sm:text-sm ${
-                          milestoneErrors[i]?.dueDate
-                            ? "border-red-500 focus-visible:ring-red-500"
-                            : ""
-                        }`}
-                      />
-                      {milestoneErrors[i]?.dueDate && (
+                      <div className="flex gap-2 mt-1">
+                        <Input
+                          type="number"
+                          min={1}
+                          placeholder="e.g. 1"
+                          value={(m as Milestone & { durationAmount?: string }).durationAmount ?? ""}
+                          onChange={(e) => {
+                            updateMilestone(i, {
+                              durationAmount: e.target.value,
+                              durationUnit: (m as Milestone & { durationUnit?: string }).durationUnit || "",
+                            } as Partial<Milestone>);
+                            if (milestoneErrors[i]?.durationAmount || milestoneErrors[i]?.durationUnit) {
+                              setMilestoneErrors(prev => ({
+                                ...prev,
+                                [i]: { ...prev[i], durationAmount: undefined, durationUnit: undefined },
+                              }));
+                            }
+                            if (milestoneErrors[-1]) {
+                              setMilestoneErrors(prev => { const next = { ...prev }; delete next[-1]; return next; });
+                            }
+                          }}
+                          className={`text-xs sm:text-sm flex-1 ${
+                            milestoneErrors[i]?.durationAmount ? "border-red-500 focus-visible:ring-red-500" : ""
+                          }`}
+                        />
+                        <Select
+                          value={(m as Milestone & { durationUnit?: string }).durationUnit || ""}
+                          onValueChange={(value: "day" | "week" | "month") => {
+                            updateMilestone(i, {
+                              durationAmount: (m as Milestone & { durationAmount?: string }).durationAmount ?? "",
+                              durationUnit: value,
+                            } as Partial<Milestone>);
+                            if (milestoneErrors[i]?.durationUnit) {
+                              setMilestoneErrors(prev => ({ ...prev, [i]: { ...prev[i], durationUnit: undefined } }));
+                            }
+                            if (milestoneErrors[-1]) {
+                              setMilestoneErrors(prev => { const next = { ...prev }; delete next[-1]; return next; });
+                            }
+                          }}
+                        >
+                          <SelectTrigger className={`text-xs sm:text-sm w-[100px] ${
+                            milestoneErrors[i]?.durationUnit ? "border-red-500 focus:ring-red-500" : ""
+                          }`}>
+                            <SelectValue placeholder="Unit" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="day">Day(s)</SelectItem>
+                            <SelectItem value="week">Week(s)</SelectItem>
+                            <SelectItem value="month">Month(s)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {(milestoneErrors[i]?.durationAmount || milestoneErrors[i]?.durationUnit) && (
                         <p className="text-xs text-red-600 mt-1">
-                          {milestoneErrors[i].dueDate}
+                          {milestoneErrors[i].durationAmount || milestoneErrors[i].durationUnit}
                         </p>
                       )}
                     </div>

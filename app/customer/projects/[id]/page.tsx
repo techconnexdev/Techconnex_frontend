@@ -32,6 +32,8 @@ import {
   X,
   Check,
   Paperclip,
+  Sparkles,
+  HelpCircle,
 } from "lucide-react";
 import NextLink from "next/link";
 import { useRouter } from "next/navigation";
@@ -40,6 +42,7 @@ import { CustomerLayout } from "@/components/customer-layout";
 import {
   getProjectById,
   getCompanyProjectRequests,
+  getBidExplanation,
   acceptProjectRequest,
   rejectProjectRequest,
   createDispute,
@@ -79,10 +82,14 @@ import {
   type Milestone,
 } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
-import { formatTimeline } from "@/lib/timeline-utils";
+import { formatTimeline, formatDurationDays, timelineToDays } from "@/lib/timeline-utils";
+import { cn } from "@/lib/utils";
 import { MarkdownViewer } from "@/components/markdown/MarkdownViewer";
 import { RichEditor } from "@/components/markdown/RichTextEditor";
 import MilestonePayment from "@/components/MilestonePayment";
+import { useRecommendedProviders } from "@/hooks/useRecommendedProviders";
+import { RecommendedProvidersList } from "@/components/customer/RecommendedProvidersList";
+import type { RecommendedProvider } from "@/hooks/useRecommendedProviders";
 
 // Project type definition
 interface Project {
@@ -100,6 +107,7 @@ interface Project {
   status?: string;
   createdAt?: string | number | Date;
   startDate?: string | Date;
+  startedAt?: string | Date;
   endDate?: string | Date;
   isFeatured?: boolean;
   currency?: string;
@@ -152,6 +160,44 @@ interface Dispute {
   [key: string]: unknown; // Allow additional properties
 }
 
+/** AI Recommended Providers for an opportunity (ServiceRequest) – same UI as dashboard. */
+function AIRecommendedProvidersSection({
+  serviceRequestId,
+}: {
+  serviceRequestId: string;
+}) {
+  const { providers, loading, error } =
+    useRecommendedProviders(serviceRequestId);
+  const router = useRouter();
+  const handleContact = (provider: RecommendedProvider) => {
+    router.push(
+      `/customer/messages?userId=${provider.id}&name=${encodeURIComponent(provider.name)}&avatar=${encodeURIComponent(provider.avatar)}`,
+    );
+  };
+  return (
+    <Card>
+      <CardHeader className="p-4 sm:p-6">
+        <CardTitle className="text-base sm:text-lg">
+          AI Recommended Providers
+        </CardTitle>
+        <CardDescription className="text-xs sm:text-sm">
+          Top 5 providers matched to this opportunity (same algorithm as
+          provider opportunities)
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="p-4 sm:p-6">
+        <RecommendedProvidersList
+          providers={providers}
+          loading={loading}
+          error={error}
+          onContact={handleContact}
+          emptyMessage="No recommended providers for this project."
+        />
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function ProjectDetailsPage({
   params,
 }: {
@@ -195,6 +241,9 @@ export default function ProjectDetailsPage({
         title?: string;
         description?: string;
         dueDate?: string;
+        daysFromStart?: string;
+        durationAmount?: string;
+        durationUnit?: string;
       }
     >
   >({});
@@ -213,7 +262,7 @@ export default function ProjectDetailsPage({
     Record<string, unknown>[]
   >([]);
   const [projectFiles, setProjectFiels] = useState<Record<string, unknown>[]>(
-    []
+    [],
   );
 
   // Extract id from params which may be a Promise in newer Next.js versions
@@ -250,6 +299,9 @@ export default function ProjectDetailsPage({
         title?: string;
         description?: string;
         dueDate?: string;
+        daysFromStart?: string;
+        durationAmount?: string;
+        durationUnit?: string;
       }
     >
   >({});
@@ -313,7 +365,8 @@ export default function ProjectDetailsPage({
       title: string;
       description?: string;
       amount: number;
-      dueDate: string;
+      dueDate?: string;
+      daysFromStart?: number;
       order: number;
     }>;
     provider?: {
@@ -326,6 +379,14 @@ export default function ProjectDetailsPage({
         profileImageUrl?: string;
       };
     };
+    /** From backend ranking: 0–100 fit score. */
+    matchScore?: number;
+    /** 1-based rank (1 = best). */
+    rank?: number;
+    /** True if in top 5 fits. */
+    isTopFive?: boolean;
+    /** AI summary stored at proposal creation (why it fits + drawbacks). */
+    aiFitExplanation?: string | null;
   }
   const isImage = (file: string) => /\.(jpg|jpeg|png|gif|webp)$/i.test(file);
 
@@ -344,6 +405,93 @@ export default function ProjectDetailsPage({
   // optional loading/error for bids section
   const [bidsLoading, setBidsLoading] = useState<boolean>(true);
   const [bidsError, setBidsError] = useState<string | null>(null);
+  // AI "why this bid" explanation for top 5 (hover)
+  const [openExplanationId, setOpenExplanationId] = useState<string | null>(
+    null,
+  );
+  const [explanationCache, setExplanationCache] = useState<
+    Record<string, string>
+  >({});
+  const [explanationLoading, setExplanationLoading] = useState<
+    Record<string, boolean>
+  >({});
+  /** On small screens: which proposal card is showing the AI summary in-place (replacing card content). */
+  const [cardSummaryViewId, setCardSummaryViewId] = useState<string | null>(
+    null,
+  );
+  const fetchedExplanationIds = React.useRef<Set<string>>(new Set());
+  const bidPanelLeaveTimeoutRef = React.useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
+  const cardRefsMap = React.useRef<Record<string, HTMLDivElement | null>>({});
+  const rightPanelColumnRef = React.useRef<HTMLDivElement | null>(null);
+  const [panelTopOffset, setPanelTopOffset] = React.useState(0);
+
+  const DEFAULT_BID_SUMMARY =
+    "Review this proposal’s bid amount, timeline, and milestones. Check the provider’s profile and cover letter to assess how well they match your project.";
+
+  const getBidSummary = (
+    proposalId: string,
+    stored: string | null | undefined,
+    cached: string | undefined,
+  ) => {
+    const text = (stored && stored.trim()) || (cached && cached.trim());
+    return text || DEFAULT_BID_SUMMARY;
+  };
+
+  // Align right panel with the hovered card (desktop only)
+  useEffect(() => {
+    if (!openExplanationId || !rightPanelColumnRef.current) {
+      setPanelTopOffset(0);
+      return;
+    }
+    const cardEl = cardRefsMap.current[openExplanationId];
+    if (!cardEl) {
+      setPanelTopOffset(0);
+      return;
+    }
+    const updatePosition = () => {
+      const col = rightPanelColumnRef.current;
+      if (!cardEl || !col) return;
+      const cardRect = cardEl.getBoundingClientRect();
+      const colRect = col.getBoundingClientRect();
+      setPanelTopOffset(Math.max(0, cardRect.top - colRect.top));
+    };
+    updatePosition();
+    window.addEventListener("scroll", updatePosition, true);
+    window.addEventListener("resize", updatePosition);
+    return () => {
+      window.removeEventListener("scroll", updatePosition, true);
+      window.removeEventListener("resize", updatePosition);
+    };
+  }, [openExplanationId]);
+
+  // Fetch AI bid explanation only for legacy proposals (no stored aiFitExplanation)
+  useEffect(() => {
+    if (!openExplanationId) return;
+    const hasStored = proposals.find(
+      (x) => x.id === openExplanationId,
+    )?.aiFitExplanation;
+    if (hasStored) return; // Use stored value, no fetch
+    if (fetchedExplanationIds.current.has(openExplanationId)) return;
+    fetchedExplanationIds.current.add(openExplanationId);
+    setExplanationLoading((prev) => ({ ...prev, [openExplanationId]: true }));
+    getBidExplanation(openExplanationId)
+      .then((r) => {
+        if (r.success && r.explanation)
+          setExplanationCache((prev) => ({
+            ...prev,
+            [openExplanationId]: r.explanation!,
+          }));
+      })
+      .catch(() => {})
+      .finally(() =>
+        setExplanationLoading((prev) => ({
+          ...prev,
+          [openExplanationId]: false,
+        })),
+      );
+  }, [openExplanationId, proposals]);
 
   useEffect(() => {
     if (!project) return;
@@ -375,14 +523,14 @@ export default function ProjectDetailsPage({
         (typeof project.budgetMin === "number"
           ? project.budgetMin.toString()
           : typeof project.budgetMin === "string"
-          ? project.budgetMin
-          : "") ?? "",
+            ? project.budgetMin
+            : "") ?? "",
       budgetMax:
         (typeof project.budgetMax === "number"
           ? project.budgetMax.toString()
           : typeof project.budgetMax === "string"
-          ? project.budgetMax
-          : "") ?? "",
+            ? project.budgetMax
+            : "") ?? "",
       skills: (Array.isArray(project.skills) ? project.skills : []).join(", "),
       requirements: convertToMarkdown(project.requirements),
       deliverables: convertToMarkdown(project.deliverables),
@@ -450,7 +598,7 @@ export default function ProjectDetailsPage({
         const filtered = Array.isArray(data.data)
           ? data.data.filter(
               (msg: Record<string, unknown>) =>
-                String(msg.projectId) === String(resolvedId)
+                String(msg.projectId) === String(resolvedId),
             )
           : [];
 
@@ -496,7 +644,7 @@ export default function ProjectDetailsPage({
           providerId: provider.id as string,
           providerName: provider.name as string,
           providerAvatar: getProfileImageUrl(
-            profile.profileImageUrl as string | undefined
+            profile.profileImageUrl as string | undefined,
           ),
           providerRating:
             (profile.rating as number | undefined) ??
@@ -515,7 +663,7 @@ export default function ProjectDetailsPage({
           proposedTimeline:
             formatTimeline(
               p.deliveryTime as string | number | undefined,
-              "day"
+              "day",
             ) || "",
           coverLetter: p.coverLetter as string,
           status: p.status
@@ -531,13 +679,13 @@ export default function ProjectDetailsPage({
           skills: Array.isArray(profile.skills)
             ? (profile.skills as string[])
             : Array.isArray(provider.skills)
-            ? (provider.skills as string[])
-            : [],
+              ? (provider.skills as string[])
+              : [],
           portfolio: Array.isArray(profile.portfolios)
             ? (profile.portfolios as string[])
             : Array.isArray(provider.portfolio)
-            ? (provider.portfolio as string[])
-            : [],
+              ? (provider.portfolio as string[])
+              : [],
           experience:
             (profile.experience as string | undefined) ??
             (provider.experience as string | undefined) ??
@@ -559,13 +707,17 @@ export default function ProjectDetailsPage({
                   amount: m.amount,
                   dueDate: m.dueDate,
                   order: m.order,
-                })
+                }),
               )
             : [],
+          matchScore: p.matchScore as number | undefined,
+          rank: p.rank as number | undefined,
+          isTopFive: p.isTopFive as boolean | undefined,
+          aiFitExplanation: (p.aiFitExplanation as string | undefined) ?? null,
         };
       });
     },
-    []
+    [],
   );
 
   // Fetch project data + proposals (bids)
@@ -629,10 +781,10 @@ export default function ProjectDetailsPage({
           const rawProposals = Array.isArray(proposalsResponse?.proposals)
             ? proposalsResponse.proposals
             : Array.isArray(proposalsResponse?.data)
-            ? proposalsResponse.data
-            : Array.isArray(proposalsResponse?.items)
-            ? proposalsResponse.items
-            : [];
+              ? proposalsResponse.data
+              : Array.isArray(proposalsResponse?.items)
+                ? proposalsResponse.items
+                : [];
 
           // 4. map raw proposals -> ProviderRequest[]
           const mappedProposals = mapProposalsToProviderRequests(rawProposals);
@@ -640,7 +792,7 @@ export default function ProjectDetailsPage({
         } else {
           // No serviceRequestId means this Project wasn't created from a ServiceRequest (unlikely but handle gracefully)
           console.warn(
-            "No serviceRequestId found for Project, cannot load proposals"
+            "No serviceRequestId found for Project, cannot load proposals",
           );
           setProposals([]);
         }
@@ -678,7 +830,7 @@ export default function ProjectDetailsPage({
       // Refresh milestones
       const milestoneData = await getCompanyProjectMilestones(loadedProject.id);
       const loadedMilestones: Milestone[] = Array.isArray(
-        milestoneData.milestones
+        milestoneData.milestones,
       )
         ? milestoneData.milestones.map(
             (m: Milestone | Record<string, unknown>) =>
@@ -715,13 +867,25 @@ export default function ProjectDetailsPage({
                   (m as Record<string, unknown>).submissionHistory) as
                   | unknown[]
                   | undefined,
-              } as Milestone)
+              }) as Milestone,
           )
         : [];
-      setProjectMilestones(loadedMilestones);
-      setOriginalProjectMilestones(
-        JSON.parse(JSON.stringify(loadedMilestones))
-      ); // Deep copy
+      const sortedLoad = [...loadedMilestones].sort(
+        (a, b) => ((a.order as number) ?? 0) - ((b.order as number) ?? 0),
+      );
+      const withDuration = sortedLoad.map((m, i) => {
+        const prev = sortedLoad[i - 1] as { daysFromStart?: number } | undefined;
+        const currDays = (m as Milestone & { daysFromStart?: number }).daysFromStart ?? 0;
+        const prevDays = prev?.daysFromStart ?? 0;
+        const durationDays = currDays - prevDays;
+        return {
+          ...m,
+          durationAmount: durationDays > 0 ? String(durationDays) : "",
+          durationUnit: (durationDays > 0 ? "day" : "") as "day" | "week" | "month" | "",
+        } as Milestone & { durationAmount?: string; durationUnit?: string };
+      });
+      setProjectMilestones(withDuration);
+      setOriginalProjectMilestones(JSON.parse(JSON.stringify(withDuration)));
       setMilestoneApprovalState({
         milestonesLocked: milestoneData.milestonesLocked,
         companyApproved: milestoneData.companyApproved,
@@ -761,10 +925,10 @@ export default function ProjectDetailsPage({
           const rawProposals = Array.isArray(proposalsResponse?.proposals)
             ? proposalsResponse.proposals
             : Array.isArray(proposalsResponse?.data)
-            ? proposalsResponse.data
-            : Array.isArray(proposalsResponse?.items)
-            ? proposalsResponse.items
-            : [];
+              ? proposalsResponse.data
+              : Array.isArray(proposalsResponse?.items)
+                ? proposalsResponse.items
+                : [];
 
           const mappedProposals = mapProposalsToProviderRequests(rawProposals);
           setProposals(mappedProposals);
@@ -783,10 +947,10 @@ export default function ProjectDetailsPage({
       if (!project?.id) return;
       try {
         const milestoneData = await getCompanyProjectMilestones(
-          project.id as string
+          project.id as string,
         );
         const loadedMilestones: Milestone[] = Array.isArray(
-          milestoneData.milestones
+          milestoneData.milestones,
         )
           ? milestoneData.milestones.map(
               (m: Milestone | Record<string, unknown>) =>
@@ -823,10 +987,24 @@ export default function ProjectDetailsPage({
                     (m as Record<string, unknown>).submissionHistory) as
                     | unknown[]
                     | undefined,
-                } as Milestone)
+                }) as Milestone,
             )
           : [];
-        setProjectMilestones(loadedMilestones);
+        const sortedLoad2 = [...loadedMilestones].sort(
+          (a, b) => ((a.order as number) ?? 0) - ((b.order as number) ?? 0),
+        );
+        const withDuration2 = sortedLoad2.map((m, i) => {
+          const prev = sortedLoad2[i - 1] as { daysFromStart?: number } | undefined;
+          const currDays = (m as Milestone & { daysFromStart?: number }).daysFromStart ?? 0;
+          const prevDays = prev?.daysFromStart ?? 0;
+          const durationDays = currDays - prevDays;
+          return {
+            ...m,
+            durationAmount: durationDays > 0 ? String(durationDays) : "",
+            durationUnit: (durationDays > 0 ? "day" : "") as "day" | "week" | "month" | "",
+          } as Milestone & { durationAmount?: string; durationUnit?: string };
+        });
+        setProjectMilestones(withDuration2);
         setMilestoneApprovalState({
           milestonesLocked: milestoneData.milestonesLocked,
           companyApproved: milestoneData.companyApproved,
@@ -959,7 +1137,7 @@ export default function ProjectDetailsPage({
   // Helpers for project milestone editor
   const normalizeMilestoneSequences = (items: Milestone[]): Milestone[] =>
     items
-      .map((m, i) => ({ ...m, sequence: i + 1 } as Milestone))
+      .map((m, i) => ({ ...m, sequence: i + 1 }) as Milestone)
       .sort((a, b) => a.sequence - b.sequence);
 
   const addProjectMilestone = () => {
@@ -971,23 +1149,24 @@ export default function ProjectDetailsPage({
           title: "",
           description: "",
           amount: 0,
-          dueDate: new Date().toISOString().slice(0, 10), // yyyy-mm-dd
-        },
-      ])
+          durationAmount: "",
+          durationUnit: "" as "day" | "week" | "month" | "",
+        } as Milestone & { durationAmount?: string; durationUnit?: string },
+      ]),
     );
   };
 
   const updateProjectMilestone = (i: number, patch: Partial<Milestone>) => {
     setProjectMilestones((prev) =>
       normalizeMilestoneSequences(
-        prev.map((m, idx) => (idx === i ? { ...m, ...patch } : m))
-      )
+        prev.map((m, idx) => (idx === i ? { ...m, ...patch } : m)),
+      ),
     );
   };
 
   const removeProjectMilestone = (i: number) => {
     setProjectMilestones((prev) =>
-      normalizeMilestoneSequences(prev.filter((_, idx) => idx !== i))
+      normalizeMilestoneSequences(prev.filter((_, idx) => idx !== i)),
     );
   };
 
@@ -999,18 +1178,18 @@ export default function ProjectDetailsPage({
     typeof safeProject.requirements === "string"
       ? safeProject.requirements
       : Array.isArray(safeProject.requirements)
-      ? safeProject.requirements
-          .map((r: unknown) => `- ${String(r)}`)
-          .join("\n")
-      : "";
+        ? safeProject.requirements
+            .map((r: unknown) => `- ${String(r)}`)
+            .join("\n")
+        : "";
   const deliverables =
     typeof safeProject.deliverables === "string"
       ? safeProject.deliverables
       : Array.isArray(safeProject.deliverables)
-      ? safeProject.deliverables
-          .map((d: unknown) => `- ${String(d)}`)
-          .join("\n")
-      : "";
+        ? safeProject.deliverables
+            .map((d: unknown) => `- ${String(d)}`)
+            .join("\n")
+        : "";
   const messages = asArray<Record<string, unknown>>(safeProject.messages);
   const currentUserId = currentUser?.id;
   const msgsToRender =
@@ -1019,20 +1198,20 @@ export default function ProjectDetailsPage({
   const handleContact = (
     providerId?: string,
     providerName?: string,
-    providerAvatar?: string
+    providerAvatar?: string,
   ) => {
     if (!providerId || !providerName) return;
     router.push(
       `/customer/messages?userId=${providerId}&name=${encodeURIComponent(
-        providerName
-      )}&avatar=${encodeURIComponent(providerAvatar || "")}`
+        providerName,
+      )}&avatar=${encodeURIComponent(providerAvatar || "")}`,
     );
   };
   // ⬇️ ADD THIS just after you define `project` (and `proposals` if present)
   const currency: string =
     typeof project?.currency === "string" ? project.currency : "RM";
   const bidCount = Number(
-    project?.bidCount ?? (Array.isArray(proposals) ? proposals.length : 0)
+    project?.bidCount ?? (Array.isArray(proposals) ? proposals.length : 0),
   );
   const startDate = project?.startDate
     ? new Date(project.startDate as string | number | Date)
@@ -1046,24 +1225,24 @@ export default function ProjectDetailsPage({
     ? typeof project.approvedPrice === "number"
       ? project.approvedPrice
       : typeof project.approvedPrice === "string"
-      ? Number(project.approvedPrice) || 0
-      : 0
+        ? Number(project.approvedPrice) || 0
+        : 0
     : 0;
 
   const totalSpentValue: number = project
     ? typeof project.totalSpent === "number"
       ? project.totalSpent
       : typeof project.totalSpent === "string"
-      ? Number(project.totalSpent) || 0
-      : 0
+        ? Number(project.totalSpent) || 0
+        : 0
     : 0;
 
   const progressValue: number = project
     ? typeof project.progress === "number"
       ? project.progress
       : typeof project.progress === "string"
-      ? Number(project.progress) || 0
-      : 0
+        ? Number(project.progress) || 0
+        : 0
     : 0;
 
   const daysLeftValue: number | null = (() => {
@@ -1108,7 +1287,7 @@ export default function ProjectDetailsPage({
 
       const { project: updated } = await updateCompanyProject(
         project.id as string,
-        payload
+        payload,
       );
       setProject(updated);
       toast({ title: "Saved", description: "Project updated successfully." });
@@ -1128,48 +1307,32 @@ export default function ProjectDetailsPage({
   const handleSaveProjectMilestones = async () => {
     if (!project?.id) return;
 
-    // Validate milestones
-    const errors: Record<
-      number,
-      { title?: string; description?: string; dueDate?: string }
-    > = {};
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    type Err = { title?: string; description?: string; dueDate?: string; daysFromStart?: string; durationAmount?: string; durationUnit?: string };
+    const errors: Record<number, Err> = {};
     let hasErrors = false;
-
     projectMilestones.forEach((m, idx) => {
-      const milestoneErrors: {
-        title?: string;
-        description?: string;
-        dueDate?: string;
-      } = {};
+      const milestoneErrors: Err = {};
+      const mm = m as Milestone & { durationAmount?: string; durationUnit?: string };
 
       if (!m.title || !m.title.trim()) {
         milestoneErrors.title = "Title is required.";
         hasErrors = true;
       }
-
       if (!m.description || !m.description.trim()) {
         milestoneErrors.description = "Description is required.";
         hasErrors = true;
       }
-
-      if (!m.dueDate) {
-        milestoneErrors.dueDate = "Due date is required.";
+      const durAmount = mm.durationAmount != null ? String(mm.durationAmount).trim() : "";
+      const durUnit = mm.durationUnit || "";
+      if (!durAmount || Number(durAmount) <= 0) {
+        milestoneErrors.durationAmount = "Duration amount is required and must be > 0.";
         hasErrors = true;
-      } else {
-        const dueDate = new Date(m.dueDate);
-        dueDate.setHours(0, 0, 0, 0);
-        if (dueDate < today) {
-          milestoneErrors.dueDate =
-            "Due date cannot be in the past. Please select today or a future date.";
-          hasErrors = true;
-        }
       }
-
-      if (Object.keys(milestoneErrors).length > 0) {
-        errors[idx] = milestoneErrors;
+      if (!durUnit) {
+        milestoneErrors.durationUnit = "Unit is required.";
+        hasErrors = true;
       }
+      if (Object.keys(milestoneErrors).length > 0) errors[idx] = milestoneErrors;
     });
 
     // Validate milestone sum equals bid amount
@@ -1177,14 +1340,14 @@ export default function ProjectDetailsPage({
       typeof project?.approvedPrice === "number"
         ? project.approvedPrice
         : typeof project?.approvedPrice === "string"
-        ? Number(project.approvedPrice)
-        : 0;
+          ? Number(project.approvedPrice)
+          : 0;
     const bidAmountValue =
       typeof project?.bidAmount === "number"
         ? project.bidAmount
         : typeof project?.bidAmount === "string"
-        ? Number(project.bidAmount)
-        : 0;
+          ? Number(project.bidAmount)
+          : 0;
     const bidAmount = approvedPrice || bidAmountValue || 0;
     if (bidAmount > 0) {
       const sumMilestones = projectMilestones.reduce(
@@ -1193,12 +1356,12 @@ export default function ProjectDetailsPage({
           if (!isNaN(val)) return sum + val;
           return sum;
         },
-        0
+        0,
       );
 
       if (sumMilestones !== bidAmount) {
         const msg = `Total of milestones (RM ${sumMilestones.toLocaleString()}) must equal the bid amount (RM ${bidAmount.toLocaleString()}).`;
-        errors[-1] = { title: msg }; // Use -1 as a special index for general error
+        errors[-1] = { ...errors[-1], title: errors[-1]?.title ?? msg };
         hasErrors = true;
       }
     }
@@ -1208,7 +1371,7 @@ export default function ProjectDetailsPage({
       toast({
         title: "Validation Error",
         description:
-          "Please fill in all required milestone fields (title, description, due date) and ensure dates are not in the past. Also ensure milestone amounts sum equals the bid amount.",
+          "Please fill required fields. Milestone durations must total the delivery timeline and amounts must equal the bid.",
         variant: "destructive",
       });
       return;
@@ -1218,16 +1381,23 @@ export default function ProjectDetailsPage({
 
     try {
       setSavingMilestones(true);
-      const payload = normalizeMilestoneSequences(projectMilestones).map(
-        (m) => ({
-          ...m,
+      const sorted = normalizeMilestoneSequences(projectMilestones);
+      let cum = 0;
+      const payload = sorted.map((m) => {
+        const mm = m as Milestone & { durationAmount?: string; durationUnit?: string };
+        const d = timelineToDays(Number(mm.durationAmount || 0), mm.durationUnit || "");
+        cum += d;
+        return {
+          sequence: m.sequence ?? m.order,
+          title: m.title,
+          description: m.description ?? "",
           amount: Number(m.amount),
-          dueDate: new Date(m.dueDate).toISOString(), // ensure ISO
-        })
-      );
+          daysFromStart: cum,
+        };
+      });
       const res = await updateCompanyProjectMilestones(
         project.id as string,
-        payload
+        payload,
       );
       setMilestoneApprovalState({
         milestonesLocked: res.milestonesLocked,
@@ -1238,10 +1408,10 @@ export default function ProjectDetailsPage({
 
       // Refresh milestones from API
       const milestoneData = await getCompanyProjectMilestones(
-        project.id as string
+        project.id as string,
       );
       const refreshedMilestones: Milestone[] = Array.isArray(
-        milestoneData.milestones
+        milestoneData.milestones,
       )
         ? milestoneData.milestones.map(
             (m: Milestone | Record<string, unknown>) =>
@@ -1278,17 +1448,27 @@ export default function ProjectDetailsPage({
                   (m as Record<string, unknown>).submissionHistory) as
                   | unknown[]
                   | undefined,
-              } as Milestone)
+              }) as Milestone,
           )
         : [];
-
-      // Update both current and original milestones with fresh data
-      setProjectMilestones(refreshedMilestones);
-      setOriginalProjectMilestones(
-        JSON.parse(JSON.stringify(refreshedMilestones))
+      const sortedRef = [...refreshedMilestones].sort(
+        (a, b) => ((a.order as number) ?? 0) - ((b.order as number) ?? 0),
       );
+      const withDurationRef = sortedRef.map((m, i) => {
+        const prev = sortedRef[i - 1] as { daysFromStart?: number } | undefined;
+        const currDays = (m as Milestone & { daysFromStart?: number }).daysFromStart ?? 0;
+        const prevDays = prev?.daysFromStart ?? 0;
+        const durationDays = currDays - prevDays;
+        return {
+          ...m,
+          durationAmount: durationDays > 0 ? String(durationDays) : "",
+          durationUnit: (durationDays > 0 ? "day" : "") as "day" | "week" | "month" | "",
+        } as Milestone & { durationAmount?: string; durationUnit?: string };
+      });
 
-      // Refresh project data to get updated milestones
+      setProjectMilestones(withDurationRef);
+      setOriginalProjectMilestones(JSON.parse(JSON.stringify(withDurationRef)));
+
       await refreshProjectData();
 
       toast({
@@ -1394,7 +1574,7 @@ export default function ProjectDetailsPage({
       // Request changes - this will reset milestone to IN_PROGRESS and save to history
       await requestMilestoneChanges(
         selectedMilestoneForReject,
-        requestChangesReason.trim()
+        requestChangesReason.trim(),
       );
 
       // Refresh all project data including milestones
@@ -1446,29 +1626,39 @@ export default function ProjectDetailsPage({
       // Optimistic status update
       setProposals((prev: ProviderRequest[]) =>
         prev.map((p) =>
-          p.id === proposalId ? { ...p, status: "accepted" as const } : p
-        )
+          p.id === proposalId ? { ...p, status: "accepted" as const } : p,
+        ),
       );
 
-      // Immediately load project milestones for edit
+      // Immediately load project milestones for edit (convert daysFromStart → duration)
       if (projectId) {
         const milestoneData = await getCompanyProjectMilestones(projectId);
-        const loadedDraftMilestones: Milestone[] = Array.isArray(
-          milestoneData.milestones
-        )
+        const rawDraft: Milestone[] = Array.isArray(milestoneData.milestones)
           ? milestoneData.milestones.map(
               (m: Milestone | Record<string, unknown>) =>
                 ({
                   ...(m as Milestone),
                   sequence: ((m as Milestone).order ??
                     (m as Record<string, unknown>).order) as number,
-                } as Milestone)
+                }) as Milestone,
             )
           : [];
-        setMilestonesDraft(loadedDraftMilestones);
-        setOriginalMilestonesDraft(
-          JSON.parse(JSON.stringify(loadedDraftMilestones))
-        ); // Deep copy
+        const sortedDraft = [...rawDraft].sort(
+          (a, b) => ((a.order as number) ?? 0) - ((b.order as number) ?? 0),
+        );
+        const withDurationDraft = sortedDraft.map((m, i) => {
+          const prev = sortedDraft[i - 1] as { daysFromStart?: number } | undefined;
+          const currDays = (m as Milestone & { daysFromStart?: number }).daysFromStart ?? 0;
+          const prevDays = prev?.daysFromStart ?? 0;
+          const durationDays = currDays - prevDays;
+          return {
+            ...m,
+            durationAmount: durationDays > 0 ? String(durationDays) : "",
+            durationUnit: (durationDays > 0 ? "day" : "") as "day" | "week" | "month" | "",
+          } as Milestone & { durationAmount?: string; durationUnit?: string };
+        });
+        setMilestonesDraft(withDurationDraft);
+        setOriginalMilestonesDraft(JSON.parse(JSON.stringify(withDurationDraft)));
         setMilestoneApprovalStateModal({
           milestonesLocked: milestoneData.milestonesLocked,
           companyApproved: milestoneData.companyApproved,
@@ -1499,66 +1689,46 @@ export default function ProjectDetailsPage({
   const handleSaveAcceptedMilestones = async () => {
     if (!activeProjectId) return;
 
-    // Validate milestones
-    const errors: Record<
-      number,
-      { title?: string; description?: string; dueDate?: string }
-    > = {};
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    type Err = { title?: string; description?: string; dueDate?: string; daysFromStart?: string; durationAmount?: string; durationUnit?: string };
+    const errors: Record<number, Err> = {};
     let hasErrors = false;
-
     milestonesDraft.forEach((m, idx) => {
-      const milestoneErrors: {
-        title?: string;
-        description?: string;
-        dueDate?: string;
-      } = {};
-
+      const milestoneErrors: Err = {};
+      const mm = m as Milestone & { durationAmount?: string; durationUnit?: string };
       if (!m.title || !m.title.trim()) {
         milestoneErrors.title = "Title is required.";
         hasErrors = true;
       }
-
       if (!m.description || !m.description.trim()) {
         milestoneErrors.description = "Description is required.";
         hasErrors = true;
       }
-
-      if (!m.dueDate) {
-        milestoneErrors.dueDate = "Due date is required.";
+      const durAmount = mm.durationAmount != null ? String(mm.durationAmount).trim() : "";
+      const durUnit = mm.durationUnit || "";
+      if (!durAmount || Number(durAmount) <= 0) {
+        milestoneErrors.durationAmount = "Duration amount is required and must be > 0.";
         hasErrors = true;
-      } else {
-        const dueDate = new Date(m.dueDate);
-        dueDate.setHours(0, 0, 0, 0);
-        if (dueDate < today) {
-          milestoneErrors.dueDate =
-            "Due date cannot be in the past. Please select today or a future date.";
-          hasErrors = true;
-        }
       }
-
-      if (Object.keys(milestoneErrors).length > 0) {
-        errors[idx] = milestoneErrors;
+      if (!durUnit) {
+        milestoneErrors.durationUnit = "Unit is required.";
+        hasErrors = true;
       }
+      if (Object.keys(milestoneErrors).length > 0) errors[idx] = milestoneErrors;
     });
 
-    // Validate milestone sum equals bid amount
-    // Get bid amount from the project - we need to find it from the project data
-    // For now, we'll get it from the project state if available
     const projectData = project || {};
     const approvedPrice =
       typeof projectData.approvedPrice === "number"
         ? projectData.approvedPrice
         : typeof projectData.approvedPrice === "string"
-        ? Number(projectData.approvedPrice)
-        : 0;
+          ? Number(projectData.approvedPrice)
+          : 0;
     const bidAmountValue =
       typeof projectData.bidAmount === "number"
         ? projectData.bidAmount
         : typeof projectData.bidAmount === "string"
-        ? Number(projectData.bidAmount)
-        : 0;
+          ? Number(projectData.bidAmount)
+          : 0;
     const bidAmount = approvedPrice || bidAmountValue || 0;
     if (bidAmount > 0) {
       const sumMilestones = milestonesDraft.reduce(
@@ -1567,12 +1737,12 @@ export default function ProjectDetailsPage({
           if (!isNaN(val)) return sum + val;
           return sum;
         },
-        0
+        0,
       );
 
       if (sumMilestones !== bidAmount) {
         const msg = `Total of milestones (RM ${sumMilestones.toLocaleString()}) must equal the bid amount (RM ${bidAmount.toLocaleString()}).`;
-        errors[-1] = { title: msg }; // Use -1 as a special index for general error
+        errors[-1] = { ...errors[-1], title: errors[-1]?.title ?? msg };
         hasErrors = true;
       }
     }
@@ -1582,7 +1752,7 @@ export default function ProjectDetailsPage({
       toast({
         title: "Validation Error",
         description:
-          "Please fill in all required milestone fields (title, description, due date) and ensure dates are not in the past. Also ensure milestone amounts sum equals the bid amount.",
+          "Please fill required fields. Milestone durations must total the delivery timeline and amounts must equal the bid.",
         variant: "destructive",
       });
       return;
@@ -1593,18 +1763,26 @@ export default function ProjectDetailsPage({
     try {
       setSavingMilestonesModal(true);
 
-      const payload = milestonesDraft
-        .map((m, i) => ({
-          ...m,
-          sequence: i + 1,
+      const sortedDraft = [...milestonesDraft].sort(
+        (a, b) => (a.sequence ?? 0) - (b.sequence ?? 0),
+      );
+      let cum = 0;
+      const payload = sortedDraft.map((m) => {
+        const mm = m as Milestone & { durationAmount?: string; durationUnit?: string };
+        const d = timelineToDays(Number(mm.durationAmount || 0), mm.durationUnit || "");
+        cum += d;
+        return {
+          sequence: m.sequence ?? 0,
+          title: m.title,
+          description: m.description ?? "",
           amount: Number(m.amount),
-          dueDate: new Date(m.dueDate).toISOString(),
-        }))
-        .sort((a, b) => a.sequence - b.sequence);
+          daysFromStart: cum,
+        };
+      });
 
       const res = await updateCompanyProjectMilestones(
         activeProjectId,
-        payload
+        payload as Milestone[],
       );
 
       setMilestoneApprovalStateModal({
@@ -1614,26 +1792,34 @@ export default function ProjectDetailsPage({
         milestonesApprovedAt: res.milestonesApprovedAt,
       });
 
-      // Refresh milestones from API
       const milestoneData = await getCompanyProjectMilestones(activeProjectId);
-      const refreshedMilestones: Milestone[] = Array.isArray(
-        milestoneData.milestones
-      )
+      const rawRefreshed: Milestone[] = Array.isArray(milestoneData.milestones)
         ? milestoneData.milestones.map(
             (m: Milestone | Record<string, unknown>) =>
               ({
                 ...(m as Milestone),
                 sequence: ((m as Milestone).order ??
                   (m as Record<string, unknown>).order) as number,
-              } as Milestone)
+              }) as Milestone,
           )
         : [];
-
-      // Update both current and original milestones with fresh data
-      setMilestonesDraft(refreshedMilestones);
-      setOriginalMilestonesDraft(
-        JSON.parse(JSON.stringify(refreshedMilestones))
+      const sortedDr = [...rawRefreshed].sort(
+        (a, b) => ((a.order as number) ?? 0) - ((b.order as number) ?? 0),
       );
+      const withDurationDr = sortedDr.map((m, i) => {
+        const prev = sortedDr[i - 1] as { daysFromStart?: number } | undefined;
+        const currDays = (m as Milestone & { daysFromStart?: number }).daysFromStart ?? 0;
+        const prevDays = prev?.daysFromStart ?? 0;
+        const durationDays = currDays - prevDays;
+        return {
+          ...m,
+          durationAmount: durationDays > 0 ? String(durationDays) : "",
+          durationUnit: (durationDays > 0 ? "day" : "") as "day" | "week" | "month" | "",
+        } as Milestone & { durationAmount?: string; durationUnit?: string };
+      });
+
+      setMilestonesDraft(withDurationDr);
+      setOriginalMilestonesDraft(JSON.parse(JSON.stringify(withDurationDr)));
 
       toast({
         title: "Milestones updated",
@@ -1707,8 +1893,8 @@ export default function ProjectDetailsPage({
         prev.map((p) =>
           p.id === selectedProposalForAction.id
             ? { ...p, status: "rejected" }
-            : p
-        )
+            : p,
+        ),
       );
 
       // Refresh proposals from server to ensure we have the latest status
@@ -1730,10 +1916,10 @@ export default function ProjectDetailsPage({
           const rawProposals = Array.isArray(proposalsResponse?.proposals)
             ? proposalsResponse.proposals
             : Array.isArray(proposalsResponse?.data)
-            ? proposalsResponse.data
-            : Array.isArray(proposalsResponse?.items)
-            ? proposalsResponse.items
-            : [];
+              ? proposalsResponse.data
+              : Array.isArray(proposalsResponse?.items)
+                ? proposalsResponse.items
+                : [];
 
           const mappedProposals = mapProposalsToProviderRequests(rawProposals);
           setProposals(mappedProposals);
@@ -1785,9 +1971,13 @@ export default function ProjectDetailsPage({
     // Validate that selected milestone is not approved or paid
     if (selectedMilestoneForDispute) {
       const selectedMilestone = projectMilestones.find(
-        (m: Milestone) => m.id === selectedMilestoneForDispute
+        (m: Milestone) => m.id === selectedMilestoneForDispute,
       );
-      if (selectedMilestone && (selectedMilestone.status === "APPROVED" || selectedMilestone.status === "PAID")) {
+      if (
+        selectedMilestone &&
+        (selectedMilestone.status === "APPROVED" ||
+          selectedMilestone.status === "PAID")
+      ) {
         toast({
           title: "Validation Error",
           description: `Cannot create a dispute for milestone "${selectedMilestone.title}" as it has already been approved or paid.`,
@@ -1911,7 +2101,7 @@ export default function ProjectDetailsPage({
   };
 
   const handleDisputeAttachmentChange = (
-    e: React.ChangeEvent<HTMLInputElement>
+    e: React.ChangeEvent<HTMLInputElement>,
   ) => {
     const files = e.target.files;
     if (files) {
@@ -1921,7 +2111,7 @@ export default function ProjectDetailsPage({
   };
 
   const handleDisputeUpdateAttachmentChange = (
-    e: React.ChangeEvent<HTMLInputElement>
+    e: React.ChangeEvent<HTMLInputElement>,
   ) => {
     const files = e.target.files;
     if (files) {
@@ -1961,7 +2151,7 @@ export default function ProjectDetailsPage({
       return false; // No milestones means no unlocked milestones
     }
     return projectMilestones.some(
-      (milestone: Milestone) => milestone.status !== "LOCKED"
+      (milestone: Milestone) => milestone.status !== "LOCKED",
     );
   };
 
@@ -1998,7 +2188,7 @@ export default function ProjectDetailsPage({
                 <span>
                   Created:{" "}
                   {new Date(
-                    project.createdAt as string | number | Date
+                    project.createdAt as string | number | Date,
                   ).toLocaleDateString()}
                 </span>
               </div>
@@ -2043,8 +2233,12 @@ export default function ProjectDetailsPage({
                 handleContact(
                   project.provider?.id,
                   project.provider?.name,
-                  (project.provider as { providerProfile?: { profileImageUrl?: string } } | undefined)?.providerProfile?.profileImageUrl ||
-                  project.assignedProvider?.providerProfile?.profileImageUrl
+                  (
+                    project.provider as
+                      | { providerProfile?: { profileImageUrl?: string } }
+                      | undefined
+                  )?.providerProfile?.profileImageUrl ||
+                    project.assignedProvider?.providerProfile?.profileImageUrl,
                 )
               }
             >
@@ -2190,8 +2384,8 @@ export default function ProjectDetailsPage({
                   {typeof project.progress === "number"
                     ? project.progress
                     : typeof project.progress === "string"
-                    ? Number(project.progress) || 0
-                    : 0}
+                      ? Number(project.progress) || 0
+                      : 0}
                   % Complete
                 </span>
               </div>
@@ -2200,8 +2394,8 @@ export default function ProjectDetailsPage({
                   typeof project.progress === "number"
                     ? project.progress
                     : typeof project.progress === "string"
-                    ? Number(project.progress) || 0
-                    : 0
+                      ? Number(project.progress) || 0
+                      : 0
                 }
                 className="h-2 sm:h-3"
               />
@@ -2224,7 +2418,7 @@ export default function ProjectDetailsPage({
                     <AvatarImage
                       src={getProfileImageUrl(
                         project.assignedProvider?.providerProfile
-                          ?.profileImageUrl || project.assignedProvider?.avatar
+                          ?.profileImageUrl || project.assignedProvider?.avatar,
                       )}
                     />
                     <AvatarFallback>
@@ -2323,64 +2517,140 @@ export default function ProjectDetailsPage({
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3 sm:space-y-4 p-4 sm:p-6 pt-0">
-                  <div>
-                    <h4 className="font-medium mb-2 text-sm sm:text-base">
-                      Category
-                    </h4>
-                    <Badge variant="secondary" className="text-xs sm:text-sm">
-                      {project.category}
-                    </Badge>
-                  </div>
-                  <div>
-                    <h4 className="font-medium mb-2 text-sm sm:text-base">
-                      Timeline
-                    </h4>
-                    <div className="space-y-2">
-                      {project.originalTimeline ? (
-                        <div>
-                          <p className="text-xs text-gray-500 mb-1">
-                            Original Timeline (Company):
-                          </p>
-                          <p className="text-xs sm:text-sm text-gray-900 font-medium">
-                            {formatTimeline(project.originalTimeline)}
-                          </p>
-                        </div>
-                      ) : null}
-                      {project.providerProposedTimeline ? (
-                        <div>
-                          <p className="text-xs text-gray-500 mb-1">
-                            Provider&apos;s Proposed Timeline:
-                          </p>
-                          <p className="text-xs sm:text-sm text-gray-900 font-medium">
-                            {formatTimeline(
-                              project.providerProposedTimeline,
-                              "day"
-                            )}
-                          </p>
-                        </div>
-                      ) : null}
-                      {!project.originalTimeline &&
-                        !project.providerProposedTimeline && (
-                          <p className="text-xs sm:text-sm text-gray-600">
-                            Not specified
-                          </p>
-                        )}
-                    </div>
-                  </div>
-                  <div>
-                    <h4 className="font-medium mb-2 text-sm sm:text-base">
-                      Required Skills
-                    </h4>
-                    <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                      {skills.map((skill) => (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                    <div>
+                      <Label className="text-xs sm:text-sm font-medium text-gray-500">
+                        Category
+                      </Label>
+                      <div className="mt-1">
                         <Badge
-                          key={skill}
-                          variant="outline"
-                          className="text-xs"
+                          variant="secondary"
+                          className="text-xs sm:text-sm"
                         >
-                          {skill}
+                          {project.category}
                         </Badge>
-                      ))}
+                      </div>
+                    </div>
+                    {(typeof project.budgetMin === "number" ||
+                      typeof project.budgetMax === "number" ||
+                      (project.budgetMin != null &&
+                        project.budgetMax != null)) && (
+                      <div>
+                        <Label className="text-xs sm:text-sm font-medium text-gray-500">
+                          Budget Range
+                        </Label>
+                        <p className="text-base sm:text-lg mt-1 break-words">
+                          {currency}{" "}
+                          {fmt(
+                            typeof project.budgetMin === "number"
+                              ? project.budgetMin
+                              : Number(project.budgetMin) || 0,
+                          )}{" "}
+                          - {currency}{" "}
+                          {fmt(
+                            typeof project.budgetMax === "number"
+                              ? project.budgetMax
+                              : Number(project.budgetMax) || 0,
+                          )}
+                        </p>
+                      </div>
+                    )}
+                    {approvedPriceValue > 0 && (
+                      <div>
+                        <Label className="text-xs sm:text-sm font-medium text-gray-500">
+                          Approved Price
+                        </Label>
+                        <p className="text-base sm:text-lg font-semibold text-green-600 mt-1">
+                          {currency} {fmt(approvedPriceValue)}
+                        </p>
+                      </div>
+                    )}
+                    <div className="sm:col-span-2">
+                      <Label className="text-xs sm:text-sm font-medium text-gray-500">
+                        Timeline
+                      </Label>
+                      <div className="space-y-2 mt-1">
+                        {project.originalTimeline ? (
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">
+                              Original Timeline (Company):
+                            </p>
+                            <p className="text-sm text-gray-900 font-medium">
+                              {formatTimeline(project.originalTimeline)}
+                            </p>
+                          </div>
+                        ) : null}
+                        {project.providerProposedTimeline ? (
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">
+                              Provider&apos;s Proposed Timeline:
+                            </p>
+                            <p className="text-sm text-gray-900 font-medium">
+                              {formatTimeline(
+                                project.providerProposedTimeline,
+                                "day",
+                              )}
+                            </p>
+                          </div>
+                        ) : null}
+                        {milestoneApprovalState.milestonesLocked &&
+                          projectMilestones &&
+                          projectMilestones.length > 0 && (() => {
+                            const sorted = [...projectMilestones].sort(
+                              (a, b) => (a.order ?? a.sequence ?? 0) - (b.order ?? b.sequence ?? 0),
+                            );
+                            const last = sorted[sorted.length - 1] as Milestone & { daysFromStart?: number };
+                            const totalDays = last?.daysFromStart ?? 0;
+                            const lastDueDate = last?.dueDate;
+                            return (
+                              <>
+                                {totalDays > 0 && (
+                                  <div>
+                                    <p className="text-xs text-gray-500 mb-1">
+                                      Approved Timeline:
+                                    </p>
+                                    <p className="text-sm font-semibold text-green-600">
+                                      {formatDurationDays(totalDays)}
+                                    </p>
+                                  </div>
+                                )}
+                                {lastDueDate && (
+                                  <div>
+                                    <p className="text-xs text-gray-500 mb-1">
+                                      Due date (project):
+                                    </p>
+                                    <p className="text-sm font-semibold text-green-600">
+                                      {new Date(lastDueDate).toLocaleDateString()}
+                                    </p>
+                                  </div>
+                                )}
+                              </>
+                            );
+                          })()}
+                        {!project.originalTimeline &&
+                          !project.providerProposedTimeline &&
+                          !(milestoneApprovalState.milestonesLocked && projectMilestones?.length) && (
+                            <p className="text-sm text-gray-600">
+                              Not specified
+                            </p>
+                          )}
+                      </div>
+                    </div>
+                    <div className="sm:col-span-2">
+                      <Label className="text-xs sm:text-sm font-medium text-gray-500">
+                        Required Skills
+                      </Label>
+                      <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-1">
+                        {skills.map((skill) => (
+                          <Badge
+                            key={skill}
+                            variant="outline"
+                            className="text-xs"
+                          >
+                            {skill}
+                          </Badge>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </CardContent>
@@ -2401,6 +2671,10 @@ export default function ProjectDetailsPage({
                 </CardContent>
               </Card>
             </div>
+
+            {project?.type === "ServiceRequest" && project?.id && (
+              <AIRecommendedProvidersSection serviceRequestId={project.id} />
+            )}
 
             <Card>
               <CardHeader className="p-4 sm:p-6">
@@ -2437,6 +2711,20 @@ export default function ProjectDetailsPage({
                       {milestoneApprovalState.providerApproved ? "✓" : "✗"}
                       {milestoneApprovalState.milestonesLocked && " · LOCKED"}
                     </Badge>
+                    {milestoneApprovalState.milestonesLocked &&
+                      projectMilestones &&
+                      projectMilestones.length > 0 && (() => {
+                        const sorted = [...projectMilestones].sort(
+                          (a, b) => (a.order ?? a.sequence ?? 0) - (b.order ?? b.sequence ?? 0),
+                        );
+                        const last = sorted[sorted.length - 1] as { daysFromStart?: number } | undefined;
+                        const totalDays = last?.daysFromStart ?? 0;
+                        return totalDays > 0 ? (
+                          <span className="text-xs sm:text-sm text-green-600 font-medium">
+                            Approved timeline: {formatDurationDays(totalDays)}
+                          </span>
+                        ) : null;
+                      })()}
                     {!milestoneApprovalState.milestonesLocked && (
                       <>
                         <Button
@@ -2444,7 +2732,7 @@ export default function ProjectDetailsPage({
                           onClick={() => {
                             // Store original milestones when opening editor
                             setOriginalProjectMilestones(
-                              JSON.parse(JSON.stringify(projectMilestones))
+                              JSON.parse(JSON.stringify(projectMilestones)),
                             );
                             setMilestoneEditorOpen(true);
                           }}
@@ -2488,7 +2776,7 @@ export default function ProjectDetailsPage({
                               <div className="flex items-center gap-2 flex-wrap">
                                 <Badge
                                   className={`${getStatusColor(
-                                    milestone.status || ""
+                                    milestone.status || "",
                                   )} text-xs`}
                                 >
                                   {getStatusText(milestone.status || "")}
@@ -2511,10 +2799,23 @@ export default function ProjectDetailsPage({
                             <div className="flex items-center gap-1">
                               <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
                               <span>
-                                Due:{" "}
-                                {new Date(
-                                  milestone.dueDate
-                                ).toLocaleDateString()}
+                                {(() => {
+                                  const sorted = [...(projectMilestones || [])].sort(
+                                    (a, b) => (a.order ?? a.sequence ?? 0) - (b.order ?? b.sequence ?? 0),
+                                  );
+                                  const idx = sorted.findIndex((x) => x.id === milestone.id);
+                                  if (idx < 0) return milestone.dueDate ? `Due: ${new Date(milestone.dueDate).toLocaleDateString()}` : "—";
+                                  const prev = sorted[idx - 1] as { daysFromStart?: number } | undefined;
+                                  const currDays = (milestone as Milestone & { daysFromStart?: number }).daysFromStart ?? 0;
+                                  const prevDays = prev?.daysFromStart ?? 0;
+                                  const durationDays = currDays - prevDays;
+                                  const durationStr = durationDays > 0 ? `Duration: ${formatDurationDays(durationDays)}` : "";
+                                  const dueStr = milestone.dueDate ? `Due: ${new Date(milestone.dueDate).toLocaleDateString()}` : "";
+                                  if (milestoneApprovalState.milestonesLocked && dueStr) {
+                                    return [durationStr, dueStr].filter(Boolean).join(" · ");
+                                  }
+                                  return durationStr || dueStr || "—";
+                                })()}
                               </span>
                             </div>
                             {milestone.completedAt && (
@@ -2523,7 +2824,7 @@ export default function ProjectDetailsPage({
                                 <span>
                                   Completed:{" "}
                                   {new Date(
-                                    milestone.completedAt
+                                    milestone.completedAt,
                                   ).toLocaleDateString()}
                                 </span>
                               </div>
@@ -2592,7 +2893,7 @@ export default function ProjectDetailsPage({
                                       }
                                     ).description
                                   : JSON.stringify(
-                                      milestone.submitDeliverables
+                                      milestone.submitDeliverables,
                                     )}
                               </p>
                             </div>
@@ -2644,7 +2945,7 @@ export default function ProjectDetailsPage({
                                       <p className="text-xs text-orange-600 mt-2">
                                         Requested on:{" "}
                                         {new Date(
-                                          latestRequest.requestedChangesAt
+                                          latestRequest.requestedChangesAt,
                                         ).toLocaleString()}
                                       </p>
                                     ) : null}
@@ -2664,15 +2965,15 @@ export default function ProjectDetailsPage({
                                 </span>
                               </div>
                               {((): React.ReactNode => {
-                                  const normalized =
-                                    milestone.submissionAttachmentUrl.replace(
-                                      /\\/g,
-                                      "/"
-                                    );
+                                const normalized =
+                                  milestone.submissionAttachmentUrl.replace(
+                                    /\\/g,
+                                    "/",
+                                  );
                                 const fileName =
                                   normalized.split("/").pop() || "attachment";
                                 const attachmentUrl = getAttachmentUrl(
-                                  milestone.submissionAttachmentUrl
+                                  milestone.submissionAttachmentUrl,
                                 );
                                 const isR2Key =
                                   attachmentUrl === "#" ||
@@ -2680,7 +2981,7 @@ export default function ProjectDetailsPage({
                                     !attachmentUrl.startsWith("/uploads/") &&
                                     !attachmentUrl.includes(
                                       process.env.NEXT_PUBLIC_API_URL ||
-                                        "localhost"
+                                        "localhost",
                                     ));
 
                                 return (
@@ -2691,26 +2992,30 @@ export default function ProjectDetailsPage({
                                         : attachmentUrl
                                     }
                                     download={fileName}
-                                target="_blank"
-                                rel="noopener noreferrer"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
                                     onClick={
-                                      isR2Key && milestone.submissionAttachmentUrl
+                                      isR2Key &&
+                                      milestone.submissionAttachmentUrl
                                         ? async (e) => {
                                             e.preventDefault();
-                                            if (!milestone.submissionAttachmentUrl) return;
+                                            if (
+                                              !milestone.submissionAttachmentUrl
+                                            )
+                                              return;
                                             try {
                                               const downloadUrl =
                                                 await getR2DownloadUrl(
-                                                  milestone.submissionAttachmentUrl
+                                                  milestone.submissionAttachmentUrl,
                                                 );
                                               window.open(
                                                 downloadUrl.downloadUrl,
-                                                "_blank"
+                                                "_blank",
                                               );
                                             } catch (error) {
                                               console.error(
                                                 "Failed to get download URL:",
-                                                error
+                                                error,
                                               );
                                               toastHook({
                                                 title: "Error",
@@ -2722,28 +3027,28 @@ export default function ProjectDetailsPage({
                                           }
                                         : undefined
                                     }
-                                className="flex items-start gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2 hover:bg-gray-50 hover:shadow-sm transition"
-                              >
-                                {/* Icon circle */}
-                                <div className="flex h-9 w-9 flex-none items-center justify-center rounded-md border border-gray-300 bg-gray-100 text-gray-700 text-xs font-medium">
-                                  PDF
-                                </div>
+                                    className="flex items-start gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2 hover:bg-gray-50 hover:shadow-sm transition"
+                                  >
+                                    {/* Icon circle */}
+                                    <div className="flex h-9 w-9 flex-none items-center justify-center rounded-md border border-gray-300 bg-gray-100 text-gray-700 text-xs font-medium">
+                                      PDF
+                                    </div>
 
-                                {/* File info */}
-                                <div className="flex flex-col min-w-0">
-                                  <span className="text-sm font-medium text-gray-900 break-all leading-snug">
+                                    {/* File info */}
+                                    <div className="flex flex-col min-w-0">
+                                      <span className="text-sm font-medium text-gray-900 break-all leading-snug">
                                         {fileName}
-                                  </span>
-                                  <span className="text-xs text-gray-500 leading-snug">
-                                    Click to preview / download
-                                  </span>
-                                </div>
+                                      </span>
+                                      <span className="text-xs text-gray-500 leading-snug">
+                                        Click to preview / download
+                                      </span>
+                                    </div>
 
-                                {/* Download icon */}
-                                <div className="ml-auto flex items-center text-gray-500 hover:text-gray-700">
+                                    {/* Download icon */}
+                                    <div className="ml-auto flex items-center text-gray-500 hover:text-gray-700">
                                       <Download className="w-4 h-4" />
-                                </div>
-                              </a>
+                                    </div>
+                                  </a>
                                 );
                               })()}
                             </div>
@@ -2788,7 +3093,7 @@ export default function ProjectDetailsPage({
                                             <span className="text-xs text-gray-500">
                                               Changes requested:{" "}
                                               {new Date(
-                                                historyRecord.requestedChangesAt
+                                                historyRecord.requestedChangesAt,
                                               ).toLocaleDateString()}
                                             </span>
                                           ) : null}
@@ -2832,7 +3137,7 @@ export default function ProjectDetailsPage({
                                                     }
                                                   ).description
                                                 : JSON.stringify(
-                                                    historyRecord.submitDeliverables
+                                                    historyRecord.submitDeliverables,
                                                   )}
                                             </p>
                                           </div>
@@ -2861,28 +3166,28 @@ export default function ProjectDetailsPage({
                                             {((): React.ReactNode => {
                                               const attachmentUrl =
                                                 getAttachmentUrl(
-                                                  historyRecord.submissionAttachmentUrl
+                                                  historyRecord.submissionAttachmentUrl,
                                                 );
                                               const isR2Key =
                                                 attachmentUrl === "#" ||
                                                 (!attachmentUrl.startsWith(
-                                                  "http"
+                                                  "http",
                                                 ) &&
                                                   !attachmentUrl.startsWith(
-                                                    "/uploads/"
+                                                    "/uploads/",
                                                   ) &&
                                                   !attachmentUrl.includes(
-                                                process.env
-                                                  .NEXT_PUBLIC_API_URL ||
-                                                      "localhost"
+                                                    process.env
+                                                      .NEXT_PUBLIC_API_URL ||
+                                                      "localhost",
                                                   ));
-                                                const normalized =
-                                                  historyRecord.submissionAttachmentUrl.replace(
-                                                    /\\/g,
-                                                    "/"
-                                                  );
+                                              const normalized =
+                                                historyRecord.submissionAttachmentUrl.replace(
+                                                  /\\/g,
+                                                  "/",
+                                                );
                                               const fileName =
-                                                  normalized.split("/").pop() ||
+                                                normalized.split("/").pop() ||
                                                 "attachment";
 
                                               return (
@@ -2897,24 +3202,30 @@ export default function ProjectDetailsPage({
                                                   rel="noopener noreferrer"
                                                   onClick={
                                                     isR2Key &&
-                                                    typeof historyRecord.submissionAttachmentUrl === "string"
+                                                    typeof historyRecord.submissionAttachmentUrl ===
+                                                      "string"
                                                       ? async (e) => {
                                                           e.preventDefault();
-                                                          const attachmentUrl = historyRecord.submissionAttachmentUrl;
-                                                          if (typeof attachmentUrl !== "string") return;
+                                                          const attachmentUrl =
+                                                            historyRecord.submissionAttachmentUrl;
+                                                          if (
+                                                            typeof attachmentUrl !==
+                                                            "string"
+                                                          )
+                                                            return;
                                                           try {
                                                             const downloadUrl =
                                                               await getR2DownloadUrl(
-                                                                attachmentUrl
+                                                                attachmentUrl,
                                                               );
                                                             window.open(
                                                               downloadUrl.downloadUrl,
-                                                              "_blank"
-                                                );
+                                                              "_blank",
+                                                            );
                                                           } catch (error) {
                                                             console.error(
                                                               "Failed to get download URL:",
-                                                              error
+                                                              error,
                                                             );
                                                             toastHook({
                                                               title: "Error",
@@ -2930,7 +3241,7 @@ export default function ProjectDetailsPage({
                                                   className="text-xs text-blue-600 hover:text-blue-800 underline"
                                                 >
                                                   {fileName}
-                                            </a>
+                                                </a>
                                               );
                                             })()}
                                           </div>
@@ -2941,13 +3252,13 @@ export default function ProjectDetailsPage({
                                           "string" &&
                                         !isNaN(
                                           new Date(
-                                            historyRecord.submittedAt
-                                          ).getTime()
+                                            historyRecord.submittedAt,
+                                          ).getTime(),
                                         ) ? (
                                           <p className="text-xs text-gray-500 mt-2">
                                             Submitted:{" "}
                                             {new Date(
-                                              historyRecord.submittedAt
+                                              historyRecord.submittedAt,
                                             ).toLocaleString()}
                                           </p>
                                         ) : null}
@@ -3017,7 +3328,7 @@ export default function ProjectDetailsPage({
                             projectMilestones.findIndex(
                               (m: Milestone) =>
                                 m.status === "LOCKED" &&
-                                project.status === "IN_PROGRESS"
+                                project.status === "IN_PROGRESS",
                             ) === index && (
                               <>
                                 <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
@@ -3063,7 +3374,7 @@ export default function ProjectDetailsPage({
                                 size="sm"
                                 onClick={() =>
                                   handleApproveIndividualMilestone(
-                                    milestone.id!
+                                    milestone.id!,
                                   )
                                 }
                                 className="bg-green-600 hover:bg-green-700 text-xs sm:text-sm w-full sm:w-auto"
@@ -3102,7 +3413,13 @@ export default function ProjectDetailsPage({
             <Card className="border border-gray-200 shadow-sm">
               <CardHeader className="border-b bg-gray-50 p-4 sm:p-6">
                 <CardTitle className="text-base sm:text-lg font-semibold flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                  <span>Received Proposals ({proposals.length})</span>
+                  <span>
+                    {proposals.length === 0
+                      ? "Received Proposals (0)"
+                      : proposals.length <= 5
+                        ? `Received Proposals (${proposals.length})`
+                        : `Best 5 of ${proposals.length} proposals`}
+                  </span>
                   {bidsLoading && (
                     <span className="text-xs text-gray-500 font-normal">
                       Loading…
@@ -3114,7 +3431,7 @@ export default function ProjectDetailsPage({
                 </CardDescription>
               </CardHeader>
 
-              <CardContent className="p-4 sm:p-5 lg:p-6 space-y-3 sm:space-y-4">
+              <CardContent className="p-4 sm:p-5 lg:p-6">
                 {bidsError && (
                   <div className="text-red-600 text-sm">{bidsError}</div>
                 )}
@@ -3122,291 +3439,545 @@ export default function ProjectDetailsPage({
                 {!bidsLoading && proposals.length === 0 ? (
                   <div className="text-sm text-gray-500">No proposals yet.</div>
                 ) : (
-                  proposals.map((p) => (
-                    <Card
-                      key={p.id}
-                      className="hover:shadow-md transition-shadow"
-                    >
-                      <CardContent className="p-4 sm:p-5 lg:p-6">
-                        <div className="flex flex-col lg:flex-row gap-4 sm:gap-5 lg:gap-6">
-                          {/* Provider Info */}
-                          <div className="flex items-start space-x-3 sm:space-x-4 flex-1 min-w-0">
-                            <Avatar className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0">
-                              <AvatarImage
-                                src={
-                                  p.providerAvatar &&
-                                  p.providerAvatar !==
-                                    "/placeholder.svg?height=40&width=40" &&
-                                  !p.providerAvatar.includes("/placeholder.svg")
-                                    ? p.providerAvatar
-                                    : "/placeholder.svg"
-                                }
-                              />
-                              <AvatarFallback>
-                                {String(p.providerName || "P")
-                                  .split(" ")
-                                  .filter(Boolean)
-                                  .map((n) => n[0])
-                                  .join("")}
-                              </AvatarFallback>
-                            </Avatar>
-
-                            <div className="flex-1 min-w-0">
-                              <div className="flex flex-wrap items-center gap-2 mb-1">
-                                <h3 className="font-semibold text-gray-900 text-sm sm:text-base truncate">
-                                  {p.providerName || "Provider"}
-                                </h3>
-                                <div className="flex items-center gap-1">
-                                  <Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-yellow-400 fill-current flex-shrink-0" />
-                                  <span className="text-xs sm:text-sm text-gray-600">
-                                    {p.providerRating ?? "No rating"}
-                                  </span>
+                  <div className="space-y-4">
+                    <div className="flex gap-0 lg:gap-4 relative">
+                      {/* Left: list of best 5 proposal cards */}
+                      <div
+                        className="flex-1 min-w-0 space-y-3 sm:space-y-4"
+                        onMouseLeave={() => {
+                          if (bidPanelLeaveTimeoutRef.current)
+                            clearTimeout(bidPanelLeaveTimeoutRef.current);
+                          bidPanelLeaveTimeoutRef.current = setTimeout(
+                            () => setOpenExplanationId(null),
+                            200,
+                          );
+                        }}
+                      >
+                        {proposals.slice(0, 5).map((p) => (
+                        <div
+                          key={p.id}
+                          ref={(el) => {
+                            cardRefsMap.current[p.id] = el;
+                          }}
+                          data-proposal-id={p.id}
+                          className="w-full"
+                        >
+                          <Card
+                            className="hover:shadow-md transition-shadow"
+                            onMouseEnter={() => {
+                              if (bidPanelLeaveTimeoutRef.current) {
+                                clearTimeout(bidPanelLeaveTimeoutRef.current);
+                                bidPanelLeaveTimeoutRef.current = null;
+                              }
+                              if (p.isTopFive) setOpenExplanationId(p.id);
+                            }}
+                          >
+                            <CardContent className="p-4 sm:p-5 lg:p-6">
+                              {/* Small screens only: in-card AI summary when this card is expanded */}
+                              {cardSummaryViewId === p.id && (
+                                <div className="lg:hidden rounded-xl border border-gray-200 bg-gradient-to-br from-blue-50/80 to-indigo-50/80 p-4 shadow-sm">
+                                  <div className="flex items-center justify-between gap-2 mb-3">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <div className="p-1.5 rounded-lg bg-blue-100 flex-shrink-0">
+                                        <Sparkles className="w-4 h-4 text-blue-600" />
+                                      </div>
+                                      <span className="text-sm font-semibold text-gray-900 truncate">
+                                        {p.providerName || "Provider"}
+                                      </span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setCardSummaryViewId(null);
+                                        setOpenExplanationId(null);
+                                      }}
+                                      className="shrink-0 p-1.5 rounded-md text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                      aria-label="Close"
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+                                    Why this bid fits
+                                  </p>
+                                  {!p.aiFitExplanation &&
+                                  explanationLoading[p.id] ? (
+                                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                                      <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
+                                      <span>Loading…</span>
+                                    </div>
+                                  ) : (
+                                    <p className="text-sm text-gray-700 leading-relaxed">
+                                      {getBidSummary(
+                                        p.id,
+                                        p.aiFitExplanation,
+                                        explanationCache[p.id],
+                                      )}
+                                    </p>
+                                  )}
                                 </div>
-                              </div>
-
-
-                              {p.coverLetter && (
-                                <p className="text-xs sm:text-sm text-gray-600 line-clamp-2 mb-2 break-words">
-                                  {p.coverLetter}
-                                </p>
                               )}
 
-                              {Array.isArray(p.skills) &&
-                                p.skills.length > 0 && (
-                                  <div className="flex flex-wrap gap-1">
-                                    {p.skills
-                                      .slice(0, 3)
-                                      .map((skill: string) => (
+                              {/* Normal card content (hidden on small when this card is showing summary) */}
+                              <div
+                                className={cn(
+                                  "flex flex-col lg:flex-row gap-4 sm:gap-5 lg:gap-6",
+                                  cardSummaryViewId === p.id &&
+                                    "hidden lg:flex",
+                                )}
+                              >
+                                {/* Provider Info */}
+                                <div className="flex items-start space-x-3 sm:space-x-4 flex-1 min-w-0">
+                                  <Avatar className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0">
+                                    <AvatarImage
+                                      src={
+                                        p.providerAvatar &&
+                                        p.providerAvatar !==
+                                          "/placeholder.svg?height=40&width=40" &&
+                                        !p.providerAvatar.includes(
+                                          "/placeholder.svg",
+                                        )
+                                          ? p.providerAvatar
+                                          : "/placeholder.svg"
+                                      }
+                                    />
+                                    <AvatarFallback>
+                                      {String(p.providerName || "P")
+                                        .split(" ")
+                                        .filter(Boolean)
+                                        .map((n) => n[0])
+                                        .join("")}
+                                    </AvatarFallback>
+                                  </Avatar>
+
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                                      <h3 className="font-semibold text-gray-900 text-sm sm:text-base truncate">
+                                        {p.providerName || "Provider"}
+                                      </h3>
+                                      {p.isTopFive && (
                                         <Badge
-                                          key={skill}
-                                          variant="secondary"
-                                          className="text-[10px] leading-tight"
+                                          className="bg-blue-100 text-blue-800 border-blue-300 text-xs shrink-0"
+                                          title="One of the top 5 best-fit bids"
                                         >
-                                          {skill}
+                                          <Sparkles className="w-3 h-3 mr-1" />
+                                          Best {p.rank ?? ""}
                                         </Badge>
-                                      ))}
-                                    {p.skills.length > 3 && (
-                                      <Badge
-                                        variant="secondary"
-                                        className="text-[10px] leading-tight"
+                                      )}
+                                      {p.matchScore != null &&
+                                        p.matchScore > 0 && (
+                                          <span className="text-xs text-gray-500">
+                                            {p.matchScore}% match
+                                          </span>
+                                        )}
+                                      <div className="flex items-center gap-1">
+                                        <Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-yellow-400 fill-current flex-shrink-0" />
+                                        <span className="text-xs sm:text-sm text-gray-600">
+                                          {p.providerRating ?? "No rating"}
+                                        </span>
+                                      </div>
+                                      {/* Mobile: tap to show AI summary in-card */}
+                                      {p.isTopFive && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setOpenExplanationId((prev) =>
+                                              prev === p.id ? null : p.id,
+                                            );
+                                            setCardSummaryViewId((prev) =>
+                                              prev === p.id ? null : p.id,
+                                            );
+                                          }}
+                                          className="lg:hidden inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-2 py-1"
+                                          aria-label="See why this bid is recommended"
+                                        >
+                                          <HelpCircle className="w-3.5 h-3.5" />
+                                          Tap here to see
+                                        </button>
+                                      )}
+                                    </div>
+
+                                    {p.coverLetter && (
+                                      <p className="text-xs sm:text-sm text-gray-600 line-clamp-2 mb-2 break-words">
+                                        {p.coverLetter}
+                                      </p>
+                                    )}
+
+                                    {Array.isArray(p.skills) &&
+                                      p.skills.length > 0 && (
+                                        <div className="flex flex-wrap gap-1">
+                                          {p.skills
+                                            .slice(0, 3)
+                                            .map((skill: string) => (
+                                              <Badge
+                                                key={skill}
+                                                variant="secondary"
+                                                className="text-[10px] leading-tight"
+                                              >
+                                                {skill}
+                                              </Badge>
+                                            ))}
+                                          {p.skills.length > 3 && (
+                                            <Badge
+                                              variant="secondary"
+                                              className="text-[10px] leading-tight"
+                                            >
+                                              +{p.skills.length - 3} more
+                                            </Badge>
+                                          )}
+                                        </div>
+                                      )}
+                                  </div>
+                                </div>
+
+                                {/* Right column */}
+                                <div className="lg:w-80 space-y-2 sm:space-y-3">
+                                  {/* Status + submitted date */}
+                                  <div className="flex justify-between items-center">
+                                    <Badge
+                                      className={
+                                        p.status === "pending"
+                                          ? "bg-yellow-100 text-yellow-800"
+                                          : p.status === "accepted"
+                                            ? "bg-green-100 text-green-800"
+                                            : p.status === "rejected"
+                                              ? "bg-red-100 text-red-800"
+                                              : "bg-gray-100 text-gray-800"
+                                      }
+                                    >
+                                      {p.status === "pending"
+                                        ? "Pending"
+                                        : p.status === "accepted"
+                                          ? "Accepted"
+                                          : p.status === "rejected"
+                                            ? "Rejected"
+                                            : p.status}
+                                    </Badge>
+
+                                    <span className="text-sm text-gray-500">
+                                      {p.submittedAt &&
+                                      !isNaN(new Date(p.submittedAt).getTime())
+                                        ? new Date(
+                                            p.submittedAt,
+                                          ).toLocaleDateString()
+                                        : "—"}
+                                    </span>
+                                  </div>
+
+                                  {/* Bid / timeline */}
+                                  <div className="flex justify-between items-center">
+                                    <div>
+                                      <p className="text-sm text-gray-600">
+                                        Bid Amount
+                                      </p>
+                                      <p className="font-semibold text-lg">
+                                        RM{" "}
+                                        {Number(
+                                          p.bidAmount ?? 0,
+                                        ).toLocaleString()}
+                                      </p>
+                                    </div>
+                                    <div className="text-right">
+                                      <p className="text-sm text-gray-600">
+                                        Timeline
+                                      </p>
+                                      <p className="font-medium">
+                                        {p.proposedTimeline || "—"}
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  {/* Mini milestones preview */}
+                                  {!!p.milestones?.length && (
+                                    <div className="text-xs text-gray-600 bg-gray-50 rounded p-2">
+                                      <div className="font-medium text-gray-900 mb-1">
+                                        Proposed Milestones
+                                      </div>
+                                      <ul className="space-y-1 max-h-24 overflow-y-auto pr-1">
+                                        {p.milestones.map(
+                                          (
+                                            m: {
+                                              title: string;
+                                              amount: number;
+                                              dueDate?: string;
+                                              daysFromStart?: number;
+                                              order: number;
+                                              description?: string;
+                                            },
+                                            idx: number,
+                                          ) => (
+                                            <li
+                                              key={idx}
+                                              className="flex justify-between"
+                                            >
+                                              <span className="truncate">
+                                                {m.title ||
+                                                  `Milestone ${idx + 1}`}
+                                              </span>
+                                              <span>
+                                                RM{" "}
+                                                {Number(
+                                                  m.amount || 0,
+                                                ).toLocaleString()}
+                                              </span>
+                                            </li>
+                                          ),
+                                        )}
+                                      </ul>
+                                    </div>
+                                  )}
+
+                                  {/* Actions - responsive: stack on small, row + wrap on large */}
+                                  <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:flex-wrap sm:gap-2">
+                                    {/* View Profile */}
+                                    <NextLink
+                                      href={`/customer/providers/${p.providerId}`}
+                                      className="w-full sm:flex-1 sm:min-w-[7rem]"
+                                    >
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="w-full min-h-[44px] sm:min-h-0 text-xs sm:text-sm justify-center"
                                       >
-                                        +{p.skills.length - 3} more
-                                      </Badge>
+                                        <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 shrink-0" />
+                                        <span className="truncate">
+                                          View Profile
+                                        </span>
+                                      </Button>
+                                    </NextLink>
+
+                                    {/* View Details */}
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="w-full sm:flex-1 sm:min-w-[7rem] min-h-[44px] sm:min-h-0 text-xs sm:text-sm justify-center"
+                                      onClick={() => {
+                                        // sync the dialog state to match requests page structure:
+                                        setSelectedProposalDetails({
+                                          ...p, // Include all proposal data
+                                          provider: {
+                                            id: p.providerId,
+                                            name: p.providerName,
+                                            avatar: p.providerAvatar,
+                                            rating: p.providerRating,
+                                            location: p.providerLocation,
+                                          },
+                                          projectTitle:
+                                            p.projectTitle ||
+                                            (project.title as string) ||
+                                            "",
+                                          bidAmount: p.bidAmount,
+                                          proposedTimeline: p.proposedTimeline,
+                                          deliveryTime:
+                                            p.proposedTimeline?.replace(
+                                              " days",
+                                              "",
+                                            ) || p.proposedTimeline,
+                                          coverLetter: p.coverLetter,
+                                          createdAt: p.submittedAt,
+                                          submittedAt: p.submittedAt,
+                                          status: p.status,
+                                          milestones: p.milestones.map(
+                                            (m: {
+                                              title: string;
+                                              amount: number;
+                                              dueDate?: string;
+                                              daysFromStart?: number;
+                                              order: number;
+                                              description?: string;
+                                            }) => ({
+                                              title: m.title,
+                                              amount: m.amount,
+                                              dueDate: m.dueDate,
+                                              daysFromStart: m.daysFromStart,
+                                              sequence: m.order,
+                                              order: m.order,
+                                              description: m.description,
+                                            }),
+                                          ),
+                                          attachmentUrls: p.attachments || [],
+                                          attachments: p.attachments || [],
+                                          skills: p.skills || [],
+                                          portfolio: p.portfolio || [],
+                                          experience:
+                                            (
+                                              p as ProviderRequest & {
+                                                experience?: string;
+                                              }
+                                            ).experience || "",
+                                        });
+                                        setProposalDetailsOpen(true);
+                                      }}
+                                    >
+                                      <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 shrink-0" />
+                                      <span className="truncate">
+                                        View Details
+                                      </span>
+                                    </Button>
+
+                                    {/* Accept / Reject only if it's still pending */}
+                                    {p.status === "pending" && (
+                                      <>
+                                        <Button
+                                          size="sm"
+                                          onClick={() =>
+                                            handleAcceptProposal(p)
+                                          }
+                                          className="w-full sm:flex-1 sm:min-w-[7rem] min-h-[44px] sm:min-h-0 bg-green-600 hover:bg-green-700 text-xs sm:text-sm justify-center"
+                                          disabled={processingId === p.id}
+                                        >
+                                          {processingId === p.id ? (
+                                            <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 animate-spin shrink-0" />
+                                          ) : (
+                                            <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 shrink-0" />
+                                          )}
+                                          <span className="truncate">
+                                            {processingId === p.id
+                                              ? "Accepting..."
+                                              : "Accept"}
+                                          </span>
+                                        </Button>
+
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() =>
+                                            handleStartRejectProposal(p)
+                                          }
+                                          className="w-full sm:flex-1 sm:min-w-[7rem] min-h-[44px] sm:min-h-0 text-red-600 hover:text-red-700 hover:bg-red-50 text-xs sm:text-sm justify-center"
+                                          disabled={processingId === p.id}
+                                        >
+                                          <X className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 shrink-0" />
+                                          <span className="truncate">
+                                            Reject
+                                          </span>
+                                        </Button>
+                                      </>
                                     )}
                                   </div>
-                                )}
-                            </div>
-                          </div>
-
-                          {/* Right column */}
-                          <div className="lg:w-80 space-y-2 sm:space-y-3">
-                            {/* Status + submitted date */}
-                            <div className="flex justify-between items-center">
-                              <Badge
-                                className={
-                                  p.status === "pending"
-                                    ? "bg-yellow-100 text-yellow-800"
-                                    : p.status === "accepted"
-                                    ? "bg-green-100 text-green-800"
-                                    : p.status === "rejected"
-                                    ? "bg-red-100 text-red-800"
-                                    : "bg-gray-100 text-gray-800"
-                                }
-                              >
-                                {p.status === "pending"
-                                  ? "Pending"
-                                  : p.status === "accepted"
-                                  ? "Accepted"
-                                  : p.status === "rejected"
-                                  ? "Rejected"
-                                  : p.status}
-                              </Badge>
-
-                              <span className="text-sm text-gray-500">
-                                {p.submittedAt &&
-                                !isNaN(new Date(p.submittedAt).getTime())
-                                  ? new Date(p.submittedAt).toLocaleDateString()
-                                  : "—"}
-                              </span>
-                            </div>
-
-                            {/* Bid / timeline */}
-                            <div className="flex justify-between items-center">
-                              <div>
-                                <p className="text-sm text-gray-600">
-                                  Bid Amount
-                                </p>
-                                <p className="font-semibold text-lg">
-                                  RM {Number(p.bidAmount ?? 0).toLocaleString()}
-                                </p>
-                              </div>
-                              <div className="text-right">
-                                <p className="text-sm text-gray-600">
-                                  Timeline
-                                </p>
-                                <p className="font-medium">
-                                  {p.proposedTimeline || "—"}
-                                </p>
-                              </div>
-                            </div>
-
-                            {/* Mini milestones preview */}
-                            {!!p.milestones?.length && (
-                              <div className="text-xs text-gray-600 bg-gray-50 rounded p-2">
-                                <div className="font-medium text-gray-900 mb-1">
-                                  Proposed Milestones
                                 </div>
-                                <ul className="space-y-1 max-h-24 overflow-y-auto pr-1">
-                                  {p.milestones.map(
-                                    (
-                                      m: {
-                                        title: string;
-                                        amount: number;
-                                        dueDate: string;
-                                        order: number;
-                                        description?: string;
-                                      },
-                                      idx: number
-                                    ) => (
-                                      <li
-                                        key={idx}
-                                        className="flex justify-between"
-                                      >
-                                        <span className="truncate">
-                                          {m.title || `Milestone ${idx + 1}`}
-                                        </span>
-                                        <span>
-                                          RM{" "}
-                                          {Number(
-                                            m.amount || 0
-                                          ).toLocaleString()}
-                                        </span>
-                                      </li>
-                                    )
-                                  )}
-                                </ul>
                               </div>
-                            )}
-
-                            {/* Actions */}
-                            <div className="flex flex-col sm:flex-row gap-2 pt-2">
-                              {/* View Profile */}
-                              <NextLink
-                                href={`/customer/providers/${p.providerId}`}
-                                className="flex-1"
-                              >
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="w-full text-xs sm:text-sm"
-                                >
-                                  <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" />
-                                  View Profile
-                                </Button>
-                              </NextLink>
-
-                              {/* View Details */}
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="flex-1 text-xs sm:text-sm"
-                                onClick={() => {
-                                  // sync the dialog state to match requests page structure:
-                                  setSelectedProposalDetails({
-                                    ...p, // Include all proposal data
-                                    provider: {
-                                      id: p.providerId,
-                                      name: p.providerName,
-                                      avatar: p.providerAvatar,
-                                      rating: p.providerRating,
-                                      location: p.providerLocation,
-                                    },
-                                    projectTitle:
-                                      p.projectTitle ||
-                                      (project.title as string) ||
-                                      "",
-                                    bidAmount: p.bidAmount,
-                                    proposedTimeline: p.proposedTimeline,
-                                    deliveryTime:
-                                      p.proposedTimeline?.replace(
-                                        " days",
-                                        ""
-                                      ) || p.proposedTimeline,
-                                    coverLetter: p.coverLetter,
-                                    createdAt: p.submittedAt,
-                                    submittedAt: p.submittedAt,
-                                    status: p.status,
-                                    milestones: p.milestones.map(
-                                      (m: {
-                                        title: string;
-                                        amount: number;
-                                        dueDate: string;
-                                        order: number;
-                                        description?: string;
-                                      }) => ({
-                                        title: m.title,
-                                        amount: m.amount,
-                                        dueDate: m.dueDate,
-                                        sequence: m.order,
-                                        order: m.order,
-                                        description: m.description,
-                                      })
-                                    ),
-                                    attachmentUrls: p.attachments || [],
-                                    attachments: p.attachments || [],
-                                    skills: p.skills || [],
-                                    portfolio: p.portfolio || [],
-                                    experience:
-                                      (
-                                        p as ProviderRequest & {
-                                          experience?: string;
-                                        }
-                                      ).experience || "",
-                                  });
-                                  setProposalDetailsOpen(true);
-                                }}
-                              >
-                                <MessageSquare className="w-4 h-4 mr-1" />
-                                View Details
-                              </Button>
-
-                              {/* Accept / Reject only if it's still pending */}
-                              {p.status === "pending" && (
-                                <>
-                                  <Button
-                                    size="sm"
-                                    onClick={() => handleAcceptProposal(p)}
-                                    className="bg-green-600 hover:bg-green-700 flex-1 text-xs sm:text-sm"
-                                    disabled={processingId === p.id}
-                                  >
-                                    {processingId === p.id ? (
-                                      <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 animate-spin" />
-                                    ) : (
-                                      <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" />
-                                    )}
-                                    {processingId === p.id
-                                      ? "Accepting..."
-                                      : "Accept"}
-                                  </Button>
-
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleStartRejectProposal(p)}
-                                    className="text-red-600 hover:text-red-700 flex-1 text-xs sm:text-sm"
-                                    disabled={processingId === p.id}
-                                  >
-                                    <X className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" />
-                                    Reject
-                                  </Button>
-                                </>
-                              )}
-                            </div>
-                          </div>
+                            </CardContent>
+                          </Card>
                         </div>
-                      </CardContent>
-                    </Card>
-                  ))
+                      ))}
+                    </div>
+
+                    {/* Right: AI summary panel (desktop hover only; small screens use in-card summary) */}
+                    {/* Backdrop only when drawer is used (not when in-card summary on mobile) */}
+                    {openExplanationId && !cardSummaryViewId && (
+                      <div
+                        className="fixed inset-0 z-40 bg-black/20 lg:hidden"
+                        aria-hidden
+                        onClick={() => {
+                          setOpenExplanationId(null);
+                          setCardSummaryViewId(null);
+                        }}
+                      />
+                    )}
+                    <div
+                      ref={rightPanelColumnRef}
+                      className={cn(
+                        "transition-all duration-300 ease-out",
+                        "hidden lg:block",
+                        "lg:overflow-hidden lg:flex-shrink-0",
+                        "fixed right-0 top-0 bottom-0 z-50 w-80 max-w-[85vw] lg:relative lg:top-auto lg:bottom-auto lg:right-auto lg:z-auto lg:max-w-none",
+                        openExplanationId
+                          ? "translate-x-0 lg:w-80"
+                          : "translate-x-full lg:translate-x-0 lg:w-0",
+                      )}
+                      onMouseEnter={() => {
+                        if (bidPanelLeaveTimeoutRef.current) {
+                          clearTimeout(bidPanelLeaveTimeoutRef.current);
+                          bidPanelLeaveTimeoutRef.current = null;
+                        }
+                      }}
+                      onMouseLeave={() => setOpenExplanationId(null)}
+                    >
+                      {/* Spacer so panel aligns vertically with the hovered card */}
+                      {openExplanationId && panelTopOffset > 0 && (
+                        <div
+                          className="hidden lg:block shrink-0"
+                          style={{ height: panelTopOffset }}
+                          aria-hidden
+                        />
+                      )}
+                      <div
+                        className={cn(
+                          "h-full lg:h-auto w-80 max-w-[85vw] lg:max-w-none min-h-[140px] rounded-none lg:rounded-xl border-0 lg:border border-gray-200 bg-white shadow-xl lg:shadow-lg p-4 lg:ml-0",
+                          openExplanationId
+                            ? "translate-x-0 opacity-100"
+                            : "translate-x-4 opacity-0 lg:translate-x-0",
+                        )}
+                        style={{
+                          transition:
+                            "opacity 0.3s ease-out, transform 0.3s ease-out",
+                        }}
+                      >
+                        {openExplanationId && (
+                          <>
+                            <div className="flex items-center justify-between gap-2 mb-3">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <div className="p-1.5 rounded-lg bg-blue-100 flex-shrink-0">
+                                  <Sparkles className="w-4 h-4 text-blue-600" />
+                                </div>
+                                <span className="text-sm font-semibold text-gray-900 truncate">
+                                  {proposals.find(
+                                    (x) => x.id === openExplanationId,
+                                  )?.providerName || "Provider"}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setOpenExplanationId(null)}
+                                className="lg:hidden p-1.5 rounded-md text-gray-500 hover:bg-gray-100 focus:outline-none flex-shrink-0"
+                                aria-label="Close"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+                              Why this bid fits
+                            </p>
+                            {!proposals.find((x) => x.id === openExplanationId)
+                              ?.aiFitExplanation &&
+                            explanationLoading[openExplanationId] ? (
+                              <div className="flex items-center gap-2 text-sm text-gray-600">
+                                <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
+                                <span>Loading…</span>
+                              </div>
+                            ) : (
+                              <p className="text-sm text-gray-700 leading-relaxed">
+                                {getBidSummary(
+                                  openExplanationId,
+                                  proposals.find(
+                                    (x) => x.id === openExplanationId,
+                                  )?.aiFitExplanation,
+                                  explanationCache[openExplanationId],
+                                )}
+                              </p>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  {(() => {
+                    const bidsServiceRequestId =
+                      project?.type === "ServiceRequest"
+                        ? project?.id
+                        : (project as Record<string, unknown>)?.serviceRequestId as string | undefined;
+                    return bidsServiceRequestId ? (
+                      <div className="flex justify-center pt-4 mt-4 border-t border-gray-100">
+                        <NextLink href={`/customer/requests?project=${encodeURIComponent(bidsServiceRequestId)}`}>
+                          <Button variant="outline" size="sm" className="text-xs sm:text-sm">
+                            Show all proposals
+                          </Button>
+                        </NextLink>
+                      </div>
+                    ) : null;
+                  })()}
+                </div>
                 )}
               </CardContent>
             </Card>
@@ -3428,7 +3999,7 @@ export default function ProjectDetailsPage({
                 {(() => {
                   // Get attachments from accepted proposals only
                   const acceptedProposals = proposals.filter(
-                    (p) => p.status === "accepted"
+                    (p) => p.status === "accepted",
                   );
                   const proposalAttachments: Array<{
                     url: string;
@@ -3471,7 +4042,7 @@ export default function ProjectDetailsPage({
                           (!attachmentUrl.startsWith("http") &&
                             !attachmentUrl.startsWith("/uploads/") &&
                             !attachmentUrl.includes(
-                              process.env.NEXT_PUBLIC_API_URL || "localhost"
+                              process.env.NEXT_PUBLIC_API_URL || "localhost",
                             ));
 
                         return (
@@ -3492,12 +4063,12 @@ export default function ProjectDetailsPage({
                                         await getR2DownloadUrl(attachment.url); // Use original URL/key
                                       window.open(
                                         downloadUrl.downloadUrl,
-                                        "_blank"
+                                        "_blank",
                                       );
                                     } catch (error) {
                                       console.error(
                                         "Failed to get download URL:",
-                                        error
+                                        error,
                                       );
                                       toastHook({
                                         title: "Error",
@@ -3596,7 +4167,7 @@ export default function ProjectDetailsPage({
                                   : undefined,
                             });
                           }
-                        }
+                        },
                       );
                     }
                   });
@@ -3621,7 +4192,7 @@ export default function ProjectDetailsPage({
                           (!attachmentUrl.startsWith("http") &&
                             !attachmentUrl.startsWith("/uploads/") &&
                             !attachmentUrl.includes(
-                              process.env.NEXT_PUBLIC_API_URL || "localhost"
+                              process.env.NEXT_PUBLIC_API_URL || "localhost",
                             ));
 
                         return (
@@ -3642,12 +4213,12 @@ export default function ProjectDetailsPage({
                                         await getR2DownloadUrl(attachment.url); // Use original URL/key
                                       window.open(
                                         downloadUrl.downloadUrl,
-                                        "_blank"
+                                        "_blank",
                                       );
                                     } catch (error) {
                                       console.error(
                                         "Failed to get download URL:",
-                                        error
+                                        error,
                                       );
                                       toastHook({
                                         title: "Error",
@@ -3672,10 +4243,10 @@ export default function ProjectDetailsPage({
                                 From: {attachment.milestoneTitle}
                                 {attachment.submittedAt &&
                                   !isNaN(
-                                    new Date(attachment.submittedAt).getTime()
+                                    new Date(attachment.submittedAt).getTime(),
                                   ) &&
                                   ` • Submitted: ${new Date(
-                                    attachment.submittedAt
+                                    attachment.submittedAt,
                                   ).toLocaleDateString()}`}
                                 <span className="block mt-0.5">
                                   Click to preview / download
@@ -3719,7 +4290,7 @@ export default function ProjectDetailsPage({
                               (message.createdAt as string) ||
                               (message.timestamp as string),
                           }))
-                        : []
+                        : [],
                   );
                   if (messageAttachments.length === 0) {
                     return (
@@ -3742,7 +4313,7 @@ export default function ProjectDetailsPage({
                           (!attachmentUrl.startsWith("http") &&
                             !attachmentUrl.startsWith("/uploads/") &&
                             !attachmentUrl.includes(
-                              process.env.NEXT_PUBLIC_API_URL || "localhost"
+                              process.env.NEXT_PUBLIC_API_URL || "localhost",
                             ));
 
                         return (
@@ -3763,12 +4334,12 @@ export default function ProjectDetailsPage({
                                         await getR2DownloadUrl(attachment.url); // Use original URL/key
                                       window.open(
                                         downloadUrl.downloadUrl,
-                                        "_blank"
+                                        "_blank",
                                       );
                                     } catch (error) {
                                       console.error(
                                         "Failed to get download URL:",
-                                        error
+                                        error,
                                       );
                                       toastHook({
                                         title: "Error",
@@ -3919,7 +4490,7 @@ export default function ProjectDetailsPage({
                                         )}
                                       </div>
                                     );
-                                  }
+                                  },
                                 )}
                               </div>
                             ) : null}
@@ -3938,8 +4509,17 @@ export default function ProjectDetailsPage({
                         handleContact(
                           project.provider?.id,
                           project.provider?.name,
-                          (project.provider as { providerProfile?: { profileImageUrl?: string } } | undefined)?.providerProfile?.profileImageUrl ||
-                          project.assignedProvider?.providerProfile?.profileImageUrl
+                          (
+                            project.provider as
+                              | {
+                                  providerProfile?: {
+                                    profileImageUrl?: string;
+                                  };
+                                }
+                              | undefined
+                          )?.providerProfile?.profileImageUrl ||
+                            project.assignedProvider?.providerProfile
+                              ?.profileImageUrl,
                         )
                       }
                     >
@@ -4193,41 +4773,65 @@ export default function ProjectDetailsPage({
                     </div>
                     <div className="sm:col-span-12 md:col-span-4">
                       <label className="text-xs sm:text-sm font-medium">
-                        Due Date <span className="text-red-500">*</span>
+                        Duration <span className="text-red-500">*</span>
                       </label>
-                      <Input
-                        type="date"
-                        min={new Date().toISOString().split("T")[0]}
-                        value={(m.dueDate || "").slice(0, 10)}
-                        onChange={(e) => {
-                          const selectedDate = e.target.value;
-                          const today = new Date().toISOString().split("T")[0];
-                          if (selectedDate < today) {
-                            toast({
-                              title: "Invalid Date",
-                              description:
-                                "Due date cannot be in the past. Please select today or a future date.",
-                              variant: "destructive",
-                            });
-                            return;
-                          }
-                          updateProjectMilestone(i, { dueDate: selectedDate });
-                          if (milestoneErrors[i]?.dueDate) {
-                            setMilestoneErrors((prev) => ({
-                              ...prev,
-                              [i]: { ...prev[i], dueDate: undefined },
-                            }));
-                          }
-                        }}
-                        className={`mt-1.5 text-sm sm:text-base ${
-                          milestoneErrors[i]?.dueDate
-                            ? "border-red-500 focus-visible:ring-red-500"
-                            : ""
-                        }`}
-                      />
-                      {milestoneErrors[i]?.dueDate && (
+                      <div className="flex gap-2 mt-1.5">
+                        <Input
+                          type="number"
+                          min={1}
+                          placeholder="e.g. 1"
+                          value={(m as Milestone & { durationAmount?: string }).durationAmount ?? ""}
+                          onChange={(e) => {
+                            updateProjectMilestone(i, {
+                              durationAmount: e.target.value,
+                              durationUnit: (m as Milestone & { durationUnit?: string }).durationUnit || "",
+                            } as Partial<Milestone>);
+                            if (milestoneErrors[i]?.durationAmount || milestoneErrors[i]?.durationUnit) {
+                              setMilestoneErrors((prev) => ({
+                                ...prev,
+                                [i]: { ...prev[i], durationAmount: undefined, durationUnit: undefined },
+                              }));
+                            }
+                            if (milestoneErrors[-1]) {
+                              setMilestoneErrors((prev) => {
+                                const next = { ...prev }; delete next[-1]; return next;
+                              });
+                            }
+                          }}
+                          className={`text-sm sm:text-base flex-1 ${
+                            milestoneErrors[i]?.durationAmount ? "border-red-500 focus-visible:ring-red-500" : ""
+                          }`}
+                        />
+                        <Select
+                          value={(m as Milestone & { durationUnit?: string }).durationUnit || ""}
+                          onValueChange={(value: "day" | "week" | "month") => {
+                            updateProjectMilestone(i, {
+                              durationAmount: (m as Milestone & { durationAmount?: string }).durationAmount ?? "",
+                              durationUnit: value,
+                            } as Partial<Milestone>);
+                            if (milestoneErrors[i]?.durationUnit) {
+                              setMilestoneErrors((prev) => ({ ...prev, [i]: { ...prev[i], durationUnit: undefined } }));
+                            }
+                            if (milestoneErrors[-1]) {
+                              setMilestoneErrors((prev) => { const next = { ...prev }; delete next[-1]; return next; });
+                            }
+                          }}
+                        >
+                          <SelectTrigger className={`text-sm sm:text-base w-[100px] ${
+                            milestoneErrors[i]?.durationUnit ? "border-red-500 focus:ring-red-500" : ""
+                          }`}>
+                            <SelectValue placeholder="Unit" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="day">Day(s)</SelectItem>
+                            <SelectItem value="week">Week(s)</SelectItem>
+                            <SelectItem value="month">Month(s)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {(milestoneErrors[i]?.durationAmount || milestoneErrors[i]?.durationUnit) && (
                         <p className="text-xs text-red-600 mt-1">
-                          {milestoneErrors[i].dueDate}
+                          {milestoneErrors[i].durationAmount || milestoneErrors[i].durationUnit}
                         </p>
                       )}
                     </div>
@@ -4301,10 +4905,10 @@ export default function ProjectDetailsPage({
                   onClick={handleApproveProjectMilestones}
                   disabled={
                     JSON.stringify(
-                      normalizeMilestoneSequences(projectMilestones)
+                      normalizeMilestoneSequences(projectMilestones),
                     ) !==
                     JSON.stringify(
-                      normalizeMilestoneSequences(originalProjectMilestones)
+                      normalizeMilestoneSequences(originalProjectMilestones),
                     )
                   }
                   size="sm"
@@ -4557,14 +5161,14 @@ export default function ProjectDetailsPage({
                     src={getProfileImageUrl(
                       selectedProposalDetails.providerAvatar ||
                         selectedProposalDetails.provider?.providerProfile
-                          ?.profileImageUrl
+                          ?.profileImageUrl,
                     )}
                   />
                   <AvatarFallback>
                     {String(
                       selectedProposalDetails.provider?.name ||
                         selectedProposalDetails.providerName ||
-                        "P"
+                        "P",
                     )
                       .split(" ")
                       .filter(Boolean)
@@ -4593,7 +5197,6 @@ export default function ProjectDetailsPage({
                             rating
                           </span>
                         </div>
-
                       </div>
 
                       {selectedProposalDetails.experience && (
@@ -4623,7 +5226,7 @@ export default function ProjectDetailsPage({
                           >
                             +
                             {asArray<string>(
-                              selectedProposalDetails.skills || []
+                              selectedProposalDetails.skills || [],
                             ).length - 4}{" "}
                             more
                           </Badge>
@@ -4675,7 +5278,7 @@ export default function ProjectDetailsPage({
                       (selectedProposalDetails.deliveryTime
                         ? formatTimeline(
                             selectedProposalDetails.deliveryTime,
-                            "day"
+                            "day",
                           )
                         : null) ||
                       "—"}
@@ -4685,7 +5288,7 @@ export default function ProjectDetailsPage({
                   <h4 className="font-semibold mb-2">Status</h4>
                   <Badge
                     className={getStatusColor(
-                      selectedProposalDetails.status || "pending"
+                      selectedProposalDetails.status || "pending",
                     )}
                   >
                     {(selectedProposalDetails.status || "pending")
@@ -4717,7 +5320,7 @@ export default function ProjectDetailsPage({
                       <Badge key={skill} variant="secondary">
                         {skill}
                       </Badge>
-                    )
+                    ),
                   )}
                 </div>
               </div>
@@ -4737,7 +5340,7 @@ export default function ProjectDetailsPage({
                       >
                         {link}
                       </a>
-                    )
+                    ),
                   )}
                   {asArray<string>(selectedProposalDetails.portfolio || [])
                     .length === 0 && (
@@ -4755,16 +5358,14 @@ export default function ProjectDetailsPage({
                     <h4 className="font-semibold mb-2">Proposed Milestones</h4>
 
                     <div className="space-y-4">
-                      {selectedProposalDetails.milestones
-                        .sort(
+                      {(() => {
+                        const sorted = [...selectedProposalDetails.milestones].sort(
                           (
                             a: { order?: number; sequence?: number },
-                            b: { order?: number; sequence?: number }
-                          ) =>
-                            (a.order || a.sequence || 0) -
-                            (b.order || b.sequence || 0)
-                        )
-                        .map(
+                            b: { order?: number; sequence?: number },
+                          ) => (a.order || a.sequence || 0) - (b.order || b.sequence || 0),
+                        );
+                        return sorted.map(
                           (
                             m: {
                               title?: string;
@@ -4773,59 +5374,60 @@ export default function ProjectDetailsPage({
                               order?: number;
                               sequence?: number;
                               description?: string;
+                              daysFromStart?: number;
                             },
-                            idx: number
-                          ) => (
-                            <Card key={idx} className="border border-gray-200">
-                              <CardContent className="p-4 space-y-2 text-sm">
-                                {/* Top row: title + amount */}
-                                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
-                                  <div className="flex items-center gap-2">
-                                    <Badge variant="secondary">
-                                      #{m.order || m.sequence || idx + 1}
-                                    </Badge>
-                                    <span className="font-medium text-gray-900">
-                                      {m.title || "Untitled milestone"}
-                                    </span>
+                            idx: number,
+                          ) => {
+                            const prev = sorted[idx - 1] as { daysFromStart?: number } | undefined;
+                            const currDays = m.daysFromStart ?? 0;
+                            const prevDays = prev?.daysFromStart ?? 0;
+                            const durationDays = currDays - prevDays;
+                            const showDuration = durationDays > 0;
+                            const displayText = showDuration
+                              ? `Duration: ${formatDurationDays(durationDays)}`
+                              : m.dueDate
+                                ? `Due: ${new Date(m.dueDate).toLocaleDateString()}`
+                                : "—";
+                            return (
+                              <Card key={idx} className="border border-gray-200">
+                                <CardContent className="p-4 space-y-2 text-sm">
+                                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                                    <div className="flex items-center gap-2">
+                                      <Badge variant="secondary">
+                                        #{m.order || m.sequence || idx + 1}
+                                      </Badge>
+                                      <span className="font-medium text-gray-900">
+                                        {m.title || "Untitled milestone"}
+                                      </span>
+                                    </div>
+                                    <div className="text-right">
+                                      <span className="text-sm text-gray-500 block">
+                                        Amount
+                                      </span>
+                                      <span className="text-lg font-semibold text-gray-900">
+                                        RM{" "}
+                                        {Number(m.amount || 0).toLocaleString()}
+                                      </span>
+                                    </div>
                                   </div>
-
-                                  <div className="text-right">
-                                    <span className="text-sm text-gray-500 block">
-                                      Amount
-                                    </span>
-                                    <span className="text-lg font-semibold text-gray-900">
-                                      RM{" "}
-                                      {Number(m.amount || 0).toLocaleString()}
-                                    </span>
+                                  {m.description &&
+                                    m.description.trim() !== "" && (
+                                      <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                                        {m.description}
+                                      </p>
+                                    )}
+                                  <div className="text-sm text-gray-600 flex flex-wrap gap-x-4 gap-y-1">
+                                    <div className="flex items-center gap-1">
+                                      <Clock className="w-4 h-4" />
+                                      <span>{displayText}</span>
+                                    </div>
                                   </div>
-                                </div>
-
-                                {/* Description */}
-                                {m.description &&
-                                  m.description.trim() !== "" && (
-                                    <p className="text-sm text-gray-700 whitespace-pre-wrap">
-                                      {m.description}
-                                    </p>
-                                  )}
-
-                                {/* Dates */}
-                                <div className="text-sm text-gray-600 flex flex-wrap gap-x-4 gap-y-1">
-                                  <div className="flex items-center gap-1">
-                                    <Clock className="w-4 h-4" />
-                                    <span>
-                                      Due:{" "}
-                                      {m.dueDate
-                                        ? new Date(
-                                            m.dueDate
-                                          ).toLocaleDateString()
-                                        : "—"}
-                                    </span>
-                                  </div>
-                                </div>
-                              </CardContent>
-                            </Card>
-                          )
-                        )}
+                                </CardContent>
+                              </Card>
+                            );
+                          },
+                        );
+                      })()}
                     </div>
                   </div>
                 )}
@@ -4854,7 +5456,7 @@ export default function ProjectDetailsPage({
                             (!attachmentUrl.startsWith("http") &&
                               !attachmentUrl.startsWith("/uploads/") &&
                               !attachmentUrl.includes(
-                                process.env.NEXT_PUBLIC_API_URL || "localhost"
+                                process.env.NEXT_PUBLIC_API_URL || "localhost",
                               ));
 
                           return (
@@ -4873,12 +5475,12 @@ export default function ProjectDetailsPage({
                                           await getR2DownloadUrl(rawUrl); // Use original URL/key
                                         window.open(
                                           downloadUrl.downloadUrl,
-                                          "_blank"
+                                          "_blank",
                                         );
                                       } catch (error) {
                                         console.error(
                                           "Failed to get download URL:",
-                                          error
+                                          error,
                                         );
                                         toastHook({
                                           title: "Error",
@@ -4926,7 +5528,7 @@ export default function ProjectDetailsPage({
                               </div>
                             </a>
                           );
-                        }
+                        },
                       )}
                     </div>
                   </div>
@@ -5066,46 +5668,65 @@ export default function ProjectDetailsPage({
                     </div>
                     <div className="md:col-span-4">
                       <Label>
-                        Due Date <span className="text-red-500">*</span>
+                        Duration <span className="text-red-500">*</span>
                       </Label>
-                      <Input
-                        type="date"
-                        min={new Date().toISOString().split("T")[0]}
-                        value={(m.dueDate || "").slice(0, 10)}
-                        onChange={(e) => {
-                          const selectedDate = e.target.value;
-                          const today = new Date().toISOString().split("T")[0];
-                          if (selectedDate < today) {
-                            toast({
-                              title: "Invalid Date",
-                              description:
-                                "Due date cannot be in the past. Please select today or a future date.",
-                              variant: "destructive",
-                            });
-                            return;
-                          }
-                          const updated = [...milestonesDraft];
-                          updated[i] = {
-                            ...updated[i],
-                            dueDate: selectedDate,
-                          };
-                          setMilestonesDraft(updated);
-                          if (milestoneDraftErrors[i]?.dueDate) {
-                            setMilestoneDraftErrors((prev) => ({
-                              ...prev,
-                              [i]: { ...prev[i], dueDate: undefined },
-                            }));
-                          }
-                        }}
-                        className={
-                          milestoneDraftErrors[i]?.dueDate
-                            ? "border-red-500 focus-visible:ring-red-500"
-                            : ""
-                        }
-                      />
-                      {milestoneDraftErrors[i]?.dueDate && (
+                      <div className="flex gap-2 mt-1">
+                        <Input
+                          type="number"
+                          min={1}
+                          placeholder="e.g. 1"
+                          value={(m as Milestone & { durationAmount?: string }).durationAmount ?? ""}
+                          onChange={(e) => {
+                            const updated = [...milestonesDraft];
+                            updated[i] = {
+                              ...updated[i],
+                              durationAmount: e.target.value,
+                              durationUnit: (m as Milestone & { durationUnit?: string }).durationUnit || "",
+                            } as (typeof milestonesDraft)[0];
+                            setMilestonesDraft(updated);
+                            if (milestoneDraftErrors[i]?.durationAmount || milestoneDraftErrors[i]?.durationUnit) {
+                              setMilestoneDraftErrors((prev) => ({
+                                ...prev,
+                                [i]: { ...prev[i], durationAmount: undefined, durationUnit: undefined },
+                              }));
+                            }
+                            if (milestoneDraftErrors[-1]) {
+                              setMilestoneDraftErrors((prev) => { const next = { ...prev }; delete next[-1]; return next; });
+                            }
+                          }}
+                          className={`flex-1 ${milestoneDraftErrors[i]?.durationAmount ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                        />
+                        <Select
+                          value={(m as Milestone & { durationUnit?: string }).durationUnit || ""}
+                          onValueChange={(value: "day" | "week" | "month") => {
+                            const updated = [...milestonesDraft];
+                            updated[i] = {
+                              ...updated[i],
+                              durationAmount: (m as Milestone & { durationAmount?: string }).durationAmount ?? "",
+                              durationUnit: value,
+                            } as (typeof milestonesDraft)[0];
+                            setMilestonesDraft(updated);
+                            if (milestoneDraftErrors[i]?.durationUnit) {
+                              setMilestoneDraftErrors((prev) => ({ ...prev, [i]: { ...prev[i], durationUnit: undefined } }));
+                            }
+                            if (milestoneDraftErrors[-1]) {
+                              setMilestoneDraftErrors((prev) => { const next = { ...prev }; delete next[-1]; return next; });
+                            }
+                          }}
+                        >
+                          <SelectTrigger className={`w-[100px] ${milestoneDraftErrors[i]?.durationUnit ? "border-red-500 focus:ring-red-500" : ""}`}>
+                            <SelectValue placeholder="Unit" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="day">Day(s)</SelectItem>
+                            <SelectItem value="week">Week(s)</SelectItem>
+                            <SelectItem value="month">Month(s)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {(milestoneDraftErrors[i]?.durationAmount || milestoneDraftErrors[i]?.durationUnit) && (
                         <p className="text-xs text-red-600 mt-1">
-                          {milestoneDraftErrors[i].dueDate}
+                          {milestoneDraftErrors[i].durationAmount || milestoneDraftErrors[i].durationUnit}
                         </p>
                       )}
                     </div>
@@ -5148,7 +5769,7 @@ export default function ProjectDetailsPage({
                       variant="outline"
                       onClick={() => {
                         setMilestonesDraft(
-                          milestonesDraft.filter((_, idx) => idx !== i)
+                          milestonesDraft.filter((_, idx) => idx !== i),
                         );
                       }}
                     >
@@ -5170,9 +5791,10 @@ export default function ProjectDetailsPage({
                       title: "",
                       description: "",
                       amount: 0,
-                      dueDate: new Date().toISOString().slice(0, 10),
+                      durationAmount: "",
+                      durationUnit: "" as "day" | "week" | "month" | "",
                     },
-                  ]);
+                  ] as (typeof milestonesDraft));
                 }}
               >
                 + Add Milestone
@@ -5189,10 +5811,10 @@ export default function ProjectDetailsPage({
                   onClick={handleApproveAcceptedMilestones}
                   disabled={
                     JSON.stringify(
-                      normalizeMilestoneSequences(milestonesDraft)
+                      normalizeMilestoneSequences(milestonesDraft),
                     ) !==
                     JSON.stringify(
-                      normalizeMilestoneSequences(originalMilestonesDraft)
+                      normalizeMilestoneSequences(originalMilestonesDraft),
                     )
                   }
                 >
@@ -5276,7 +5898,7 @@ export default function ProjectDetailsPage({
                   <div className="text-xs text-gray-500 mt-1">
                     Locked at{" "}
                     {new Date(
-                      milestoneApprovalStateModal.milestonesApprovedAt
+                      milestoneApprovalStateModal.milestonesApprovedAt,
                     ).toLocaleString()}
                   </div>
                 )}
@@ -5321,16 +5943,19 @@ export default function ProjectDetailsPage({
                   </SelectTrigger>
                   <SelectContent>
                     {projectMilestones
-                      .filter((m: Milestone) => 
-                        m.status !== "APPROVED" && m.status !== "PAID"
+                      .filter(
+                        (m: Milestone) =>
+                          m.status !== "APPROVED" && m.status !== "PAID",
                       )
                       .map((m: Milestone) => (
-                      <SelectItem key={m.id} value={m.id || ""}>
-                          {m.title} - RM{(m.amount || 0).toLocaleString()} ({m.status})
-                      </SelectItem>
-                    ))}
-                    {projectMilestones.filter((m: Milestone) => 
-                      m.status !== "APPROVED" && m.status !== "PAID"
+                        <SelectItem key={m.id} value={m.id || ""}>
+                          {m.title} - RM{(m.amount || 0).toLocaleString()} (
+                          {m.status})
+                        </SelectItem>
+                      ))}
+                    {projectMilestones.filter(
+                      (m: Milestone) =>
+                        m.status !== "APPROVED" && m.status !== "PAID",
                     ).length === 0 && (
                       <SelectItem value="" disabled>
                         No milestones available for dispute
@@ -5528,7 +6153,7 @@ export default function ProjectDetailsPage({
                   Created:{" "}
                   {currentDispute.createdAt
                     ? new Date(
-                        currentDispute.createdAt as string | number | Date
+                        currentDispute.createdAt as string | number | Date,
                       ).toLocaleDateString()
                     : "Unknown"}
                   {currentDispute.updatedAt &&
@@ -5537,7 +6162,7 @@ export default function ProjectDetailsPage({
                         {" "}
                         • Updated:{" "}
                         {new Date(
-                          currentDispute.updatedAt as string | number | Date
+                          currentDispute.updatedAt as string | number | Date,
                         ).toLocaleDateString()}
                       </>
                     )}
@@ -5592,7 +6217,7 @@ export default function ProjectDetailsPage({
                                           currentDispute.createdAt as
                                             | string
                                             | number
-                                            | Date
+                                            | Date,
                                         ).toLocaleString()
                                       : "Unknown"}
                                   </p>
@@ -5608,7 +6233,7 @@ export default function ProjectDetailsPage({
                               // Parse update format: [Update by Name on Date]: content
                               // Also handle old format: [Update by userId]: content
                               const match = update.match(
-                                /^\[Update by (.+?) on (.+?)\]:\s*([\s\S]+)$/
+                                /^\[Update by (.+?) on (.+?)\]:\s*([\s\S]+)$/,
                               );
                               let userName = "";
                               let updateDate = "";
@@ -5619,7 +6244,7 @@ export default function ProjectDetailsPage({
                               } else {
                                 // Try old format: [Update by userId]: content
                                 const oldMatch = update.match(
-                                  /^\[Update by (.+?)\]:\s*([\s\S]+)$/
+                                  /^\[Update by (.+?)\]:\s*([\s\S]+)$/,
                                 );
                                 if (oldMatch) {
                                   const [, userIdOrName, content] = oldMatch;
@@ -5675,8 +6300,8 @@ export default function ProjectDetailsPage({
                                     isCustomer
                                       ? "bg-blue-50 border-blue-400"
                                       : isProvider
-                                      ? "bg-green-50 border-green-400"
-                                      : "bg-yellow-50 border-yellow-400"
+                                        ? "bg-green-50 border-green-400"
+                                        : "bg-yellow-50 border-yellow-400"
                                   }`}
                                 >
                                   <div className="flex items-center gap-2 mb-2">
@@ -5697,8 +6322,8 @@ export default function ProjectDetailsPage({
                                           {isCustomer
                                             ? "Customer"
                                             : isProvider
-                                            ? "Provider"
-                                            : "User"}
+                                              ? "Provider"
+                                              : "User"}
                                         </Badge>
                                       </div>
                                       <p className="text-xs text-gray-500">
@@ -5785,7 +6410,7 @@ export default function ProjectDetailsPage({
                             adminName?: string;
                             createdAt?: string | number | Date;
                           },
-                          index: number
+                          index: number,
                         ) => (
                           <div
                             key={index}
@@ -5813,7 +6438,7 @@ export default function ProjectDetailsPage({
                               {note.note || ""}
                             </p>
                           </div>
-                        )
+                        ),
                       )}
                     </CardContent>
                   </Card>
@@ -5866,8 +6491,8 @@ export default function ProjectDetailsPage({
                             const attachmentMetadataMatch = description.match(
                               new RegExp(
                                 `\\[Attachment: (.+?) uploaded by (.+?) on (.+?)\\]`,
-                                "g"
-                              )
+                                "g",
+                              ),
                             );
                             let uploadedBy = "Unknown User";
                             let uploadedAt = "Unknown Date";
@@ -5876,7 +6501,7 @@ export default function ProjectDetailsPage({
                               // Find matching metadata for this file
                               for (const meta of attachmentMetadataMatch) {
                                 const metaMatch = meta.match(
-                                  /\[Attachment: (.+?) uploaded by (.+?) on (.+?)\]/
+                                  /\[Attachment: (.+?) uploaded by (.+?) on (.+?)\]/,
                                 );
                                 if (metaMatch && metaMatch[1] === filename) {
                                   uploadedBy = metaMatch[2];
@@ -5901,7 +6526,7 @@ export default function ProjectDetailsPage({
                                     currentDispute.createdAt as
                                       | string
                                       | number
-                                      | Date
+                                      | Date,
                                   ).toLocaleString()
                                 : "Unknown Date";
                             }
@@ -5931,7 +6556,7 @@ export default function ProjectDetailsPage({
                                       !attachmentUrl.startsWith("/uploads/") &&
                                       !attachmentUrl.includes(
                                         process.env.NEXT_PUBLIC_API_URL ||
-                                          "localhost"
+                                          "localhost",
                                       ));
 
                                   return (
@@ -5950,16 +6575,16 @@ export default function ProjectDetailsPage({
                                               try {
                                                 const downloadUrl =
                                                   await getR2DownloadUrl(
-                                                    urlStr
+                                                    urlStr,
                                                   ); // Use original URL/key
                                                 window.open(
                                                   downloadUrl.downloadUrl,
-                                                  "_blank"
+                                                  "_blank",
                                                 );
                                               } catch (error) {
                                                 console.error(
                                                   "Failed to get download URL:",
-                                                  error
+                                                  error,
                                                 );
                                                 toastHook({
                                                   title: "Error",
@@ -5981,7 +6606,7 @@ export default function ProjectDetailsPage({
                                 })()}
                               </div>
                             );
-                          }
+                          },
                         )}
                       </div>
                     </CardContent>

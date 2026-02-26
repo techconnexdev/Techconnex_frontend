@@ -2,7 +2,7 @@
 
 import type React from "react";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -12,8 +12,16 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  getNotificationCategory,
+  DISPLAY_CATEGORIES,
+  CATEGORY_LABELS,
+} from "@/lib/notification-categories";
 import {
   Dialog,
   DialogContent,
@@ -42,11 +50,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import {
-  getProfileImageUrl,
-  getAdminUsersForSupport,
-  getUnreadMessageCount,
-} from "@/lib/api";
+import { getProfileImageUrl, getUnreadMessageCount } from "@/lib/api";
+import { SupportChatWidget } from "@/components/support/SupportChatWidget";
 
 interface CustomerLayoutProps {
   children: React.ReactNode;
@@ -75,13 +80,19 @@ type Notification = {
   [key: string]: unknown;
 };
 
-type AdminUser = {
+/** Grouped notification (project + type); from API when ?grouped=1 */
+type GroupedNotification = {
   id: string;
-  name: string;
-  email: string;
-  customerProfile?: {
-    profileImageUrl?: string;
-  };
+  projectName: string;
+  type: string;
+  eventType?: string;
+  count: number;
+  latestAt: string | number | Date;
+  notificationIds: string[];
+  linkPath: string | null;
+  isRead: boolean;
+  title: string;
+  content: string;
 };
 
 export function CustomerLayout({ children }: CustomerLayoutProps) {
@@ -147,17 +158,12 @@ export function CustomerLayout({ children }: CustomerLayoutProps) {
     }
   }, [router]);
 
-  // Notifications state
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  // Notifications state (grouped by project + type)
+  const [notifications, setNotifications] = useState<GroupedNotification[]>([]);
   const [notificationsLoading, setNotificationsLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedNotification, setSelectedNotification] =
     useState<Notification | null>(null);
-
-  // Support dialog state
-  const [supportDialogOpen, setSupportDialogOpen] = useState(false);
-  const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
-  const [adminUsersLoading, setAdminUsersLoading] = useState(false);
 
   // Unread message count state
   const [unreadMessageCount, setUnreadMessageCount] = useState(0);
@@ -168,7 +174,7 @@ export function CustomerLayout({ children }: CustomerLayoutProps) {
       if (!token) return;
       const API_URL =
         process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
-      const endpoint = `${API_URL}/notifications/`;
+      const endpoint = `${API_URL}/notifications?grouped=1`;
 
       fetch(endpoint, {
         headers: {
@@ -179,14 +185,25 @@ export function CustomerLayout({ children }: CustomerLayoutProps) {
           if (!res.ok) throw new Error("Failed to fetch notifications");
           return res.json();
         })
-        .then((data) => setNotifications((data.data || []) as Notification[]))
+        .then((data) =>
+          setNotifications((data.data || []) as GroupedNotification[]),
+        )
         .catch(() => setNotifications([]))
         .finally(() => setNotificationsLoading(false));
     }
   }, []);
 
-  // Calculate unread notifications
   const unreadCount = notifications.filter((n) => !n.isRead).length;
+
+  const notificationsByCategory = useMemo(() => {
+    const map: Record<string, GroupedNotification[]> = {};
+    for (const cat of DISPLAY_CATEGORIES) map[cat] = [];
+    for (const n of notifications) {
+      const cat = getNotificationCategory(n.type, n.eventType);
+      if (map[cat]) map[cat].push(n);
+    }
+    return map;
+  }, [notifications]);
 
   // Fetch unread message count
   useEffect(() => {
@@ -215,97 +232,68 @@ export function CustomerLayout({ children }: CustomerLayoutProps) {
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch admin users when support dialog opens
-  useEffect(() => {
-    if (supportDialogOpen && adminUsers.length === 0) {
-      const fetchAdminUsers = async () => {
-        setAdminUsersLoading(true);
-        try {
-          const response = await getAdminUsersForSupport();
-          if (response.success && response.data) {
-            setAdminUsers(response.data as AdminUser[]);
-          }
-        } catch (error) {
-          console.error("Failed to fetch admin users:", error);
-        } finally {
-          setAdminUsersLoading(false);
-        }
-      };
-      fetchAdminUsers();
-    }
-  }, [supportDialogOpen, adminUsers.length]);
-
-  // Handle admin selection and navigate to messages
-  const handleAdminSelect = (admin: AdminUser) => {
-    const adminName = admin.name || "Admin";
-    const adminAvatar = admin.customerProfile?.profileImageUrl || "";
-    router.push(
-      `/customer/messages?userId=${admin.id}&name=${encodeURIComponent(
-        adminName
-      )}&avatar=${encodeURIComponent(adminAvatar)}`
-    );
-    setSupportDialogOpen(false);
-  };
-
-  // Handler to mark a notification as read
-  const handleNotificationClick = async (id: string) => {
+  // Handler when clicking a (grouped) notification: mark as read, then navigate or open modal
+  const handleNotificationClick = async (group: GroupedNotification) => {
     const token = localStorage.getItem("token");
     if (!token) return;
     const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
-    const notif = notifications.find((n) => n.id === id);
 
-    // Optimistically update UI
     setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))
+      prev.map((n) =>
+        n.notificationIds.some((id) => group.notificationIds.includes(id))
+          ? { ...n, isRead: true }
+          : n,
+      ),
     );
 
-    // Mark as read in database
     try {
-      const response = await fetch(`${API_URL}/notifications/${id}/read`, {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-      if (!response.ok) {
-        // Revert optimistic update on error
-        setNotifications((prev) =>
-          prev.map((n) =>
-            n.id === id ? { ...n, isRead: notif?.isRead || false } : n
-          )
+      if (group.notificationIds.length > 1) {
+        const res = await fetch(`${API_URL}/notifications/read-bulk`, {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ ids: group.notificationIds }),
+        });
+        if (!res.ok) throw new Error("Failed to mark as read");
+      } else if (group.notificationIds.length === 1) {
+        const res = await fetch(
+          `${API_URL}/notifications/${group.notificationIds[0]}/read`,
+          {
+            method: "PATCH",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          },
         );
-        console.error("Failed to mark notification as read");
-        return;
-      }
-
-      // Refresh notifications to ensure sync with database
-      const refreshResponse = await fetch(`${API_URL}/notifications/`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      if (refreshResponse.ok) {
-        const refreshData = await refreshResponse.json();
-        if (refreshData.success) {
-          setNotifications((refreshData.data || []) as Notification[]);
-        }
+        if (!res.ok) throw new Error("Failed to mark as read");
       }
     } catch (error) {
       console.error("Failed to mark notification as read", error);
-      // Revert optimistic update on error
       setNotifications((prev) =>
         prev.map((n) =>
-          n.id === id ? { ...n, isRead: notif?.isRead || false } : n
-        )
+          n.notificationIds.some((id) => group.notificationIds.includes(id))
+            ? { ...n, isRead: group.isRead }
+            : n,
+        ),
       );
+      return;
     }
 
-    if (notif) {
-      setSelectedNotification({ ...notif, isRead: true });
-      setModalOpen(true);
+    if (group.linkPath) {
+      router.push(group.linkPath);
+      return;
     }
+    setSelectedNotification({
+      id: group.id,
+      title: group.title,
+      content: group.content,
+      createdAt: group.latestAt,
+      isRead: true,
+    });
+    setModalOpen(true);
   };
 
   const navigation = [
@@ -346,7 +334,7 @@ export function CustomerLayout({ children }: CustomerLayoutProps) {
                 <Zap className="w-5 h-5 text-white" />
               </div>
               <span className="text-xl font-bold text-gray-900">
-                TechConnect
+                Techconnex
               </span>
             </div>
             <Button
@@ -391,7 +379,7 @@ export function CustomerLayout({ children }: CustomerLayoutProps) {
                 <Zap className="w-5 h-5 text-white" />
               </div>
               <span className="text-xl font-bold text-gray-900">
-                TechConnect
+                Techconnex
               </span>
             </div>
           </div>
@@ -416,30 +404,6 @@ export function CustomerLayout({ children }: CustomerLayoutProps) {
               </Link>
             ))}
           </nav>
-          {/* <div className="p-4 border-t">
-            <Link href="/customer/projects/new">
-              <Button className="w-full">
-                <Plus className="w-4 h-4 mr-2" />
-                New Project
-              </Button>
-            </Link>
-          </div> */}
-          <div className="p-4 border-t">
-            <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg p-4 text-white">
-              <h3 className="text-sm font-medium mb-1">Need Help?</h3>
-              <p className="text-xs opacity-90 mb-3">
-                Contact our support team for assistance
-              </p>
-              <Button
-                size="sm"
-                variant="secondary"
-                className="w-full"
-                onClick={() => setSupportDialogOpen(true)}
-              >
-                Get Support
-              </Button>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -479,11 +443,7 @@ export function CustomerLayout({ children }: CustomerLayoutProps) {
                     </Badge>
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  className="w-80 max-h-[800px] overflow-y-auto"
-                  align="end"
-                  forceMount
-                >
+                <DropdownMenuContent className="w-64" align="end" forceMount>
                   <DropdownMenuLabel className="font-medium text-gray-900">
                     Notifications
                   </DropdownMenuLabel>
@@ -491,23 +451,67 @@ export function CustomerLayout({ children }: CustomerLayoutProps) {
                   {notificationsLoading ? (
                     <DropdownMenuItem disabled>Loading...</DropdownMenuItem>
                   ) : notifications.length > 0 ? (
-                    notifications.map((n) => (
-                      <DropdownMenuItem
-                        key={n.id}
-                        onClick={() => handleNotificationClick(n.id)}
-                        className={n.isRead ? "opacity-50" : ""}
-                      >
-                        <div className="flex flex-col space-y-1">
-                          <span className="font-medium">{String(n.title)}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(n.createdAt).toLocaleString()}
-                          </span>
-                          <span className="text-sm text-gray-600">
-                            {String(n.content)}
-                          </span>
-                        </div>
-                      </DropdownMenuItem>
-                    ))
+                    DISPLAY_CATEGORIES.map(
+                      (category) =>
+                        notificationsByCategory[category]?.length > 0 && (
+                          <DropdownMenuSub key={category}>
+                            <DropdownMenuSubTrigger>
+                              <span className="font-medium">
+                                {CATEGORY_LABELS[category]}
+                              </span>
+                              <span className="ml-auto text-xs text-muted-foreground">
+                                {notificationsByCategory[category].length}
+                              </span>
+                            </DropdownMenuSubTrigger>
+                            <DropdownMenuSubContent
+                              className="w-80 max-h-[400px] overflow-y-auto"
+                              sideOffset={4}
+                            >
+                              {notificationsByCategory[category].map((n) => (
+                                <DropdownMenuItem
+                                  key={n.id}
+                                  onClick={() => handleNotificationClick(n)}
+                                  className={n.isRead ? "opacity-50" : ""}
+                                >
+                                  <div className="flex flex-col space-y-1 w-full">
+                                    <span className="font-medium">
+                                      {n.count > 1 ? (
+                                        n.type === "proposal" &&
+                                        n.eventType === "new_proposal" ? (
+                                          <>
+                                            You received {n.count} new proposals
+                                            for &quot;{n.projectName}&quot;
+                                          </>
+                                        ) : n.type === "milestone" ? (
+                                          <>
+                                            {n.count} milestone updates for
+                                            &quot;{n.projectName}&quot;
+                                          </>
+                                        ) : (
+                                          <>
+                                            {n.title} for &quot;{n.projectName}
+                                            &quot; (+{n.count - 1} more)
+                                          </>
+                                        )
+                                      ) : (
+                                        String(n.title)
+                                      )}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                      {new Date(n.latestAt).toLocaleString()}
+                                    </span>
+                                    {n.count === 1 && (
+                                      <span className="text-sm text-gray-600 line-clamp-2">
+                                        {String(n.content)}
+                                      </span>
+                                    )}
+                                  </div>
+                                </DropdownMenuItem>
+                              ))}
+                            </DropdownMenuSubContent>
+                          </DropdownMenuSub>
+                        ),
+                    )
                   ) : (
                     <DropdownMenuItem disabled>
                       No notifications
@@ -531,7 +535,7 @@ export function CustomerLayout({ children }: CustomerLayoutProps) {
                     <Avatar className="h-8 w-8">
                       <AvatarImage
                         src={getProfileImageUrl(
-                          profile?.data?.customerProfile?.profileImageUrl
+                          profile?.data?.customerProfile?.profileImageUrl,
                         )}
                         alt={profile?.data?.name || profile?.name || "User"}
                       />
@@ -554,15 +558,15 @@ export function CustomerLayout({ children }: CustomerLayoutProps) {
                         {profileLoading
                           ? "Loading..."
                           : profile && profile.data?.name
-                          ? profile.data.name
-                          : "Unknown User"}
+                            ? profile.data.name
+                            : "Unknown User"}
                       </p>
                       <p className="text-xs leading-none text-muted-foreground">
                         {profileLoading
                           ? "Loading..."
                           : profile && profile.data?.email
-                          ? profile.data.email
-                          : "-"}
+                            ? profile.data.email
+                            : "-"}
                       </p>
                     </div>
                   </DropdownMenuLabel>
@@ -653,80 +657,7 @@ export function CustomerLayout({ children }: CustomerLayoutProps) {
         </DialogContent>
       </Dialog>
 
-      {/* Support Dialog - Select Admin */}
-      <Dialog open={supportDialogOpen} onOpenChange={setSupportDialogOpen}>
-        <DialogContent className="max-w-md p-6 mx-auto">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-semibold">
-              Contact Support
-            </DialogTitle>
-            <DialogDescription className="mt-2">
-              Select an admin to contact for support
-            </DialogDescription>
-            <DialogClose className="absolute right-4 top-4">
-              <X className="w-5 h-5" />
-            </DialogClose>
-          </DialogHeader>
-          <div className="mt-4 max-h-[400px] overflow-y-auto">
-            {adminUsersLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="text-center">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                  <p className="text-gray-600">Loading admins...</p>
-                </div>
-              </div>
-            ) : adminUsers.length > 0 ? (
-              <div className="space-y-2">
-                {adminUsers.map((admin) => (
-                  <button
-                    key={admin.id}
-                    onClick={() => handleAdminSelect(admin)}
-                    className="w-full flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-100 transition-colors text-left"
-                  >
-                    <Avatar className="h-10 w-10">
-                      <AvatarImage
-                        src={getProfileImageUrl(
-                          admin.customerProfile?.profileImageUrl
-                        )}
-                        alt={admin.name}
-                      />
-                      <AvatarFallback>
-                        {admin.name
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")
-                          .toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">
-                        {admin.name}
-                      </p>
-                      <p className="text-xs text-gray-500 truncate">
-                        {admin.email}
-                      </p>
-                    </div>
-                    <MessageSquare className="w-5 h-5 text-gray-400" />
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div className="flex items-center justify-center py-8">
-                <p className="text-gray-600">No admins available</p>
-              </div>
-            )}
-          </div>
-          <DialogFooter className="mt-4">
-            <Button
-              variant="outline"
-              onClick={() => setSupportDialogOpen(false)}
-              className="w-full"
-            >
-              Cancel
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <SupportChatWidget />
     </div>
   );
 }

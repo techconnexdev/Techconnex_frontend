@@ -17,13 +17,13 @@ const Heading = ({ className, title, text, tag }: HeadingProps) => {
       )}
       {title && (
         <div className="flex justify-center w-full overflow-hidden">
-          <h2 className="text-5xl md:text-6xl font-medium tracking-tighter md:whitespace-nowrap text-center">
+          <h2 className="text-4xl font-semibold !leading-tight mb-4 md:text-5xl md:mb-5 lg:text-6xl text-center text-gray-900 tracking-tight">
             {title}
           </h2>
         </div>
       )}
       {text && (
-        <p className="text-gray-950 text-lg md:text-xl max-w-2xl mx-auto tracking-tight text-center mt-5">
+        <p className="text-center text-gray-600 md:text-xl mx-auto mt-8 md:mt-12 leading-relaxed">
           {text}
         </p>
       )}

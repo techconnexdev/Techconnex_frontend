@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -22,6 +22,8 @@ import {
   Zap,
   Star,
   MessageSquare,
+  Headphones,
+  Flag,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -31,8 +33,16 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  getNotificationCategory,
+  DISPLAY_CATEGORIES,
+  CATEGORY_LABELS,
+} from "@/lib/notification-categories";
 import {
   Dialog,
   DialogContent,
@@ -77,6 +87,8 @@ const NAV_ITEMS = [
   { name: "Disputes", href: "/admin/disputes", icon: AlertTriangle },
   { name: "Payments", href: "/admin/payments", icon: DollarSign },
   { name: "Messages", href: "/admin/messages", icon: MessageSquare },
+  { name: "AI Support", href: "/admin/support", icon: Headphones },
+  { name: "Message Reports", href: "/admin/conversation-reports", icon: Flag },
   { name: "Reports", href: "/admin/reports", icon: BarChart3 },
   { name: "Settings", href: "/admin/settings", icon: Settings },
 ];
@@ -177,6 +189,21 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   // Calculate unread notifications
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
+  const notificationsByCategory = useMemo(() => {
+    const map: Record<string, Notification[]> = {};
+    for (const cat of DISPLAY_CATEGORIES) map[cat] = [];
+    for (const n of notifications) {
+      const type = typeof n.type === "string" ? n.type : "";
+      const meta =
+        n.metadata && typeof n.metadata === "object"
+          ? (n.metadata as { eventType?: string })
+          : undefined;
+      const cat = getNotificationCategory(type, meta?.eventType);
+      if (map[cat]) map[cat].push(n);
+    }
+    return map;
+  }, [notifications]);
+
   // Fetch unread message count
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -213,7 +240,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
 
     // Optimistically update UI
     setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))
+      prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)),
     );
 
     // Mark as read in database
@@ -230,8 +257,8 @@ export function AdminLayout({ children }: AdminLayoutProps) {
         // Revert optimistic update on error
         setNotifications((prev) =>
           prev.map((n) =>
-            n.id === id ? { ...n, isRead: notif?.isRead || false } : n
-          )
+            n.id === id ? { ...n, isRead: notif?.isRead || false } : n,
+          ),
         );
         console.error("Failed to mark notification as read");
         return;
@@ -254,8 +281,8 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       // Revert optimistic update on error
       setNotifications((prev) =>
         prev.map((n) =>
-          n.id === id ? { ...n, isRead: notif?.isRead || false } : n
-        )
+          n.id === id ? { ...n, isRead: notif?.isRead || false } : n,
+        ),
       );
     }
 
@@ -284,7 +311,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                 <Zap className="w-5 h-5 text-white" />
               </div>
               <span className="text-xl font-bold text-gray-900">
-                TechConnect
+                Techconnex
               </span>
             </div>
             <Button
@@ -329,7 +356,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                 <Zap className="w-5 h-5 text-white" />
               </div>
               <span className="text-xl font-bold text-gray-900">
-                TechConnect
+                Techconnex
               </span>
             </div>
           </div>
@@ -414,11 +441,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                     )}
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  className="w-80 max-h-[800px] overflow-y-auto"
-                  align="end"
-                  forceMount
-                >
+                <DropdownMenuContent className="w-64" align="end" forceMount>
                   <DropdownMenuLabel className="font-medium text-gray-900">
                     Notifications
                   </DropdownMenuLabel>
@@ -426,23 +449,45 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                   {notificationsLoading ? (
                     <DropdownMenuItem disabled>Loading...</DropdownMenuItem>
                   ) : notifications.length > 0 ? (
-                    notifications.map((n) => (
-                      <DropdownMenuItem
-                        key={n.id}
-                        onClick={() => handleNotificationClick(n.id)}
-                        className={n.isRead ? "opacity-50" : ""}
-                      >
-                        <div className="flex flex-col space-y-1">
-                          <span className="font-medium">{String(n.title)}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(n.createdAt).toLocaleString()}
-                          </span>
-                          <span className="text-sm text-gray-600">
-                            {String(n.content)}
-                          </span>
-                        </div>
-                      </DropdownMenuItem>
-                    ))
+                    DISPLAY_CATEGORIES.map(
+                      (category) =>
+                        notificationsByCategory[category]?.length > 0 && (
+                          <DropdownMenuSub key={category}>
+                            <DropdownMenuSubTrigger>
+                              <span className="font-medium">
+                                {CATEGORY_LABELS[category]}
+                              </span>
+                              <span className="ml-auto text-xs text-muted-foreground">
+                                {notificationsByCategory[category].length}
+                              </span>
+                            </DropdownMenuSubTrigger>
+                            <DropdownMenuSubContent
+                              className="w-80 max-h-[400px] overflow-y-auto"
+                              sideOffset={4}
+                            >
+                              {notificationsByCategory[category].map((n) => (
+                                <DropdownMenuItem
+                                  key={n.id}
+                                  onClick={() => handleNotificationClick(n.id)}
+                                  className={n.isRead ? "opacity-50" : ""}
+                                >
+                                  <div className="flex flex-col space-y-1">
+                                    <span className="font-medium">
+                                      {String(n.title)}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                      {new Date(n.createdAt).toLocaleString()}
+                                    </span>
+                                    <span className="text-sm text-gray-600">
+                                      {String(n.content)}
+                                    </span>
+                                  </div>
+                                </DropdownMenuItem>
+                              ))}
+                            </DropdownMenuSubContent>
+                          </DropdownMenuSub>
+                        ),
+                    )
                   ) : (
                     <DropdownMenuItem disabled>
                       No notifications
@@ -463,7 +508,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                         <AvatarImage
                           src={`/${String(profile.resume.fileUrl).replace(
                             /\\/g,
-                            "/"
+                            "/",
                           )}`}
                           alt={profile.name || "User"}
                         />

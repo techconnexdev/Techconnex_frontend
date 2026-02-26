@@ -327,6 +327,7 @@ export default function NewProjectClient() {
                   Project Timeline
                   {errors.timeline && <span className="text-red-600">*</span>}
                 </Label>
+                <p className="text-xs text-gray-500 mt-0.5">by max</p>
                 <Input
                   id="timeline"
                   placeholder="e.g., 10–12 weeks"

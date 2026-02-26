@@ -62,6 +62,16 @@ export function formatTimeline(amount: number | string | null | undefined, unit?
 }
 
 /**
+ * Format a duration in days for display (e.g. "7 days", "1 week", "2 weeks")
+ */
+export function formatDurationDays(days: number | null | undefined): string {
+  if (days == null || typeof days !== "number" || days <= 0) return "—";
+  if (days % 30 === 0 && days >= 30) return days === 30 ? "1 month" : `${days / 30} months`;
+  if (days % 7 === 0 && days >= 7) return days === 7 ? "1 week" : `${days / 7} weeks`;
+  return days === 1 ? "1 day" : `${days} days`;
+}
+
+/**
  * Converts timelineAmount and timelineUnit to days
  * @param amount - The timeline amount (e.g., 2)
  * @param unit - The timeline unit ('day', 'week', or 'month')

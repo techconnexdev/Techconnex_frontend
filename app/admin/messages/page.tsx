@@ -14,10 +14,12 @@ import {
   Loader2,
   FileText,
   ArrowLeft,
+  Flag,
 } from "lucide-react";
 import io, { Socket } from "socket.io-client";
 import { useSearchParams } from "next/navigation";
 import { AdminLayout } from "@/components/admin-layout";
+import { ReportConversationDialog } from "@/components/messages/ReportConversationDialog";
 import Link from "next/link";
 import Image from "next/image";
 
@@ -82,6 +84,7 @@ export default function AdminMessagesPage() {
     string | null
   >(null);
   const [showConversationsList, setShowConversationsList] = useState(true);
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
 
   // Get user data and token on mount
   useEffect(() => {
@@ -756,6 +759,16 @@ export default function AdminMessagesPage() {
                         </div>
                       </div>
                     </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setReportDialogOpen(true)}
+                        className="text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+                      >
+                        <Flag className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </>
                 ) : (
                   <div className="text-center w-full py-4">
@@ -979,6 +992,14 @@ export default function AdminMessagesPage() {
           </Card>
         </div>
       </div>
+      {selectedConversation && (
+        <ReportConversationDialog
+          open={reportDialogOpen}
+          onOpenChange={setReportDialogOpen}
+          reportedUserName={selectedConversation.name}
+          reportedUserId={selectedConversation.userId}
+        />
+      )}
     </AdminLayout>
   );
 }

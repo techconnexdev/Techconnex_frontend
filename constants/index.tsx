@@ -149,11 +149,11 @@ export const navMenu: MenuItem[] = [
 
 // Hero
 export const heroData = {
-  sectionSubtitle: "ALL IN ONE COLLABORATION PLATFORM",
+  sectionSubtitle: "ALL IN ONE FREELANCING PLATFORM",
   sectionTitle: "Smart Tech. Meaningful ",
   decoTitle: "Connections.",
   sectionText:
-    "Experience the new standard in collaboration. We use AI-driven insights to bridge the gap between verified talent, universities, and industries... turning chaotic gigs into structured, milestone-based success.",
+    "Experience the new standard in collaboration. We use AI-driven insights to bridge the gap between verified talents and industries... turning chaotic gigs into structured, milestone-based success.",
 };
 
 
@@ -311,11 +311,11 @@ export const footerData = {
       title: "Legal",
       items: [
         {
-          href: "#",
+          href: "/terms",
           label: "Terms and Conditions",
         },
         {
-          href: "#",
+          href: "/privacy",
           label: "Privacy Policy",
         },
         {
@@ -323,13 +323,12 @@ export const footerData = {
           label: "Data Processing Agreement",
         },
         {
-          href: "#",
+          href: "/cookies",
           label: "Cookie manager",
         },
       ],
     },
   ],
-  copyright: "© 2024 codewithsadee",
   socialLinks: [
     {
       href: "https://x.com/codewithsadee_",

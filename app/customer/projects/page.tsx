@@ -80,7 +80,17 @@ type CustomerProject = {
   budget?: number;
   deadline?: string;
   isUrgent?: boolean;
+  milestones?: Array<{ order?: number; dueDate?: string | null }>;
 };
+
+function getProjectDueDate(project: CustomerProject): string | null {
+  if (project.type !== "Project") return null;
+  const milestones = project.milestones;
+  if (!milestones?.length) return null;
+  const sorted = [...milestones].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const last = sorted[sorted.length - 1];
+  return last?.dueDate ?? null;
+}
 
 export default function CustomerProjectsPage() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -714,8 +724,10 @@ export default function CustomerProjectsPage() {
                       <div className="flex items-center">
                         <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 flex-shrink-0" />
                         <span className="truncate">
-                          Created:{" "}
-                          {new Date(project.createdAt).toLocaleDateString()}
+                          Due:{" "}
+                          {getProjectDueDate(project)
+                            ? new Date(getProjectDueDate(project)!).toLocaleDateString()
+                            : "—"}
                         </span>
                       </div>
                       {project.type === "Project" && (
@@ -851,10 +863,10 @@ export default function CustomerProjectsPage() {
                               </span>
                               <span className="hidden sm:inline">•</span>
                               <span className="truncate">
-                                Created:{" "}
-                                {new Date(
-                                  project.createdAt
-                                ).toLocaleDateString()}
+                                Due:{" "}
+                                {getProjectDueDate(project)
+                                  ? new Date(getProjectDueDate(project)!).toLocaleDateString()
+                                  : "—"}
                               </span>
                               {project.timeline && (
                                 <>

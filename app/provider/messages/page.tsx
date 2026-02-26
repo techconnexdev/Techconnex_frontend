@@ -14,13 +14,15 @@ import {
   Loader2,
   FileText,
   ArrowLeft,
+  Flag,
 } from "lucide-react";
 import io, { Socket } from "socket.io-client";
 import { useSearchParams } from "next/navigation";
 import { ProviderLayout } from "@/components/provider-layout";
 import Link from "next/link";
 import Image from "next/image";
-import { getProfileImageUrl, getMessageAttachmentUrl } from "@/lib/api";
+import { getProfileImageUrl, getMessageAttachmentUrl, checkCanChatWithUser } from "@/lib/api";
+import { ReportConversationDialog } from "@/components/messages/ReportConversationDialog";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -88,6 +90,8 @@ export default function CustomerMessagesPage() {
     string | null
   >(null);
   const [showConversationsList, setShowConversationsList] = useState(true);
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
+  const [canChat, setCanChat] = useState(true);
 
   // Get user data and token on mount
   useEffect(() => {
@@ -379,6 +383,17 @@ export default function CustomerMessagesPage() {
       fetchConversations();
     }
   }, [token, fetchConversations]);
+
+  // Check if messaging is allowed (no report between users)
+  useEffect(() => {
+    if (!selectedChat || !token) {
+      setCanChat(true);
+      return;
+    }
+    checkCanChatWithUser(selectedChat)
+      .then((res) => setCanChat(res.data?.canChat !== false))
+      .catch(() => setCanChat(true));
+  }, [selectedChat, token]);
 
   // Handle URL parameters for direct chat links - only when conversations are ready
   useEffect(() => {
@@ -760,15 +775,14 @@ export default function CustomerMessagesPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      {/* <Button variant="outline" size="sm">
-                        <Phone className="w-4 h-4" />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setReportDialogOpen(true)}
+                        className="text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+                      >
+                        <Flag className="w-4 h-4" />
                       </Button>
-                      <Button variant="outline" size="sm">
-                        <Video className="w-4 h-4" />
-                      </Button> */}
-                      {/* <Button variant="outline" size="sm">
-                        <MoreVertical className="w-4 h-4" />
-                      </Button> */}
                     </div>
                   </>
                 ) : (
@@ -931,6 +945,12 @@ export default function CustomerMessagesPage() {
             {/* Input */}
             {selectedChat && (
               <div className="border-t p-2 md:p-4 relative flex-shrink-0">
+                {!canChat ? (
+                  <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 text-center text-sm text-amber-800">
+                    Messaging is disabled for this conversation. One user has reported the other.
+                  </div>
+                ) : (
+                <>
                 <div className="flex items-end gap-1 md:gap-2">
                   <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
                     <Button
@@ -1004,11 +1024,22 @@ export default function CustomerMessagesPage() {
                     </div>
                   </div>
                 )}
+                </>
+                )}
               </div>
             )}
           </Card>
         </div>
       </div>
+      {selectedConversation && (
+        <ReportConversationDialog
+          open={reportDialogOpen}
+          onOpenChange={setReportDialogOpen}
+          reportedUserName={selectedConversation.name}
+          reportedUserId={selectedConversation.userId}
+          onReportSubmitted={() => setCanChat(false)}
+        />
+      )}
     </ProviderLayout>
   );
 }

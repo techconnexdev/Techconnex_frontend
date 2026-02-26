@@ -72,6 +72,7 @@ import {
   buildTimelineData,
   timelineToDays,
 } from "@/lib/timeline-utils";
+import { formatBidAmountDisplay, parseBidAmountInput } from "@/lib/utils";
 import { toast } from "sonner";
 
 type Milestone = {
@@ -134,11 +135,11 @@ export default function CompanyDetailClient({
     switch (sortBy) {
       case "newest":
         return sorted.sort(
-          (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+          (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
         );
       case "oldest":
         return sorted.sort(
-          (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+          (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
         );
       case "highest":
         return sorted.sort((a, b) => b.rating - a.rating);
@@ -166,7 +167,7 @@ export default function CompanyDetailClient({
 
   // Opportunities state
   const [opportunities, setOpportunities] = useState<TransformedOpportunity[]>(
-    []
+    [],
   );
   const [loadingOpportunities, setLoadingOpportunities] = useState(true);
   const [selectedOpportunity, setSelectedOpportunity] =
@@ -232,12 +233,12 @@ export default function CompanyDetailClient({
       if (e.key === "ArrowLeft") {
         const images = company.mediaGallery || [];
         setCurrentImageIndex((prev) =>
-          prev > 0 ? prev - 1 : images.length - 1
+          prev > 0 ? prev - 1 : images.length - 1,
         );
       } else if (e.key === "ArrowRight") {
         const images = company.mediaGallery || [];
         setCurrentImageIndex((prev) =>
-          prev < images.length - 1 ? prev + 1 : 0
+          prev < images.length - 1 ? prev + 1 : 0,
         );
       } else if (e.key === "Escape") {
         setLightboxOpen(false);
@@ -279,7 +280,7 @@ export default function CompanyDetailClient({
                 if (!opp.timeline) return 0;
                 const timelineStr = String(opp.timeline).toLowerCase().trim();
                 const match = timelineStr.match(
-                  /^(\d+(?:\.\d+)?)\s*(day|days|week|weeks|month|months)$/
+                  /^(\d+(?:\.\d+)?)\s*(day|days|week|weeks|month|months)$/,
                 );
                 if (match) {
                   const amount = Number(match[1]);
@@ -300,10 +301,10 @@ export default function CompanyDetailClient({
               proposals: (opp.proposalCount as number) || 0,
               hasSubmitted: Boolean(opp.hasProposed),
               postedTime: new Date(
-                String(opp.createdAt || "")
+                String(opp.createdAt || ""),
               ).toLocaleDateString(),
               originalData: opp,
-            })
+            }),
           );
           setOpportunities(transformed);
         }
@@ -348,7 +349,7 @@ export default function CompanyDetailClient({
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-        }
+        },
       );
 
       if (response.ok) {
@@ -677,7 +678,7 @@ export default function CompanyDetailClient({
                         </PaginationItem>
                         {Array.from(
                           { length: totalPages },
-                          (_, i) => i + 1
+                          (_, i) => i + 1,
                         ).map((page) => (
                           <PaginationItem key={page}>
                             <PaginationLink
@@ -698,7 +699,7 @@ export default function CompanyDetailClient({
                             onClick={(e) => {
                               e.preventDefault();
                               setCurrentPage((prev) =>
-                                Math.min(totalPages, prev + 1)
+                                Math.min(totalPages, prev + 1),
                               );
                             }}
                             href="#"
@@ -849,7 +850,7 @@ export default function CompanyDetailClient({
                           >
                             {link}
                           </a>
-                        )
+                        ),
                       )}
                     </div>
                   </div>
@@ -1024,13 +1025,14 @@ export default function CompanyDetailClient({
                 </Label>
                 <Input
                   id="bidAmount"
-                  type="number"
-                  placeholder="15000"
-                  value={proposalData.bidAmount}
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="15,000.00"
+                  value={formatBidAmountDisplay(proposalData.bidAmount)}
                   onChange={(e) =>
                     setProposalData((prev) => ({
                       ...prev,
-                      bidAmount: e.target.value,
+                      bidAmount: parseBidAmountInput(e.target.value),
                     }))
                   }
                   className={`text-sm sm:text-base ${
@@ -1296,7 +1298,7 @@ export default function CompanyDetailClient({
                             setProposalData((prev) => ({
                               ...prev,
                               milestones: prev.milestones.filter(
-                                (_, idx) => idx !== i
+                                (_, idx) => idx !== i,
                               ),
                             }));
                           }}
@@ -1375,7 +1377,7 @@ export default function CompanyDetailClient({
                           setProposalData((prev) => ({
                             ...prev,
                             attachments: prev.attachments.filter(
-                              (_, i) => i !== index
+                              (_, i) => i !== index,
                             ),
                           }));
                         }}
@@ -1441,14 +1443,14 @@ export default function CompanyDetailClient({
                 ) {
                   const providerTimelineInDays = timelineToDays(
                     timelineAmountNum,
-                    proposalData.timelineUnit
+                    proposalData.timelineUnit,
                   );
                   if (
                     providerTimelineInDays >
                     selectedOpportunity.originalTimelineInDays
                   ) {
                     errors.timelineAmount = `Your timeline must be equal to or less than the company's timeline (${formatTimeline(
-                      selectedOpportunity.originalTimeline
+                      selectedOpportunity.originalTimeline,
                     )})`;
                   }
                 }
@@ -1466,7 +1468,7 @@ export default function CompanyDetailClient({
                 } else {
                   const sumMilestones = proposalData.milestones.reduce(
                     (sum, m) => sum + (Number(m.amount) || 0),
-                    0
+                    0,
                   );
                   if (bidAmountNum > 0 && sumMilestones !== bidAmountNum) {
                     errors.milestones = `Total of milestones (RM ${sumMilestones}) must equal your bid amount (RM ${bidAmountNum})`;
@@ -1483,7 +1485,7 @@ export default function CompanyDetailClient({
                   setSubmittingProposal(true);
                   const { timeline, timelineInDays } = buildTimelineData(
                     Number(proposalData.timelineAmount),
-                    proposalData.timelineUnit
+                    proposalData.timelineUnit,
                   );
 
                   if (!selectedOpportunity) {
@@ -1494,7 +1496,7 @@ export default function CompanyDetailClient({
                   const formData = new FormData();
                   formData.append(
                     "serviceRequestId",
-                    String(selectedOpportunity.originalData.id || "")
+                    String(selectedOpportunity.originalData.id || ""),
                   );
                   formData.append("bidAmount", bidAmountNum.toString());
                   formData.append("deliveryTime", timelineInDays.toString());
@@ -1505,20 +1507,20 @@ export default function CompanyDetailClient({
                   proposalData.milestones.forEach((m, idx) => {
                     formData.append(
                       `milestones[${idx}][sequence]`,
-                      String(idx + 1)
+                      String(idx + 1),
                     );
                     formData.append(`milestones[${idx}][title]`, m.title);
                     formData.append(
                       `milestones[${idx}][description]`,
-                      m.description || ""
+                      m.description || "",
                     );
                     formData.append(
                       `milestones[${idx}][amount]`,
-                      String(m.amount)
+                      String(m.amount),
                     );
                     formData.append(
                       `milestones[${idx}][dueDate]`,
-                      new Date(m.dueDate).toISOString()
+                      new Date(m.dueDate).toISOString(),
                     );
                   });
 
@@ -1539,8 +1541,8 @@ export default function CompanyDetailClient({
                                 hasSubmitted: true,
                                 proposals: opp.proposals + 1,
                               }
-                            : opp
-                        )
+                            : opp,
+                        ),
                       );
                     }
                     setProposalData({
@@ -1554,7 +1556,7 @@ export default function CompanyDetailClient({
                     setProposalErrors({});
                   } else {
                     toast.error(
-                      response.message || "Failed to submit proposal"
+                      response.message || "Failed to submit proposal",
                     );
                   }
                 } catch (error: unknown) {

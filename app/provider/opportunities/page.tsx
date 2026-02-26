@@ -2,7 +2,8 @@
 
 import type React from "react";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -34,6 +35,12 @@ import {
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Switch } from "@/components/ui/switch";
+import {
   Search,
   ThumbsUp,
   Eye,
@@ -49,12 +56,14 @@ import {
   Sparkles,
   ChevronRight,
   Calendar,
+  SlidersHorizontal,
 } from "lucide-react";
 import { ProviderLayout } from "@/components/provider-layout";
 import { toast } from "sonner";
 import {
   getProviderOpportunities,
   getProviderRecommendedOpportunities,
+  getProviderProfile,
   sendProposal,
   getServiceRequestAiDrafts,
   getProfileImageUrl,
@@ -64,6 +73,7 @@ import {
   buildTimelineData,
   timelineToDays,
 } from "@/lib/timeline-utils";
+import { formatBidAmountDisplay, parseBidAmountInput } from "@/lib/utils";
 import Link from "next/link";
 import { MarkdownViewer } from "@/components/markdown/MarkdownViewer";
 
@@ -128,10 +138,34 @@ type AiDraft = {
   summary?: string;
 };
 
+const OPPORTUNITIES_URL_KEYS = {
+  search: "q",
+  status: "status",
+  tags: "tags",
+  useProfileTags: "profileTags",
+  sort: "sort",
+} as const;
+
 export default function ProviderOpportunitiesPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
   const [searchQuery, setSearchQuery] = useState("");
   const [submissionFilter, setSubmissionFilter] = useState("all");
-  const [selectedProject, setSelectedProject] = useState<OpportunityData | null>(null);
+  const [useProfileTags, setUseProfileTags] = useState(true);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [sortBy, setSortBy] = useState<"best-match" | "newest">("best-match");
+  const [providerProfileTags, setProviderProfileTags] = useState<{
+    skills: string[];
+    major: string | null;
+  }>({ skills: [], major: null });
+  const hasPreselectedTags = useRef(false);
+  /** True if the URL had no "tags" param when first read (e.g. refresh or clean link). Don't auto-add tags in that case. */
+  const urlHadNoTagsOnLoad = useRef(true);
+
+  const [selectedProject, setSelectedProject] =
+    useState<OpportunityData | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [isProposalModalOpen, setIsProposalModalOpen] = useState(false);
   type Milestone = {
@@ -139,7 +173,10 @@ export default function ProviderOpportunitiesPage() {
     title: string;
     description?: string;
     amount: number;
-    dueDate: string; // ISO (yyyy-mm-dd or full ISO; we’ll normalize on submit)
+    dueDate?: string;
+    daysFromStart?: number;
+    durationAmount?: string;
+    durationUnit?: "day" | "week" | "month" | "";
   };
 
   type ProposalFormData = {
@@ -193,6 +230,9 @@ export default function ProviderOpportunitiesPage() {
         description?: string;
         amount?: string;
         dueDate?: string;
+        daysFromStart?: string;
+        durationAmount?: string;
+        durationUnit?: string;
       }
     >;
   }>({});
@@ -201,13 +241,18 @@ export default function ProviderOpportunitiesPage() {
   // useRecommendationInsights: if true, use aiExplanation from opportunity (for recommended tab), if false, ignore it (for all tab - will use drafts)
   const mapOpportunityData = (
     opportunity: Record<string, unknown>,
-    useRecommendationInsights: boolean = false
+    useRecommendationInsights: boolean = false,
   ): OpportunityData => ({
     id: String(opportunity.id || ""),
     title: String(opportunity.title || ""),
-    description: opportunity.description ? String(opportunity.description) : undefined,
-    fullDescription: opportunity.description ? String(opportunity.description) : undefined,
-    client: (opportunity.customer as OpportunityCustomer)?.name || "Unknown Client",
+    description: opportunity.description
+      ? String(opportunity.description)
+      : undefined,
+    fullDescription: opportunity.description
+      ? String(opportunity.description)
+      : undefined,
+    client:
+      (opportunity.customer as OpportunityCustomer)?.name || "Unknown Client",
     clientId: (opportunity.customer as OpportunityCustomer)?.id || null,
     budget: `RM ${((opportunity.budgetMin as number) || 0).toLocaleString()} - RM ${((opportunity.budgetMax as number) || 0).toLocaleString()}`,
     budgetMin: (opportunity.budgetMin as number) || 0,
@@ -219,7 +264,7 @@ export default function ProviderOpportunitiesPage() {
       if (!opportunity.timeline) return 0;
       const timelineStr = String(opportunity.timeline).toLowerCase().trim();
       const match = timelineStr.match(
-        /^(\d+(?:\.\d+)?)\s*(day|days|week|weeks|month|months)$/
+        /^(\d+(?:\.\d+)?)\s*(day|days|week|weeks|month|months)$/,
       );
       if (match) {
         const amount = Number(match[1]);
@@ -228,42 +273,68 @@ export default function ProviderOpportunitiesPage() {
       }
       return 0;
     })(),
-    skills: Array.isArray(opportunity.skills) ? (opportunity.skills as string[]) : [],
-    postedTime: new Date(String(opportunity.createdAt || Date.now())).toLocaleDateString(),
-    matchScore: opportunity.matchScore ? Number(opportunity.matchScore) : undefined,
-    proposals: ((opportunity._count as { proposals?: number })?.proposals) || (opportunity.proposalCount as number) || 0,
+    skills: Array.isArray(opportunity.skills)
+      ? (opportunity.skills as string[])
+      : [],
+    postedTime: new Date(
+      String(opportunity.createdAt || Date.now()),
+    ).toLocaleDateString(),
+    matchScore: opportunity.matchScore
+      ? Number(opportunity.matchScore)
+      : undefined,
+    proposals:
+      (opportunity._count as { proposals?: number })?.proposals ||
+      (opportunity.proposalCount as number) ||
+      0,
     category: opportunity.category ? String(opportunity.category) : undefined,
     location:
-      (opportunity.customer as OpportunityCustomer)?.customerProfile?.location || "Not specified",
+      (opportunity.customer as OpportunityCustomer)?.customerProfile
+        ?.location || "Not specified",
     clientRating: 4.5,
-    projectsPosted: (opportunity.customer as OpportunityCustomer)?.customerProfile?.projectsPosted || 0,
-    avatar: getProfileImageUrl((opportunity.customer as OpportunityCustomer)?.customerProfile?.profileImageUrl),
+    projectsPosted:
+      (opportunity.customer as OpportunityCustomer)?.customerProfile
+        ?.projectsPosted || 0,
+    avatar: getProfileImageUrl(
+      (opportunity.customer as OpportunityCustomer)?.customerProfile
+        ?.profileImageUrl,
+    ),
     urgent: opportunity.priority === "High",
-    verified: (opportunity.customer as OpportunityCustomer)?.isVerified || false,
+    verified:
+      (opportunity.customer as OpportunityCustomer)?.isVerified || false,
     hasSubmitted: (opportunity.hasProposed as boolean) || false,
     requirements:
       typeof opportunity.requirements === "string"
         ? opportunity.requirements
         : Array.isArray(opportunity.requirements)
-        ? (opportunity.requirements as unknown[]).map((r: unknown) => `- ${String(r)}`).join("\n")
-        : "",
+          ? (opportunity.requirements as unknown[])
+              .map((r: unknown) => `- ${String(r)}`)
+              .join("\n")
+          : "",
     deliverables:
       typeof opportunity.deliverables === "string"
         ? opportunity.deliverables
         : Array.isArray(opportunity.deliverables)
-        ? (opportunity.deliverables as unknown[]).map((d: unknown) => `- ${String(d)}`).join("\n")
-        : "",
+          ? (opportunity.deliverables as unknown[])
+              .map((d: unknown) => `- ${String(d)}`)
+              .join("\n")
+          : "",
     clientInfo: {
       companySize:
-        (opportunity.customer as OpportunityCustomer)?.customerProfile?.companySize || "Not specified",
+        (opportunity.customer as OpportunityCustomer)?.customerProfile
+          ?.companySize || "Not specified",
       industry:
-        (opportunity.customer as OpportunityCustomer)?.customerProfile?.industry || "Not specified",
-      memberSince: new Date((opportunity.customer as OpportunityCustomer)?.createdAt || Date.now())
+        (opportunity.customer as OpportunityCustomer)?.customerProfile
+          ?.industry || "Not specified",
+      memberSince: new Date(
+        (opportunity.customer as OpportunityCustomer)?.createdAt || Date.now(),
+      )
         .getFullYear()
         .toString(),
-      totalSpent: (opportunity.customer as OpportunityCustomer)?.customerProfile?.totalSpend
+      totalSpent: (opportunity.customer as OpportunityCustomer)?.customerProfile
+        ?.totalSpend
         ? `RM ${Number(
-            (opportunity.customer as OpportunityCustomer).customerProfile?.totalSpend
+            (opportunity.customer as OpportunityCustomer).customerProfile
+              ?.totalSpend,
           ).toLocaleString()}`
         : "RM 0",
       avgRating: 4.5,
@@ -272,10 +343,91 @@ export default function ProviderOpportunitiesPage() {
     // Only use aiExplanation from opportunity if useRecommendationInsights is true (for recommended tab)
     // For "All" tab, this will be null and we'll use drafts instead
     aiExplanation: useRecommendationInsights
-      ? (opportunity.aiExplanation ? String(opportunity.aiExplanation) : null)
+      ? opportunity.aiExplanation
+        ? String(opportunity.aiExplanation)
+        : null
       : null,
     serviceRequestId: String(opportunity.id || ""), // ID for fetching AI drafts
   });
+
+  // Read URL on mount and when searchParams change (e.g. back/forward)
+  useEffect(() => {
+    const q = searchParams.get(OPPORTUNITIES_URL_KEYS.search);
+    const status = searchParams.get(OPPORTUNITIES_URL_KEYS.status);
+    const tags = searchParams.get(OPPORTUNITIES_URL_KEYS.tags);
+    const profileTags = searchParams.get(OPPORTUNITIES_URL_KEYS.useProfileTags);
+    const sort = searchParams.get(OPPORTUNITIES_URL_KEYS.sort);
+    const hadTagsParam = tags != null && tags !== "";
+    urlHadNoTagsOnLoad.current = !hadTagsParam;
+    if (q != null) setSearchQuery(q);
+    if (
+      status === "submitted" ||
+      status === "not-submitted" ||
+      status === "all"
+    )
+      setSubmissionFilter(status);
+    if (profileTags === "0" || profileTags === "1")
+      setUseProfileTags(profileTags === "1");
+    if (hadTagsParam) {
+      setSelectedTags(
+        tags!
+          .split(",")
+          .filter(Boolean)
+          .map((t) => t.trim()),
+      );
+      hasPreselectedTags.current = true;
+    }
+    if (sort === "best-match" || sort === "newest") setSortBy(sort);
+  }, [searchParams]);
+
+  // Persist filter state to URL
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (searchQuery) params.set(OPPORTUNITIES_URL_KEYS.search, searchQuery);
+    else params.delete(OPPORTUNITIES_URL_KEYS.search);
+    if (submissionFilter !== "all")
+      params.set(OPPORTUNITIES_URL_KEYS.status, submissionFilter);
+    else params.delete(OPPORTUNITIES_URL_KEYS.status);
+    if (selectedTags.length)
+      params.set(OPPORTUNITIES_URL_KEYS.tags, selectedTags.join(","));
+    else params.delete(OPPORTUNITIES_URL_KEYS.tags);
+    params.set(
+      OPPORTUNITIES_URL_KEYS.useProfileTags,
+      useProfileTags ? "1" : "0",
+    );
+    params.set(OPPORTUNITIES_URL_KEYS.sort, sortBy);
+    const next = params.toString();
+    const current = searchParams.toString();
+    if (next !== current) {
+      router.replace(next ? `${pathname}?${next}` : (pathname ?? ""), {
+        scroll: false,
+      });
+    }
+  }, [
+    searchQuery,
+    submissionFilter,
+    selectedTags,
+    useProfileTags,
+    sortBy,
+    router,
+    searchParams,
+    pathname,
+  ]);
+
+  // Fetch provider profile for "Use my profile tags" (API returns { data } with skills/major at top level)
+  useEffect(() => {
+    getProviderProfile()
+      .then((res: { success?: boolean; data?: Record<string, unknown> }) => {
+        const profile = res?.data as Record<string, unknown> | undefined;
+        if (!profile) return;
+        const skills = Array.isArray(profile.skills)
+          ? (profile.skills as string[])
+          : [];
+        const major = typeof profile.major === "string" ? profile.major : null;
+        setProviderProfileTags({ skills, major });
+      })
+      .catch(() => {});
+  }, []);
 
   // Fetch all opportunities from API
   useEffect(() => {
@@ -287,14 +439,14 @@ export default function ProviderOpportunitiesPage() {
         const response = await getProviderOpportunities({
           page: 1,
           limit: 100,
-          search: searchQuery,
-          // Note: submissionFilter is handled client-side, not sent to API
+          search: searchQuery || undefined,
+          sort: sortBy,
         });
 
         if (response.success) {
           // For "All" tab: Don't use recommendation insights, only use drafts
           let mappedOpportunities = (response.opportunities || []).map(
-            (opp: Record<string, unknown>) => mapOpportunityData(opp, false) // false = don't use recommendation insights
+            (opp: Record<string, unknown>) => mapOpportunityData(opp, false), // false = don't use recommendation insights
           );
 
           // Fetch AiDraft summaries and merge into opportunities (this is the only source of AI insights for "All" tab)
@@ -303,21 +455,25 @@ export default function ProviderOpportunitiesPage() {
             .filter(Boolean);
           if (serviceRequestIds.length > 0) {
             try {
-              const draftRes = await getServiceRequestAiDrafts(
-                serviceRequestIds
-              );
+              const draftRes =
+                await getServiceRequestAiDrafts(serviceRequestIds);
               if (draftRes?.success && Array.isArray(draftRes.drafts)) {
                 const draftMap = new Map<string, string>(
-                  (draftRes.drafts as AiDraft[]).map((d: AiDraft) => [d.referenceId, d.summary || ""])
+                  (draftRes.drafts as AiDraft[]).map((d: AiDraft) => [
+                    d.referenceId,
+                    d.summary || "",
+                  ]),
                 );
-                mappedOpportunities = mappedOpportunities.map((opp: OpportunityData) => ({
-                  ...opp,
-                  // Only use draft summary for "All" tab
-                  aiExplanation:
-                    opp.serviceRequestId && draftMap.has(opp.serviceRequestId)
-                      ? draftMap.get(opp.serviceRequestId) || null
-                      : null,
-                }));
+                mappedOpportunities = mappedOpportunities.map(
+                  (opp: OpportunityData) => ({
+                    ...opp,
+                    // Only use draft summary for "All" tab
+                    aiExplanation:
+                      opp.serviceRequestId && draftMap.has(opp.serviceRequestId)
+                        ? draftMap.get(opp.serviceRequestId) || null
+                        : null,
+                  }),
+                );
               }
             } catch (err) {
               console.warn("Failed to fetch AI drafts for opportunities", err);
@@ -331,7 +487,7 @@ export default function ProviderOpportunitiesPage() {
       } catch (err) {
         console.error("Error fetching opportunities:", err);
         setError(
-          err instanceof Error ? err.message : "Failed to fetch opportunities"
+          err instanceof Error ? err.message : "Failed to fetch opportunities",
         );
         toast.error("Failed to load opportunities");
       } finally {
@@ -340,9 +496,12 @@ export default function ProviderOpportunitiesPage() {
     };
 
     fetchOpportunities();
-  }, [searchQuery]); // submissionFilter is handled client-side
+  }, [searchQuery, sortBy]); // submissionFilter and selectedTags are client-side
 
-  // Fetch recommended opportunities
+  // Fetch recommended opportunities (cached 2h on backend; auto-refresh when expired)
+  const fetchRecommendedOpportunitiesRef = useRef<() => Promise<void>>(
+    async () => {},
+  );
   useEffect(() => {
     const fetchRecommendedOpportunities = async () => {
       try {
@@ -351,19 +510,17 @@ export default function ProviderOpportunitiesPage() {
 
         const response = await getProviderRecommendedOpportunities();
         if (response.success) {
-          // For "AI Recommended" tab: Use recommendation insights (aiExplanation from API), don't fetch drafts
-          // Map the data but ensure aiExplanation from recommendation API is preserved
           const mappedRecommended = (response.recommendations || []).map(
             (opp: Record<string, unknown>) => {
-              const mapped = mapOpportunityData(opp, true); // true = use recommendation insights
-              // Explicitly preserve the aiExplanation from the recommendation API response
+              const mapped = mapOpportunityData(opp, true);
               return {
                 ...mapped,
-                aiExplanation: opp.aiExplanation ? String(opp.aiExplanation) : null, // Use aiExplanation directly from API response
+                aiExplanation: opp.aiExplanation
+                  ? String(opp.aiExplanation)
+                  : null,
               };
-            }
+            },
           );
-          // Don't fetch drafts for recommended opportunities - use the aiExplanation from the recommendation API
           setRecommendedOpportunities(mappedRecommended);
           setRecommendationsCacheInfo({
             cachedAt: response.cachedAt,
@@ -375,15 +532,32 @@ export default function ProviderOpportunitiesPage() {
         setErrorRecommended(
           err instanceof Error
             ? err.message
-            : "Failed to fetch recommended opportunities"
+            : "Failed to fetch recommended opportunities",
         );
       } finally {
         setLoadingRecommended(false);
       }
     };
-
+    fetchRecommendedOpportunitiesRef.current = fetchRecommendedOpportunities;
     fetchRecommendedOpportunities();
   }, []);
+
+  // Auto-refresh when 2-hour cache expires
+  useEffect(() => {
+    const next = recommendationsCacheInfo.nextRefreshAt;
+    if (next == null || typeof next !== "number") return;
+    const now = Date.now();
+    if (next <= now) {
+      fetchRecommendedOpportunitiesRef.current();
+      return;
+    }
+    const delay = next - now;
+    const timeoutId = setTimeout(
+      () => fetchRecommendedOpportunitiesRef.current(),
+      delay,
+    );
+    return () => clearTimeout(timeoutId);
+  }, [recommendationsCacheInfo.nextRefreshAt]);
 
   const getMatchScoreColor = (score: number) => {
     if (score >= 90) return "text-green-600 bg-green-100";
@@ -407,7 +581,8 @@ export default function ProviderOpportunitiesPage() {
           title: "",
           description: "",
           amount: 0,
-          dueDate: new Date().toISOString().slice(0, 10), // yyyy-mm-dd
+          durationAmount: "1",
+          durationUnit: "week",
         },
       ]),
     }));
@@ -417,7 +592,7 @@ export default function ProviderOpportunitiesPage() {
     setProposalData((prev) => ({
       ...prev,
       milestones: normalizeDraftSequences(
-        prev.milestones.map((m, idx) => (idx === i ? { ...m, ...patch } : m))
+        prev.milestones.map((m, idx) => (idx === i ? { ...m, ...patch } : m)),
       ),
     }));
   };
@@ -426,20 +601,60 @@ export default function ProviderOpportunitiesPage() {
     setProposalData((prev) => ({
       ...prev,
       milestones: normalizeDraftSequences(
-        prev.milestones.filter((_, idx) => idx !== i)
+        prev.milestones.filter((_, idx) => idx !== i),
       ),
     }));
   };
+
+  const globalTagList = useMemo(() => {
+    const set = new Set<string>();
+    opportunities.forEach((o) => {
+      (o.skills || []).forEach((s: string) => set.add(s));
+      if (o.category) set.add(o.category);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [opportunities]);
+
+  const profileTagList = useMemo(() => {
+    const list: string[] = [...(providerProfileTags.skills || [])];
+    if (providerProfileTags.major) list.push(providerProfileTags.major);
+    return [...new Set(list)]
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+  }, [providerProfileTags]);
+
+  const tagOptions = useProfileTags ? profileTagList : globalTagList;
+
+  // Pre-select most relevant profile tags only when URL already had a tags param (don't add tags on refresh/clean URL)
+  useEffect(() => {
+    if (urlHadNoTagsOnLoad.current) return;
+    if (
+      !useProfileTags ||
+      profileTagList.length === 0 ||
+      opportunities.length === 0 ||
+      hasPreselectedTags.current
+    )
+      return;
+    if (selectedTags.length > 0) return;
+    const relevant = profileTagList.filter((t) =>
+      opportunities.some(
+        (o) => (o.skills || []).includes(t) || o.category === t,
+      ),
+    );
+    if (relevant.length > 0) {
+      hasPreselectedTags.current = true;
+      setSelectedTags(relevant.slice(0, 15));
+    }
+  }, [useProfileTags, profileTagList, opportunities, selectedTags.length]);
 
   const filteredOpportunities = opportunities.filter((opportunity) => {
     const matchesSearch =
       opportunity.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       opportunity.client.toLowerCase().includes(searchQuery.toLowerCase()) ||
       opportunity.skills.some((skill: string) =>
-        skill.toLowerCase().includes(searchQuery.toLowerCase())
+        skill.toLowerCase().includes(searchQuery.toLowerCase()),
       );
 
-    // Submission status filter
     let matchesSubmission = true;
     if (submissionFilter === "submitted") {
       matchesSubmission = opportunity.hasSubmitted;
@@ -447,7 +662,17 @@ export default function ProviderOpportunitiesPage() {
       matchesSubmission = !opportunity.hasSubmitted;
     }
 
-    return matchesSearch && matchesSubmission;
+    let matchesTags = true;
+    if (selectedTags.length > 0) {
+      matchesTags =
+        (opportunity.skills || []).some((s: string) =>
+          selectedTags.includes(s),
+        ) ||
+        (opportunity.category != null &&
+          selectedTags.includes(opportunity.category));
+    }
+
+    return matchesSearch && matchesSubmission && matchesTags;
   });
 
   const handleSubmitProposal = (opportunity: OpportunityData) => {
@@ -498,7 +723,7 @@ export default function ProviderOpportunitiesPage() {
       if (bidAmountNum < budgetMin || bidAmountNum > budgetMax) {
         newErrors.bidAmount = `Bid amount must be between RM ${budgetMin.toLocaleString()} and RM ${budgetMax.toLocaleString()}.`;
         messages.push(
-          `Bid amount must be within the budget range (RM ${budgetMin.toLocaleString()} - RM ${budgetMax.toLocaleString()}).`
+          `Bid amount must be within the budget range (RM ${budgetMin.toLocaleString()} - RM ${budgetMax.toLocaleString()}).`,
         );
       }
     }
@@ -520,7 +745,7 @@ export default function ProviderOpportunitiesPage() {
       // Check if provider timeline is <= original timeline
       const providerTimelineInDays = timelineToDays(
         timelineAmountNum,
-        form.timelineUnit
+        form.timelineUnit,
       );
       if (providerTimelineInDays > selectedProject.originalTimelineInDays) {
         const originalTimelineDisplay =
@@ -528,7 +753,7 @@ export default function ProviderOpportunitiesPage() {
           `${selectedProject.originalTimelineInDays} days`;
         newErrors.timelineAmount = `Your timeline must be equal to or less than the company's timeline (${originalTimelineDisplay}).`;
         messages.push(
-          `Your timeline must be equal to or less than the company's timeline (${originalTimelineDisplay}).`
+          `Your timeline must be equal to or less than the company's timeline (${originalTimelineDisplay}).`,
         );
       }
     }
@@ -539,7 +764,6 @@ export default function ProviderOpportunitiesPage() {
       messages.push("Cover letter must be at least 20 characters.");
     }
 
-    // Milestones validation (REQUIRED)
     const milestoneFieldErrors: Record<
       number,
       {
@@ -547,14 +771,21 @@ export default function ProviderOpportunitiesPage() {
         description?: string;
         amount?: string;
         dueDate?: string;
+        daysFromStart?: string;
+        durationAmount?: string;
+        durationUnit?: string;
       }
     > = {};
+
+    const deliveryTimeDays = timelineToDays(
+      Number(form.timelineAmount),
+      form.timelineUnit,
+    );
 
     if (form.milestones.length === 0) {
       newErrors.milestones = "At least one milestone is required.";
       messages.push("At least one milestone is required.");
     } else {
-      // each milestone needs title, description, amount>0, dueDate
       form.milestones.forEach((m: Milestone, idx: number) => {
         milestoneFieldErrors[idx] = {};
 
@@ -577,29 +808,29 @@ export default function ProviderOpportunitiesPage() {
           milestoneFieldErrors[idx].amount = errorMsg;
           messages.push(`Milestone #${idx + 1}: amount must be > 0.`);
         }
-        if (!m.dueDate) {
-          const errorMsg = "Due date is required.";
-          milestoneFieldErrors[idx].dueDate = errorMsg;
-          messages.push(`Milestone #${idx + 1}: due date is required.`);
-        } else {
-          // Validate that due date is not in the past (must be today or future)
-          const today = new Date();
-          today.setHours(0, 0, 0, 0);
-          const dueDate = new Date(m.dueDate);
-          dueDate.setHours(0, 0, 0, 0);
-
-          if (dueDate < today) {
-            const errorMsg =
-              "Due date cannot be in the past. Please select today or a future date.";
-            milestoneFieldErrors[idx].dueDate = errorMsg;
-            messages.push(
-              `Milestone #${
-                idx + 1
-              }: due date cannot be in the past. Please select today or a future date.`
-            );
-          }
+        const durAmount = m.durationAmount != null ? String(m.durationAmount).trim() : "";
+        const durUnit = m.durationUnit || "";
+        if (!durAmount || isNaN(Number(durAmount)) || Number(durAmount) <= 0) {
+          milestoneFieldErrors[idx].durationAmount = "Amount is required and must be > 0.";
+          messages.push(`Milestone #${idx + 1}: duration amount is required.`);
+        }
+        if (!durUnit) {
+          milestoneFieldErrors[idx].durationUnit = "Unit is required.";
+          messages.push(`Milestone #${idx + 1}: duration unit is required.`);
         }
       });
+
+      if (deliveryTimeDays > 0 && form.milestones.length > 0) {
+        const milestonesDurationDays = form.milestones.reduce((sum, m) => {
+          const d = timelineToDays(Number(m.durationAmount || 0), m.durationUnit || "");
+          return sum + (d > 0 ? d : 0);
+        }, 0);
+        if (milestonesDurationDays !== deliveryTimeDays) {
+          const msg = `Total of milestone durations must equal your delivery timeline (${deliveryTimeDays} days). Currently ${milestonesDurationDays} days.`;
+          newErrors.milestones = newErrors.milestones || msg;
+          messages.push(msg);
+        }
+      }
 
       // Only add milestoneFieldErrors if there are any errors
       if (Object.keys(milestoneFieldErrors).length > 0) {
@@ -614,7 +845,7 @@ export default function ProviderOpportunitiesPage() {
             if (!isNaN(val)) return sum + val;
             return sum;
           },
-          0
+          0,
         );
 
         if (sumMilestones !== bidAmountNum) {
@@ -662,36 +893,40 @@ export default function ProviderOpportunitiesPage() {
     try {
       setSubmittingProposal(true);
 
-      // Normalize milestones for the backend
-      const normalized = normalizeDraftSequences(proposalData.milestones).map(
-        (m: Milestone, idx: number) => ({
+      const sorted = normalizeDraftSequences(proposalData.milestones);
+      let cumulativeDays = 0;
+      const normalized = sorted.map((m: Milestone, idx: number) => {
+        const durationDays = timelineToDays(
+          Number(m.durationAmount || 0),
+          m.durationUnit || "",
+        );
+        cumulativeDays += durationDays > 0 ? durationDays : 0;
+        return {
           sequence: idx + 1,
           title: (m.title || "").trim(),
           description: m.description || "",
           amount: Number(m.amount || 0),
-          dueDate: m.dueDate
-            ? new Date(m.dueDate).toISOString()
-            : new Date().toISOString(),
-        })
-      );
+          daysFromStart: cumulativeDays,
+        };
+      });
 
       // Build multipart/form-data
       const formDataToSend = new FormData();
 
       formDataToSend.append(
         "serviceRequestId",
-        String(selectedProject.originalData.id || "")
+        String(selectedProject.originalData.id || ""),
       );
 
       formDataToSend.append(
         "bidAmount",
-        parseFloat(proposalData.bidAmount).toString()
+        parseFloat(proposalData.bidAmount).toString(),
       );
 
       // Build timeline data from amount and unit
       const { timeline, timelineInDays } = buildTimelineData(
         Number(proposalData.timelineAmount),
-        proposalData.timelineUnit
+        proposalData.timelineUnit,
       );
 
       formDataToSend.append("deliveryTime", timelineInDays.toString());
@@ -701,17 +936,32 @@ export default function ProviderOpportunitiesPage() {
       formDataToSend.append("coverLetter", proposalData.coverLetter);
 
       normalized.forEach((m, idx) => {
+        const row = m as {
+          sequence: number;
+          title: string;
+          description: string;
+          amount: number;
+          daysFromStart?: number;
+        };
         formDataToSend.append(
           `milestones[${idx}][sequence]`,
-          String(m.sequence)
+          String(row.sequence),
         );
-        formDataToSend.append(`milestones[${idx}][title]`, m.title);
-        formDataToSend.append(`milestones[${idx}][description]`, m.description);
+        formDataToSend.append(`milestones[${idx}][title]`, row.title);
+        formDataToSend.append(
+          `milestones[${idx}][description]`,
+          row.description,
+        );
         formDataToSend.append(
           `milestones[${idx}][amount]`,
-          m.amount != null ? String(m.amount) : "0"
+          row.amount != null ? String(row.amount) : "0",
         );
-        formDataToSend.append(`milestones[${idx}][dueDate]`, m.dueDate);
+        if (row.daysFromStart != null) {
+          formDataToSend.append(
+            `milestones[${idx}][daysFromStart]`,
+            String(row.daysFromStart),
+          );
+        }
       });
 
       proposalData.attachments.forEach((file) => {
@@ -747,7 +997,7 @@ export default function ProviderOpportunitiesPage() {
 
           if (refreshResponse.success) {
             let mappedOpportunities = (refreshResponse.opportunities || []).map(
-              (opp: Record<string, unknown>) => mapOpportunityData(opp, false)
+              (opp: Record<string, unknown>) => mapOpportunityData(opp, false),
             );
 
             // Fetch AiDraft summaries and merge into opportunities
@@ -756,39 +1006,52 @@ export default function ProviderOpportunitiesPage() {
               .filter(Boolean);
             if (serviceRequestIds.length > 0) {
               try {
-                const draftRes = await getServiceRequestAiDrafts(serviceRequestIds);
+                const draftRes =
+                  await getServiceRequestAiDrafts(serviceRequestIds);
                 if (draftRes?.success && Array.isArray(draftRes.drafts)) {
                   const draftMap = new Map<string, string>(
-                    (draftRes.drafts as AiDraft[]).map((d: AiDraft) => [d.referenceId, d.summary || ""])
+                    (draftRes.drafts as AiDraft[]).map((d: AiDraft) => [
+                      d.referenceId,
+                      d.summary || "",
+                    ]),
                   );
-                  mappedOpportunities = mappedOpportunities.map((opp: OpportunityData) => ({
-                    ...opp,
-                    aiExplanation:
-                      opp.serviceRequestId && draftMap.has(opp.serviceRequestId)
-                        ? draftMap.get(opp.serviceRequestId) || null
-                        : null,
-                  }));
+                  mappedOpportunities = mappedOpportunities.map(
+                    (opp: OpportunityData) => ({
+                      ...opp,
+                      aiExplanation:
+                        opp.serviceRequestId &&
+                        draftMap.has(opp.serviceRequestId)
+                          ? draftMap.get(opp.serviceRequestId) || null
+                          : null,
+                    }),
+                  );
                 }
               } catch (err) {
-                console.warn("Failed to fetch AI drafts after proposal submission", err);
+                console.warn(
+                  "Failed to fetch AI drafts after proposal submission",
+                  err,
+                );
               }
             }
 
             setOpportunities(mappedOpportunities);
           }
         } catch (err) {
-          console.error("Failed to refresh opportunities after proposal submission", err);
+          console.error(
+            "Failed to refresh opportunities after proposal submission",
+            err,
+          );
           // Fallback: optimistic UI update
-        const updatedOpportunities = opportunities.map((opp) =>
-          opp.id === selectedProject?.id
-            ? {
-                ...opp,
-                hasSubmitted: true,
-                proposals: opp.proposals + 1,
-              }
-            : opp
-        );
-        setOpportunities(updatedOpportunities);
+          const updatedOpportunities = opportunities.map((opp) =>
+            opp.id === selectedProject?.id
+              ? {
+                  ...opp,
+                  hasSubmitted: true,
+                  proposals: opp.proposals + 1,
+                }
+              : opp,
+          );
+          setOpportunities(updatedOpportunities);
         }
       } else {
         toast.error(response.message || "Failed to submit proposal");
@@ -796,7 +1059,7 @@ export default function ProviderOpportunitiesPage() {
     } catch (err) {
       console.error("Error submitting proposal:", err);
       toast.error(
-        err instanceof Error ? err.message : "Failed to submit proposal"
+        err instanceof Error ? err.message : "Failed to submit proposal",
       );
     } finally {
       setSubmittingProposal(false);
@@ -877,31 +1140,139 @@ export default function ProviderOpportunitiesPage() {
           </div> */}
         </div>
 
-        {/* Filters */}
+        {/* Top filter bar (LinkedIn-style): search + status + sort + Filters panel */}
         <Card>
           <CardContent className="p-4 sm:p-6">
-            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-              <div className="flex-1">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <Input
-                    placeholder="Search opportunities by title, client, or skills..."
-                    className="pl-10 text-sm sm:text-base"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
+            <div className="flex flex-col gap-3 sm:gap-4">
+              <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 flex-wrap">
+                <div className="flex-1 min-w-[200px]">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <Input
+                      placeholder="Search opportunities by title, client, or skills..."
+                      className="pl-10 text-sm sm:text-base"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                  </div>
                 </div>
+                <Select
+                  value={submissionFilter}
+                  onValueChange={setSubmissionFilter}
+                >
+                  <SelectTrigger className="w-full sm:w-44 text-sm sm:text-base">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Status</SelectItem>
+                    <SelectItem value="not-submitted">Not Submitted</SelectItem>
+                    <SelectItem value="submitted">Already Submitted</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={sortBy}
+                  onValueChange={(v) => setSortBy(v as "best-match" | "newest")}
+                >
+                  <SelectTrigger className="w-full sm:w-44 text-sm sm:text-base">
+                    <SelectValue placeholder="Sort" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="best-match">Best match</SelectItem>
+                    <SelectItem value="newest">Newest</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="default"
+                      className="w-full sm:w-auto text-sm sm:text-base shrink-0"
+                    >
+                      <SlidersHorizontal className="w-4 h-4 mr-2" />
+                      Filters
+                      {selectedTags.length > 0 && (
+                        <span className="ml-1.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-xs font-medium">
+                          {selectedTags.length}
+                        </span>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-80 sm:w-96 p-4" align="start">
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <Label
+                          htmlFor="use-profile-tags"
+                          className="text-sm font-medium cursor-pointer"
+                        >
+                          Use my profile tags
+                        </Label>
+                        <Switch
+                          id="use-profile-tags"
+                          checked={useProfileTags}
+                          onCheckedChange={setUseProfileTags}
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        {useProfileTags
+                          ? "Tag options from your profile (skills, expertise). Pre-selected: most relevant to current opportunities."
+                          : "Show full tag list from all opportunities."}
+                      </p>
+                      <Separator />
+                      <div>
+                        <Label className="text-sm font-medium mb-2 block">
+                          Tags
+                        </Label>
+                        <div className="max-h-48 overflow-y-auto rounded-md border border-gray-200 p-2 space-y-1.5">
+                          {tagOptions.length === 0 ? (
+                            <p className="text-xs text-gray-500 py-2">
+                              {useProfileTags
+                                ? "Add skills in your profile to see tags here."
+                                : "No tags yet."}
+                            </p>
+                          ) : (
+                            tagOptions.map((tag) => (
+                              <label
+                                key={tag}
+                                className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-gray-50 cursor-pointer text-sm"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={selectedTags.includes(tag)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedTags((prev) =>
+                                        [...prev, tag].sort((a, b) =>
+                                          a.localeCompare(b),
+                                        ),
+                                      );
+                                    } else {
+                                      setSelectedTags((prev) =>
+                                        prev.filter((t) => t !== tag),
+                                      );
+                                    }
+                                  }}
+                                  className="rounded border-gray-300"
+                                />
+                                <span className="truncate">{tag}</span>
+                              </label>
+                            ))
+                          )}
+                        </div>
+                        {selectedTags.length > 0 && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="mt-2 text-xs"
+                            onClick={() => setSelectedTags([])}
+                          >
+                            Clear tags
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </div>
-              <Select value={submissionFilter} onValueChange={setSubmissionFilter}>
-                <SelectTrigger className="w-full sm:w-48 text-sm sm:text-base">
-                  <SelectValue placeholder="Submission Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="not-submitted">Not Submitted</SelectItem>
-                  <SelectItem value="submitted">Already Submitted</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
           </CardContent>
         </Card>
@@ -939,10 +1310,25 @@ export default function ProviderOpportunitiesPage() {
             </CardContent>
           </Card>
         ) : (
-          <Tabs defaultValue="all" className="space-y-4 sm:space-y-6">
+          <Tabs
+            defaultValue={
+              searchParams.get("tab") === "recommended" ? "recommended" : "all"
+            }
+            className="space-y-4 sm:space-y-6"
+          >
             <TabsList className="grid w-full grid-cols-2 h-auto">
-              <TabsTrigger value="all" className="text-xs sm:text-sm px-2 sm:px-4">All</TabsTrigger>
-              <TabsTrigger value="recommended" className="text-xs sm:text-sm px-2 sm:px-4">AI Recommended</TabsTrigger>
+              <TabsTrigger
+                value="all"
+                className="text-xs sm:text-sm px-2 sm:px-4"
+              >
+                All
+              </TabsTrigger>
+              <TabsTrigger
+                value="recommended"
+                className="text-xs sm:text-sm px-2 sm:px-4"
+              >
+                AI Recommended
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="all" className="space-y-4 sm:space-y-6">
@@ -988,6 +1374,20 @@ export default function ProviderOpportunitiesPage() {
                               <CardTitle className="text-lg sm:text-xl break-words">
                                 {opportunity.title}
                               </CardTitle>
+                              {opportunity.matchScore !== undefined &&
+                                opportunity.matchScore !== null && (
+                                  <Badge
+                                    className={`text-xs font-semibold shrink-0 ${
+                                      opportunity.matchScore >= 80
+                                        ? "bg-green-100 text-green-700 border-green-300"
+                                        : opportunity.matchScore >= 60
+                                          ? "bg-blue-100 text-blue-700 border-blue-300"
+                                          : "bg-yellow-100 text-yellow-700 border-yellow-300"
+                                    }`}
+                                  >
+                                    {opportunity.matchScore}% match
+                                  </Badge>
+                                )}
                               {opportunity.urgent && (
                                 <Badge className="bg-red-100 text-red-800 text-xs shrink-0">
                                   <Clock className="w-3 h-3 mr-1" />
@@ -1023,7 +1423,7 @@ export default function ProviderOpportunitiesPage() {
                                   opportunity.avatar !==
                                     "/placeholder.svg?height=40&width=40" &&
                                   !opportunity.avatar.includes(
-                                    "/placeholder.svg"
+                                    "/placeholder.svg",
                                   )
                                     ? opportunity.avatar
                                     : "/placeholder.svg"
@@ -1060,7 +1460,9 @@ export default function ProviderOpportunitiesPage() {
                                 <span>•</span>
                                 <div className="flex items-center">
                                   <MapPin className="w-3 h-3 mr-1 flex-shrink-0" />
-                                  <span className="break-words">{opportunity.location}</span>
+                                  <span className="break-words">
+                                    {opportunity.location}
+                                  </span>
                                 </div>
                               </div>
                             </div>
@@ -1068,7 +1470,9 @@ export default function ProviderOpportunitiesPage() {
                           <div className="text-left sm:text-right w-full sm:w-auto">
                             <div className="flex items-center text-green-600 font-semibold text-sm sm:text-base">
                               <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 flex-shrink-0" />
-                              <span className="break-words">{opportunity.budget}</span>
+                              <span className="break-words">
+                                {opportunity.budget}
+                              </span>
                             </div>
                             <p className="text-xs sm:text-sm text-gray-500">
                               {formatTimeline(opportunity.timeline)}
@@ -1100,7 +1504,7 @@ export default function ProviderOpportunitiesPage() {
                               <button
                                 onClick={() =>
                                   setExpandedOpportunityId(
-                                    isExpanded ? null : opportunity.id
+                                    isExpanded ? null : opportunity.id,
                                   )
                                 }
                                 className="flex items-center gap-2 text-xs text-blue-600 active:text-blue-800 sm:hover:text-blue-700 font-medium touch-manipulation"
@@ -1205,13 +1609,21 @@ export default function ProviderOpportunitiesPage() {
                               href={`/provider/opportunities/${opportunity.id}`}
                               className="w-full sm:w-auto"
                             >
-                              <Button variant="outline" size="sm" className="w-full sm:w-auto text-xs sm:text-sm">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="w-full sm:w-auto text-xs sm:text-sm"
+                              >
                                 <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                                 View Details
                               </Button>
                             </Link>
                             {opportunity.hasSubmitted ? (
-                              <Button size="sm" disabled className="w-full sm:w-auto text-xs sm:text-sm">
+                              <Button
+                                size="sm"
+                                disabled
+                                className="w-full sm:w-auto text-xs sm:text-sm"
+                              >
                                 <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                                 Submitted
                               </Button>
@@ -1253,12 +1665,16 @@ export default function ProviderOpportunitiesPage() {
                 <Card>
                   <CardContent className="p-8 sm:p-12 text-center">
                     <div className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
-                      <span className="text-red-600 text-lg sm:text-xl">⚠️</span>
+                      <span className="text-red-600 text-lg sm:text-xl">
+                        ⚠️
+                      </span>
                     </div>
                     <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
                       Error loading recommendations
                     </h3>
-                    <p className="text-sm sm:text-base text-gray-600 mb-4">{errorRecommended}</p>
+                    <p className="text-sm sm:text-base text-gray-600 mb-4">
+                      {errorRecommended}
+                    </p>
                     <Button
                       onClick={() => window.location.reload()}
                       variant="outline"
@@ -1298,10 +1714,10 @@ export default function ProviderOpportunitiesPage() {
 
                           const ageMinutes = Math.floor(ageMs / 60000);
                           const remainingMinutes = Math.floor(
-                            remainingMs / 60000
+                            remainingMs / 60000,
                           );
                           const remainingHours = Math.floor(
-                            remainingMinutes / 60
+                            remainingMinutes / 60,
                           );
                           const remainingMins = remainingMinutes % 60;
 
@@ -1332,235 +1748,240 @@ export default function ProviderOpportunitiesPage() {
                       </div>
                     )}
                   <div className="space-y-3 sm:space-y-4">
-                    {recommendedOpportunities.map((opportunity: OpportunityData) => {
-                      const isExpanded =
-                        expandedOpportunityId === opportunity.id;
-                      return (
-                        <Card
-                          key={opportunity.id}
-                          className="group relative p-3 sm:p-4 md:p-5 border-2 border-gray-200 rounded-lg sm:rounded-xl active:border-blue-400 active:shadow-md sm:hover:border-blue-400 sm:hover:shadow-lg transition-all duration-300 bg-white"
-                        >
-                          {/* AI Badge Indicator - Desktop hover only */}
-                          {opportunity.aiExplanation && (
-                            <div className="absolute top-2 right-2 sm:top-3 sm:right-3 opacity-0 lg:group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
-                              <div className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-full text-xs font-medium shadow-md">
-                                <Sparkles className="w-3 h-3" />
-                                <span className="hidden sm:inline">
-                                  AI Insights
-                                </span>
-                              </div>
-                            </div>
-                          )}
-
-                          <CardHeader className="p-0 pb-3 sm:pb-4">
-                            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-3 pr-0 sm:pr-20">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-2 flex-wrap">
-                                  <CardTitle className="font-semibold text-gray-900 sm:group-hover:text-blue-700 transition-colors text-base sm:text-lg break-words">
-                                    {opportunity.title}
-                                  </CardTitle>
-                                  {opportunity.matchScore !== undefined && (
-                                    <Badge
-                                      className={`text-xs font-semibold shrink-0 ${
-                                        opportunity.matchScore >= 80
-                                          ? "bg-green-100 text-green-700 border-green-300"
-                                          : opportunity.matchScore >= 60
-                                          ? "bg-blue-100 text-blue-700 border-blue-300"
-                                          : "bg-yellow-100 text-yellow-700 border-yellow-300"
-                                      }`}
-                                    >
-                                      {opportunity.matchScore}% match
-                                    </Badge>
-                                  )}
-                                </div>
-                                <CardDescription className="text-xs sm:text-sm font-medium text-gray-700 mt-1 break-words">
-                                  {opportunity.budget}
-                                </CardDescription>
-                                {opportunity.client && (
-                                  <div className="flex items-center gap-2 mt-2 flex-wrap">
-                                    <p className="text-xs text-gray-600 break-words">
-                                      {opportunity.client}
-                                    </p>
-                                    {opportunity.verified && (
-                                      <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium shrink-0">
-                                        ✓ Verified
-                                      </span>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* AI Explanation - Responsive: Hover on desktop, Click on mobile */}
+                    {recommendedOpportunities.map(
+                      (opportunity: OpportunityData) => {
+                        const isExpanded =
+                          expandedOpportunityId === opportunity.id;
+                        return (
+                          <Card
+                            key={opportunity.id}
+                            className="group relative p-3 sm:p-4 md:p-5 border-2 border-gray-200 rounded-lg sm:rounded-xl active:border-blue-400 active:shadow-md sm:hover:border-blue-400 sm:hover:shadow-lg transition-all duration-300 bg-white"
+                          >
+                            {/* AI Badge Indicator - Desktop hover only */}
                             {opportunity.aiExplanation && (
-                              <div className="mb-3 sm:mb-4 overflow-hidden">
-                                {/* Collapsed State - Desktop hover, Mobile click */}
-                                <div
-                                  className={`lg:group-hover:hidden ${
-                                    isExpanded ? "hidden" : "block"
-                                  } transition-all duration-300`}
-                                >
-                                  <button
-                                    onClick={() =>
-                                      setExpandedOpportunityId(
-                                        isExpanded ? null : opportunity.id
-                                      )
-                                    }
-                                    className="flex items-center gap-2 text-xs text-blue-600 active:text-blue-800 sm:hover:text-blue-700 font-medium touch-manipulation"
-                                  >
-                                    <Sparkles className="w-3.5 h-3.5 shrink-0" />
-                                    <span className="hidden sm:inline">
-                                      Hover to see AI insights
-                                    </span>
-                                    <span className="sm:hidden">
-                                      Tap to see AI insights
-                                    </span>
-                                    <ChevronRight
-                                      className={`w-3 h-3 shrink-0 transition-transform ${
-                                        isExpanded ? "rotate-90" : ""
-                                      }`}
-                                    />
-                                  </button>
-                                </div>
-
-                                {/* Expanded State - Shows on hover (desktop) or click (mobile) */}
-                                <div
-                                  className={`lg:group-hover:block ${
-                                    isExpanded ? "block" : "hidden"
-                                  } animate-in fade-in slide-in-from-top-2 duration-300`}
-                                >
-                                  <div className="p-3 sm:p-4 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 rounded-lg border-2 border-blue-200 shadow-md">
-                                    <div className="flex items-center gap-2 mb-2 sm:mb-3">
-                                      <div className="p-1.5 bg-blue-100 rounded-lg shrink-0">
-                                        <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600" />
-                                      </div>
-                                      <p className="text-xs sm:text-sm font-semibold text-blue-900">
-                                        Why this is recommended for you:
-                                      </p>
-                                      {/* Close button for mobile */}
-                                      <button
-                                        onClick={() =>
-                                          setExpandedOpportunityId(null)
-                                        }
-                                        className="ml-auto lg:hidden text-blue-600 active:text-blue-800 sm:hover:text-blue-800 p-1"
-                                        aria-label="Close insights"
-                                      >
-                                        <span className="text-lg">×</span>
-                                      </button>
-                                    </div>
-                                    <div className="text-xs sm:text-sm text-blue-800 space-y-1.5 sm:space-y-2">
-                                      {opportunity.aiExplanation
-                                        .split("\n")
-                                        .filter((line: string) => line.trim())
-                                        .map((line: string, index: number) => {
-                                          const cleanLine = line
-                                            .replace(/^[•\-\*]\s*/, "")
-                                            .trim();
-                                          return cleanLine ? (
-                                            <div
-                                              key={index}
-                                              className="flex items-start gap-2 sm:gap-3"
-                                            >
-                                              <span className="text-blue-600 mt-0.5 font-bold flex-shrink-0">
-                                                •
-                                              </span>
-                                              <span className="leading-relaxed break-words">
-                                                {cleanLine}
-                                              </span>
-                                            </div>
-                                          ) : null;
-                                        })}
-                                    </div>
-                                  </div>
+                              <div className="absolute top-2 right-2 sm:top-3 sm:right-3 opacity-0 lg:group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
+                                <div className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-full text-xs font-medium shadow-md">
+                                  <Sparkles className="w-3 h-3" />
+                                  <span className="hidden sm:inline">
+                                    AI Insights
+                                  </span>
                                 </div>
                               </div>
                             )}
-                          </CardHeader>
 
-                          <CardContent className="p-0 space-y-3 sm:space-y-4">
-                            <div className="flex flex-wrap gap-1.5">
-                              {(opportunity.skills || [])
-                                .slice(0, 6)
-                                .map((skill: string) => (
-                                  <Badge
-                                    key={skill}
-                                    variant="secondary"
-                                    className="text-xs sm:group-hover:bg-blue-100 sm:group-hover:text-blue-700 transition-colors border"
+                            <CardHeader className="p-0 pb-3 sm:pb-4">
+                              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-3 pr-0 sm:pr-20">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-2 flex-wrap">
+                                    <CardTitle className="font-semibold text-gray-900 sm:group-hover:text-blue-700 transition-colors text-base sm:text-lg break-words">
+                                      {opportunity.title}
+                                    </CardTitle>
+                                    {opportunity.matchScore !== undefined && (
+                                      <Badge
+                                        className={`text-xs font-semibold shrink-0 ${
+                                          opportunity.matchScore >= 80
+                                            ? "bg-green-100 text-green-700 border-green-300"
+                                            : opportunity.matchScore >= 60
+                                              ? "bg-blue-100 text-blue-700 border-blue-300"
+                                              : "bg-yellow-100 text-yellow-700 border-yellow-300"
+                                        }`}
+                                      >
+                                        {opportunity.matchScore}% match
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <CardDescription className="text-xs sm:text-sm font-medium text-gray-700 mt-1 break-words">
+                                    {opportunity.budget}
+                                  </CardDescription>
+                                  {opportunity.client && (
+                                    <div className="flex items-center gap-2 mt-2 flex-wrap">
+                                      <p className="text-xs text-gray-600 break-words">
+                                        {opportunity.client}
+                                      </p>
+                                      {opportunity.verified && (
+                                        <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium shrink-0">
+                                          ✓ Verified
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* AI Explanation - Responsive: Hover on desktop, Click on mobile */}
+                              {opportunity.aiExplanation && (
+                                <div className="mb-3 sm:mb-4 overflow-hidden">
+                                  {/* Collapsed State - Desktop hover, Mobile click */}
+                                  <div
+                                    className={`lg:group-hover:hidden ${
+                                      isExpanded ? "hidden" : "block"
+                                    } transition-all duration-300`}
                                   >
-                                    {skill}
-                                  </Badge>
-                                ))}
-                              {(opportunity.skills || []).length > 6 && (
-                                <Badge
-                                  variant="secondary"
-                                  className="text-xs border"
-                                >
-                                  +{(opportunity.skills || []).length - 6} more
-                                </Badge>
+                                    <button
+                                      onClick={() =>
+                                        setExpandedOpportunityId(
+                                          isExpanded ? null : opportunity.id,
+                                        )
+                                      }
+                                      className="flex items-center gap-2 text-xs text-blue-600 active:text-blue-800 sm:hover:text-blue-700 font-medium touch-manipulation"
+                                    >
+                                      <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                                      <span className="hidden sm:inline">
+                                        Hover to see AI insights
+                                      </span>
+                                      <span className="sm:hidden">
+                                        Tap to see AI insights
+                                      </span>
+                                      <ChevronRight
+                                        className={`w-3 h-3 shrink-0 transition-transform ${
+                                          isExpanded ? "rotate-90" : ""
+                                        }`}
+                                      />
+                                    </button>
+                                  </div>
+
+                                  {/* Expanded State - Shows on hover (desktop) or click (mobile) */}
+                                  <div
+                                    className={`lg:group-hover:block ${
+                                      isExpanded ? "block" : "hidden"
+                                    } animate-in fade-in slide-in-from-top-2 duration-300`}
+                                  >
+                                    <div className="p-3 sm:p-4 bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 rounded-lg border-2 border-blue-200 shadow-md">
+                                      <div className="flex items-center gap-2 mb-2 sm:mb-3">
+                                        <div className="p-1.5 bg-blue-100 rounded-lg shrink-0">
+                                          <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600" />
+                                        </div>
+                                        <p className="text-xs sm:text-sm font-semibold text-blue-900">
+                                          Why this is recommended for you:
+                                        </p>
+                                        {/* Close button for mobile */}
+                                        <button
+                                          onClick={() =>
+                                            setExpandedOpportunityId(null)
+                                          }
+                                          className="ml-auto lg:hidden text-blue-600 active:text-blue-800 sm:hover:text-blue-800 p-1"
+                                          aria-label="Close insights"
+                                        >
+                                          <span className="text-lg">×</span>
+                                        </button>
+                                      </div>
+                                      <div className="text-xs sm:text-sm text-blue-800 space-y-1.5 sm:space-y-2">
+                                        {opportunity.aiExplanation
+                                          .split("\n")
+                                          .filter((line: string) => line.trim())
+                                          .map(
+                                            (line: string, index: number) => {
+                                              const cleanLine = line
+                                                .replace(/^[•\-\*]\s*/, "")
+                                                .trim();
+                                              return cleanLine ? (
+                                                <div
+                                                  key={index}
+                                                  className="flex items-start gap-2 sm:gap-3"
+                                                >
+                                                  <span className="text-blue-600 mt-0.5 font-bold flex-shrink-0">
+                                                    •
+                                                  </span>
+                                                  <span className="leading-relaxed break-words">
+                                                    {cleanLine}
+                                                  </span>
+                                                </div>
+                                              ) : null;
+                                            },
+                                          )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
                               )}
-                            </div>
+                            </CardHeader>
 
-                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 pt-3 border-t border-gray-200 sm:group-hover:border-blue-200 transition-colors">
-                              <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs text-gray-600 w-full sm:w-auto">
-                                <span className="capitalize font-medium">
-                                  {opportunity.category}
-                                </span>
-                                {opportunity.timeline && (
-                                  <span className="flex items-center gap-1">
-                                    <Calendar className="w-3 h-3 shrink-0" />
-                                    <span className="break-words">
-                                      {opportunity.timeline}
+                            <CardContent className="p-0 space-y-3 sm:space-y-4">
+                              <div className="flex flex-wrap gap-1.5">
+                                {(opportunity.skills || [])
+                                  .slice(0, 6)
+                                  .map((skill: string) => (
+                                    <Badge
+                                      key={skill}
+                                      variant="secondary"
+                                      className="text-xs sm:group-hover:bg-blue-100 sm:group-hover:text-blue-700 transition-colors border"
+                                    >
+                                      {skill}
+                                    </Badge>
+                                  ))}
+                                {(opportunity.skills || []).length > 6 && (
+                                  <Badge
+                                    variant="secondary"
+                                    className="text-xs border"
+                                  >
+                                    +{(opportunity.skills || []).length - 6}{" "}
+                                    more
+                                  </Badge>
+                                )}
+                              </div>
+
+                              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 pt-3 border-t border-gray-200 sm:group-hover:border-blue-200 transition-colors">
+                                <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs text-gray-600 w-full sm:w-auto">
+                                  <span className="capitalize font-medium">
+                                    {opportunity.category}
+                                  </span>
+                                  {opportunity.timeline && (
+                                    <span className="flex items-center gap-1">
+                                      <Calendar className="w-3 h-3 shrink-0" />
+                                      <span className="break-words">
+                                        {opportunity.timeline}
+                                      </span>
                                     </span>
-                                  </span>
-                                )}
-                                {opportunity.proposals !== undefined && (
-                                  <span className="whitespace-nowrap">
-                                    {opportunity.proposals} proposal
-                                    {opportunity.proposals !== 1 ? "s" : ""}
-                                  </span>
-                                )}
+                                  )}
+                                  {opportunity.proposals !== undefined && (
+                                    <span className="whitespace-nowrap">
+                                      {opportunity.proposals} proposal
+                                      {opportunity.proposals !== 1 ? "s" : ""}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                                  <Link
+                                    href={`/provider/opportunities/${opportunity.id}`}
+                                    className="w-full sm:w-auto"
+                                  >
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="w-full sm:w-auto text-xs sm:text-sm"
+                                    >
+                                      <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+                                      View Details
+                                    </Button>
+                                  </Link>
+                                  {opportunity.hasSubmitted ? (
+                                    <Button
+                                      size="sm"
+                                      disabled
+                                      className="w-full sm:w-auto text-xs sm:text-sm"
+                                    >
+                                      <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+                                      Submitted
+                                    </Button>
+                                  ) : (
+                                    <Button
+                                      size="sm"
+                                      onClick={() =>
+                                        handleSubmitProposal(opportunity)
+                                      }
+                                      className="w-full sm:w-auto sm:group-hover:bg-blue-600 sm:group-hover:text-white transition-all duration-300 text-xs sm:text-sm"
+                                    >
+                                      <ThumbsUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+                                      Submit Proposal
+                                    </Button>
+                                  )}
+                                </div>
                               </div>
-                              <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                                <Link
-                                  href={`/provider/opportunities/${opportunity.id}`}
-                                  className="w-full sm:w-auto"
-                                >
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="w-full sm:w-auto text-xs sm:text-sm"
-                                  >
-                                    <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                                    View Details
-                                  </Button>
-                                </Link>
-                                {opportunity.hasSubmitted ? (
-                                  <Button
-                                    size="sm"
-                                    disabled
-                                    className="w-full sm:w-auto text-xs sm:text-sm"
-                                  >
-                                    <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                                    Submitted
-                                  </Button>
-                                ) : (
-                                  <Button
-                                    size="sm"
-                                    onClick={() =>
-                                      handleSubmitProposal(opportunity)
-                                    }
-                                    className="w-full sm:w-auto sm:group-hover:bg-blue-600 sm:group-hover:text-white transition-all duration-300 text-xs sm:text-sm"
-                                  >
-                                    <ThumbsUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                                    Submit Proposal
-                                  </Button>
-                                )}
-                              </div>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      );
-                    })}
+                            </CardContent>
+                          </Card>
+                        );
+                      },
+                    )}
                   </div>
                 </>
               )}
@@ -1654,7 +2075,7 @@ export default function ProviderOpportunitiesPage() {
                           <span className="text-gray-600">Match Score:</span>
                           <Badge
                             className={getMatchScoreColor(
-                              selectedProject.matchScore || 0
+                              selectedProject.matchScore || 0,
                             )}
                           >
                             {selectedProject.matchScore || 0}%
@@ -1678,7 +2099,7 @@ export default function ProviderOpportunitiesPage() {
                                 selectedProject.avatar !==
                                   "/placeholder.svg?height=40&width=40" &&
                                 !selectedProject.avatar.includes(
-                                  "/placeholder.svg"
+                                  "/placeholder.svg",
                                 )
                                   ? selectedProject.avatar
                                   : "/placeholder.svg"
@@ -1805,13 +2226,14 @@ export default function ProviderOpportunitiesPage() {
                   <Label htmlFor="bidAmount">Your Bid Amount (RM) *</Label>
                   <Input
                     id="bidAmount"
-                    type="number"
-                    placeholder="15000"
-                    value={proposalData.bidAmount}
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="15,000.00"
+                    value={formatBidAmountDisplay(proposalData.bidAmount)}
                     onChange={(e) =>
                       setProposalData((prev) => ({
                         ...prev,
-                        bidAmount: e.target.value,
+                        bidAmount: parseBidAmountInput(e.target.value),
                       }))
                     }
                     className={
@@ -1898,7 +2320,7 @@ export default function ProviderOpportunitiesPage() {
                       Your timeline:{" "}
                       {formatTimeline(
                         proposalData.timelineAmount,
-                        proposalData.timelineUnit
+                        proposalData.timelineUnit,
                       )}
                     </p>
                   )}
@@ -2051,51 +2473,74 @@ export default function ProviderOpportunitiesPage() {
                           </div>
                           <div className="md:col-span-4">
                             <label className="text-sm font-medium">
-                              Due Date <span className="text-red-500">*</span>
+                              Duration <span className="text-red-500">*</span>
                             </label>
-                            <Input
-                              type="date"
-                              min={new Date().toISOString().split("T")[0]}
-                              value={(m.dueDate || "").slice(0, 10)}
-                              onChange={(e) => {
-                                const selectedDate = e.target.value;
-                                const today = new Date()
-                                  .toISOString()
-                                  .split("T")[0];
-                                if (selectedDate < today) {
-                                  toast.error(
-                                    "Due date cannot be in the past. Please select today or a future date."
-                                  );
-                                  return;
-                                }
-                                updateProposalMilestone(i, {
-                                  dueDate: selectedDate,
-                                });
-                                // Clear error when user selects a date
-                                if (
-                                  proposalErrors.milestoneFields?.[i]?.dueDate
-                                ) {
-                                  setProposalErrors((prev) => ({
-                                    ...prev,
-                                    milestoneFields: {
-                                      ...prev.milestoneFields,
-                                      [i]: {
-                                        ...prev.milestoneFields?.[i],
-                                        dueDate: undefined,
+                            <div className="flex flex-col sm:flex-row gap-2 mt-1.5">
+                              <Input
+                                type="number"
+                                min={1}
+                                placeholder="e.g. 1"
+                                value={m.durationAmount ?? ""}
+                                onChange={(e) => {
+                                  updateProposalMilestone(i, {
+                                    durationAmount: e.target.value,
+                                    durationUnit: m.durationUnit || "",
+                                  });
+                                  if (proposalErrors.milestoneFields?.[i]?.durationAmount) {
+                                    setProposalErrors((prev) => ({
+                                      ...prev,
+                                      milestoneFields: {
+                                        ...prev.milestoneFields,
+                                        [i]: { ...prev.milestoneFields?.[i], durationAmount: undefined },
                                       },
-                                    },
-                                  }));
+                                    }));
+                                  }
+                                }}
+                                className={
+                                  proposalErrors.milestoneFields?.[i]?.durationAmount
+                                    ? "border-red-500 focus-visible:ring-red-500"
+                                    : ""
                                 }
-                              }}
-                              className={
-                                proposalErrors.milestoneFields?.[i]?.dueDate
-                                  ? "border-red-500 focus-visible:ring-red-500"
-                                  : ""
-                              }
-                            />
-                            {proposalErrors.milestoneFields?.[i]?.dueDate && (
+                              />
+                              <Select
+                                value={m.durationUnit || ""}
+                                onValueChange={(value: "day" | "week" | "month") => {
+                                  updateProposalMilestone(i, {
+                                    durationAmount: m.durationAmount ?? "",
+                                    durationUnit: value,
+                                  });
+                                  if (proposalErrors.milestoneFields?.[i]?.durationUnit) {
+                                    setProposalErrors((prev) => ({
+                                      ...prev,
+                                      milestoneFields: {
+                                        ...prev.milestoneFields,
+                                        [i]: { ...prev.milestoneFields?.[i], durationUnit: undefined },
+                                      },
+                                    }));
+                                  }
+                                }}
+                              >
+                                <SelectTrigger
+                                  className={
+                                    proposalErrors.milestoneFields?.[i]?.durationUnit
+                                      ? "border-red-500 focus:ring-red-500"
+                                      : ""
+                                  }
+                                >
+                                  <SelectValue placeholder="Unit" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="day">Day(s)</SelectItem>
+                                  <SelectItem value="week">Week(s)</SelectItem>
+                                  <SelectItem value="month">Month(s)</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            {(proposalErrors.milestoneFields?.[i]?.durationAmount ||
+                              proposalErrors.milestoneFields?.[i]?.durationUnit) && (
                               <p className="text-xs text-red-600 mt-1">
-                                {proposalErrors.milestoneFields[i].dueDate}
+                                {proposalErrors.milestoneFields[i].durationAmount ||
+                                  proposalErrors.milestoneFields[i].durationUnit}
                               </p>
                             )}
                           </div>
@@ -2155,9 +2600,9 @@ export default function ProviderOpportunitiesPage() {
                     </Card>
                   ))}
                 </div>
-                {/* Milestones total check */}
+                {/* Milestones total check (bid + time) */}
                 {proposalData.milestones.length > 0 && (
-                  <div className="mt-4 rounded-md border p-3 text-sm">
+                  <div className="mt-4 rounded-md border p-3 text-sm space-y-3">
                     {(() => {
                       const bidAmountNum = Number(proposalData.bidAmount || 0);
                       const sumMilestones = proposalData.milestones.reduce(
@@ -2166,31 +2611,67 @@ export default function ProviderOpportunitiesPage() {
                           if (!isNaN(val)) return sum + val;
                           return sum;
                         },
-                        0
+                        0,
                       );
-
-                      const match =
+                      const bidMatch =
                         bidAmountNum > 0 && sumMilestones === bidAmountNum;
 
+                      const deliveryTimeDays = timelineToDays(
+                        Number(proposalData.timelineAmount || 0),
+                        proposalData.timelineUnit || "",
+                      );
+                      const milestonesDurationDays = proposalData.milestones.reduce(
+                        (sum, m) =>
+                          sum +
+                          (timelineToDays(
+                            Number(m.durationAmount || 0),
+                            m.durationUnit || "",
+                          ) || 0),
+                        0,
+                      );
+                      const timeMatch =
+                        deliveryTimeDays > 0 &&
+                        milestonesDurationDays === deliveryTimeDays;
+
                       return (
-                        <div className="flex justify-between flex-wrap gap-2">
-                          <div>
-                            <div className="font-medium">
-                              Milestones total: RM {sumMilestones || 0}
+                        <>
+                          <div className="flex justify-between flex-wrap gap-2">
+                            <div>
+                              <div className="font-medium">
+                                Milestones total: RM {sumMilestones || 0}
+                              </div>
+                              <div>Your bid: RM {bidAmountNum || 0}</div>
                             </div>
-                            <div>Your bid: RM {bidAmountNum || 0}</div>
+                            <div
+                              className={
+                                "text-xs font-semibold " +
+                                (bidMatch ? "text-green-600" : "text-red-600")
+                              }
+                            >
+                              {bidMatch
+                                ? "Total matches bid ✅"
+                                : "Total does not match bid ❗"}
+                            </div>
                           </div>
-                          <div
-                            className={
-                              "text-xs font-semibold " +
-                              (match ? "text-green-600" : "text-red-600")
-                            }
-                          >
-                            {match
-                              ? "Total matches bid ✅"
-                              : "Total does not match bid ❗"}
+                          <div className="flex justify-between flex-wrap gap-2 border-t pt-2">
+                            <div>
+                              <div className="font-medium">
+                                Milestones duration total: {milestonesDurationDays} days
+                              </div>
+                              <div>Your delivery timeline: {deliveryTimeDays} days</div>
+                            </div>
+                            <div
+                              className={
+                                "text-xs font-semibold " +
+                                (timeMatch ? "text-green-600" : "text-red-600")
+                              }
+                            >
+                              {timeMatch
+                                ? "Total matches delivery timeline ✅"
+                                : "Total does not match delivery timeline ❗"}
+                            </div>
                           </div>
-                        </div>
+                        </>
                       );
                     })()}
                   </div>
@@ -2277,7 +2758,7 @@ export default function ProviderOpportunitiesPage() {
                       <span>
                         {formatTimeline(
                           proposalData.timelineAmount,
-                          proposalData.timelineUnit
+                          proposalData.timelineUnit,
                         ) || "Not specified"}
                       </span>
                     </div>

@@ -39,6 +39,14 @@ import {
 } from "@/components/ui/table";
 import { Separator } from "@/components/ui/separator";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { ChartContainer } from "@/components/ui/chart";
+import { Bar, BarChart, XAxis, YAxis } from "recharts";
+import {
   CreditCard,
   Download,
   Search,
@@ -54,6 +62,7 @@ import {
   Send,
   ArrowUpRight,
   ArrowDownRight,
+  HelpCircle,
 } from "lucide-react";
 import { CustomerLayout } from "@/components/customer-layout";
 import { useToast } from "@/hooks/use-toast";
@@ -136,6 +145,7 @@ export default function CustomerBillingPage() {
     pendingPayments: 0,
     thisMonth: 0,
     averageTransaction: 0,
+    averageTransactionByYear: [] as { year: number; average: number }[],
     completedPayments: 0,
   });
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -371,6 +381,7 @@ export default function CustomerBillingPage() {
           pendingPayments: overviewRes.data.pendingPayments,
           thisMonth: overviewRes.data.thisMonthSpent,
           averageTransaction: overviewRes.data.averageTransaction,
+          averageTransactionByYear: overviewRes.data.averageTransactionByYear ?? [],
           completedPayments: overviewRes.data.recentTransactions.length,
         });
         // Budgets feature is commented out, so we don't set budgets state
@@ -554,21 +565,55 @@ export default function CustomerBillingPage() {
 
               <Card>
                 <CardContent className="p-4 md:p-6">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs md:text-sm text-gray-500">Avg. Transaction</p>
-                      <p className="text-xl md:text-2xl font-bold">
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-xs md:text-sm text-gray-500">Avg. Transaction (YTD)</p>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <HelpCircle className="h-3.5 w-3.5 md:h-4 md:w-4 text-gray-400 hover:text-gray-600 cursor-help shrink-0" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-[260px]">
+                              <p>Average payment amount per completed transaction (escrowed, released, or transferred) for the current year. The chart shows year-over-year comparison across recent years.</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
+                      <p className="text-xl md:text-2xl font-bold mt-1">
                         RM
                         {Math.round(
                           stats?.averageTransaction || 0
                         ).toLocaleString()}
                       </p>
                       <div className="flex items-center mt-2 text-purple-600 text-xs md:text-sm">
-                        <Receipt className="w-3 h-3 md:w-4 md:h-4 mr-1" />
+                        <Receipt className="w-3 h-3 md:w-4 md:h-4 mr-1 shrink-0" />
                         <span>{stats.completedPayments} completed</span>
                       </div>
                     </div>
-                    <Receipt className="w-6 h-6 md:w-8 md:h-8 text-purple-600 flex-shrink-0 ml-2" />
+                    {(stats.averageTransactionByYear?.length ?? 0) > 0 && (
+                      <div className="w-20 md:w-28 h-12 shrink-0">
+                        <ChartContainer
+                          config={{
+                            average: { label: "Avg", color: "rgb(147 51 234)" },
+                          }}
+                          className="h-full w-full !aspect-auto [&_.recharts-cartesian-grid]:opacity-0"
+                        >
+                          <BarChart
+                            data={[...(stats.averageTransactionByYear ?? [])].reverse().map((d) => ({
+                              year: String(d.year).slice(-2),
+                              average: Math.round(d.average),
+                            }))}
+                            margin={{ top: 2, right: 2, bottom: 2, left: 2 }}
+                          >
+                            <XAxis type="category" dataKey="year" tick={{ fontSize: 9 }} />
+                            <YAxis type="number" hide />
+                            <Bar dataKey="average" fill="rgb(147 51 234)" radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                        </ChartContainer>
+                      </div>
+                    )}
+                    <Receipt className="w-6 h-6 md:w-8 md:h-8 text-purple-600 flex-shrink-0 hidden sm:block" />
                   </div>
                 </CardContent>
               </Card>
@@ -843,7 +888,7 @@ export default function CustomerBillingPage() {
                                 : "text-gray-900"
                             }`}
                           >
-                            {transaction.type === "refund" ? "+" : "-"}RM
+                            {transaction.type === "refund" ? "+" : ""}RM
                             {transaction.amount.toLocaleString() ?? "0.00"}
                           </span>
                         </div>

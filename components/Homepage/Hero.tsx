@@ -4,6 +4,7 @@ import React from "react";
 import { Button } from "../ui/button";
 import { heroBanner } from "@/public/assets";
 import { useRef } from "react";
+import Image from "next/image";
 import {
   motion,
   Variants,
@@ -106,7 +107,7 @@ const Hero = () => {
             </Link>
             <Button
               variant={"ghost"}
-              onClick={() => scrollToSection("features")}
+              onClick={() => scrollToSection("about")}
             >
               Explore Our Tech
             </Button>
@@ -133,17 +134,13 @@ const Hero = () => {
             ref={heroBannerRef}
             style={{ scale }}
           >
-            <img
-              src={
-                typeof heroBanner === "string"
-                  ? heroBanner
-                  : (heroBanner as { src: string }).src
-              }
+            <Image
+              src={heroBanner}
               alt="TechConnex Dashboard"
               className="w-full h-auto"
-              loading="eager"
+              priority
+              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 90vw, 1280px"
               style={{
-                imageRendering: "auto",
                 transform: "translateZ(0)",
                 backfaceVisibility: "hidden",
               }}

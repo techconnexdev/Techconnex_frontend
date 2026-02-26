@@ -77,7 +77,16 @@ type ProviderProject = {
   createdAt: string;
   customer?: ProjectCustomer;
   nextMilestone?: NextMilestone;
+  milestones?: Array<{ order?: number; dueDate?: string | null }>;
 };
+
+function getProjectDueDate(project: ProviderProject): string | null {
+  const milestones = project.milestones;
+  if (!milestones?.length) return null;
+  const sorted = [...milestones].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const last = sorted[sorted.length - 1];
+  return last?.dueDate ?? null;
+}
 
 export default function ProviderProjectsPage() {
   const { toast } = useToast();
@@ -484,7 +493,7 @@ export default function ProviderProjectsPage() {
                                   )}`}
                             </p>
                             <p className="text-xs sm:text-sm text-gray-500">
-                              Created: {formatDate(project.createdAt)}
+                              Due: {getProjectDueDate(project) ? formatDate(getProjectDueDate(project)!) : "—"}
                             </p>
                           </div>
                         </div>
@@ -617,7 +626,7 @@ export default function ProviderProjectsPage() {
                                   )}`}
                             </p>
                             <p className="text-xs sm:text-sm text-gray-500">
-                              Created: {formatDate(project.createdAt)}
+                              Due: {getProjectDueDate(project) ? formatDate(getProjectDueDate(project)!) : "—"}
                             </p>
                           </div>
                         </div>
@@ -842,7 +851,7 @@ export default function ProviderProjectsPage() {
                                   )}`}
                             </p>
                             <p className="text-xs sm:text-sm text-gray-500">
-                              Created: {formatDate(project.createdAt)}
+                              Due: {getProjectDueDate(project) ? formatDate(getProjectDueDate(project)!) : "—"}
                             </p>
                           </div>
                         </div>

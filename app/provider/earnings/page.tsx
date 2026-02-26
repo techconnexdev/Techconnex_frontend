@@ -134,7 +134,7 @@ export default function ProviderEarningsPage() {
               "Content-Type": "application/json",
               Authorization: `Bearer ${token}`,
             },
-          }
+          },
         );
 
         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
@@ -193,7 +193,7 @@ export default function ProviderEarningsPage() {
         {
           method: "GET",
           headers: { Authorization: `Bearer ${token}` },
-        }
+        },
       );
 
       if (!res.ok) throw new Error("Failed to fetch payout methods");
@@ -275,7 +275,7 @@ export default function ProviderEarningsPage() {
 
       const res = await fetch(
         `${process.env.NEXT_PUBLIC_API_URL}/provider/earnings/bank/${id}`,
-        { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }
+        { method: "DELETE", headers: { Authorization: `Bearer ${token}` } },
       );
 
       if (!res.ok) throw new Error("Failed to delete payout method");
@@ -344,7 +344,7 @@ export default function ProviderEarningsPage() {
           headers: {
             Authorization: `Bearer ${token}`,
           },
-        }
+        },
       );
 
       if (!res.ok) {
@@ -399,9 +399,7 @@ export default function ProviderEarningsPage() {
     if (method.type === "BANK") {
       return {
         title: method.label || method.bankName || "Bank Account",
-        subtitle: method.accountNumber
-          ? `${method.accountNumber}`
-          : "",
+        subtitle: method.accountNumber ? `${method.accountNumber}` : "",
         details: method.accountHolder || "",
       };
     } else {
@@ -521,7 +519,9 @@ export default function ProviderEarningsPage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Earnings</h1>
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
+              Earnings
+            </h1>
             <p className="text-sm md:text-base text-gray-600">
               Track your income and payment history
             </p>
@@ -538,7 +538,11 @@ export default function ProviderEarningsPage() {
                 <SelectItem value="this-year">This Year</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" onClick={handleExportReport} className="w-full sm:w-auto text-xs md:text-sm">
+            <Button
+              variant="outline"
+              onClick={handleExportReport}
+              className="w-full sm:w-auto text-xs md:text-sm"
+            >
               <Download className="w-3 h-3 md:w-4 md:h-4 mr-2" />
               Export Report
             </Button>
@@ -619,7 +623,7 @@ export default function ProviderEarningsPage() {
                   </p>
                   <p className="text-xs text-gray-500 mt-2">
                     Payments already transferred and should be received from
-                    TechConnect platform. Processing takes 3-14 working days.
+                    Techconnex platform. Processing takes 3-14 working days.
                   </p>
                 </div>
                 <div className="w-10 h-10 md:w-12 md:h-12 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
@@ -632,11 +636,17 @@ export default function ProviderEarningsPage() {
 
         <Tabs defaultValue="overview" className="space-y-6">
           <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="overview" className="text-xs md:text-sm">Overview</TabsTrigger>
-            <TabsTrigger value="payments" className="text-xs md:text-sm">Payment History</TabsTrigger>
+            <TabsTrigger value="overview" className="text-xs md:text-sm">
+              Overview
+            </TabsTrigger>
+            <TabsTrigger value="payments" className="text-xs md:text-sm">
+              Payment History
+            </TabsTrigger>
             {/* <TabsTrigger value="analytics">Analytics</TabsTrigger> */}
             {/* <TabsTrigger value="withdraw">Withdraw</TabsTrigger> */}
-            <TabsTrigger value="methods" className="text-xs md:text-sm">Payment Methods</TabsTrigger>
+            <TabsTrigger value="methods" className="text-xs md:text-sm">
+              Payment Methods
+            </TabsTrigger>
           </TabsList>
 
           {/* Overview */}
@@ -699,7 +709,9 @@ export default function ProviderEarningsPage() {
                           >
                             <div className="flex items-center space-x-2 md:space-x-3">
                               <div className="w-2 h-2 md:w-3 md:h-3 bg-blue-500 rounded-full flex-shrink-0" />
-                              <span className="font-medium text-sm md:text-base">{month.month}</span>
+                              <span className="font-medium text-sm md:text-base">
+                                {month.month}
+                              </span>
                             </div>
                             <div className="flex items-center space-x-2 md:space-x-4">
                               <span className="text-xs md:text-sm text-gray-500">
@@ -728,7 +740,9 @@ export default function ProviderEarningsPage() {
                 {/* Recent Payments */}
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-base md:text-lg">Recent Payments</CardTitle>
+                    <CardTitle className="text-base md:text-lg">
+                      Recent Payments
+                    </CardTitle>
                     <CardDescription className="text-xs md:text-sm">
                       Your latest payment transactions
                     </CardDescription>
@@ -750,7 +764,9 @@ export default function ProviderEarningsPage() {
                               </AvatarFallback>
                             </Avatar>
                             <div className="min-w-0 flex-1">
-                              <p className="font-medium text-sm md:text-base truncate">{payment.project}</p>
+                              <p className="font-medium text-sm md:text-base truncate">
+                                {payment.project}
+                              </p>
                               <p className="text-xs md:text-sm text-gray-600 truncate">
                                 {payment.client}
                               </p>
@@ -763,7 +779,9 @@ export default function ProviderEarningsPage() {
                             <p className="font-semibold text-sm md:text-base">
                               RM{payment.amount.toLocaleString()}
                             </p>
-                            <Badge className={`${getStatusColor(payment.status)} text-xs mt-1`}>
+                            <Badge
+                              className={`${getStatusColor(payment.status)} text-xs mt-1`}
+                            >
                               {getStatusText(payment.status)}
                             </Badge>
                             <p className="text-xs text-gray-500 mt-1">
@@ -782,7 +800,9 @@ export default function ProviderEarningsPage() {
                 {/* Quick Stats */}
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-base md:text-lg">Quick Stats</CardTitle>
+                    <CardTitle className="text-base md:text-lg">
+                      Quick Stats
+                    </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3 md:space-y-4">
                     <div className="flex items-center justify-between">
@@ -902,7 +922,9 @@ export default function ProviderEarningsPage() {
                           </AvatarFallback>
                         </Avatar>
                         <div className="min-w-0 flex-1">
-                          <p className="font-medium text-sm md:text-base truncate">{payment.project}</p>
+                          <p className="font-medium text-sm md:text-base truncate">
+                            {payment.project}
+                          </p>
                           <p className="text-xs md:text-sm text-gray-600 truncate">
                             {payment.client}
                           </p>
@@ -916,7 +938,9 @@ export default function ProviderEarningsPage() {
                           <p className="font-semibold text-sm md:text-base">
                             RM{payment.amount.toLocaleString()}
                           </p>
-                          <Badge className={`${getStatusColor(payment.status)} text-xs mt-1`}>
+                          <Badge
+                            className={`${getStatusColor(payment.status)} text-xs mt-1`}
+                          >
                             {getStatusText(payment.status)}
                           </Badge>
                         </div>
@@ -926,7 +950,7 @@ export default function ProviderEarningsPage() {
                           className="w-full sm:w-auto text-xs md:text-sm"
                           onClick={() =>
                             router.push(
-                              `/provider/earnings/transactions/${payment.id}`
+                              `/provider/earnings/transactions/${payment.id}`,
                             )
                           }
                         >
@@ -1118,7 +1142,9 @@ export default function ProviderEarningsPage() {
               <CardHeader>
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <div>
-                    <CardTitle className="text-base md:text-lg">Payout Methods</CardTitle>
+                    <CardTitle className="text-base md:text-lg">
+                      Payout Methods
+                    </CardTitle>
                     <CardDescription className="text-xs md:text-sm">
                       Manage your payout methods for withdrawals
                     </CardDescription>
@@ -1179,7 +1205,12 @@ export default function ProviderEarningsPage() {
                                   </p>
                                 </div>
                               </div>
-                              <Badge variant="secondary" className="text-xs flex-shrink-0">{method.type}</Badge>
+                              <Badge
+                                variant="secondary"
+                                className="text-xs flex-shrink-0"
+                              >
+                                {method.type}
+                              </Badge>
                             </div>
                             {displayInfo.details && (
                               <p className="text-xs md:text-sm text-gray-600 mb-4">

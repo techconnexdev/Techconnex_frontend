@@ -15,7 +15,7 @@ const Brand = () => {
 
             <motion.div variants={motionVariants.staggerContainer} initial='start' whileInView='end' className='flex justify-center flex-wrap gap-5 md:gap-10'>
                 {brands.map((brand, index)=>(
-                    <motion.figure variants={motionVariants.fadeInUp} key={index}><Image width={100} height={100} src={brand} alt='brands' className='opacity-[0.6]'></Image></motion.figure>
+                    <motion.figure variants={motionVariants.fadeInUp} key={index}><Image width={80} height={80} src={brand} alt='brands' className='opacity-[0.6]'></Image></motion.figure>
                 ))}
             </motion.div>
         </div>

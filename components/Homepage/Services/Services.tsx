@@ -108,6 +108,7 @@ const iconVariants: Variants = {
 const Services = () => {
   const [isHovered, setIsHovered] = useState(false);
   const [isSmallScreen, setIsSmallScreen] = useState(false);
+  const [mobileInsightsExpanded, setMobileInsightsExpanded] = useState(false);
 
   useEffect(() => {
     const checkScreenSize = () => {
@@ -208,7 +209,13 @@ const Services = () => {
               >
                 <img
                   src={
-                    !isSmallScreen && isHovered ? service2.src : service22.src
+                    isSmallScreen
+                      ? mobileInsightsExpanded
+                        ? service2.src
+                        : service22.src
+                      : isHovered
+                        ? service2.src
+                        : service22.src
                   }
                   className="w-auto h-[70%] max-h-[500px] object-contain transition-opacity duration-300"
                   width={400}
@@ -225,11 +232,18 @@ const Services = () => {
                 transition={{ delay: 0.6, duration: 0.5 }}
               >
                 <h4 className="h4 mb-4">Just Hover!</h4>
-                <p className="body-2 mb-[3rem] text-n-3">
+                <p className="body-2 mb-4 lg:mb-[3rem] text-n-3">
                   Our AI-driven engine extracts and highlights the most relevant
                   details from any profile, allowing you to vet, compare, and
                   decide with unparalleled speed and accuracy.{" "}
                 </p>
+                <button
+                  type="button"
+                  onClick={() => setMobileInsightsExpanded((prev) => !prev)}
+                  className="lg:hidden self-start px-4 py-2 rounded-full text-sm font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
+                >
+                  {mobileInsightsExpanded ? "Hide AI insights" : "Show AI insights"}
+                </button>
               </motion.div>
 
               {/* <PhotoChatMessage /> */}

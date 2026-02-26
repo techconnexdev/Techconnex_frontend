@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -159,93 +159,105 @@ export default function FindProvidersClient({
     fetchProviders();
   }, [searchQuery, ratingFilter, verifiedFilter]);
 
-  // Fetch recommended providers
-  useEffect(() => {
-    const fetchRecommendedProviders = async () => {
-      try {
-        setLoadingRecommended(true);
-        setErrorRecommended(null);
+  // Fetch recommended providers (same 2-hour cache as provider AI Recommended Opportunities)
+  const fetchRecommendedProviders = useCallback(async () => {
+    try {
+      setLoadingRecommended(true);
+      setErrorRecommended(null);
 
-        // Get userId from localStorage to include in API call for saved status
-        const userJson =
-          typeof window !== "undefined" ? localStorage.getItem("user") : null;
-        const userId = (() => {
-          try {
-            return userJson ? JSON.parse(userJson)?.id || "" : "";
-          } catch {
-            return "";
-          }
-        })();
-
-        const params = new URLSearchParams();
-        if (userId) params.append("userId", userId);
-
-        const token =
-          typeof window !== "undefined" ? localStorage.getItem("token") : null;
-
-        const res = await fetch(
-          `${
-            process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"
-          }/providers/recommended?${params.toString()}`,
-          {
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
-          }
-        );
-        const response = await res.json();
-
-        if (response.success) {
-          // Map recommended providers and include profileId if present
-          const raw = response.recommendations || [];
-          const mappedProviders: RecommendedProvider[] = raw.map((provider: Record<string, unknown>) => ({
-            id: provider.id as string,
-            profileId: (provider.profileId as string | undefined) || null,
-            name: provider.name as string,
-            specialty: (provider.major as string | undefined) || "ICT Professional",
-            rating: (provider.rating as number | undefined) || 0,
-            completedJobs: (provider.completedJobs as number | undefined) || 0,
-            hourlyRate: (provider.hourlyRate as number | undefined) || 0,
-            location: (provider.location as string | undefined) || "Malaysia",
-            avatar: getProfileImageUrl(provider.avatar as string | undefined),
-            skills: Array.isArray(provider.skills) ? (provider.skills as string[]) : [],
-            verified: (provider.isVerified as boolean | undefined) || false,
-            saved: (provider.saved as boolean | undefined) || false,
-            matchScore: provider.matchScore as number | undefined,
-            recommendedFor: provider.recommendedForServiceRequest as { title: string } | undefined,
-            // For "AI Recommended" tab: Use the aiExplanation from recommendation API, don't fetch drafts
-            aiExplanation: (provider.aiExplanation as string | undefined) || null,
-            yearsExperience: provider.yearsExperience as number | undefined,
-            successRate: provider.successRate as number | undefined,
-            responseTime: (provider.responseTime as string | undefined) || "",
-            reviewCount: (provider.reviewCount as number | undefined) || 0,
-            availability: (provider.availability as string | undefined) || "",
-            specialties: Array.isArray(provider.specialties) ? (provider.specialties as string[]) : [],
-          }));
-
-          // Don't fetch drafts for recommended providers - use the aiExplanation from the recommendation API
-
-          setRecommendedProviders(mappedProviders);
-          setRecommendationsCacheInfo({
-            cachedAt: response.cachedAt,
-            nextRefreshAt: response.nextRefreshAt,
-          });
-        } else {
-          setRecommendedProviders([]);
+      const userJson =
+        typeof window !== "undefined" ? localStorage.getItem("user") : null;
+      const userId = (() => {
+        try {
+          return userJson ? JSON.parse(userJson)?.id || "" : "";
+        } catch {
+          return "";
         }
-      } catch (err) {
-        console.error("Error fetching recommended providers:", err);
-        setErrorRecommended(
-          err instanceof Error
-            ? err.message
-            : "Failed to fetch recommended providers"
-        );
-        setRecommendedProviders([]);
-      } finally {
-        setLoadingRecommended(false);
-      }
-    };
+      })();
 
-    fetchRecommendedProviders();
+      const params = new URLSearchParams();
+      if (userId) params.append("userId", userId);
+
+      const token =
+        typeof window !== "undefined" ? localStorage.getItem("token") : null;
+
+      const res = await fetch(
+        `${
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"
+        }/providers/recommended?${params.toString()}`,
+        {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        }
+      );
+      const response = await res.json();
+
+      if (response.success) {
+        const raw = response.recommendations || [];
+        const mappedProviders: RecommendedProvider[] = raw.map((provider: Record<string, unknown>) => ({
+          id: provider.id as string,
+          profileId: (provider.profileId as string | undefined) || null,
+          name: provider.name as string,
+          specialty: (provider.major as string | undefined) || "ICT Professional",
+          rating: (provider.rating as number | undefined) || 0,
+          completedJobs: (provider.completedJobs as number | undefined) || 0,
+          hourlyRate: (provider.hourlyRate as number | undefined) || 0,
+          location: (provider.location as string | undefined) || "Malaysia",
+          avatar: getProfileImageUrl(provider.avatar as string | undefined),
+          skills: Array.isArray(provider.skills) ? (provider.skills as string[]) : [],
+          verified: (provider.isVerified as boolean | undefined) || false,
+          saved: (provider.saved as boolean | undefined) || false,
+          matchScore: provider.matchScore as number | undefined,
+          recommendedFor: provider.recommendedForServiceRequest as { title: string } | undefined,
+          aiExplanation: (provider.aiExplanation as string | undefined) || null,
+          yearsExperience: provider.yearsExperience as number | undefined,
+          successRate: provider.successRate as number | undefined,
+          responseTime: (provider.responseTime as string | undefined) || "",
+          reviewCount: (provider.reviewCount as number | undefined) || 0,
+          availability: (provider.availability as string | undefined) || "",
+          workPreference: (provider.workPreference as string | undefined) || "",
+          specialties: Array.isArray(provider.specialties) ? (provider.specialties as string[]) : [],
+        }));
+
+        setRecommendedProviders(mappedProviders);
+        setRecommendationsCacheInfo({
+          cachedAt: response.cachedAt,
+          nextRefreshAt: response.nextRefreshAt,
+        });
+      } else {
+        setRecommendedProviders([]);
+      }
+    } catch (err) {
+      console.error("Error fetching recommended providers:", err);
+      setErrorRecommended(
+        err instanceof Error
+          ? err.message
+          : "Failed to fetch recommended providers"
+      );
+      setRecommendedProviders([]);
+    } finally {
+      setLoadingRecommended(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchRecommendedProviders();
+  }, [fetchRecommendedProviders]);
+
+  // Auto-refresh when 2-hour cache expires (same as provider AI Recommended Opportunities)
+  const fetchRecommendedRef = useRef(fetchRecommendedProviders);
+  fetchRecommendedRef.current = fetchRecommendedProviders;
+  useEffect(() => {
+    const next = recommendationsCacheInfo.nextRefreshAt;
+    if (next == null || typeof next !== "number") return;
+    const now = Date.now();
+    if (next <= now) {
+      fetchRecommendedRef.current();
+      return;
+    }
+    const delay = next - now;
+    const timeoutId = setTimeout(() => fetchRecommendedRef.current(), delay);
+    return () => clearTimeout(timeoutId);
+  }, [recommendationsCacheInfo.nextRefreshAt]);
 
   const filteredProviders = providers; // backend handles filtering
 
@@ -523,6 +535,28 @@ export default function FindProvidersClient({
                             <span className="text-xs text-gray-500 truncate">
                               {provider.location}
                             </span>
+                          </div>
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs sm:text-sm mt-1.5">
+                            <div className="flex items-center gap-2">
+                              <div
+                                className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                                  provider.availability === "Available" ||
+                                  provider.availability === "available"
+                                    ? "bg-green-500"
+                                    : provider.availability === "busy"
+                                    ? "bg-yellow-500"
+                                    : "bg-gray-400"
+                                }`}
+                              />
+                              <span className="text-gray-600 capitalize">
+                                {provider.availability || "—"}
+                              </span>
+                            </div>
+                            {provider.workPreference && (
+                              <span className="text-gray-500 capitalize truncate">
+                                {provider.workPreference}
+                              </span>
+                            )}
                           </div>
                           <div className="flex flex-wrap gap-1 mt-1.5 sm:mt-2">
                             {provider.skills

@@ -186,6 +186,52 @@ export function getUserIdFromToken(): string | null {
   }
 }
 
+// ── AI Support Chat (user-facing)
+export type SupportMessage = {
+  id: string;
+  senderType: "AI" | "HUMAN";
+  senderUserId: string | null;
+  content: string;
+  attachments: string[];
+  metadata?: { handoffTriggered?: boolean; referencesUsed?: unknown };
+  createdAt: string;
+};
+
+export type SupportConversation = {
+  id: string;
+  userId: string;
+  status: string;
+  handoffRequestedAt: string | null;
+  messages: SupportMessage[];
+};
+
+export async function getSupportConversation(): Promise<{ success: boolean; data: SupportConversation }> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : undefined;
+  if (!token) throw new Error("Not authenticated");
+  const res = await fetch(`${API_BASE}/support-chat`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.message || "Failed to load support chat");
+  return data;
+}
+
+export async function sendSupportMessage(content: string, attachmentUrls: string[] = []): Promise<{
+  success: boolean;
+  data: { userMessage: SupportMessage; aiMessage: SupportMessage | null };
+}> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : undefined;
+  if (!token) throw new Error("Not authenticated");
+  const res = await fetch(`${API_BASE}/support-chat/message`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ content, attachmentUrls }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.message || "Failed to send message");
+  return data;
+}
+
 export async function uploadKyc(files: File[], type: "PROVIDER_ID" | "COMPANY_REG" | "COMPANY_DIRECTOR_ID") {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : undefined;
   if (!token) throw new Error("Not authenticated");
@@ -677,6 +723,7 @@ export async function getProviderOpportunities(params?: {
   category?: string;
   skills?: string[];
   search?: string;
+  sort?: "best-match" | "newest";
 }) {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : undefined;
   if (!token) throw new Error("Not authenticated");
@@ -689,6 +736,7 @@ export async function getProviderOpportunities(params?: {
     params.skills.forEach(skill => searchParams.append("skills", skill));
   }
   if (params?.search) searchParams.append("search", params.search);
+  if (params?.sort) searchParams.append("sort", params.sort);
 
   const url = `${API_BASE}/provider/opportunities${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
   
@@ -860,6 +908,22 @@ export async function getCompanyProjectRequests(params?: {
   
   const data = await res.json();
   if (!res.ok) throw new Error(data?.message || "Failed to fetch project requests");
+  return data;
+}
+
+/** Fetch AI explanation for why a bid is a good fit (for hover in Bids tab). */
+export async function getBidExplanation(proposalId: string): Promise<{ success: boolean; explanation?: string }> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : undefined;
+  if (!token) throw new Error("Not authenticated");
+  const res = await fetch(
+    `${API_BASE}/company/project-requests/${proposalId}/bid-explanation`,
+    {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.message || "Failed to fetch explanation");
   return data;
 }
 
@@ -1218,7 +1282,12 @@ export type Milestone = {
   title: string;
   description?: string;
   amount: number;
-  dueDate: string; // ISO
+  dueDate?: string; // ISO (computed from startedAt + daysFromStart when locked)
+  daysFromStart?: number; // Days after project start (primary)
+  /** UI-only: duration amount for "due in X days/weeks/months" before conversion to daysFromStart */
+  durationAmount?: string;
+  /** UI-only: duration unit for "due in X days/weeks/months" before conversion to daysFromStart */
+  durationUnit?: "day" | "week" | "month" | "";
   status?: string;
   order?: number;
   completedAt?: string;
@@ -1253,6 +1322,7 @@ export async function getCompanyProjectMilestones(projectId: string) {
       description: string;
       amount: number;
       dueDate: string;
+      daysFromStart?: number;
       order: number;
       status: string;
       startDeliverables?: unknown;
@@ -1398,18 +1468,22 @@ export async function approveProviderMilestones(projectId: string) {
 }
 
 // Provider search API functions
-export async function getRecommendedProviders() {
+/** Fetch AI-recommended providers. When serviceRequestId is set, returns top 5 for that opportunity only (same algorithm everywhere). */
+export async function getRecommendedProviders(serviceRequestId?: string) {
   const token = getToken();
   if (!token) throw new Error("Not authenticated");
 
-  const res = await fetch(`${API_BASE}/providers/recommended`, {
+  const url = serviceRequestId
+    ? `${API_BASE}/providers/recommended?serviceRequestId=${encodeURIComponent(serviceRequestId)}`
+    : `${API_BASE}/providers/recommended`;
+  const res = await fetch(url, {
     method: "GET",
     headers: {
       "Authorization": `Bearer ${token}`,
       "Content-Type": "application/json",
     },
   });
-  
+
   const data = await res.json();
   if (!res.ok) throw new Error(data?.message || "Failed to fetch recommended providers");
   return data;
@@ -2450,6 +2524,171 @@ export async function getAdminDisputeStats() {
   return data;
 }
 
+export async function getAdminConversationReports(filters?: {
+  status?: string;
+  search?: string;
+}) {
+  const token = getToken();
+  if (!token) throw new Error("Not authenticated");
+
+  const params = new URLSearchParams();
+  if (filters?.status) params.append("status", filters.status);
+  if (filters?.search) params.append("search", filters.search);
+
+  const res = await fetch(
+    `${API_BASE}/admin/conversation-reports?${params.toString()}`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+
+  const data = await res.json();
+  if (!res.ok)
+    throw new Error(data?.message || "Failed to fetch conversation reports");
+  return data;
+}
+
+export async function checkCanChatWithUser(otherUserId: string) {
+  const token = getToken();
+  if (!token) throw new Error("Not authenticated");
+
+  const res = await fetch(
+    `${API_BASE}/messages/can-chat?otherUserId=${encodeURIComponent(otherUserId)}`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.message || "Failed to check");
+  return data;
+}
+
+export async function getAdminConversationReportById(reportId: string) {
+  const token = getToken();
+  if (!token) throw new Error("Not authenticated");
+
+  const res = await fetch(
+    `${API_BASE}/admin/conversation-reports/${reportId}`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+
+  const data = await res.json();
+  if (!res.ok)
+    throw new Error(data?.message || "Failed to fetch report");
+  return data;
+}
+
+export async function getAdminConversationReportMessages(reportId: string) {
+  const token = getToken();
+  if (!token) throw new Error("Not authenticated");
+
+  const res = await fetch(
+    `${API_BASE}/admin/conversation-reports/${reportId}/messages`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+
+  const data = await res.json();
+  if (!res.ok)
+    throw new Error(data?.message || "Failed to fetch messages");
+  return data;
+}
+
+export async function getAdminConversationReportStats() {
+  const token = getToken();
+  if (!token) throw new Error("Not authenticated");
+
+  const res = await fetch(`${API_BASE}/admin/conversation-reports/stats`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  const data = await res.json();
+  if (!res.ok)
+    throw new Error(
+      data?.message || "Failed to fetch conversation report stats"
+    );
+  return data;
+}
+
+export async function updateConversationReportStatus(
+  reportId: string,
+  status: string
+) {
+  const token = getToken();
+  if (!token) throw new Error("Not authenticated");
+
+  const res = await fetch(
+    `${API_BASE}/admin/conversation-reports/${reportId}/status`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ status }),
+    }
+  );
+
+  const data = await res.json();
+  if (!res.ok)
+    throw new Error(data?.message || "Failed to update report status");
+  return data;
+}
+
+export async function adminSendNotification({
+  userId,
+  title,
+  content,
+}: {
+  userId: string;
+  title: string;
+  content: string;
+}) {
+  const token = getToken();
+  if (!token) throw new Error("Not authenticated");
+
+  const res = await fetch(
+    `${API_BASE}/admin/conversation-reports/send-notification`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ userId, title, content }),
+    }
+  );
+
+  const data = await res.json();
+  if (!res.ok)
+    throw new Error(data?.message || "Failed to send notification");
+  return data;
+}
+
 export async function getAdminDisputeById(disputeId: string) {
   const token = getToken();
   if (!token) throw new Error("Not authenticated");
@@ -2482,6 +2721,96 @@ export async function resolveDispute(disputeId: string, status: string, resoluti
   
   const data = await res.json();
   if (!res.ok) throw new Error(data?.error || "Failed to resolve dispute");
+  return data;
+}
+
+// Admin AI Support
+export async function getAdminSupportConversations(status?: string) {
+  const token = getToken();
+  if (!token) throw new Error("Not authenticated");
+  const q = status ? `?status=${encodeURIComponent(status)}` : "";
+  const res = await fetch(`${API_BASE}/admin/support/conversations${q}`, {
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.message || "Failed to fetch conversations");
+  return data;
+}
+
+export async function getAdminSupportConversation(id: string) {
+  const token = getToken();
+  if (!token) throw new Error("Not authenticated");
+  const res = await fetch(`${API_BASE}/admin/support/conversations/${id}`, {
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.message || "Failed to fetch conversation");
+  return data;
+}
+
+export async function sendAdminSupportMessage(conversationId: string, content: string, attachmentUrls: string[] = []) {
+  const token = getToken();
+  if (!token) throw new Error("Not authenticated");
+  const res = await fetch(`${API_BASE}/admin/support/conversations/${conversationId}/message`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ content, attachmentUrls }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.message || "Failed to send message");
+  return data;
+}
+
+export async function updateAdminSupportConversationStatus(conversationId: string, status: string) {
+  const token = getToken();
+  if (!token) throw new Error("Not authenticated");
+  const res = await fetch(`${API_BASE}/admin/support/conversations/${conversationId}`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.message || "Failed to update conversation");
+  return data;
+}
+
+export async function getAdminSupportReferences() {
+  const token = getToken();
+  if (!token) throw new Error("Not authenticated");
+  const res = await fetch(`${API_BASE}/admin/support/references`, {
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.message || "Failed to fetch references");
+  return data;
+}
+
+export async function uploadAdminSupportReference(file: File, slug: string, name: string) {
+  const token = getToken();
+  if (!token) throw new Error("Not authenticated");
+  const form = new FormData();
+  form.append("file", file);
+  form.append("slug", slug);
+  form.append("name", name);
+  const res = await fetch(`${API_BASE}/admin/support/references/upload`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.message || "Failed to upload reference");
+  return data;
+}
+
+export async function reindexAdminSupportReference(documentId: string) {
+  const token = getToken();
+  if (!token) throw new Error("Not authenticated");
+  const res = await fetch(`${API_BASE}/admin/support/references/${documentId}/reindex`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.message || "Failed to reindex");
   return data;
 }
 
