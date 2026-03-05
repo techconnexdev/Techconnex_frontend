@@ -16,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Bell, Shield, CreditCard, Trash2 } from "lucide-react";
 import { CustomerLayout } from "@/components/customer-layout";
+import { CustomerSettingsTour } from "@/components/customer/CustomerSettingsTour";
 import { Loader2 } from "lucide-react";
 
 type NotificationSettings = {
@@ -44,7 +45,8 @@ type Payment = {
 
 export default function CustomerSettingsPage() {
   const [loading, setLoading] = useState(true);
-  const [notifications, setNotifications] = useState<NotificationSettings | null>(null);
+  const [notifications, setNotifications] =
+    useState<NotificationSettings | null>(null);
   const [privacy, setPrivacy] = useState<PrivacySettings | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -66,7 +68,7 @@ export default function CustomerSettingsPage() {
   const handleDeleteAccount = async () => {
     // Step 1: Confirm user intention
     const confirmDelete = window.confirm(
-      "⚠️ Are you sure you want to permanently delete your account? This action cannot be undone."
+      "⚠️ Are you sure you want to permanently delete your account? This action cannot be undone.",
     );
     if (!confirmDelete) return;
 
@@ -118,7 +120,7 @@ export default function CustomerSettingsPage() {
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify(notifications),
-        }
+        },
       );
 
       const data = await response.json();
@@ -127,7 +129,7 @@ export default function CustomerSettingsPage() {
         setMessage("✅ Notification preferences updated successfully!");
       } else {
         setMessage(
-          `❌ Failed to update notifications: ${data.message || "Error"}`
+          `❌ Failed to update notifications: ${data.message || "Error"}`,
         );
       }
     } catch (error) {
@@ -228,7 +230,7 @@ export default function CustomerSettingsPage() {
 
     if (strength.score < 5) {
       setPasswordMessage(
-        `Password must be stronger. Missing: ${strength.feedback.join(", ")}.`
+        `Password must be stronger. Missing: ${strength.feedback.join(", ")}.`,
       );
       setPasswordSuccess(false);
       return;
@@ -368,9 +370,10 @@ export default function CustomerSettingsPage() {
 
   return (
     <CustomerLayout>
+      <CustomerSettingsTour />
       <div className="space-y-8">
         {/* Header */}
-        <div>
+        <div data-tour-step="0">
           <h1 className="text-3xl font-bold text-gray-900">Settings</h1>
           <p className="text-gray-600">
             Manage your account settings and preferences
@@ -380,9 +383,13 @@ export default function CustomerSettingsPage() {
         <Tabs defaultValue="privacy" className="space-y-6">
           <TabsList className="grid w-full grid-cols-2">
             {/* <TabsTrigger value="notifications">Notifications</TabsTrigger> */}
-            <TabsTrigger value="privacy">Privacy</TabsTrigger>
+            <TabsTrigger value="privacy" data-tour-step="1">
+              Privacy
+            </TabsTrigger>
             {/* <TabsTrigger value="billing">Billing</TabsTrigger> */}
-            <TabsTrigger value="security">Security</TabsTrigger>
+            <TabsTrigger value="security" data-tour-step="2">
+              Security
+            </TabsTrigger>
           </TabsList>
 
           {/* Notifications */}
@@ -530,7 +537,7 @@ export default function CustomerSettingsPage() {
 
           {/* Privacy */}
           <TabsContent value="privacy">
-            <Card>
+            <Card data-tour-step="priv-card">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Shield className="w-5 h-5" />
@@ -556,7 +563,8 @@ export default function CustomerSettingsPage() {
                       checked={privacy?.showEmail ?? false}
                       onCheckedChange={(checked) =>
                         setPrivacy((prev) => ({
-                          profileVisibility: prev?.profileVisibility ?? "public",
+                          profileVisibility:
+                            prev?.profileVisibility ?? "public",
                           showEmail: checked,
                           showPhone: prev?.showPhone ?? false,
                           allowMessages: prev?.allowMessages ?? false,
@@ -577,7 +585,8 @@ export default function CustomerSettingsPage() {
                       checked={privacy?.showPhone ?? false}
                       onCheckedChange={(checked) =>
                         setPrivacy((prev) => ({
-                          profileVisibility: prev?.profileVisibility ?? "public",
+                          profileVisibility:
+                            prev?.profileVisibility ?? "public",
                           showEmail: prev?.showEmail ?? false,
                           showPhone: checked,
                           allowMessages: prev?.allowMessages ?? false,
@@ -600,7 +609,8 @@ export default function CustomerSettingsPage() {
                       checked={privacy?.allowMessages ?? false}
                       onCheckedChange={(checked) =>
                         setPrivacy((prev) => ({
-                          profileVisibility: prev?.profileVisibility ?? "public",
+                          profileVisibility:
+                            prev?.profileVisibility ?? "public",
                           showEmail: prev?.showEmail ?? false,
                           showPhone: prev?.showPhone ?? false,
                           allowMessages: checked,
@@ -709,7 +719,9 @@ export default function CustomerSettingsPage() {
                       onChange={(e) => {
                         setNewPassword(e.target.value);
                         if (e.target.value) {
-                          setPasswordStrength(validatePasswordStrength(e.target.value));
+                          setPasswordStrength(
+                            validatePasswordStrength(e.target.value),
+                          );
                         } else {
                           setPasswordStrength({ score: 0, feedback: [] });
                         }
@@ -726,8 +738,8 @@ export default function CustomerSettingsPage() {
                                   ? passwordStrength.score <= 2
                                     ? "bg-red-500"
                                     : passwordStrength.score <= 3
-                                    ? "bg-yellow-500"
-                                    : "bg-green-500"
+                                      ? "bg-yellow-500"
+                                      : "bg-green-500"
                                   : "bg-gray-200"
                               }`}
                             />

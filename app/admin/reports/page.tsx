@@ -365,11 +365,11 @@ export default function AdminReportsPage() {
               <span className="hidden sm:inline">Export Report</span>
               <span className="sm:hidden">Export</span>
             </Button>
-            <Button className="w-full sm:w-auto">
+            {/* <Button className="w-full sm:w-auto">
               <BarChart3 className="w-4 h-4 mr-2" />
               <span className="hidden sm:inline">Advanced Analytics</span>
               <span className="sm:hidden">Analytics</span>
-            </Button>
+            </Button> */}
           </div>
         </div>
 

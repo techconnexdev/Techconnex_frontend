@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Bot, ChevronDown, MoreHorizontal } from "lucide-react";
+import { Bot, ChevronDown } from "lucide-react";
 import { SupportChatClient } from "./SupportChatClient";
 
 const PANEL_WIDTH = 380;
@@ -33,7 +33,7 @@ export function SupportChatWidget() {
         type="button"
         onClick={toggle}
         aria-label={open ? "Close chat" : "Open AI support chat"}
-        className="fixed bottom-6 right-6 z-[9998] flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-all hover:scale-105 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+        className="fixed bottom-6 right-6 z-[9998] flex h-14 w-14 items-center justify-center rounded-full bg-blue-700 text-white shadow-lg transition-all hover:scale-105 hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-700 focus:ring-offset-2"
       >
         <Bot className="h-7 w-7" />
       </button>
@@ -41,7 +41,7 @@ export function SupportChatWidget() {
       {/* Overlay on mobile when open */}
       {open && isMobile && (
         <div
-          className="fixed inset-0 z-[9997] bg-black/40"
+          className="fixed inset-0 z-[9997] bg-blue-700/40"
           aria-hidden
           onClick={close}
         />
@@ -84,7 +84,7 @@ export function SupportChatWidget() {
         }
       >
         {/* Header */}
-        <div className="flex shrink-0 items-center justify-between gap-2 rounded-t-2xl bg-gradient-to-br from-primary/90 to-primary/70 px-4 py-3 text-primary-foreground">
+        <div className="flex shrink-0 items-center justify-between gap-2 rounded-t-2xl bg-gradient-to-br from-blue-700 to-blue-800 px-4 py-3 text-white">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/20">
               <Bot className="h-5 w-5" />
@@ -104,15 +104,7 @@ export function SupportChatWidget() {
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 text-primary-foreground hover:bg-white/20"
-              aria-label="More options"
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-primary-foreground hover:bg-white/20"
+              className="h-8 w-8 text-white hover:bg-white/20"
               aria-label="Minimize chat"
               onClick={close}
             >

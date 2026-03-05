@@ -5,9 +5,20 @@ import { useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AdminLayout } from "@/components/admin-layout"
-import { getAdminUserById, suspendUser, activateUser, updateAdminUser, getResumeByUserId, getR2DownloadUrl } from "@/lib/api"
+import { getAdminUserById, suspendUser, activateUser, updateAdminUser, getResumeByUserId, getR2DownloadUrl, adminSendNotification } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 import { Loader2 } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import Link from "next/link"
 import { UserHeader } from "@/components/admin/users/UserHeader"
 import { StatusBadges } from "@/components/admin/users/StatusBadges"
@@ -38,6 +49,9 @@ export default function AdminUserDetailPage() {
   const [formData, setFormData] = useState<UserFormData | null>(null)
   const [resume, setResume] = useState<{ fileUrl: string; uploadedAt: string } | null>(null)
   const [loadingResume, setLoadingResume] = useState(false)
+  const [notifyOpen, setNotifyOpen] = useState(false)
+  const [notifyTitle, setNotifyTitle] = useState("")
+  const [notifyContent, setNotifyContent] = useState("")
 
   const loadUserData = useCallback(async () => {
     try {
@@ -287,6 +301,40 @@ export default function AdminUserDetailPage() {
     }
   }
 
+  const openNotifyDialog = () => {
+    setNotifyTitle("Message from TechConnex")
+    setNotifyContent("")
+    setNotifyOpen(true)
+  }
+
+  const handleSendNotification = async () => {
+    if (!notifyTitle.trim() || !notifyContent.trim()) return
+
+    try {
+      setActionLoading(true)
+      await adminSendNotification({
+        userId,
+        title: notifyTitle.trim(),
+        content: notifyContent.trim(),
+      })
+      toast({
+        title: "Success",
+        description: "Notification sent successfully",
+      })
+      setNotifyOpen(false)
+      setNotifyTitle("")
+      setNotifyContent("")
+    } catch (error: unknown) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to send notification",
+        variant: "destructive",
+      })
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
   if (loading) {
     return (
       <AdminLayout>
@@ -497,6 +545,7 @@ export default function AdminUserDetailPage() {
           onSave={handleSave}
           onSuspend={handleSuspend}
           onActivate={handleActivate}
+          onSendNotification={openNotifyDialog}
         />
 
         <StatusBadges
@@ -567,6 +616,61 @@ export default function AdminUserDetailPage() {
             </TabsContent>
           )}
         </Tabs>
+
+        {/* Send notification dialog */}
+        <Dialog open={notifyOpen} onOpenChange={setNotifyOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Send notification</DialogTitle>
+              <DialogDescription>
+                Send a notification to {userName}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="notify-title">Title</Label>
+                <Input
+                  id="notify-title"
+                  value={notifyTitle}
+                  onChange={(e) => setNotifyTitle(e.target.value)}
+                  placeholder="Notification title"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="notify-content">Message</Label>
+                <Textarea
+                  id="notify-content"
+                  className="min-h-[100px]"
+                  value={notifyContent}
+                  onChange={(e) => setNotifyContent(e.target.value)}
+                  placeholder="Notification message"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setNotifyOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSendNotification}
+                disabled={
+                  !notifyTitle.trim() ||
+                  !notifyContent.trim() ||
+                  actionLoading
+                }
+              >
+                {actionLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  "Send"
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </AdminLayout>
   )

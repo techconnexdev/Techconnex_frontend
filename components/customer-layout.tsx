@@ -12,15 +12,13 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
   getNotificationCategory,
   DISPLAY_CATEGORIES,
   CATEGORY_LABELS,
+  CATEGORY_COLORS,
 } from "@/lib/notification-categories";
 import {
   Dialog,
@@ -32,7 +30,6 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import {
-  Zap,
   Home,
   Briefcase,
   Users,
@@ -47,11 +44,15 @@ import {
   ClipboardList,
   Wallet,
   Star,
+  ChevronLeft,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { getProfileImageUrl, getUnreadMessageCount } from "@/lib/api";
 import { SupportChatWidget } from "@/components/support/SupportChatWidget";
+import { CustomerCompletionProvider } from "@/contexts/CustomerCompletionContext";
+import { CompanyProfileCompletionWidget } from "@/components/customer/CompanyProfileCompletionWidget";
+import Image from "next/image";
 
 interface CustomerLayoutProps {
   children: React.ReactNode;
@@ -130,6 +131,19 @@ export function CustomerLayout({ children }: CustomerLayoutProps) {
       try {
         const parsedUser = JSON.parse(user);
         const userId = parsedUser?.id;
+        const roles = Array.isArray(parsedUser?.role) ? parsedUser.role : (parsedUser?.role ? [parsedUser.role] : []);
+
+        // Only customers (company) can access customer/company routes
+        if (!roles.includes("CUSTOMER")) {
+          if (roles.includes("PROVIDER")) {
+            router.push("/provider/dashboard");
+          } else if (roles.includes("ADMIN")) {
+            router.push("/admin/dashboard");
+          } else {
+            router.push("/auth/login");
+          }
+          return;
+        }
 
         if (userId) {
           const API_URL =
@@ -164,6 +178,7 @@ export function CustomerLayout({ children }: CustomerLayoutProps) {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedNotification, setSelectedNotification] =
     useState<Notification | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   // Unread message count state
   const [unreadMessageCount, setUnreadMessageCount] = useState(0);
@@ -316,6 +331,7 @@ export function CustomerLayout({ children }: CustomerLayoutProps) {
     pathname === href || pathname.startsWith(href + "/");
 
   return (
+    <CustomerCompletionProvider>
     <div className="min-h-screen bg-gray-50">
       {/* Mobile sidebar */}
       <div
@@ -330,9 +346,13 @@ export function CustomerLayout({ children }: CustomerLayoutProps) {
         <div className="fixed inset-y-0 left-0 flex w-full max-w-xs flex-col bg-white">
           <div className="flex h-16 items-center justify-between px-4 border-b">
             <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                <Zap className="w-5 h-5 text-white" />
-              </div>
+              <Image
+                src="/logo.png"
+                alt="TechConnex"
+                width={40}
+                height={40}
+                className="h-10 w-10 rounded-xl object-contain"
+              />
               <span className="text-xl font-bold text-gray-900">
                 Techconnex
               </span>
@@ -371,13 +391,20 @@ export function CustomerLayout({ children }: CustomerLayoutProps) {
       </div>
 
       {/* Desktop sidebar */}
-      <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
+      <div
+        className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col"
+        data-tour-step="5"
+      >
         <div className="flex flex-col flex-grow bg-white border-r border-gray-200">
           <div className="flex items-center h-16 px-4 border-b">
             <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                <Zap className="w-5 h-5 text-white" />
-              </div>
+              <Image
+                src="/logo.png"
+                alt="TechConnex"
+                width={40}
+                height={40}
+                className="h-10 w-10 rounded-xl object-contain"
+              />
               <span className="text-xl font-bold text-gray-900">
                 Techconnex
               </span>
@@ -433,8 +460,11 @@ export function CustomerLayout({ children }: CustomerLayoutProps) {
               </div> */}
             </div>
 
-            <div className="flex items-center space-x-4">
-              <DropdownMenu>
+            <div className="flex items-center space-x-2 sm:space-x-4">
+              <CompanyProfileCompletionWidget />
+              <DropdownMenu
+                onOpenChange={(open) => !open && setSelectedCategory(null)}
+              >
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="sm" className="relative">
                     <Bell className="w-5 h-5" />
@@ -443,86 +473,133 @@ export function CustomerLayout({ children }: CustomerLayoutProps) {
                     </Badge>
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-64" align="end" forceMount>
-                  <DropdownMenuLabel className="font-medium text-gray-900">
-                    Notifications
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {notificationsLoading ? (
-                    <DropdownMenuItem disabled>Loading...</DropdownMenuItem>
-                  ) : notifications.length > 0 ? (
-                    DISPLAY_CATEGORIES.map(
-                      (category) =>
-                        notificationsByCategory[category]?.length > 0 && (
-                          <DropdownMenuSub key={category}>
-                            <DropdownMenuSubTrigger>
-                              <span className="font-medium">
-                                {CATEGORY_LABELS[category]}
-                              </span>
-                              <span className="ml-auto text-xs text-muted-foreground">
-                                {notificationsByCategory[category].length}
-                              </span>
-                            </DropdownMenuSubTrigger>
-                            <DropdownMenuSubContent
-                              className="w-80 max-h-[400px] overflow-y-auto"
-                              sideOffset={4}
+                <DropdownMenuContent
+                  className="w-80 min-h-[200px] max-h-[420px] p-0"
+                  align="end"
+                  forceMount
+                >
+                  <div className="flex flex-col">
+                    <div className="px-4 py-3 border-b">
+                      <DropdownMenuLabel className="font-medium text-gray-900 p-0">
+                        {selectedCategory ? (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedCategory(null)}
+                            className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 -ml-1"
+                          >
+                            <ChevronLeft className="w-4 h-4" />
+                            {CATEGORY_LABELS[selectedCategory as keyof typeof CATEGORY_LABELS]}
+                          </button>
+                        ) : (
+                          "Notifications"
+                        )}
+                      </DropdownMenuLabel>
+                    </div>
+                    <div className="overflow-y-auto max-h-[360px]">
+                      {notificationsLoading ? (
+                        <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+                          Loading...
+                        </div>
+                      ) : notifications.length === 0 ? (
+                        <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+                          No notifications
+                        </div>
+                      ) : selectedCategory ? (
+                        (notificationsByCategory[selectedCategory] ?? []).map(
+                          (n) => (
+                            <DropdownMenuItem
+                              key={n.id}
+                              onClick={() => handleNotificationClick(n)}
+                              className={`flex flex-col items-start gap-1 py-3 px-4 rounded-none border-b last:border-b-0 cursor-pointer ${
+                                n.isRead ? "opacity-60" : ""
+                              }`}
                             >
-                              {notificationsByCategory[category].map((n) => (
-                                <DropdownMenuItem
-                                  key={n.id}
-                                  onClick={() => handleNotificationClick(n)}
-                                  className={n.isRead ? "opacity-50" : ""}
+                              <span className="font-medium text-left">
+                                {n.count > 1 ? (
+                                  n.type === "proposal" &&
+                                  n.eventType === "new_proposal" ? (
+                                    <>
+                                      You received {n.count} new proposals for
+                                      &quot;{n.projectName}&quot;
+                                    </>
+                                  ) : n.type === "milestone" ? (
+                                    <>
+                                      {n.count} milestone updates for &quot;
+                                      {n.projectName}&quot;
+                                    </>
+                                  ) : (
+                                    <>
+                                      {n.title} for &quot;{n.projectName}&quot;
+                                      (+{n.count - 1} more)
+                                    </>
+                                  )
+                                ) : (
+                                  String(n.title)
+                                )}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {new Date(n.latestAt).toLocaleString()}
+                              </span>
+                              {n.count === 1 && (
+                                <span className="text-sm text-gray-600 line-clamp-2 text-left">
+                                  {String(n.content)}
+                                </span>
+                              )}
+                            </DropdownMenuItem>
+                          ),
+                        )
+                      ) : (
+                        <div className="py-2">
+                          {DISPLAY_CATEGORIES.filter(
+                            (cat) =>
+                              (notificationsByCategory[cat]?.length ?? 0) > 0,
+                          ).map((category) => {
+                            const count =
+                              notificationsByCategory[category]?.length ?? 0;
+                            const unreadCount =
+                              notificationsByCategory[category]?.filter(
+                                (n) => !n.isRead,
+                              ).length ?? 0;
+                            const color =
+                              CATEGORY_COLORS[
+                                category as keyof typeof CATEGORY_COLORS
+                              ];
+                            return (
+                              <button
+                                key={category}
+                                type="button"
+                                onClick={() => setSelectedCategory(category)}
+                                className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors border-l-4"
+                                style={{
+                                  borderLeftColor: color,
+                                }}
+                              >
+                                <div
+                                  className="w-3 h-3 rounded-full shrink-0"
+                                  style={{ backgroundColor: color }}
+                                />
+                                <span className="flex-1 font-medium text-gray-900">
+                                  {CATEGORY_LABELS[
+                                    category as keyof typeof CATEGORY_LABELS
+                                  ]}
+                                </span>
+                                <Badge
+                                  variant={unreadCount > 0 ? "default" : "secondary"}
+                                  className={
+                                    unreadCount > 0
+                                      ? "bg-red-500"
+                                      : "bg-gray-200 text-gray-700"
+                                  }
                                 >
-                                  <div className="flex flex-col space-y-1 w-full">
-                                    <span className="font-medium">
-                                      {n.count > 1 ? (
-                                        n.type === "proposal" &&
-                                        n.eventType === "new_proposal" ? (
-                                          <>
-                                            You received {n.count} new proposals
-                                            for &quot;{n.projectName}&quot;
-                                          </>
-                                        ) : n.type === "milestone" ? (
-                                          <>
-                                            {n.count} milestone updates for
-                                            &quot;{n.projectName}&quot;
-                                          </>
-                                        ) : (
-                                          <>
-                                            {n.title} for &quot;{n.projectName}
-                                            &quot; (+{n.count - 1} more)
-                                          </>
-                                        )
-                                      ) : (
-                                        String(n.title)
-                                      )}
-                                    </span>
-                                    <span className="text-xs text-muted-foreground">
-                                      {new Date(n.latestAt).toLocaleString()}
-                                    </span>
-                                    {n.count === 1 && (
-                                      <span className="text-sm text-gray-600 line-clamp-2">
-                                        {String(n.content)}
-                                      </span>
-                                    )}
-                                  </div>
-                                </DropdownMenuItem>
-                              ))}
-                            </DropdownMenuSubContent>
-                          </DropdownMenuSub>
-                        ),
-                    )
-                  ) : (
-                    <DropdownMenuItem disabled>
-                      No notifications
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuSeparator />
-                  {/* <DropdownMenuItem
-                    onClick={() => router.push("/customer/notifications")}
-                  >
-                    View All
-                  </DropdownMenuItem> */}
+                                  {count}
+                                </Badge>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </DropdownMenuContent>
               </DropdownMenu>
 
@@ -659,5 +736,6 @@ export function CustomerLayout({ children }: CustomerLayoutProps) {
 
       <SupportChatWidget />
     </div>
+    </CustomerCompletionProvider>
   );
 }

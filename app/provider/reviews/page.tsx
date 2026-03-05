@@ -38,6 +38,7 @@ import {
   Award,
 } from "lucide-react";
 import { ProviderLayout } from "@/components/provider-layout";
+import { ProviderReviewsTour } from "@/components/provider/ProviderReviewsTour";
 import { useToast } from "@/hooks/use-toast";
 import {
   useProviderReviews,
@@ -78,7 +79,7 @@ const initialReviewForm: ProviderReviewFormState = {
 
 const computeProviderOverallRating = (form: ProviderReviewFormState) => {
   const ratings = PROVIDER_CATEGORY_KEYS.map((key) => form[key]).filter(
-    (value) => value > 0
+    (value) => value > 0,
   );
   if (ratings.length !== PROVIDER_CATEGORY_KEYS.length) {
     return 0;
@@ -94,7 +95,7 @@ const hasAllProviderCategoryRatings = (form: ProviderReviewFormState) =>
 export default function ProviderReviewsPage() {
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<"given" | "received" | "pending">(
-    "given"
+    "given",
   );
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedRating, setSelectedRating] = useState("all");
@@ -114,7 +115,7 @@ export default function ProviderReviewsPage() {
         selectedRating === "all" ? undefined : parseInt(selectedRating, 10),
       sortBy,
     }),
-    [searchTerm, selectedRating, sortBy]
+    [searchTerm, selectedRating, sortBy],
   );
 
   const {
@@ -148,7 +149,7 @@ export default function ProviderReviewsPage() {
 
   const availableProjectsForReview = useMemo(
     () => completedProjects,
-    [completedProjects]
+    [completedProjects],
   );
 
   const stats = useMemo(
@@ -158,7 +159,7 @@ export default function ProviderReviewsPage() {
       pendingReviews:
         statistics?.pendingReviews ?? availableProjectsForReview.length,
     }),
-    [statistics, availableProjectsForReview.length]
+    [statistics, availableProjectsForReview.length],
   );
 
   const handleReviewFormChange = (values: Partial<ProviderReviewFormState>) => {
@@ -191,7 +192,8 @@ export default function ProviderReviewsPage() {
     if (!targetProjectId) {
       toast({
         title: "No companies available",
-        description: "All completed and disputed projects already have reviews.",
+        description:
+          "All completed and disputed projects already have reviews.",
       });
       return;
     }
@@ -234,7 +236,7 @@ export default function ProviderReviewsPage() {
 
   const handleDeleteReview = async (reviewId: string) => {
     const confirmed = window.confirm(
-      "Delete this review? This action cannot be undone."
+      "Delete this review? This action cannot be undone.",
     );
     if (!confirmed) return;
 
@@ -249,14 +251,15 @@ export default function ProviderReviewsPage() {
     } catch (error: unknown) {
       toast({
         title: "Unable to delete review",
-        description: error instanceof Error ? error.message : "Please try again later.",
+        description:
+          error instanceof Error ? error.message : "Please try again later.",
         variant: "destructive",
       });
     }
   };
 
   const handleSubmitReview = async (
-    event: React.FormEvent<HTMLFormElement>
+    event: React.FormEvent<HTMLFormElement>,
   ) => {
     event.preventDefault();
 
@@ -294,7 +297,7 @@ export default function ProviderReviewsPage() {
             timelinessRating: reviewForm.paymentRating,
             professionalismRating: reviewForm.professionalismRating,
           },
-          true
+          true,
         );
 
         toast({
@@ -303,12 +306,12 @@ export default function ProviderReviewsPage() {
         });
       } else {
         const selectedProject = availableProjectsForReview.find(
-          (project) => project.id === reviewForm.projectId
+          (project) => project.id === reviewForm.projectId,
         );
 
         if (!selectedProject || !selectedProject.customer?.id) {
           throw new Error(
-            "We could not match the selected project with a company."
+            "We could not match the selected project with a company.",
           );
         }
 
@@ -323,7 +326,7 @@ export default function ProviderReviewsPage() {
             paymentRating: reviewForm.paymentRating,
             professionalismRating: reviewForm.professionalismRating,
           },
-          true
+          true,
         );
 
         toast({
@@ -336,7 +339,8 @@ export default function ProviderReviewsPage() {
       refetchGivenReviews();
       refetchProjects();
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Unable to save your review.";
+      const message =
+        error instanceof Error ? error.message : "Unable to save your review.";
       toast({
         title: message.includes("already exists")
           ? "Review already submitted"
@@ -378,7 +382,8 @@ export default function ProviderReviewsPage() {
     } catch (error: unknown) {
       toast({
         title: "Unable to post reply",
-        description: error instanceof Error ? error.message : "Please try again.",
+        description:
+          error instanceof Error ? error.message : "Please try again.",
         variant: "destructive",
       });
     }
@@ -386,8 +391,9 @@ export default function ProviderReviewsPage() {
 
   return (
     <ProviderLayout>
+      <ProviderReviewsTour />
       <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between" data-tour-step="0">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
               Reviews & Feedback
@@ -403,13 +409,14 @@ export default function ProviderReviewsPage() {
               projectsLoading || availableProjectsForReview.length === 0
             }
             className="w-full sm:w-auto"
+            data-tour-step="1"
           >
             <Plus className="mr-2 h-4 w-4" />
             Write Review
           </Button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6" data-tour-step="2">
           <StatsCard
             title="Total Reviews"
             value={
@@ -422,7 +429,9 @@ export default function ProviderReviewsPage() {
           />
           <StatsCard
             title="Average Rating"
-            value={statsLoading ? "…" : stats.averageRating.toFixed(1) ?? "0.0"}
+            value={
+              statsLoading ? "…" : (stats.averageRating.toFixed(1) ?? "0.0")
+            }
             icon={<Star className="h-8 w-8 text-yellow-500" />}
             helper="From reviews received by companies"
           />
@@ -438,7 +447,7 @@ export default function ProviderReviewsPage() {
           />
         </div>
 
-        <Card>
+        <Card data-tour-step="3">
           <CardContent className="p-4 sm:p-6">
             <div className="flex flex-col gap-3 sm:gap-4 lg:flex-row lg:items-center">
               <div className="flex flex-1 items-center gap-2">
@@ -451,7 +460,10 @@ export default function ProviderReviewsPage() {
                 />
               </div>
               <div className="flex flex-col gap-3 sm:flex-row">
-                <Select value={selectedRating} onValueChange={setSelectedRating}>
+                <Select
+                  value={selectedRating}
+                  onValueChange={setSelectedRating}
+                >
                   <SelectTrigger className="w-full sm:w-48 text-sm sm:text-base">
                     <Filter className="mr-2 h-4 w-4" />
                     <SelectValue placeholder="Filter rating" />
@@ -486,20 +498,31 @@ export default function ProviderReviewsPage() {
           onValueChange={(value) =>
             setActiveTab(value as "given" | "received" | "pending")
           }
+          data-tour-step="4"
         >
           <TabsList className="w-full sm:w-auto flex flex-col sm:flex-row h-auto sm:h-10 bg-gray-100 p-2 sm:p-3 rounded-lg">
-            <TabsTrigger value="given" className="text-xs sm:text-sm w-full sm:w-auto data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-md">
+            <TabsTrigger
+              value="given"
+              className="text-xs sm:text-sm w-full sm:w-auto data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-md"
+            >
               Reviews Given
             </TabsTrigger>
-            <TabsTrigger value="received" className="text-xs sm:text-sm w-full sm:w-auto data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-md">
+            <TabsTrigger
+              value="received"
+              className="text-xs sm:text-sm w-full sm:w-auto data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-md"
+            >
               Reviews Received
             </TabsTrigger>
-            <TabsTrigger value="pending" className="text-xs sm:text-sm w-full sm:w-auto data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-md">
+            <TabsTrigger
+              value="pending"
+              className="text-xs sm:text-sm w-full sm:w-auto data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-md"
+            >
               Pending
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="given" className="pt-6">
+            <div data-tour-step="5">
             <ReviewList
               reviews={givenReviews}
               loading={givenLoading}
@@ -509,9 +532,11 @@ export default function ProviderReviewsPage() {
               onEdit={handleOpenEditReview}
               onDelete={(review) => handleDeleteReview(review.id)}
             />
+            </div>
           </TabsContent>
 
           <TabsContent value="received" className="pt-6">
+            <div data-tour-step="5">
             <ReviewList
               reviews={receivedReviews}
               loading={receivedLoading}
@@ -520,14 +545,17 @@ export default function ProviderReviewsPage() {
               emptyMessage="No companies have reviewed you yet."
               onReply={handleOpenReply}
             />
+            </div>
           </TabsContent>
 
           <TabsContent value="pending" className="pt-6">
+            <div data-tour-step="5">
             <PendingProjectsList
               projects={availableProjectsForReview}
               loading={projectsLoading}
               onWriteReview={(projectId) => handleOpenCreateReview(projectId)}
             />
+            </div>
           </TabsContent>
         </Tabs>
 
@@ -571,11 +599,17 @@ function StatsCard({
     <Card>
       <CardContent className="flex items-center justify-between p-4 sm:p-6">
         <div className="flex-1 min-w-0">
-          <p className="text-xs sm:text-sm font-medium text-gray-600">{title}</p>
-          <p className="text-2xl sm:text-3xl font-bold text-gray-900 mt-1">{value}</p>
+          <p className="text-xs sm:text-sm font-medium text-gray-600">
+            {title}
+          </p>
+          <p className="text-2xl sm:text-3xl font-bold text-gray-900 mt-1">
+            {value}
+          </p>
           <p className="text-xs text-gray-500 mt-1">{helper}</p>
         </div>
-        <div className="rounded-full bg-gray-100 p-3 flex-shrink-0 ml-2">{icon}</div>
+        <div className="rounded-full bg-gray-100 p-3 flex-shrink-0 ml-2">
+          {icon}
+        </div>
       </CardContent>
     </Card>
   );
@@ -665,9 +699,11 @@ function ReviewCard({
 
   // Get profile image URL from customerProfile or providerProfile
   const profileImageUrl = getProfileImageUrl(
-    (counterparty as { customerProfile?: { profileImageUrl?: string } })?.customerProfile?.profileImageUrl ||
-    (counterparty as { providerProfile?: { profileImageUrl?: string } })?.providerProfile?.profileImageUrl ||
-    undefined
+    (counterparty as { customerProfile?: { profileImageUrl?: string } })
+      ?.customerProfile?.profileImageUrl ||
+      (counterparty as { providerProfile?: { profileImageUrl?: string } })
+        ?.providerProfile?.profileImageUrl ||
+      undefined,
   );
 
   const categories =
@@ -701,7 +737,9 @@ function ReviewCard({
               <h3 className="font-bold text-gray-900 text-base sm:text-lg mb-1">
                 {counterparty?.name ?? "Unknown"}
               </h3>
-              <p className="text-sm text-gray-600 mb-1 truncate">{projectTitle}</p>
+              <p className="text-sm text-gray-600 mb-1 truncate">
+                {projectTitle}
+              </p>
               <p className="text-xs text-gray-500">
                 {new Date(review.createdAt).toLocaleDateString("en-US", {
                   month: "2-digit",
@@ -720,8 +758,8 @@ function ReviewCard({
                 {(review.rating || 0).toFixed(1)}
               </span>
             </div>
-            <Badge 
-              variant="outline" 
+            <Badge
+              variant="outline"
               className="text-xs bg-gray-50 border-gray-200 text-gray-700"
             >
               {type === "given"
@@ -748,14 +786,16 @@ function ReviewCard({
                   label={category.label}
                   value={category.value}
                 />
-              )
+              ),
           )}
         </div>
 
         {/* Reply section */}
         {reply && (
           <div className="rounded-lg bg-gray-50 border border-gray-200 p-3 sm:p-4 mt-4">
-            <p className="text-sm font-semibold text-gray-900 mb-1">Your reply</p>
+            <p className="text-sm font-semibold text-gray-900 mb-1">
+              Your reply
+            </p>
             <p className="text-xs text-gray-500 mb-2">
               {new Date(reply.createdAt).toLocaleDateString("en-US", {
                 month: "2-digit",
@@ -763,14 +803,16 @@ function ReviewCard({
                 year: "numeric",
               })}
             </p>
-            <p className="text-sm text-gray-700 leading-relaxed">{reply.content}</p>
+            <p className="text-sm text-gray-700 leading-relaxed">
+              {reply.content}
+            </p>
           </div>
         )}
 
         {/* Action buttons */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mt-4 pt-4 border-t border-gray-200">
-          <Badge 
-            variant="secondary" 
+          <Badge
+            variant="secondary"
             className="text-xs bg-gray-100 text-gray-700"
           >
             {type === "given" ? "Published" : "Received"}
@@ -827,7 +869,10 @@ function PendingProjectsList({
   return (
     <div className="space-y-3 sm:space-y-4">
       {projects.map((project) => (
-        <Card key={project.id} className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+        <Card
+          key={project.id}
+          className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
+        >
           <CardContent className="flex flex-col gap-4 p-4 sm:p-6 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1.5 flex-wrap">
@@ -845,15 +890,18 @@ function PendingProjectsList({
               </p>
               <p className="text-xs text-gray-500">
                 {project.completedDate
-                  ? new Date(project.completedDate).toLocaleDateString("en-US", {
-                      month: "2-digit",
-                      day: "2-digit",
-                      year: "numeric",
-                    })
+                  ? new Date(project.completedDate).toLocaleDateString(
+                      "en-US",
+                      {
+                        month: "2-digit",
+                        day: "2-digit",
+                        year: "numeric",
+                      },
+                    )
                   : "Completion date unavailable"}
               </p>
             </div>
-            <Button 
+            <Button
               onClick={() => onWriteReview(project.id)}
               className="w-full sm:w-auto text-xs sm:text-sm"
             >
@@ -1090,7 +1138,8 @@ function RatingStars({
     <div className="flex gap-0.5 sm:gap-1">
       {[1, 2, 3, 4, 5].map((value) => {
         const isFilled = value <= Math.floor(rating);
-        const isHalfFilled = value === Math.ceil(rating) && rating % 1 !== 0 && value > rating;
+        const isHalfFilled =
+          value === Math.ceil(rating) && rating % 1 !== 0 && value > rating;
         return (
           <Star
             key={value}
@@ -1111,7 +1160,9 @@ function CategoryScore({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex items-center justify-between rounded-md border border-gray-200 bg-white p-2 sm:p-2.5">
       <span className="text-xs sm:text-sm text-gray-600">{label}</span>
-      <span className="text-sm sm:text-base font-semibold text-gray-900">{value.toFixed(1)}</span>
+      <span className="text-sm sm:text-base font-semibold text-gray-900">
+        {value.toFixed(1)}
+      </span>
     </div>
   );
 }

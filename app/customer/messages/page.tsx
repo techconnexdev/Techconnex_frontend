@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Search, Send, Paperclip, Loader2, FileText, ArrowLeft, Flag } from "lucide-react";
 import { CustomerLayout } from "@/components/customer-layout";
+import { CustomerMessagesTour } from "@/components/customer/CustomerMessagesTour";
 import io, { Socket } from "socket.io-client";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
@@ -697,12 +698,14 @@ export default function CustomerMessagesPage() {
 
   return (
     <CustomerLayout>
+      <CustomerMessagesTour />
       <div className="h-[calc(100vh-8rem)] flex flex-col md:flex-row gap-4 md:gap-6">
         {/* 🧾 Conversations List */}
         <div
           className={`${
             showConversationsList ? "flex" : "hidden"
           } md:flex w-full md:w-1/3 flex-col`}
+          data-tour-step="0"
         >
           <Card className="h-full flex flex-col">
             <CardHeader className="pb-3">
@@ -800,6 +803,7 @@ export default function CustomerMessagesPage() {
           className={`${
             !showConversationsList || selectedChat ? "flex" : "hidden"
           } md:flex flex-1 flex-col`}
+          data-tour-step="1"
         >
           <Card className="h-full flex flex-col">
             {/* Header */}

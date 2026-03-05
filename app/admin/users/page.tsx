@@ -37,12 +37,16 @@ import {
   Loader2,
   Copy,
   Check,
+  MessageSquare,
+  Bell,
+  Megaphone,
 } from "lucide-react"
 import { AdminLayout } from "@/components/admin-layout"
-import { getAdminUsers, getAdminUserStats, suspendUser, activateUser, getProfileImageUrl, createAdminUser, exportAdminUsers } from "@/lib/api"
+import { getAdminUsers, getAdminUserStats, suspendUser, activateUser, getProfileImageUrl, createAdminUser, exportAdminUsers, adminSendNotification, adminBroadcastNotification } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 
 export default function AdminUsersPage() {
   const { toast } = useToast()
@@ -72,6 +76,14 @@ export default function AdminUsersPage() {
     phone: "",
     role: "CUSTOMER" as "ADMIN" | "PROVIDER" | "CUSTOMER",
   })
+  const [notifyOpen, setNotifyOpen] = useState(false)
+  const [notifyTarget, setNotifyTarget] = useState<Record<string, unknown> | null>(null)
+  const [notifyTitle, setNotifyTitle] = useState("")
+  const [notifyContent, setNotifyContent] = useState("")
+  const [broadcastOpen, setBroadcastOpen] = useState(false)
+  const [broadcastTitle, setBroadcastTitle] = useState("")
+  const [broadcastContent, setBroadcastContent] = useState("")
+  const [broadcastLoading, setBroadcastLoading] = useState(false)
 
   const loadUsers = useCallback(async () => {
     try {
@@ -133,6 +145,70 @@ export default function AdminUsersPage() {
   const handleActivateClick = (user: Record<string, unknown>) => {
     setSelectedUser(user)
     setActivateDialogOpen(true)
+  }
+
+  const openNotifyDialog = (user: Record<string, unknown>) => {
+    setNotifyTarget(user)
+    setNotifyTitle("Message from TechConnex")
+    setNotifyContent("")
+    setNotifyOpen(true)
+  }
+
+  const handleSendNotification = async () => {
+    if (!notifyTarget?.id || !notifyTitle.trim() || !notifyContent.trim()) return
+
+    try {
+      setActionLoading(true)
+      await adminSendNotification({
+        userId: String(notifyTarget.id),
+        title: notifyTitle.trim(),
+        content: notifyContent.trim(),
+      })
+      toast({
+        title: "Success",
+        description: "Notification sent successfully",
+      })
+      setNotifyOpen(false)
+      setNotifyTarget(null)
+      setNotifyTitle("")
+      setNotifyContent("")
+    } catch (error: unknown) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to send notification",
+        variant: "destructive",
+      })
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleBroadcastNotification = async () => {
+    if (!broadcastTitle.trim() || !broadcastContent.trim()) return
+
+    try {
+      setBroadcastLoading(true)
+      const res = await adminBroadcastNotification({
+        title: broadcastTitle.trim(),
+        content: broadcastContent.trim(),
+      })
+      const count = (res as { count?: number })?.count ?? 0
+      toast({
+        title: "Success",
+        description: `Announcement sent to ${count} user(s). It will appear under Announcements in their notifications.`,
+      })
+      setBroadcastOpen(false)
+      setBroadcastTitle("")
+      setBroadcastContent("")
+    } catch (error: unknown) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to send announcement",
+        variant: "destructive",
+      })
+    } finally {
+      setBroadcastLoading(false)
+    }
   }
 
   const confirmSuspend = async () => {
@@ -437,6 +513,33 @@ export default function AdminUsersPage() {
           </Card>
         </div>
 
+        {/* Announcements – send notification to all users */}
+        <Card>
+          <CardHeader className="p-4 sm:p-6">
+            <CardTitle className="text-lg sm:text-xl flex items-center gap-2">
+              <Megaphone className="w-5 h-5 text-sky-600" />
+              Announcements
+            </CardTitle>
+            <CardDescription className="text-xs sm:text-sm">
+              Send a notification to all users. It will appear under &quot;Announcements&quot; in their notification dropdown (provider, customer, and admin layouts).
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-4 sm:p-6 pt-0">
+            <Button
+              onClick={() => {
+                setBroadcastTitle("Message from TechConnex")
+                setBroadcastContent("")
+                setBroadcastOpen(true)
+              }}
+              variant="outline"
+              className="w-full sm:w-auto"
+            >
+              <Megaphone className="w-4 h-4 mr-2" />
+              Send notification to all users
+            </Button>
+          </CardContent>
+        </Card>
+
         {/* Filters */}
         <Card>
           <CardContent className="p-4 sm:p-6">
@@ -613,6 +716,19 @@ export default function AdminUsersPage() {
                             View Profile
                                   </Link>
                           </DropdownMenuItem>
+                                <DropdownMenuItem asChild>
+                                  <Link
+                                    href={`/admin/messages?userId=${user.id}&name=${encodeURIComponent((user.name as string) || "")}`}
+                                    className="text-xs sm:text-sm"
+                                  >
+                                    <MessageSquare className="mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                                    Message
+                                  </Link>
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => openNotifyDialog(user)} className="text-xs sm:text-sm">
+                                  <Bell className="mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                                  Send notification
+                                </DropdownMenuItem>
                           <DropdownMenuSeparator />
                                 {user.status === "ACTIVE" ? (
                                   <DropdownMenuItem
@@ -858,6 +974,122 @@ export default function AdminUsersPage() {
                 ) : (
                   "Create User"
                 )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Send notification dialog */}
+        <Dialog open={notifyOpen} onOpenChange={setNotifyOpen}>
+          <DialogContent className="p-4 sm:p-6">
+            <DialogHeader>
+              <DialogTitle className="text-lg sm:text-xl">Send notification</DialogTitle>
+              <DialogDescription className="text-xs sm:text-sm">
+                Send a notification to {notifyTarget?.name as string || "the user"}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="notify-title">Title</Label>
+                <Input
+                  id="notify-title"
+                  value={notifyTitle}
+                  onChange={(e) => setNotifyTitle(e.target.value)}
+                  placeholder="Notification title"
+                  className="text-sm sm:text-base"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="notify-content">Message</Label>
+                <Textarea
+                  id="notify-content"
+                  className="min-h-[100px] text-sm sm:text-base"
+                  value={notifyContent}
+                  onChange={(e) => setNotifyContent(e.target.value)}
+                  placeholder="Notification message"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setNotifyOpen(false)}
+                disabled={actionLoading}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleSendNotification}
+                disabled={
+                  !notifyTitle.trim() ||
+                  !notifyContent.trim() ||
+                  !!actionLoading
+                }
+              >
+                {actionLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  "Send"
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Broadcast announcement dialog – send to all users */}
+        <Dialog open={broadcastOpen} onOpenChange={setBroadcastOpen}>
+          <DialogContent className="p-4 sm:p-6">
+            <DialogHeader>
+              <DialogTitle className="text-lg sm:text-xl flex items-center gap-2">
+                <Megaphone className="w-5 h-5 text-sky-600" />
+                Send announcement to all users
+              </DialogTitle>
+              <DialogDescription className="text-xs sm:text-sm">
+                This notification will be sent to every user and shown under &quot;Announcements&quot; in their notification bell.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="broadcast-title">Title</Label>
+                <Input
+                  id="broadcast-title"
+                  value={broadcastTitle}
+                  onChange={(e) => setBroadcastTitle(e.target.value)}
+                  placeholder="Announcement title"
+                  className="text-sm sm:text-base"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="broadcast-content">Message</Label>
+                <Textarea
+                  id="broadcast-content"
+                  className="min-h-[120px] text-sm sm:text-base"
+                  value={broadcastContent}
+                  onChange={(e) => setBroadcastContent(e.target.value)}
+                  placeholder="Announcement message"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setBroadcastOpen(false)}
+                disabled={broadcastLoading}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleBroadcastNotification}
+                disabled={
+                  !broadcastTitle.trim() ||
+                  !broadcastContent.trim() ||
+                  broadcastLoading
+                }
+              >
+                {broadcastLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                ) : null}
+                Send to all users
               </Button>
             </DialogFooter>
           </DialogContent>

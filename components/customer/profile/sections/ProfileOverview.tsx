@@ -100,6 +100,15 @@ export default function ProfileOverview({ value, onChange, isEditing, onCompleti
     }
   };
 
+  // Ensure href is absolute so target="_blank" opens in a new tab
+  const ensureAbsoluteUrl = (url: string) => {
+    if (!url?.trim()) return url;
+    const trimmed = url.trim();
+    return trimmed.startsWith("http://") || trimmed.startsWith("https://")
+      ? trimmed
+      : `https://${trimmed}`;
+  };
+
   const handleImageClick = () => {
     fileInputRef.current?.click();
   };
@@ -173,9 +182,22 @@ export default function ProfileOverview({ value, onChange, isEditing, onCompleti
 
   return (
     <div className="space-y-4 sm:space-y-5 lg:space-y-6">
-    <Card>
+    <Card
+      className={
+        isEditing
+          ? "ring-2 ring-blue-300 border-blue-200 bg-blue-50/30"
+          : ""
+      }
+    >
       <CardHeader className="p-4 sm:p-6">
-        <CardTitle className="text-base sm:text-lg">Profile Overview</CardTitle>
+        <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+          Profile Overview
+          {isEditing && (
+            <span className="text-xs font-normal text-blue-700 bg-blue-100 px-2 py-0.5 rounded">
+              Editable
+            </span>
+          )}
+        </CardTitle>
         <CardDescription className="text-xs sm:text-sm">Your public profile information</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 sm:space-y-5 lg:space-y-6 p-4 sm:p-6 pt-0">
@@ -296,16 +318,29 @@ export default function ProfileOverview({ value, onChange, isEditing, onCompleti
               <Label htmlFor="phone" className="text-sm sm:text-base">Phone</Label>
               {isEditing ? (
                 <>
-              <div className="relative">
-                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <Input
-                  id="phone"
-                    className="pl-10 bg-gray-50 text-sm sm:text-base"
-                    value={value.phone || ""}
-                    disabled={true}
-                />
-              </div>
-                <p className="text-xs text-gray-500 mt-1">Contact support to change phone</p>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <Input
+                      id="phone"
+                      value={value.phone || ""}
+                      disabled={!!(value.phone && value.phone.trim())}
+                      onChange={(e) =>
+                        !(value.phone && value.phone.trim()) &&
+                        onChange({ ...value, phone: e.target.value })
+                      }
+                      placeholder={
+                        value.phone?.trim()
+                          ? undefined
+                          : "Add your phone number"
+                      }
+                      className={`pl-10 text-sm sm:text-base ${value.phone?.trim() ? "bg-gray-50" : ""}`}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {value.phone?.trim()
+                      ? "Contact support to change phone"
+                      : "You can add your phone number once"}
+                  </p>
                 </>
               ) : (
                 <div className="flex items-center gap-2 mt-2">
@@ -378,7 +413,7 @@ export default function ProfileOverview({ value, onChange, isEditing, onCompleti
                   <div className="mt-2">
                     {value.customerProfile?.website ? (
                       <a
-                        href={value.customerProfile.website}
+                        href={ensureAbsoluteUrl(value.customerProfile.website)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex items-center gap-2 sm:gap-3 p-3 sm:p-4 bg-gradient-to-r from-gray-50 to-gray-100 border border-gray-200 rounded-lg hover:shadow-lg hover:border-blue-300 transition-all duration-200 group"
@@ -451,7 +486,7 @@ export default function ProfileOverview({ value, onChange, isEditing, onCompleti
                           className="flex items-center justify-between p-3 sm:p-4 bg-gradient-to-r from-gray-50 to-gray-100 border border-gray-200 rounded-lg hover:shadow-md transition-all duration-200 group"
                         >
                           <a
-                            href={url}
+                            href={ensureAbsoluteUrl(url)}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0 group-hover:text-blue-600 transition-colors"
@@ -507,7 +542,7 @@ export default function ProfileOverview({ value, onChange, isEditing, onCompleti
                   return (
                     <a
                       key={index}
-                      href={link}
+                      href={ensureAbsoluteUrl(link)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center gap-3 p-3 sm:p-4 bg-gradient-to-r from-gray-50 to-gray-100 border border-gray-200 rounded-lg hover:shadow-lg hover:border-blue-300 transition-all duration-200 group"

@@ -2,6 +2,11 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
+  ProviderOnboardingPromptDialog,
+  getOnboardingDismissed,
+  getOnboardingCompleted,
+} from "@/components/provider/ProviderOnboardingPromptDialog";
+import {
   Card,
   CardContent,
   CardDescription,
@@ -25,12 +30,14 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { ProviderLayout } from "@/components/provider-layout";
+import { ProviderDashboardTour } from "@/components/provider/ProviderDashboardTour";
 import {
   getProviderProjectStats,
   getProviderProjects,
   getProviderRecommendedOpportunities,
   getProviderPerformanceMetrics,
   getProfileImageUrl,
+  getProviderProfileCompletion,
 } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 
@@ -133,7 +140,7 @@ export default function ProviderDashboard() {
   >([]);
   const [loadingOpportunities, setLoadingOpportunities] = useState(true);
   const [errorOpportunities, setErrorOpportunities] = useState<string | null>(
-    null
+    null,
   );
   const [recommendationsCacheInfo, setRecommendationsCacheInfo] = useState<{
     cachedAt: number | null;
@@ -142,6 +149,58 @@ export default function ProviderDashboard() {
   const [expandedOpportunityId, setExpandedOpportunityId] = useState<
     string | null
   >(null);
+
+  const [onboardingCompletion, setOnboardingCompletion] = useState<number | null>(null);
+  const [onboardingCompletionLoading, setOnboardingCompletionLoading] = useState(true);
+  const [onboardingDialogOpen, setOnboardingDialogOpen] = useState(false);
+  const [tourAllowed, setTourAllowed] = useState(false);
+
+  const ONBOARDING_MAX_COMPLETION = 50; // Don't show dialog if profile is already > 50% complete
+
+  // Fetch completion on this page for onboarding dialog only
+  useEffect(() => {
+    let cancelled = false;
+    setOnboardingCompletionLoading(true);
+    getProviderProfileCompletion()
+      .then((res) => {
+        if (cancelled) return;
+        const data = res?.data ?? res;
+        const comp = typeof data?.completion === "number" ? data.completion : 0;
+        setOnboardingCompletion(comp);
+      })
+      .catch(() => {
+        if (!cancelled) setOnboardingCompletion(0);
+      })
+      .finally(() => {
+        if (!cancelled) setOnboardingCompletionLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Once completion has loaded: show dialog only if completion ≤ 50% and not dismissed/completed
+  useEffect(() => {
+    if (onboardingCompletionLoading || onboardingCompletion === null) return;
+    if (getOnboardingDismissed() || getOnboardingCompleted()) return;
+    if (onboardingCompletion > ONBOARDING_MAX_COMPLETION) return;
+    const t = setTimeout(() => {
+      if (getOnboardingDismissed() || getOnboardingCompleted()) return;
+      setOnboardingDialogOpen(true);
+    }, 150);
+    return () => clearTimeout(t);
+  }, [onboardingCompletionLoading, onboardingCompletion]);
+
+  // Hide dialog when profile is > 50% complete
+  useEffect(() => {
+    if (!onboardingCompletionLoading && onboardingCompletion !== null && onboardingCompletion > ONBOARDING_MAX_COMPLETION) {
+      setOnboardingDialogOpen(false);
+    }
+  }, [onboardingCompletionLoading, onboardingCompletion]);
+
+  // Delay tour until after we've had time to show the onboarding dialog (avoids tour showing first)
+  useEffect(() => {
+    const t = setTimeout(() => setTourAllowed(true), 900);
+    return () => clearTimeout(t);
+  }, []);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -174,7 +233,7 @@ export default function ProviderDashboard() {
             await getProviderRecommendedOpportunities();
           if (recommendationsResponse.success) {
             setRecommendedOpportunities(
-              recommendationsResponse.recommendations || []
+              recommendationsResponse.recommendations || [],
             );
             setRecommendationsCacheInfo({
               cachedAt: recommendationsResponse.cachedAt,
@@ -226,23 +285,41 @@ export default function ProviderDashboard() {
 
   return (
     <ProviderLayout>
+      <ProviderOnboardingPromptDialog
+        open={onboardingDialogOpen}
+        onOpenChange={setOnboardingDialogOpen}
+      />
+      {/* Show dashboard tour only after dialog chance has passed and dialog is closed */}
+      {!onboardingDialogOpen && tourAllowed && <ProviderDashboardTour />}
       <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
+        <div
+          className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4"
+          data-tour-step="0"
+        >
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Dashboard</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+              Dashboard
+            </h1>
             <p className="text-sm sm:text-base text-gray-600">
               Welcome back! Here&apos;s your business overview.
             </p>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
             <Link href="/provider/profile" className="w-full sm:w-auto">
-              <Button variant="outline" className="w-full sm:w-auto text-xs sm:text-sm">
+              <Button
+                variant="outline"
+                className="w-full sm:w-auto text-xs sm:text-sm"
+              >
                 <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                 View Profile
               </Button>
             </Link>
-            <Link href="/provider/opportunities" className="w-full sm:w-auto">
+            <Link
+              href="/provider/opportunities"
+              className="w-full sm:w-auto"
+              data-tour-step="1"
+            >
               <Button className="w-full sm:w-auto text-xs sm:text-sm">
                 <Target className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                 Browse Jobs
@@ -252,7 +329,10 @@ export default function ProviderDashboard() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+        <div
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6"
+          data-tour-step="2"
+        >
           <Card>
             <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
@@ -301,7 +381,9 @@ export default function ProviderDashboard() {
             <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs sm:text-sm font-medium text-gray-600">Rating</p>
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">
+                    Rating
+                  </p>
                   <div className="flex items-center gap-1 mt-1">
                     <p className="text-xl sm:text-2xl font-bold text-gray-900">
                       {statsLoading ? (
@@ -347,12 +429,18 @@ export default function ProviderDashboard() {
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-4 sm:space-y-6">
             {/* Active Projects */}
-            <Card>
+            <Card data-tour-step="3">
               <CardHeader className="p-4 sm:p-6">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
-                  <CardTitle className="text-lg sm:text-xl">Active Projects</CardTitle>
+                  <CardTitle className="text-lg sm:text-xl">
+                    Active Projects
+                  </CardTitle>
                   <Link href="/provider/projects" className="w-full sm:w-auto">
-                    <Button variant="outline" size="sm" className="w-full sm:w-auto text-xs sm:text-sm">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full sm:w-auto text-xs sm:text-sm"
+                    >
                       View All
                     </Button>
                   </Link>
@@ -394,7 +482,7 @@ export default function ProviderDashboard() {
                               <AvatarImage
                                 src={getProfileImageUrl(
                                   project.customer?.customerProfile
-                                    ?.profileImageUrl
+                                    ?.profileImageUrl,
                                 )}
                               />
                               <AvatarFallback>
@@ -465,7 +553,7 @@ export default function ProviderDashboard() {
             </Card>
 
             {/* Recommended Opportunities - top 5 on dashboard; full list on Find Opportunities */}
-            <Card>
+            <Card data-tour-step="4">
               <CardHeader className="p-4 sm:p-6">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
                   <div className="flex-1">
@@ -502,10 +590,10 @@ export default function ProviderDashboard() {
 
                         const ageMinutes = Math.floor(ageMs / 60000);
                         const remainingMinutes = Math.floor(
-                          remainingMs / 60000
+                          remainingMs / 60000,
                         );
                         const remainingHours = Math.floor(
-                          remainingMinutes / 60
+                          remainingMinutes / 60,
                         );
                         const remainingMins = remainingMinutes % 60;
 
@@ -551,12 +639,10 @@ export default function ProviderDashboard() {
                       No recommended opportunities found. Check back later!
                     </div>
                   ) : (
-                    recommendedOpportunities
-                      .slice(0, 5)
-                      .map((opportunity) => {
-                        const isExpanded =
-                          expandedOpportunityId === opportunity.id;
-                        return (
+                    recommendedOpportunities.slice(0, 5).map((opportunity) => {
+                      const isExpanded =
+                        expandedOpportunityId === opportunity.id;
+                      return (
                         <div
                           key={opportunity.id}
                           className="group relative p-3 sm:p-4 md:p-5 border-2 border-gray-200 rounded-lg sm:rounded-xl active:border-blue-400 active:shadow-md sm:hover:border-blue-400 sm:hover:shadow-lg transition-all duration-300 bg-white"
@@ -586,8 +672,8 @@ export default function ProviderDashboard() {
                                         opportunity.matchScore >= 80
                                           ? "bg-green-100 text-green-700 border-green-300"
                                           : opportunity.matchScore >= 60
-                                          ? "bg-blue-100 text-blue-700 border-blue-300"
-                                          : "bg-yellow-100 text-yellow-700 border-yellow-300"
+                                            ? "bg-blue-100 text-blue-700 border-blue-300"
+                                            : "bg-yellow-100 text-yellow-700 border-yellow-300"
                                       }`}
                                     >
                                       {opportunity.matchScore}% match
@@ -627,7 +713,7 @@ export default function ProviderDashboard() {
                                 <button
                                   onClick={() =>
                                     setExpandedOpportunityId(
-                                      isExpanded ? null : opportunity.id
+                                      isExpanded ? null : opportunity.id,
                                     )
                                   }
                                   className="flex items-center gap-2 text-xs text-blue-600 hover:text-blue-700 active:text-blue-800 font-medium touch-manipulation"
@@ -768,9 +854,11 @@ export default function ProviderDashboard() {
           {/* Sidebar */}
           <div className="space-y-4 sm:space-y-6">
             {/* Quick Stats */}
-            <Card>
+            <Card data-tour-step="5">
               <CardHeader className="p-4 sm:p-6">
-                <CardTitle className="text-base sm:text-lg">Performance Metrics</CardTitle>
+                <CardTitle className="text-base sm:text-lg">
+                  Performance Metrics
+                </CardTitle>
               </CardHeader>
               <CardContent className="p-4 sm:p-6 space-y-3 sm:space-y-4">
                 <div className="flex items-center justify-between">

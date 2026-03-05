@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import {
   ArrowLeft,
   Ban,
+  Bell,
   CheckCircle,
   Edit,
   Loader2,
@@ -31,6 +32,7 @@ interface UserHeaderProps {
   onSave: () => void;
   onSuspend: () => void;
   onActivate: () => void;
+  onSendNotification?: () => void;
 }
 
 export function UserHeader({
@@ -50,6 +52,7 @@ export function UserHeader({
   onSave,
   onSuspend,
   onActivate,
+  onSendNotification,
 }: UserHeaderProps) {
   const router = useRouter();
 
@@ -126,10 +129,14 @@ export function UserHeader({
           </>
         ) : (
           <>
-            {!isProvider && (
-              <Button variant="outline" onClick={handleContact}>
-                <MessageSquare className="w-4 h-4 mr-2" />
-                Contact
+            <Button variant="outline" onClick={handleContact}>
+              <MessageSquare className="w-4 h-4 mr-2" />
+              Message
+            </Button>
+            {onSendNotification && (
+              <Button variant="outline" onClick={onSendNotification}>
+                <Bell className="w-4 h-4 mr-2" />
+                Send notification
               </Button>
             )}
             <Button variant="outline" onClick={onEdit}>

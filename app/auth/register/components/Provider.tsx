@@ -19,7 +19,6 @@ import {
   Lock,
   Eye,
   EyeOff,
-  Phone,
   MapPin,
   Globe,
   Upload,
@@ -34,9 +33,12 @@ import {
   AlertCircle,
   Edit,
   Link,
+  User,
+  FileText,
 } from "lucide-react";
 import { RegistrationFormData, Certification } from "../page";
 import { Checkbox, CheckboxIndicator } from "@radix-ui/react-checkbox";
+import { PhoneInputField } from "./PhoneInputField";
 
 const fadeInUp = {
   initial: { opacity: 0, y: 30 },
@@ -582,21 +584,15 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                 )}
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="phone">Phone Number *</Label>
-              <div className="relative">
-                <Phone className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                <Input
-                  id="phone"
-                  type="tel"
-                  placeholder="+60 12-345 6789"
-                  className="pl-10 bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
-                  value={formData.phone}
-                  onChange={(e) => handleInputChange("phone", e.target.value)}
-                  required
-                />
-              </div>
-            </div>
+            <PhoneInputField
+              id="phone"
+              label="Phone Number *"
+              value={formData.phone}
+              onChange={(val) => handleInputChange("phone", val)}
+              defaultCountry="MY"
+              placeholder="Enter phone number"
+              required
+            />
 
             <div className="space-y-2">
               <Label htmlFor="password">Password *</Label>
@@ -1460,24 +1456,24 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
           variants={fadeInUp}
           initial="initial"
           animate="animate"
-          className="space-y-6"
+          className="space-y-5"
         >
-          <div className="text-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">Certifications</h2>
-            <p className="text-gray-600">
-              Add your professional certifications (optional but recommended)
+          <div className="text-center mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">Certifications</h2>
+            <p className="text-sm text-gray-600">
+              Add your professional certifications (optional). If added, each must have a valid date and either serial number or verification link.
             </p>
           </div>
 
-          <div className="space-y-6">
+          <div className="space-y-4">
             <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <div className="flex items-start">
-                <AlertCircle className="w-5 h-5 text-blue-600 mr-2 mt-0.5" />
+                <AlertCircle className="w-4 h-4 text-blue-600 mr-2 mt-0.5 shrink-0" />
                 <div>
-                  <p className="text-sm text-blue-800 font-medium">
+                  <p className="text-sm font-medium text-gray-900">
                     Why add certifications?
                   </p>
-                  <p className="text-sm text-blue-700">
+                  <p className="text-sm text-gray-600">
                     Certifications help build trust with clients and showcase
                     your expertise in specific technologies.
                   </p>
@@ -1487,7 +1483,7 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
 
             {/* Add New Certification */}
             <div className="space-y-4 p-4 border rounded-lg bg-white/50">
-              <h3 className="font-medium text-gray-900">Add Certification</h3>
+              <h3 className="text-sm font-semibold text-gray-900">Add certification</h3>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -1605,23 +1601,23 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
 
             {/* Certifications List */}
             {certifications.length > 0 && (
-              <div className="space-y-4">
-                <h3 className="font-medium text-gray-900">
-                  Your Certifications ({certifications.length})
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-gray-900">
+                  Your certifications ({certifications.length})
                 </h3>
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {certifications.map((cert, index) => (
                     <div
                       key={index}
-                      className="p-4 border rounded-lg bg-white/50"
+                      className="p-3 border rounded-lg bg-white/50"
                     >
                       <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center mb-2">
-                            <Award className="w-5 h-5 text-blue-600 mr-2" />
-                            <h4 className="font-medium text-gray-900">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Award className="w-4 h-4 text-gray-500 shrink-0" />
+                            <span className="text-sm font-medium text-gray-900">
                               {cert.name}
-                            </h4>
+                            </span>
                           </div>
                           <p className="text-sm text-gray-600 mb-1">
                             <Building2 className="w-4 h-4 inline mr-1" />
@@ -1629,7 +1625,9 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                           </p>
                           <p className="text-sm text-gray-600">
                             <Calendar className="w-4 h-4 inline mr-1" />
-                            {new Date(cert.issuedDate).toLocaleDateString()}
+                            {cert.issuedDate && !Number.isNaN(new Date(cert.issuedDate).getTime())
+                              ? new Date(cert.issuedDate).toLocaleDateString()
+                              : cert.issuedDate || "—"}
                           </p>
                           {cert.serialNumber && (
                             <p className="text-sm text-gray-500 mt-1">
@@ -1771,211 +1769,246 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
           variants={fadeInUp}
           initial="initial"
           animate="animate"
-          className="space-y-6"
+          className="space-y-5"
         >
-          <h2 className="text-2xl font-bold text-gray-900 text-center mb-6">
-            Review & Submit
-          </h2>
+          <div className="text-center mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">
+              Review & Submit
+            </h2>
+            <p className="text-sm text-gray-600">
+              Please review your information before submitting
+            </p>
+          </div>
 
-          <p className="text-gray-600 text-center">
-            Please review your profile details carefully before submission.
-          </p>
-
-          <div className="bg-white/50 p-6 rounded-lg border space-y-4 text-gray-800">
-            {/* Basic Information */}
-            <div>
-              <h3 className="text-lg font-semibold text-blue-700 mb-2">
-                Personal Information
+          <div className="space-y-4">
+            <div className="p-4 border rounded-lg bg-white/50">
+              <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center">
+                <User className="w-4 h-4 mr-2" />
+                Account (Step 1)
               </h3>
-              <p>
-                <strong>Full Name:</strong> {formData.name}
-              </p>
-              <p>
-                <strong>Email:</strong> {formData.email}
-              </p>
-              <p>
-                <strong>Phone:</strong> {formData.phone}
-              </p>
-              <p>
-                <strong>Location:</strong> {formData.location}
-              </p>
-              <p>
-                <strong>Major/Title:</strong> {formData.major || "Not provided"}
-              </p>
-              <p>
-                <strong>Bio:</strong> {formData.bio}
-              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                <div>
+                  <span className="text-gray-600">Full name:</span>
+                  <span className="ml-2 font-medium">{formData.name || "—"}</span>
+                </div>
+                <div>
+                  <span className="text-gray-600">Email:</span>
+                  <span className="ml-2 font-medium">{formData.email || "—"}</span>
+                </div>
+                <div>
+                  <span className="text-gray-600">Phone:</span>
+                  <span className="ml-2 font-medium">{formData.phone || "—"}</span>
+                </div>
+              </div>
             </div>
 
-            {/* Professional Details */}
-            <div>
-              <h3 className="text-lg font-semibold text-blue-700 mb-2">
-                Professional Details
+            <div className="p-4 border rounded-lg bg-white/50">
+              <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center">
+                <FileText className="w-4 h-4 mr-2" />
+                Profile & CV (Step 2)
               </h3>
-              <p>
-                <strong>Years of Experience:</strong> {formData.yearsExperience}
-              </p>
-              <p>
-                <strong>Hourly Rate:</strong> RM {formData.hourlyRate}
-              </p>
-              <p>
-                <strong>Skills:</strong>{" "}
-                {selectedSkills.length > 0
-                  ? selectedSkills.join(", ")
-                  : "Not provided"}
-              </p>
-              <p>
-                <strong>Languages:</strong>{" "}
-                {selectedLanguages.length > 0
-                  ? selectedLanguages.join(", ")
-                  : "Not provided"}
-              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                <div>
+                  <span className="text-gray-600">Location:</span>
+                  <span className="ml-2 font-medium">{formData.location || "—"}</span>
+                </div>
+                <div>
+                  <span className="text-gray-600">Major/Title:</span>
+                  <span className="ml-2 font-medium">{formData.major || "—"}</span>
+                </div>
+                {formData.bio?.trim() && (
+                  <div className="md:col-span-2">
+                    <span className="text-gray-600">Bio:</span>
+                    <p className="ml-2 mt-0.5 font-medium">{formData.bio}</p>
+                  </div>
+                )}
+                <div>
+                  <span className="text-gray-600">Resume:</span>
+                  <span className="ml-2 font-medium">{resumeFile ? resumeFile.name : "—"}</span>
+                </div>
+                <div>
+                  <span className="text-gray-600">KYC:</span>
+                  <span className="ml-2 font-medium">
+                    {kycDocType && kycFile ? `${kycDocType} (${kycFile.name})` : "—"}
+                  </span>
+                </div>
+              </div>
             </div>
 
-            {/* Portfolio Section */}
-            <div>
-              <h3 className="text-lg font-semibold text-blue-700 mb-2">
-                Portfolio Links
+            <div className="p-4 border rounded-lg bg-white/50">
+              <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center">
+                <Award className="w-4 h-4 mr-2" />
+                Skills & Experience (Step 3)
               </h3>
-              {portfolioUrls.length > 0 ? (
-                <ul className="list-disc list-inside text-gray-700">
-                  {portfolioUrls.map((url, idx) => (
-                    <li key={idx}>
-                      <a
-                        href={url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 hover:underline"
-                      >
-                        {url}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p>None added</p>
-              )}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                <div>
+                  <span className="text-gray-600">Years of experience:</span>
+                  <span className="ml-2 font-medium">{formData.yearsExperience || "—"}</span>
+                </div>
+                <div>
+                  <span className="text-gray-600">Hourly rate:</span>
+                  <span className="ml-2 font-medium">
+                    {formData.hourlyRate ? `RM ${formData.hourlyRate}` : "—"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-600">Availability:</span>
+                  <span className="ml-2 font-medium">{formData.availability || "—"}</span>
+                </div>
+                <div>
+                  <span className="text-gray-600">Work preference:</span>
+                  <span className="ml-2 font-medium">{formData.workPreference || "—"}</span>
+                </div>
+                {selectedSkills.length > 0 && (
+                  <div className="md:col-span-2">
+                    <span className="text-gray-600">Skills:</span>
+                    <span className="ml-2 font-medium">{selectedSkills.join(", ")}</span>
+                  </div>
+                )}
+                {selectedLanguages.length > 0 && (
+                  <div className="md:col-span-2">
+                    <span className="text-gray-600">Languages:</span>
+                    <span className="ml-2 font-medium">{selectedLanguages.join(", ")}</span>
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* Resume / KYC Section */}
-            <div>
-              <h3 className="text-lg font-semibold text-blue-700 mb-2">
-                Documents
+            <div className="p-4 border rounded-lg bg-white/50">
+              <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center">
+                <Link className="w-4 h-4 mr-2" />
+                Portfolio & Links (Step 4)
               </h3>
-              <p>
-                <strong>Resume:</strong>{" "}
-                {resumeFile ? resumeFile.name : "Not uploaded"}
-              </p>
-              <p>
-                <strong>KYC Document:</strong>{" "}
-                {kycDocType
-                  ? `${kycDocType} (${kycFile ? kycFile.name : "Not uploaded"})`
-                  : "Not provided"}
-              </p>
+              <div className="text-sm">
+                {portfolioUrls.length > 0 ? (
+                  <ul className="list-disc list-inside mt-0.5">
+                    {portfolioUrls.map((url, idx) => (
+                      <li key={idx}>
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:text-blue-700"
+                        >
+                          {url}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <span className="text-gray-600">—</span>
+                )}
+              </div>
             </div>
 
-            {/* Certifications Section */}
-            <div>
-              <h3 className="text-lg font-semibold text-blue-700 mb-2">
-                Certifications
+            <div className="p-4 border rounded-lg bg-white/50">
+              <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center">
+                <Award className="w-4 h-4 mr-2" />
+                Certifications (Step 5)
               </h3>
-              {certifications.length > 0 ? (
-                <ul className="space-y-3">
-                  {certifications.map((cert, idx) => (
-                    <li
-                      key={idx}
-                      className="p-3 border rounded-lg bg-white/70 shadow-sm"
-                    >
-                      <p>
-                        <strong>Name:</strong> {cert.name}
-                      </p>
-                      <p>
-                        <strong>Issuer:</strong> {cert.issuer}
-                      </p>
-                      <p>
-                        <strong>Issued Date:</strong>{" "}
-                        {new Date(cert.issuedDate).toLocaleDateString()}
-                      </p>
-                      {cert.serialNumber && (
-                        <p>
-                          <strong>Serial Number:</strong> {cert.serialNumber}
-                        </p>
-                      )}
-                      {cert.sourceUrl && (
-                        <p>
-                          <strong>Verification Link:</strong>{" "}
+              <div className="text-sm">
+                {certifications.length > 0 ? (
+                  <ul className="space-y-2">
+                    {certifications.map((cert, idx) => (
+                      <li key={idx} className="p-2 border rounded bg-gray-50/80">
+                        <span className="font-medium">{cert.name}</span>
+                        <span className="text-gray-600"> — {cert.issuer}</span>
+                        {cert.issuedDate && (
+                          <span className="text-gray-600"> ({cert.issuedDate})</span>
+                        )}
+                        {cert.serialNumber?.trim() && (
+                          <p className="mt-0.5 text-gray-600">Serial: {cert.serialNumber}</p>
+                        )}
+                        {cert.sourceUrl?.trim() && (
                           <a
                             href={cert.sourceUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-blue-600 hover:underline"
+                            className="text-blue-600 hover:text-blue-700 text-xs"
                           >
-                            {cert.sourceUrl}
+                            Verification link
                           </a>
-                        </p>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p>No certifications added</p>
-              )}
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <span className="text-gray-600">—</span>
+                )}
+              </div>
             </div>
 
-            {/* AI CV Extraction Results (if available) */}
             {showAIResults && aiProcessingComplete && cvExtractedData && (
-              <div>
-                <h3 className="text-lg font-semibold text-blue-700 mb-2">
-                  AI CV Extracted Insights
+              <div className="p-4 border rounded-lg bg-white/50">
+                <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center">
+                  <Zap className="w-4 h-4 mr-2" />
+                  AI CV insights
                 </h3>
-                <pre className="bg-gray-50 p-3 rounded-lg border text-sm text-gray-700 whitespace-pre-wrap">
+                <pre className="bg-gray-50 p-2 rounded border text-xs text-gray-700 whitespace-pre-wrap max-h-40 overflow-auto">
                   {JSON.stringify(cvExtractedData, null, 2)}
                 </pre>
               </div>
             )}
-          </div>
 
-          <div className="flex items-start space-x-2 p-4 border rounded-lg bg-blue-50">
-            <Checkbox
-              id="terms"
-              className="w-5 h-5 border rounded bg-white focus:ring-blue-500"
-              checked={formData.acceptedTerms}
-              onCheckedChange={(checked) =>
-                handleBooleanInputChange("acceptedTerms", checked as boolean)
-              }
-              required
-            >
-              <CheckboxIndicator className="flex items-center justify-center">
-                <Check className="w-4 h-4 text-blue-600" />
-              </CheckboxIndicator>
-            </Checkbox>
-            <Label
-              htmlFor="terms"
-              className="text-sm text-gray-700 leading-relaxed"
-            >
-              I agree to the{" "}
-              <Link href="/terms" className="text-blue-600 hover:text-blue-700">
-                Terms of Service
-              </Link>{" "}
-              and{" "}
-              <Link
-                href="/privacy"
-                className="text-blue-600 hover:text-blue-700"
-              >
-                Privacy Policy
-              </Link>
-              . I understand that my information will be used in accordance with
-              Malaysian data protection laws.
-            </Label>
-          </div>
-          {!formData.acceptedTerms && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-red-600 text-sm">
-                You must accept the Terms of Service and Privacy Policy to
-                continue.
+            <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-4">
+              <p className="mb-3 text-sm font-medium text-gray-900">
+                Agreement
               </p>
+              <div className="flex items-start gap-4">
+                <Checkbox
+                  id="terms"
+                  className="mt-0.5 h-5 w-5 shrink-0 rounded border-2 border-gray-400 bg-white focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 data-[state=checked]:border-blue-600 data-[state=checked]:bg-blue-600"
+                  checked={formData.acceptedTerms}
+                  onCheckedChange={(checked) =>
+                    handleBooleanInputChange("acceptedTerms", checked as boolean)
+                  }
+                  required
+                >
+                  <CheckboxIndicator className="flex items-center justify-center text-white">
+                    <Check className="h-3.5 w-3.5 stroke-[3]" />
+                  </CheckboxIndicator>
+                </Checkbox>
+                <Label
+                  htmlFor="terms"
+                  className="cursor-pointer text-sm leading-snug text-gray-700"
+                >
+                  I agree to the{" "}
+                  <a
+                    href="/terms"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-blue-600 underline hover:text-blue-700"
+                  >
+                    Terms of Service
+                  </a>
+                  ,{" "}
+                  <a
+                    href="/privacy"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-blue-600 underline hover:text-blue-700"
+                  >
+                    Privacy Policy
+                  </a>
+                  , and{" "}
+                  <a
+                    href="/cookies"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-blue-600 underline hover:text-blue-700"
+                  >
+                    Cookie Policy
+                  </a>
+                  .
+                </Label>
+              </div>
             </div>
-          )}
+            {!formData.acceptedTerms && (
+              <p className="text-sm text-red-600">
+                Please tick the box above to continue.
+              </p>
+            )}
+          </div>
         </motion.div>
       );
 

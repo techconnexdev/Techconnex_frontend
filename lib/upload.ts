@@ -180,7 +180,7 @@ export function validateFileBeforeUpload(
     };
   }
 
-  // Check MIME type
+  // Check MIME type (document includes images for proposals/attachments)
   const allowedTypes = {
     image: [
       "image/jpeg",
@@ -198,6 +198,12 @@ export function validateFileBeforeUpload(
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "text/plain",
       "text/csv",
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+      "image/gif",
+      "image/webp",
+      "image/svg+xml",
     ],
     video: [
       "video/mp4",

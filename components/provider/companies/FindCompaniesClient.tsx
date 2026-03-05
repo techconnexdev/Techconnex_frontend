@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ProviderCompaniesTour } from "@/components/provider/ProviderCompaniesTour";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -141,15 +142,16 @@ export default function FindCompaniesClient({
 
   return (
     <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
+      <ProviderCompaniesTour />
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4" data-tour-step="0">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Find Companies</h1>
           <p className="text-sm sm:text-base text-gray-600 mt-1">
             Discover companies looking for ICT professionals
           </p>
         </div>
-        <div className="flex gap-2 sm:gap-3 w-full sm:w-auto">
+        <div className="flex gap-2 sm:gap-3 w-full sm:w-auto" data-tour-step="1">
           <Link href="/provider/companies/saved" className="w-full sm:w-auto">
             <Button variant="outline" className="w-full sm:w-auto text-xs sm:text-sm">
               <Heart className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
@@ -160,7 +162,7 @@ export default function FindCompaniesClient({
       </div>
 
       {/* Filters (Search + Rating + Verified) */}
-      <Card>
+      <Card data-tour-step="2">
         <CardContent className="p-4 sm:p-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             <div className="relative">
@@ -200,23 +202,24 @@ export default function FindCompaniesClient({
         </CardContent>
       </Card>
 
-      {/* Results header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
-        <p className="text-sm sm:text-base text-gray-600">
-          {filteredCompanies.length} companies found
-        </p>
-        <Select value={sortBy} onValueChange={setSortBy}>
-          <SelectTrigger className="w-full sm:w-48 text-sm sm:text-base">
-            <SelectValue placeholder="Sort by" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="rating">Highest Rated</SelectItem>
-            <SelectItem value="verified">Verified First</SelectItem>
-            <SelectItem value="projects">Most Projects</SelectItem>
-            <SelectItem value="newest">Newest</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      {/* Results header + Grid */}
+      <div data-tour-step="3">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 mb-4">
+          <p className="text-sm sm:text-base text-gray-600">
+            {filteredCompanies.length} companies found
+          </p>
+          <Select value={sortBy} onValueChange={setSortBy}>
+            <SelectTrigger className="w-full sm:w-48 text-sm sm:text-base">
+              <SelectValue placeholder="Sort by" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="rating">Highest Rated</SelectItem>
+              <SelectItem value="verified">Verified First</SelectItem>
+              <SelectItem value="projects">Most Projects</SelectItem>
+              <SelectItem value="newest">Newest</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
       {/* Grid */}
       {loading ? (
@@ -224,12 +227,13 @@ export default function FindCompaniesClient({
           <p className="text-sm sm:text-base text-gray-600">Loading companies...</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 items-stretch">
           {filteredCompanies.map((c) => (
             <CompanyCard key={c.id} company={c} />
           ))}
         </div>
       )}
+      </div>
     </div>
   );
 }

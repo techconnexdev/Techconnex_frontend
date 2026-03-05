@@ -12,18 +12,15 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
   getNotificationCategory,
   DISPLAY_CATEGORIES,
   CATEGORY_LABELS,
+  CATEGORY_COLORS,
 } from "@/lib/notification-categories";
 import {
-  Zap,
   Home,
   Briefcase,
   Target,
@@ -38,6 +35,7 @@ import {
   X,
   Building2,
   Star,
+  ChevronLeft,
 } from "lucide-react";
 import {
   Dialog,
@@ -52,6 +50,10 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { getProfileImageUrl, getUnreadMessageCount } from "@/lib/api";
 import { SupportChatWidget } from "@/components/support/SupportChatWidget";
+import { ProviderCompletionProvider } from "@/contexts/ProviderCompletionContext";
+import { ProfileCompletionWidget } from "@/components/provider/ProfileCompletionWidget";
+import { clearOnboardingCache } from "@/components/provider/ProviderOnboardingPromptDialog";
+import Image from "next/image";
 
 interface ProviderLayoutProps {
   children: React.ReactNode;
@@ -116,7 +118,6 @@ export function ProviderLayout({ children }: ProviderLayoutProps) {
   // Profile state
   const [profile, setProfile] = useState<ProviderProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
-  const [authChecked, setAuthChecked] = useState(false);
 
   // Notifications state (grouped by project + type when fetched with ?grouped=1)
   const [notifications, setNotifications] = useState<GroupedNotification[]>([]);
@@ -124,6 +125,7 @@ export function ProviderLayout({ children }: ProviderLayoutProps) {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedNotification, setSelectedNotification] =
     useState<Notification | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   // Unread message count state
   const [unreadMessageCount, setUnreadMessageCount] = useState(0);
@@ -133,6 +135,9 @@ export function ProviderLayout({ children }: ProviderLayoutProps) {
     // Clear user data from localStorage
     localStorage.removeItem("user");
     localStorage.removeItem("token");
+
+    // Clear onboarding dialog cache so it re-validates on next login
+    clearOnboardingCache();
 
     // Clear any other session data
     sessionStorage.clear();
@@ -228,10 +233,11 @@ export function ProviderLayout({ children }: ProviderLayoutProps) {
         return;
       }
 
-      // Try to get user id from localStorage
+      // Try to get user id and role from localStorage
       let userId = null;
+      let userData: { id?: string; role?: string[] } | null = null;
       try {
-        const userData = JSON.parse(user);
+        userData = JSON.parse(user);
         userId = userData?.id;
         console.log("👤 User ID extracted:", userId);
       } catch (e) {
@@ -243,6 +249,19 @@ export function ProviderLayout({ children }: ProviderLayoutProps) {
       if (!userId) {
         console.log("❌ No user ID found, redirecting to login");
         routerRef.current.push("/auth/login");
+        return;
+      }
+
+      // Only providers can access provider routes
+      const roles = Array.isArray(userData?.role) ? userData.role : (userData?.role ? [userData.role] : []);
+      if (!roles.includes("PROVIDER")) {
+        if (roles.includes("CUSTOMER")) {
+          routerRef.current.push("/customer/dashboard");
+        } else if (roles.includes("ADMIN")) {
+          routerRef.current.push("/admin/dashboard");
+        } else {
+          routerRef.current.push("/auth/login");
+        }
         return;
       }
       const API_URL =
@@ -271,11 +290,10 @@ export function ProviderLayout({ children }: ProviderLayoutProps) {
         setProfile(profileData as ProviderProfile);
       } catch (error) {
         console.error("❌ Error fetching profile:", error);
-        // Don't redirect immediately on fetch error, just set profile to null
         setProfile(null);
+        routerRef.current.push("/auth/login");
       } finally {
         setProfileLoading(false);
-        setAuthChecked(true);
         console.log("✅ Authentication check completed");
       }
     };
@@ -344,18 +362,6 @@ export function ProviderLayout({ children }: ProviderLayoutProps) {
     return () => clearInterval(interval);
   }, []);
 
-  // Show loading spinner while checking authentication
-  if (!authChecked) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Checking authentication...</p>
-        </div>
-      </div>
-    );
-  }
-
   const navigation = [
     { name: "Dashboard", href: "/provider/dashboard", icon: Home },
     { name: "My Projects", href: "/provider/projects", icon: Briefcase },
@@ -372,6 +378,7 @@ export function ProviderLayout({ children }: ProviderLayoutProps) {
     pathname === href || pathname.startsWith(href + "/");
 
   return (
+    <ProviderCompletionProvider>
     <div className="min-h-screen bg-gray-50">
       {/* Mobile sidebar */}
       <div
@@ -386,9 +393,13 @@ export function ProviderLayout({ children }: ProviderLayoutProps) {
         <div className="fixed inset-y-0 left-0 flex w-full max-w-xs flex-col bg-white">
           <div className="flex h-16 items-center justify-between px-4 border-b">
             <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                <Zap className="w-5 h-5 text-white" />
-              </div>
+              <Image
+                src="/logo.png"
+                alt="TechConnex"
+                width={40}
+                height={40}
+                className="h-10 w-10 rounded-xl object-contain"
+              />
               <span className="text-xl font-bold text-gray-900">
                 Techconnex
               </span>
@@ -427,13 +438,17 @@ export function ProviderLayout({ children }: ProviderLayoutProps) {
       </div>
 
       {/* Desktop sidebar */}
-      <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
+      <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col" data-tour-step="6">
         <div className="flex flex-col flex-grow bg-white border-r border-gray-200">
           <div className="flex items-center h-16 px-4 border-b">
             <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                <Zap className="w-5 h-5 text-white" />
-              </div>
+              <Image
+                src="/logo.png"
+                alt="TechConnex"
+                width={40}
+                height={40}
+                className="h-10 w-10 rounded-xl object-contain"
+              />
               <span className="text-xl font-bold text-gray-900">
                 Techconnex
               </span>
@@ -489,8 +504,11 @@ export function ProviderLayout({ children }: ProviderLayoutProps) {
               </div> */}
             </div>
 
-            <div className="flex items-center space-x-4">
-              <DropdownMenu>
+            <div className="flex items-center space-x-2 sm:space-x-4">
+              <ProfileCompletionWidget />
+              <DropdownMenu
+                onOpenChange={(open) => !open && setSelectedCategory(null)}
+              >
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="sm" className="relative">
                     <Bell className="w-5 h-5" />
@@ -503,83 +521,133 @@ export function ProviderLayout({ children }: ProviderLayoutProps) {
                     </Badge>
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-64" align="end" forceMount>
-                  <DropdownMenuLabel className="font-medium text-gray-900">
-                    Notifications
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {notificationsLoading ? (
-                    <DropdownMenuItem disabled>Loading...</DropdownMenuItem>
-                  ) : notifications.length > 0 ? (
-                    DISPLAY_CATEGORIES.map(
-                      (category) =>
-                        notificationsByCategory[category]?.length > 0 && (
-                          <DropdownMenuSub key={category}>
-                            <DropdownMenuSubTrigger>
-                              <span className="font-medium">
-                                {CATEGORY_LABELS[category]}
-                              </span>
-                              <span className="ml-auto text-xs text-muted-foreground">
-                                {notificationsByCategory[category].length}
-                              </span>
-                            </DropdownMenuSubTrigger>
-                            <DropdownMenuSubContent
-                              className="w-80 max-h-[400px] overflow-y-auto"
-                              sideOffset={4}
+                <DropdownMenuContent
+                  className="w-80 min-h-[200px] max-h-[420px] p-0"
+                  align="end"
+                  forceMount
+                >
+                  <div className="flex flex-col">
+                    <div className="px-4 py-3 border-b">
+                      <DropdownMenuLabel className="font-medium text-gray-900 p-0">
+                        {selectedCategory ? (
+                          <button
+                            type="button"
+                            onClick={() => setSelectedCategory(null)}
+                            className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 -ml-1"
+                          >
+                            <ChevronLeft className="w-4 h-4" />
+                            {CATEGORY_LABELS[selectedCategory as keyof typeof CATEGORY_LABELS]}
+                          </button>
+                        ) : (
+                          "Notifications"
+                        )}
+                      </DropdownMenuLabel>
+                    </div>
+                    <div className="overflow-y-auto max-h-[360px]">
+                      {notificationsLoading ? (
+                        <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+                          Loading...
+                        </div>
+                      ) : notifications.length === 0 ? (
+                        <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+                          No notifications
+                        </div>
+                      ) : selectedCategory ? (
+                        (notificationsByCategory[selectedCategory] ?? []).map(
+                          (n) => (
+                            <DropdownMenuItem
+                              key={n.id}
+                              onClick={() => handleNotificationClick(n)}
+                              className={`flex flex-col items-start gap-1 py-3 px-4 rounded-none border-b last:border-b-0 cursor-pointer ${
+                                n.isRead ? "opacity-60" : ""
+                              }`}
                             >
-                              {notificationsByCategory[category].map((n) => (
-                                <DropdownMenuItem
-                                  key={n.id}
-                                  onClick={() => handleNotificationClick(n)}
-                                  className={n.isRead ? "opacity-50" : ""}
+                              <span className="font-medium text-left">
+                                {n.count > 1 ? (
+                                  n.type === "proposal" &&
+                                  n.eventType === "new_proposal" ? (
+                                    <>
+                                      You received {n.count} new proposals for
+                                      &quot;{n.projectName}&quot;
+                                    </>
+                                  ) : n.type === "milestone" ? (
+                                    <>
+                                      {n.count} milestone updates for &quot;
+                                      {n.projectName}&quot;
+                                    </>
+                                  ) : (
+                                    <>
+                                      {n.title} for &quot;{n.projectName}&quot;
+                                      (+{n.count - 1} more)
+                                    </>
+                                  )
+                                ) : (
+                                  String(n.title)
+                                )}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {new Date(n.latestAt).toLocaleString()}
+                              </span>
+                              {n.count === 1 && (
+                                <span className="text-sm text-gray-600 line-clamp-2 text-left">
+                                  {String(n.content)}
+                                </span>
+                              )}
+                            </DropdownMenuItem>
+                          ),
+                        )
+                      ) : (
+                        <div className="py-2">
+                          {DISPLAY_CATEGORIES.filter(
+                            (cat) =>
+                              (notificationsByCategory[cat]?.length ?? 0) > 0,
+                          ).map((category) => {
+                            const count =
+                              notificationsByCategory[category]?.length ?? 0;
+                            const unreadCount =
+                              notificationsByCategory[category]?.filter(
+                                (n) => !n.isRead,
+                              ).length ?? 0;
+                            const color =
+                              CATEGORY_COLORS[
+                                category as keyof typeof CATEGORY_COLORS
+                              ];
+                            return (
+                              <button
+                                key={category}
+                                type="button"
+                                onClick={() => setSelectedCategory(category)}
+                                className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors border-l-4"
+                                style={{
+                                  borderLeftColor: color,
+                                }}
+                              >
+                                <div
+                                  className="w-3 h-3 rounded-full shrink-0"
+                                  style={{ backgroundColor: color }}
+                                />
+                                <span className="flex-1 font-medium text-gray-900">
+                                  {CATEGORY_LABELS[
+                                    category as keyof typeof CATEGORY_LABELS
+                                  ]}
+                                </span>
+                                <Badge
+                                  variant={unreadCount > 0 ? "default" : "secondary"}
+                                  className={
+                                    unreadCount > 0
+                                      ? "bg-red-500"
+                                      : "bg-gray-200 text-gray-700"
+                                  }
                                 >
-                                  <div className="flex flex-col space-y-1 w-full">
-                                    <span className="font-medium">
-                                      {n.count > 1 ? (
-                                        n.type === "proposal" &&
-                                        n.eventType === "new_proposal" ? (
-                                          <>
-                                            You received {n.count} new proposals
-                                            for &quot;{n.projectName}&quot;
-                                          </>
-                                        ) : n.type === "milestone" ? (
-                                          <>
-                                            {n.count} milestone updates for
-                                            &quot;
-                                            {n.projectName}&quot;
-                                          </>
-                                        ) : (
-                                          <>
-                                            {n.title} for &quot;{n.projectName}
-                                            &quot; (+
-                                            {n.count - 1} more)
-                                          </>
-                                        )
-                                      ) : (
-                                        String(n.title)
-                                      )}
-                                    </span>
-                                    <span className="text-xs text-muted-foreground">
-                                      {new Date(n.latestAt).toLocaleString()}
-                                    </span>
-                                    {n.count === 1 && (
-                                      <span className="text-sm text-gray-600 line-clamp-2">
-                                        {String(n.content)}
-                                      </span>
-                                    )}
-                                  </div>
-                                </DropdownMenuItem>
-                              ))}
-                            </DropdownMenuSubContent>
-                          </DropdownMenuSub>
-                        ),
-                    )
-                  ) : (
-                    <DropdownMenuItem disabled>
-                      No notifications
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuSeparator />
+                                  {count}
+                                </Badge>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </DropdownMenuContent>
               </DropdownMenu>
 
@@ -628,15 +696,21 @@ export function ProviderLayout({ children }: ProviderLayoutProps) {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem>
+                  <DropdownMenuItem
+                  onClick={() => router.push("/provider/profile")}
+                  >
                     <User className="mr-2 h-4 w-4" />
                     <span>Profile</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem>
-                    <BarChart3 className="mr-2 h-4 w-4" />
-                    <span>Analytics</span>
+                  <DropdownMenuItem
+                  onClick={() => router.push("/provider/earnings")}
+                  >
+                    <DollarSign className="mr-2 h-4 w-4" />
+                    <span>Earnings</span>
                   </DropdownMenuItem>
-                  <DropdownMenuItem>
+                  <DropdownMenuItem
+                  onClick={() => router.push("/provider/settings")}
+                  >
                     <Settings className="mr-2 h-4 w-4" />
                     <span>Settings</span>
                   </DropdownMenuItem>
@@ -799,5 +873,6 @@ export function ProviderLayout({ children }: ProviderLayoutProps) {
 
       <SupportChatWidget />
     </div>
+    </ProviderCompletionProvider>
   );
 }

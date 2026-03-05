@@ -2,12 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
@@ -21,7 +16,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Progress } from "@/components/ui/progress";
 import {
   Dialog,
   DialogContent,
@@ -30,6 +24,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Star,
   MapPin,
@@ -47,8 +46,11 @@ import {
   Camera,
   AlertCircle,
   FileText,
+  ChevronDown,
+  ListTodo,
 } from "lucide-react";
 import { ProviderLayout } from "@/components/provider-layout";
+import { ProviderProfileTour } from "@/components/provider/ProviderProfileTour";
 import {
   getProviderProfile,
   upsertProviderProfile,
@@ -78,10 +80,10 @@ import { uploadFile } from "@/lib/upload";
 import { useToast } from "@/hooks/use-toast";
 import { useRef } from "react";
 import Image from "next/image";
+import { useSearchParams } from "next/navigation";
+import { useProviderCompletion } from "@/contexts/ProviderCompletionContext";
 import VerificationSection from "@/components/customer/profile/sections/VerificationSection";
-import {
-  UploadedDocument,
-} from "@/components/customer/profile/types";
+import { UploadedDocument } from "@/components/customer/profile/types";
 
 type Props = Record<string, never>;
 
@@ -185,9 +187,10 @@ export default function ProviderProfilePage(_props: Props) {
     responseTime: 0,
     completion: 0,
   });
+  const { refetch: refetchCompletion } = useProviderCompletion();
   const [profileCompletion, setProfileCompletion] = useState(0);
   const [completionSuggestions, setCompletionSuggestions] = useState<string[]>(
-    []
+    [],
   );
   const [profileFormErrors, setProfileFormErrors] = useState<{
     name?: string;
@@ -215,14 +218,18 @@ export default function ProviderProfilePage(_props: Props) {
   const [newPortfolioLink, setNewPortfolioLink] = useState("");
 
   // State for portfolio projects (platform projects)
-  const [portfolioProjects, setPortfolioProjects] = useState<PortfolioProject[]>([]);
+  const [portfolioProjects, setPortfolioProjects] = useState<
+    PortfolioProject[]
+  >([]);
   const [loadingPortfolio, setLoadingPortfolio] = useState(false);
-  
+
   // State for portfolio items (external work)
   const [portfolioItems, setPortfolioItems] = useState<PortfolioItem[]>([]);
   const [loadingPortfolioItems, setLoadingPortfolioItems] = useState(false);
   const [showPortfolioDialog, setShowPortfolioDialog] = useState(false);
-  const [editingPortfolioIndex, setEditingPortfolioIndex] = useState<number | null>(null);
+  const [editingPortfolioIndex, setEditingPortfolioIndex] = useState<
+    number | null
+  >(null);
   const [portfolioFormData, setPortfolioFormData] = useState({
     title: "",
     description: "",
@@ -259,23 +266,44 @@ export default function ProviderProfilePage(_props: Props) {
     sourceUrl?: string;
   }>({});
   const [docs, setDocs] = useState<UploadedDocument[]>([]);
-  const [resume, setResume] = useState<{ fileUrl: string; uploadedAt: string } | null>(null);
+  const [resume, setResume] = useState<{
+    fileUrl: string;
+    uploadedAt: string;
+  } | null>(null);
   const [uploadingResume, setUploadingResume] = useState(false);
   const [deletingResume, setDeletingResume] = useState(false);
   const resumeInputRef = useRef<HTMLInputElement>(null);
+
+  // Controlled tab for switching to verification from warning
+  const searchParams = useSearchParams();
+  const [activeTab, setActiveTab] = useState("overview");
+
+  // Sync tab from URL (e.g. /provider/profile?tab=verification)
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab === "verification") setActiveTab("verification");
+  }, [searchParams]);
+
+  // Provider is verified if at least one KYC document has approved status
+  const isProviderVerified =
+    docs.some((d) => d.status === "approved");
 
   // Load profile data on component mount
   useEffect(() => {
     const loadProfileData = async () => {
       try {
         setLoading(true);
-        const [profileResponse, statsResponse, completionResponse, resumeResponse] =
-          await Promise.all([
+        const [
+          profileResponse,
+          statsResponse,
+          completionResponse,
+          resumeResponse,
+        ] = await Promise.all([
           getProviderProfile(),
           getProviderProfileStats(),
-            getProviderProfileCompletion(),
-            getMyResume().catch(() => ({ success: false, data: null })), // Resume is optional
-          ]);
+          getProviderProfileCompletion(),
+          getMyResume().catch(() => ({ success: false, data: null })), // Resume is optional
+        ]);
 
         if (profileResponse.success) {
           const profile = profileResponse.data;
@@ -315,9 +343,10 @@ export default function ProviderProfilePage(_props: Props) {
         }
 
         if (completionResponse.success) {
-          setProfileCompletion(completionResponse.data.completion || 0);
+          setProfileCompletion(completionResponse.data.completion ?? 0);
           setCompletionSuggestions(completionResponse.data.suggestions || []);
         }
+        await refetchCompletion();
 
         if (resumeResponse.success && resumeResponse.data) {
           setResume(resumeResponse.data);
@@ -409,75 +438,86 @@ export default function ProviderProfilePage(_props: Props) {
     loadCertifications();
   }, [toast]);
 
-
-
   // Fetch profile and kyc documents client-side
   useEffect(() => {
     setLoading(true);
-    (async () => {      
-        try {
-          const kycResp = await getKycDocuments();
-          const docsData = (kycResp?.data?.documents ??
-            kycResp?.data ??
-            []) as unknown[];
-          const mapped = docsData.map((d) => {
-            const item = d as Record<string, unknown>;
-            const fileUrl = item.fileUrl ? String(item.fileUrl) : undefined;
-            // Use getAttachmentUrl helper for consistent URL handling (R2 keys, public URLs, local paths)
-            // Note: We'll resolve the actual URL when downloading, not here
-            return {
-              id: String(item.id ?? ""),
-              name: String(item.filename ?? item.fileUrl ?? item.id ?? ""),
-              type: String(item.type ?? "document"),
-              size: String(item.size ?? "-"),
-              uploadDate: String(item.uploadedAt ?? item.uploadDate ?? ""),
-              // Normalize backend statuses (uploaded|verified|rejected) to our UI statuses
-              status: ((): "pending" | "approved" | "rejected" => {
-                const raw = String(item.status ?? "uploaded").toLowerCase();
-                if (raw === "verified" || raw === "approved") return "approved";
-                if (raw === "rejected") return "rejected";
-                return "pending"; // uploaded / uploaded-but-not-reviewed
-              })(),
-              rejectionReason: item.reviewNotes
-                ? String(item.reviewNotes)
-                : undefined,
-              // prefer the reviewer's display name when available (item.reviewer.name),
-              // otherwise fall back to any top-level reviewedBy value
-              reviewedBy:
-                item.reviewer && typeof item.reviewer === "object" && "name" in item.reviewer
-                  ? String((item.reviewer as Reviewer).name)
-                  : item.reviewedBy
+    (async () => {
+      try {
+        const kycResp = await getKycDocuments();
+        const docsData = (kycResp?.data?.documents ??
+          kycResp?.data ??
+          []) as unknown[];
+        const mapped = docsData.map((d) => {
+          const item = d as Record<string, unknown>;
+          const fileUrl = item.fileUrl ? String(item.fileUrl) : undefined;
+          // Use getAttachmentUrl helper for consistent URL handling (R2 keys, public URLs, local paths)
+          // Note: We'll resolve the actual URL when downloading, not here
+          return {
+            id: String(item.id ?? ""),
+            name: String(item.filename ?? item.fileUrl ?? item.id ?? ""),
+            type: String(item.type ?? "document"),
+            size: String(item.size ?? "-"),
+            uploadDate: String(item.uploadedAt ?? item.uploadDate ?? ""),
+            // Normalize backend statuses (uploaded|verified|rejected) to our UI statuses
+            status: ((): "pending" | "approved" | "rejected" => {
+              const raw = String(item.status ?? "uploaded").toLowerCase();
+              if (raw === "verified" || raw === "approved") return "approved";
+              if (raw === "rejected") return "rejected";
+              return "pending"; // uploaded / uploaded-but-not-reviewed
+            })(),
+            rejectionReason: item.reviewNotes
+              ? String(item.reviewNotes)
+              : undefined,
+            // prefer the reviewer's display name when available (item.reviewer.name),
+            // otherwise fall back to any top-level reviewedBy value
+            reviewedBy:
+              item.reviewer &&
+              typeof item.reviewer === "object" &&
+              "name" in item.reviewer
+                ? String((item.reviewer as Reviewer).name)
+                : item.reviewedBy
                   ? String(item.reviewedBy)
                   : undefined,
-              reviewedAt: item.reviewedAt
-                ? new Date(String(item.reviewedAt)).toLocaleString("en-MY", {
-                    day: "2-digit",
-                    month: "short",
-                    year: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    hour12: true,
-                  })
-                : undefined,
-              fileUrl: fileUrl, // Keep original fileUrl (R2 key or path) - will be resolved when downloading
-              reviewer: item.reviewer && typeof item.reviewer === "object"
+            reviewedAt: item.reviewedAt
+              ? new Date(String(item.reviewedAt)).toLocaleString("en-MY", {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  hour12: true,
+                })
+              : undefined,
+            fileUrl: fileUrl, // Keep original fileUrl (R2 key or path) - will be resolved when downloading
+            reviewer:
+              item.reviewer && typeof item.reviewer === "object"
                 ? {
                     id: String((item.reviewer as Reviewer).id || ""),
                     name: String((item.reviewer as Reviewer).name || ""),
-                    email: (item.reviewer as Reviewer).email ? String((item.reviewer as Reviewer).email) : undefined,
+                    email: (item.reviewer as Reviewer).email
+                      ? String((item.reviewer as Reviewer).email)
+                      : undefined,
                   }
                 : null,
-            } as UploadedDocument;
-          });
-          setDocs(mapped);
-        } catch (err) {
-          console.warn("Failed to fetch KYC documents", err);
-        }
-       finally {
+          } as UploadedDocument;
+        });
+        setDocs(mapped);
+      } catch (err) {
+        console.warn("Failed to fetch KYC documents", err);
+      } finally {
         setLoading(false);
       }
     })();
   }, []);
+
+  // Ensure href is absolute so target="_blank" opens in a new tab
+  const ensureAbsoluteUrl = (url: string) => {
+    if (!url?.trim()) return url;
+    const trimmed = url.trim();
+    return trimmed.startsWith("http://") || trimmed.startsWith("https://")
+      ? trimmed
+      : `https://${trimmed}`;
+  };
 
   // Save profile data
   const handleSaveProfile = async () => {
@@ -497,6 +537,7 @@ export default function ProviderProfilePage(_props: Props) {
         bio: profileData.bio,
         major: profileData.major,
         location: profileData.location,
+        ...(profileData.phone != null && profileData.phone.trim() !== "" && { phone: profileData.phone.trim() }),
         hourlyRate: profileData.hourlyRate,
         availability: profileData.availability,
         languages: profileData.languages,
@@ -521,9 +562,10 @@ export default function ProviderProfilePage(_props: Props) {
         // Reload completion percentage and suggestions
         const completionResponse = await getProviderProfileCompletion();
         if (completionResponse.success) {
-          setProfileCompletion(completionResponse.data.completion || 0);
+          setProfileCompletion(completionResponse.data.completion ?? 0);
           setCompletionSuggestions(completionResponse.data.suggestions || []);
         }
+        await refetchCompletion();
       } else {
         toast({
           title: "Error",
@@ -566,9 +608,10 @@ export default function ProviderProfilePage(_props: Props) {
       try {
         const url = profileData.website.trim();
         // Add protocol if missing
-        const urlWithProtocol = url.startsWith("http://") || url.startsWith("https://") 
-          ? url 
-          : `https://${url}`;
+        const urlWithProtocol =
+          url.startsWith("http://") || url.startsWith("https://")
+            ? url
+            : `https://${url}`;
         new URL(urlWithProtocol);
       } catch {
         errors.website = "Please enter a valid website URL";
@@ -581,9 +624,10 @@ export default function ProviderProfilePage(_props: Props) {
         if (!link.trim()) return true;
         try {
           const url = link.trim();
-          const urlWithProtocol = url.startsWith("http://") || url.startsWith("https://") 
-            ? url 
-            : `https://${url}`;
+          const urlWithProtocol =
+            url.startsWith("http://") || url.startsWith("https://")
+              ? url
+              : `https://${url}`;
           new URL(urlWithProtocol);
           return false;
         } catch {
@@ -622,8 +666,10 @@ export default function ProviderProfilePage(_props: Props) {
       profileData.maximumProjectBudget > 0 &&
       profileData.minimumProjectBudget > profileData.maximumProjectBudget
     ) {
-      errors.minimumProjectBudget = "Minimum budget cannot exceed maximum budget";
-      errors.maximumProjectBudget = "Maximum budget must be greater than minimum budget";
+      errors.minimumProjectBudget =
+        "Minimum budget cannot exceed maximum budget";
+      errors.maximumProjectBudget =
+        "Maximum budget must be greater than minimum budget";
     }
 
     // Team size validation
@@ -770,14 +816,16 @@ export default function ProviderProfilePage(_props: Props) {
     // Validate URL format
     try {
       const url = newPortfolioLink.trim();
-      const urlWithProtocol = url.startsWith("http://") || url.startsWith("https://") 
-        ? url 
-        : `https://${url}`;
+      const urlWithProtocol =
+        url.startsWith("http://") || url.startsWith("https://")
+          ? url
+          : `https://${url}`;
       new URL(urlWithProtocol);
     } catch {
       toast({
         title: "Invalid URL",
-        description: "Please enter a valid URL (e.g., https://github.com/username)",
+        description:
+          "Please enter a valid URL (e.g., https://github.com/username)",
         variant: "destructive",
       });
       return;
@@ -854,11 +902,15 @@ export default function ProviderProfilePage(_props: Props) {
       // Reload completion percentage and suggestions
       const completionResponse = await getProviderProfileCompletion();
       if (completionResponse.success) {
-        setProfileCompletion(completionResponse.data.completion || 0);
+        setProfileCompletion(completionResponse.data.completion ?? 0);
         setCompletionSuggestions(completionResponse.data.suggestions || []);
+        refetchCompletion();
       }
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to upload profile image";
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Failed to upload profile image";
       toast({
         title: "Upload failed",
         description: errorMessage,
@@ -933,9 +985,17 @@ export default function ProviderProfilePage(_props: Props) {
         });
       } catch (uploadError: unknown) {
         // Handle R2 upload errors
-        const errorMessage = uploadError instanceof Error ? uploadError.message : String(uploadError);
-        if (errorMessage.includes("network") || errorMessage.includes("fetch")) {
-          throw new Error("Network error: Unable to connect to upload service. Please check your internet connection and try again.");
+        const errorMessage =
+          uploadError instanceof Error
+            ? uploadError.message
+            : String(uploadError);
+        if (
+          errorMessage.includes("network") ||
+          errorMessage.includes("fetch")
+        ) {
+          throw new Error(
+            "Network error: Unable to connect to upload service. Please check your internet connection and try again.",
+          );
         }
         if (errorMessage.includes("size") || errorMessage.includes("limit")) {
           throw new Error(`File size error: ${errorMessage}`);
@@ -943,7 +1003,9 @@ export default function ProviderProfilePage(_props: Props) {
         if (errorMessage.includes("type") || errorMessage.includes("format")) {
           throw new Error(`File type error: ${errorMessage}`);
         }
-        throw new Error(`Upload failed: ${errorMessage || "Unknown error occurred during file upload"}`);
+        throw new Error(
+          `Upload failed: ${errorMessage || "Unknown error occurred during file upload"}`,
+        );
       }
 
       if (!uploadResult.success) {
@@ -956,15 +1018,26 @@ export default function ProviderProfilePage(_props: Props) {
         response = await uploadResume(uploadResult.key);
       } catch (apiError: unknown) {
         // Handle API errors
-        const errorMessage = apiError instanceof Error ? apiError.message : String(apiError);
+        const errorMessage =
+          apiError instanceof Error ? apiError.message : String(apiError);
         const errorName = apiError instanceof Error ? apiError.name : "";
-        if (errorMessage.includes("network") || errorMessage.includes("fetch") || errorName === "TypeError") {
-          throw new Error("Network error: Unable to connect to server. Please check your internet connection and try again.");
+        if (
+          errorMessage.includes("network") ||
+          errorMessage.includes("fetch") ||
+          errorName === "TypeError"
+        ) {
+          throw new Error(
+            "Network error: Unable to connect to server. Please check your internet connection and try again.",
+          );
         }
         if (errorMessage.includes("401") || errorMessage.includes("403")) {
-          throw new Error("Authorization error: Your session may have expired. Please refresh the page and try again.");
+          throw new Error(
+            "Authorization error: Your session may have expired. Please refresh the page and try again.",
+          );
         }
-        throw apiError instanceof Error ? apiError : new Error(String(apiError));
+        throw apiError instanceof Error
+          ? apiError
+          : new Error(String(apiError));
       }
 
       if (response.success) {
@@ -978,7 +1051,10 @@ export default function ProviderProfilePage(_props: Props) {
       }
     } catch (error: unknown) {
       console.error("Resume upload error:", error);
-      const errorMessage = error instanceof Error ? error.message : "Failed to upload resume. Please try again.";
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Failed to upload resume. Please try again.";
       toast({
         title: "Upload failed",
         description: errorMessage,
@@ -993,7 +1069,11 @@ export default function ProviderProfilePage(_props: Props) {
   };
 
   const handleDeleteResume = async () => {
-    if (!confirm("Are you sure you want to delete your resume? This action cannot be undone.")) {
+    if (
+      !confirm(
+        "Are you sure you want to delete your resume? This action cannot be undone.",
+      )
+    ) {
       return;
     }
 
@@ -1006,7 +1086,8 @@ export default function ProviderProfilePage(_props: Props) {
         description: "Resume deleted successfully",
       });
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to delete resume";
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to delete resume";
       toast({
         title: "Delete failed",
         description: errorMessage,
@@ -1024,7 +1105,8 @@ export default function ProviderProfilePage(_props: Props) {
       const downloadUrl = await getR2DownloadUrl(resume.fileUrl);
       window.open(downloadUrl.downloadUrl, "_blank");
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to download resume";
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to download resume";
       toast({
         title: "Download failed",
         description: errorMessage,
@@ -1122,8 +1204,9 @@ export default function ProviderProfilePage(_props: Props) {
           // Reload completion percentage and suggestions
           const completionResponse = await getProviderProfileCompletion();
           if (completionResponse.success) {
-            setProfileCompletion(completionResponse.data.completion || 0);
+            setProfileCompletion(completionResponse.data.completion ?? 0);
             setCompletionSuggestions(completionResponse.data.suggestions || []);
+            refetchCompletion();
           }
         }
       } else {
@@ -1142,7 +1225,7 @@ export default function ProviderProfilePage(_props: Props) {
           // Reload completion percentage and suggestions
           const completionResponse = await getProviderProfileCompletion();
           if (completionResponse.success) {
-            setProfileCompletion(completionResponse.data.completion || 0);
+            refetchCompletion();
             setCompletionSuggestions(completionResponse.data.suggestions || []);
           }
         }
@@ -1158,7 +1241,8 @@ export default function ProviderProfilePage(_props: Props) {
       });
       setEditingCertIndex(null);
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to save certification";
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to save certification";
       toast({
         title: "Error",
         description: errorMessage,
@@ -1193,12 +1277,16 @@ export default function ProviderProfilePage(_props: Props) {
         // Reload completion percentage and suggestions
         const completionResponse = await getProviderProfileCompletion();
         if (completionResponse.success) {
-          setProfileCompletion(completionResponse.data.completion || 0);
+          setProfileCompletion(completionResponse.data.completion ?? 0);
           setCompletionSuggestions(completionResponse.data.suggestions || []);
         }
+        await refetchCompletion();
       }
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to delete certification";
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Failed to delete certification";
       toast({
         title: "Error",
         description: errorMessage,
@@ -1263,8 +1351,9 @@ export default function ProviderProfilePage(_props: Props) {
           // Reload completion percentage and suggestions
           const completionResponse = await getProviderProfileCompletion();
           if (completionResponse.success) {
-            setProfileCompletion(completionResponse.data.completion || 0);
+            setProfileCompletion(completionResponse.data.completion ?? 0);
             setCompletionSuggestions(completionResponse.data.suggestions || []);
+            refetchCompletion();
           }
         }
       } else {
@@ -1283,8 +1372,9 @@ export default function ProviderProfilePage(_props: Props) {
           // Reload completion percentage and suggestions
           const completionResponse = await getProviderProfileCompletion();
           if (completionResponse.success) {
-            setProfileCompletion(completionResponse.data.completion || 0);
+            setProfileCompletion(completionResponse.data.completion ?? 0);
             setCompletionSuggestions(completionResponse.data.suggestions || []);
+            refetchCompletion();
           }
         }
       }
@@ -1302,7 +1392,10 @@ export default function ProviderProfilePage(_props: Props) {
       setNewTechStack("");
       setEditingPortfolioIndex(null);
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : "Failed to save portfolio item";
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Failed to save portfolio item";
       toast({
         title: "Error",
         description: errorMessage,
@@ -1314,7 +1407,10 @@ export default function ProviderProfilePage(_props: Props) {
   };
 
   const handleAddTechStack = () => {
-    if (newTechStack.trim() && !portfolioFormData.techStack.includes(newTechStack.trim())) {
+    if (
+      newTechStack.trim() &&
+      !portfolioFormData.techStack.includes(newTechStack.trim())
+    ) {
       setPortfolioFormData((prev) => ({
         ...prev,
         techStack: [...prev.techStack, newTechStack.trim()],
@@ -1330,135 +1426,246 @@ export default function ProviderProfilePage(_props: Props) {
     }));
   };
 
-
   return (
     <ProviderLayout>
+      <ProviderProfileTour />
       <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
+        <div
+          className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4"
+          data-tour-step="0"
+        >
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">My Profile</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+              My Profile
+            </h1>
             <p className="text-sm sm:text-base text-gray-600 mt-1">
               Manage your professional profile and showcase your expertise
             </p>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
-            {/* <Button variant="outline">
-              <Eye className="w-4 h-4 mr-2" />
-              Preview Profile
-            </Button> */}
-            {isEditing ? (
-              <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setIsEditing(false);
-                    setProfileFormErrors({}); // Clear errors when canceling
-                  }}
-                  className="w-full sm:w-auto text-xs sm:text-sm"
-                >
-                  Cancel
-                </Button>
-                <Button onClick={handleSaveProfile} disabled={saving} className="w-full sm:w-auto text-xs sm:text-sm">
-                  {saving ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                      Save Changes
-                    </>
-                  )}
-                </Button>
-              </div>
-            ) : (
+            {!isEditing && (
               <Button
-                onClick={() => {
+                onClick={async () => {
                   setIsEditing(true);
-                  setProfileFormErrors({}); // Clear any previous errors when entering edit mode
+                  setProfileFormErrors({});
+                  // Refresh completion so "View missing fields" is up to date
+                  try {
+                    const res = await getProviderProfileCompletion();
+                    if (res.success) {
+                      setProfileCompletion(res.data.completion ?? 0);
+                      setCompletionSuggestions(res.data.suggestions || []);
+                    }
+                  } catch {
+                    // ignore
+                  }
                 }}
                 className="w-full sm:w-auto text-xs sm:text-sm"
+                data-tour-step="1"
               >
-              <Edit className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+                <Edit className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                 Edit Profile
-            </Button>
+              </Button>
             )}
           </div>
         </div>
 
-        {/* Profile Completion */}
-        <Card className="border-blue-200 bg-blue-50">
-          <CardContent className="p-4 sm:p-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 mb-3 sm:mb-4">
-              <div>
-                <h3 className="font-semibold text-sm sm:text-base text-blue-900">
-                  Profile Completion
-                </h3>
-                <p className="text-xs sm:text-sm text-blue-700 mt-1">
-                  Complete your profile to attract more clients
-                </p>
-              </div>
-              <div className="text-left sm:text-right">
-                <p className="text-xl sm:text-2xl font-bold text-blue-600">
-                  {profileCompletion}%
-                </p>
-              </div>
-            </div>
-            <Progress value={profileCompletion} className="h-2 mb-3 sm:mb-4" />
-            {completionSuggestions.length > 0 && (
-              <div className="mt-3 sm:mt-4">
-                <p className="text-xs sm:text-sm font-medium text-blue-900 mb-2">
-                  To complete your profile:
-                </p>
-                <ul className="space-y-1">
-                  {completionSuggestions.map((suggestion, index) => (
-                    <li
-                      key={index}
-                      className="text-xs sm:text-sm text-blue-700 flex items-start gap-2"
+        {/* Edit-mode banner: clear indicator and actions */}
+        {isEditing && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 py-3 px-4 -mx-4 sm:mx-0 sm:rounded-lg bg-amber-50 border border-amber-200 shadow-sm"
+          >
+            <div className="flex flex-wrap items-center gap-3 min-w-0">
+              <p className="text-sm text-amber-900">
+                <strong>Editing your profile.</strong> Update any section below (Basic info, rates, portfolio, skills, etc.) and click <strong>Save changes</strong> when done.
+              </p>
+              {profileCompletion < 100 && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="border-amber-300 text-amber-900 hover:bg-amber-100 hover:text-amber-950"
                     >
-                      <AlertCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 mt-0.5 flex-shrink-0" />
-                      <span className="break-words">{suggestion}</span>
-                    </li>
-                  ))}
-                </ul>
+                      <ListTodo className="w-3.5 h-3.5 mr-1.5" />
+                      View missing fields
+                      <ChevronDown className="w-3.5 h-3.5 ml-1" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="start"
+                    className="w-80 max-h-[60vh] overflow-y-auto"
+                  >
+                    <div className="px-3 py-2 border-b bg-muted/50">
+                      <p className="text-sm font-semibold text-gray-900">
+                        Incomplete or missing
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Complete these to increase your profile score
+                      </p>
+                    </div>
+                    {completionSuggestions.length > 0 ? (
+                      <div className="py-1">
+                        {completionSuggestions.map((suggestion, index) => (
+                          <div
+                            key={index}
+                            className="flex items-start gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                          >
+                            <AlertCircle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                            <span className="break-words">{suggestion}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="px-3 py-4 text-sm text-muted-foreground">
+                        Fill in all sections below (Overview, Portfolio, Skills, Verification) to complete your profile.
+                      </div>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
             </div>
-            )}
-            {profileCompletion === 100 && (
-              <div className="mt-3 sm:mt-4 flex items-center gap-2 text-green-700">
-                <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0" />
-                <span className="text-xs sm:text-sm font-medium">
-                  Your profile is complete! 🎉
-                </span>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+            <div className="flex gap-2 flex-shrink-0">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setIsEditing(false);
+                  setProfileFormErrors({});
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleSaveProfile}
+                disabled={saving}
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Save changes
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
 
-        <Tabs defaultValue="overview" className="space-y-4 sm:space-y-6">
+        {/* Profile completion: compact strip (full checklist lives in header widget) */}
+        {profileCompletion < 100 && (
+          <div
+            className="flex flex-wrap items-center gap-2 sm:gap-3 py-2.5 px-3 rounded-lg border border-blue-200 bg-blue-50/80"
+            data-tour-step="2"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="h-2 w-20 sm:w-24 rounded-full bg-blue-200 overflow-hidden flex-shrink-0">
+                <div
+                  className="h-full bg-blue-600 rounded-full transition-all"
+                  style={{ width: `${Math.min(100, profileCompletion)}%` }}
+                />
+              </div>
+              <span className="text-sm font-semibold text-blue-800 whitespace-nowrap">
+                {profileCompletion}%
+              </span>
+            </div>
+            <span className="text-xs text-blue-700">
+              Profile incomplete — open the <strong>Profile</strong> menu in the top bar to see what to add.
+            </span>
+          </div>
+        )}
+
+        {/* Verification warning: clickable, navigates to Verification tab */}
+        {!isProviderVerified && (
+          <button
+            type="button"
+            onClick={() => setActiveTab("verification")}
+            className="flex flex-wrap items-center gap-2 sm:gap-3 py-2.5 px-3 rounded-lg border border-amber-200 bg-amber-50/90 hover:bg-amber-100/90 hover:border-amber-300 w-full text-left transition-colors cursor-pointer"
+          >
+            <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0" />
+            <span className="text-sm font-semibold text-amber-800">
+              Provider not verified
+            </span>
+            <span className="text-xs text-amber-700">
+              You cannot receive payouts until you are verified. Complete identity verification to build trust and unlock features. Click to go to Verification.
+            </span>
+            <ChevronDown className="w-4 h-4 text-amber-600 rotate-[270deg] flex-shrink-0 ml-auto" />
+          </button>
+        )}
+
+        <Tabs
+          value={activeTab}
+          onValueChange={setActiveTab}
+          className="space-y-4 sm:space-y-6"
+          data-tour-step="3"
+        >
           <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto">
-            <TabsTrigger value="overview" className="text-xs sm:text-sm px-2 sm:px-4">Overview</TabsTrigger>
-            <TabsTrigger value="portfolio" className="text-xs sm:text-sm px-2 sm:px-4">Portfolio</TabsTrigger>
-            <TabsTrigger value="skills" className="text-xs sm:text-sm px-2 sm:px-4">Skills</TabsTrigger>
-            <TabsTrigger value="verification" className="text-xs sm:text-sm px-2 sm:px-4">Verification</TabsTrigger>
+            <TabsTrigger
+              value="overview"
+              className="text-xs sm:text-sm px-2 sm:px-4"
+            >
+              Overview
+            </TabsTrigger>
+            <TabsTrigger
+              value="portfolio"
+              className="text-xs sm:text-sm px-2 sm:px-4"
+            >
+              Portfolio
+            </TabsTrigger>
+            <TabsTrigger
+              value="skills"
+              className="text-xs sm:text-sm px-2 sm:px-4"
+            >
+              Skills
+            </TabsTrigger>
+            <TabsTrigger
+              value="verification"
+              className="text-xs sm:text-sm px-2 sm:px-4"
+            >
+              Verification
+            </TabsTrigger>
           </TabsList>
 
           {/* Overview */}
           <TabsContent value="overview">
             <div className="grid lg:grid-cols-3 gap-4 sm:gap-6">
-              <div className="lg:col-span-2 space-y-4 sm:space-y-6">
+              <div
+                className="lg:col-span-2 space-y-4 sm:space-y-6"
+                data-tour-step="4"
+              >
                 {/* Basic Info */}
-                <Card>
+                <Card
+                  className={
+                    isEditing
+                      ? "ring-2 ring-blue-300 border-blue-200 bg-blue-50/30"
+                      : ""
+                  }
+                >
                   <CardHeader className="p-4 sm:p-6">
-                    <CardTitle className="text-lg sm:text-xl">Basic Information</CardTitle>
+                    <CardTitle className="text-lg sm:text-xl flex items-center gap-2">
+                      Basic Information
+                      {isEditing && (
+                        <span className="text-xs font-normal text-blue-700 bg-blue-100 px-2 py-0.5 rounded">
+                          Editable
+                        </span>
+                      )}
+                    </CardTitle>
                   </CardHeader>
                   <CardContent className="p-4 sm:p-6 space-y-4 sm:space-y-6">
                     <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-6">
                       <div className="relative flex-shrink-0">
                         <Avatar className="w-20 h-20 sm:w-24 sm:h-24">
                           <AvatarImage
-                            src={getProfileImageUrl(profileData.profileImageUrl)}
+                            src={getProfileImageUrl(
+                              profileData.profileImageUrl,
+                            )}
                           />
                           <AvatarFallback className="text-base sm:text-lg">
                             {profileData.name
@@ -1488,7 +1695,7 @@ export default function ProviderProfilePage(_props: Props) {
                               ) : (
                                 <Camera className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                               )}
-                          </Button>
+                            </Button>
                           </>
                         )}
                       </div>
@@ -1497,17 +1704,29 @@ export default function ProviderProfilePage(_props: Props) {
                           <>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                               <div>
-                                <Label htmlFor="name" className="text-xs sm:text-sm">Full Name</Label>
+                                <Label
+                                  htmlFor="name"
+                                  className="text-xs sm:text-sm"
+                                >
+                                  Full Name
+                                </Label>
                                 <Input
                                   id="name"
                                   value={profileData.name}
                                   disabled={true}
                                   className="bg-gray-50 text-sm sm:text-base"
                                 />
-                                <p className="text-xs text-gray-500 mt-1">Contact support to change name</p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Contact support to change name
+                                </p>
                               </div>
                               <div>
-                                <Label htmlFor="email" className="text-xs sm:text-sm">Email</Label>
+                                <Label
+                                  htmlFor="email"
+                                  className="text-xs sm:text-sm"
+                                >
+                                  Email
+                                </Label>
                                 <Input
                                   id="email"
                                   type="email"
@@ -1515,29 +1734,58 @@ export default function ProviderProfilePage(_props: Props) {
                                   disabled={true}
                                   className="bg-gray-50 text-sm sm:text-base"
                                 />
-                                <p className="text-xs text-gray-500 mt-1">Contact support to change email</p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Contact support to change email
+                                </p>
                               </div>
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                               <div>
-                                <Label htmlFor="phone" className="text-xs sm:text-sm">Phone</Label>
+                                <Label
+                                  htmlFor="phone"
+                                  className="text-xs sm:text-sm"
+                                >
+                                  Phone
+                                </Label>
                                 <Input
                                   id="phone"
                                   value={profileData.phone}
-                                  disabled={true}
-                                  className="bg-gray-50 text-sm sm:text-base"
+                                  disabled={!!(profileData.phone && profileData.phone.trim())}
+                                  onChange={(e) =>
+                                    handleInputChange("phone", e.target.value)
+                                  }
+                                  placeholder={
+                                    profileData.phone?.trim()
+                                      ? undefined
+                                      : "Add your phone number"
+                                  }
+                                  className={`text-sm sm:text-base ${profileData.phone?.trim() ? "bg-gray-50" : ""} ${profileFormErrors.phone ? "border-red-500" : ""}`}
                                 />
-                                <p className="text-xs text-gray-500 mt-1">Contact support to change phone</p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  {profileData.phone?.trim()
+                                    ? "Contact support to change phone"
+                                    : "You can add your phone number once"}
+                                </p>
+                                {profileFormErrors.phone && (
+                                  <p className="text-xs text-red-600 mt-1">
+                                    {profileFormErrors.phone}
+                                  </p>
+                                )}
                               </div>
                               <div>
-                                <Label htmlFor="location" className="text-xs sm:text-sm">Location</Label>
+                                <Label
+                                  htmlFor="location"
+                                  className="text-xs sm:text-sm"
+                                >
+                                  Location
+                                </Label>
                                 <Input
                                   id="location"
                                   value={profileData.location}
                                   onChange={(e) =>
                                     handleInputChange(
                                       "location",
-                                      e.target.value
+                                      e.target.value,
                                     )
                                   }
                                   className={`text-sm sm:text-base ${profileFormErrors.location ? "border-red-500" : ""}`}
@@ -1550,7 +1798,12 @@ export default function ProviderProfilePage(_props: Props) {
                               </div>
                             </div>
                             <div>
-                              <Label htmlFor="major" className="text-xs sm:text-sm">Major/Title</Label>
+                              <Label
+                                htmlFor="major"
+                                className="text-xs sm:text-sm"
+                              >
+                                Major/Title
+                              </Label>
                               <Input
                                 id="major"
                                 value={profileData.major}
@@ -1567,7 +1820,12 @@ export default function ProviderProfilePage(_props: Props) {
                               )}
                             </div>
                             <div>
-                              <Label htmlFor="bio" className="text-xs sm:text-sm">Bio</Label>
+                              <Label
+                                htmlFor="bio"
+                                className="text-xs sm:text-sm"
+                              >
+                                Bio
+                              </Label>
                               <Textarea
                                 id="bio"
                                 value={profileData.bio}
@@ -1601,7 +1859,9 @@ export default function ProviderProfilePage(_props: Props) {
                             <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-500">
                               <div className="flex items-center gap-1">
                                 <MapPin className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
-                                <span className="break-words">{profileData.location}</span>
+                                <span className="break-words">
+                                  {profileData.location}
+                                </span>
                               </div>
                               <div className="flex items-center gap-1">
                                 <Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-yellow-400 fill-current flex-shrink-0" />
@@ -1618,8 +1878,8 @@ export default function ProviderProfilePage(_props: Props) {
                                     profileData.availability === "available"
                                       ? "text-green-500"
                                       : profileData.availability === "busy"
-                                      ? "text-yellow-500"
-                                      : "text-gray-400"
+                                        ? "text-yellow-500"
+                                        : "text-gray-400"
                                   }`}
                                 />
                                 <span className="capitalize">
@@ -1636,14 +1896,18 @@ export default function ProviderProfilePage(_props: Props) {
                       <>
                         {profileData.major && (
                           <div>
-                            <Label className="text-xs sm:text-sm">Major/Title</Label>
+                            <Label className="text-xs sm:text-sm">
+                              Major/Title
+                            </Label>
                             <p className="text-sm sm:text-base text-gray-600 mt-2 break-words">
                               {profileData.major}
                             </p>
                           </div>
                         )}
                         <div>
-                          <Label className="text-xs sm:text-sm">Professional Bio</Label>
+                          <Label className="text-xs sm:text-sm">
+                            Professional Bio
+                          </Label>
                           <p className="text-sm sm:text-base text-gray-600 mt-2 break-words">
                             {profileData.bio || "No bio provided"}
                           </p>
@@ -1654,7 +1918,12 @@ export default function ProviderProfilePage(_props: Props) {
                     {isEditing && (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                         <div>
-                          <Label htmlFor="hourlyRate" className="text-xs sm:text-sm">Hourly Rate (RM)</Label>
+                          <Label
+                            htmlFor="hourlyRate"
+                            className="text-xs sm:text-sm"
+                          >
+                            Hourly Rate (RM)
+                          </Label>
                           <Input
                             id="hourlyRate"
                             type="number"
@@ -1663,7 +1932,7 @@ export default function ProviderProfilePage(_props: Props) {
                             onChange={(e) =>
                               handleInputChange(
                                 "hourlyRate",
-                                Number(e.target.value) || 0
+                                Number(e.target.value) || 0,
                               )
                             }
                             className={`text-sm sm:text-base ${profileFormErrors.hourlyRate ? "border-red-500" : ""}`}
@@ -1675,7 +1944,12 @@ export default function ProviderProfilePage(_props: Props) {
                           )}
                         </div>
                         <div>
-                          <Label htmlFor="availability" className="text-xs sm:text-sm">Availability</Label>
+                          <Label
+                            htmlFor="availability"
+                            className="text-xs sm:text-sm"
+                          >
+                            Availability
+                          </Label>
                           <Select
                             value={profileData.availability}
                             onValueChange={(value) =>
@@ -1725,9 +1999,14 @@ export default function ProviderProfilePage(_props: Props) {
                           <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
                             <FileText className="w-6 h-6 sm:w-8 sm:h-8 text-gray-400 flex-shrink-0" />
                             <div className="min-w-0 flex-1">
-                              <p className="font-medium text-sm sm:text-base">Resume uploaded</p>
+                              <p className="font-medium text-sm sm:text-base">
+                                Resume uploaded
+                              </p>
                               <p className="text-xs sm:text-sm text-gray-500">
-                                Uploaded on {new Date(resume.uploadedAt).toLocaleDateString()}
+                                Uploaded on{" "}
+                                {new Date(
+                                  resume.uploadedAt,
+                                ).toLocaleDateString()}
                               </p>
                             </div>
                           </div>
@@ -1779,7 +2058,9 @@ export default function ProviderProfilePage(_props: Props) {
                     ) : (
                       <div className="text-center py-6 sm:py-8">
                         <FileText className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-3 sm:mb-4 text-gray-300" />
-                        <p className="text-sm sm:text-base text-gray-500 mb-3 sm:mb-4">No resume uploaded yet</p>
+                        <p className="text-sm sm:text-base text-gray-500 mb-3 sm:mb-4">
+                          No resume uploaded yet
+                        </p>
                         {isEditing && (
                           <Button
                             onClick={handleResumeClick}
@@ -1813,7 +2094,11 @@ export default function ProviderProfilePage(_props: Props) {
                         Certifications
                       </CardTitle>
                       {isEditing && (
-                        <Button size="sm" onClick={handleAddCertification} className="w-full sm:w-auto text-xs sm:text-sm">
+                        <Button
+                          size="sm"
+                          onClick={handleAddCertification}
+                          className="w-full sm:w-auto text-xs sm:text-sm"
+                        >
                           <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                           Add Certification
                         </Button>
@@ -1831,33 +2116,44 @@ export default function ProviderProfilePage(_props: Props) {
                     ) : certifications.length === 0 ? (
                       <div className="text-center py-6 sm:py-8 text-gray-500">
                         <Award className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-3 sm:mb-4 text-gray-300" />
-                        <p className="text-sm sm:text-base">No certifications added yet</p>
+                        <p className="text-sm sm:text-base">
+                          No certifications added yet
+                        </p>
                         {isEditing && (
                           <p className="text-xs sm:text-sm mt-2">
-                            Click &quot;Add Certification&quot; to add your professional
-                            certifications
+                            Click &quot;Add Certification&quot; to add your
+                            professional certifications
                           </p>
                         )}
                       </div>
                     ) : (
-                    <div className="space-y-3 sm:space-y-4">
-                      {certifications.map((cert, index) => (
-                          <div key={cert.id || index} className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 p-3 sm:p-4 border rounded-lg">
+                      <div className="space-y-3 sm:space-y-4">
+                        {certifications.map((cert, index) => (
+                          <div
+                            key={cert.id || index}
+                            className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 p-3 sm:p-4 border rounded-lg"
+                          >
                             <div className="flex items-center space-x-3 flex-1 min-w-0 w-full sm:w-auto">
                               <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                              <Award className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
-                            </div>
-                              <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <p className="font-medium text-sm sm:text-base break-words">{cert.name}</p>
-                                  {cert.verified && <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-500 flex-shrink-0" />}
+                                <Award className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
                               </div>
-                              <p className="text-xs sm:text-sm text-gray-600 break-words">{cert.issuer}</p>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <p className="font-medium text-sm sm:text-base break-words">
+                                    {cert.name}
+                                  </p>
+                                  {cert.verified && (
+                                    <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-green-500 flex-shrink-0" />
+                                  )}
+                                </div>
+                                <p className="text-xs sm:text-sm text-gray-600 break-words">
+                                  {cert.issuer}
+                                </p>
                                 <p className="text-xs text-gray-500">
                                   Issued:{" "}
                                   {cert.issuedDate
                                     ? new Date(
-                                        cert.issuedDate
+                                        cert.issuedDate,
                                       ).toLocaleDateString()
                                     : "N/A"}
                                 </p>
@@ -1868,7 +2164,7 @@ export default function ProviderProfilePage(_props: Props) {
                                 )}
                                 {cert.sourceUrl && (
                                   <a
-                                    href={cert.sourceUrl}
+                                    href={ensureAbsoluteUrl(cert.sourceUrl)}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="text-xs text-blue-600 active:text-blue-800 sm:hover:underline mt-1 inline-block break-all"
@@ -1876,9 +2172,9 @@ export default function ProviderProfilePage(_props: Props) {
                                     Verify Certificate ↗
                                   </a>
                                 )}
+                              </div>
                             </div>
-                          </div>
-                          {isEditing && (
+                            {isEditing && (
                               <div className="flex gap-2 w-full sm:w-auto sm:ml-4">
                                 <Button
                                   variant="outline"
@@ -1896,20 +2192,20 @@ export default function ProviderProfilePage(_props: Props) {
                                   }
                                   className="flex-1 sm:flex-none text-xs sm:text-sm"
                                 >
-                              <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                            </Button>
+                                  <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                                </Button>
                               </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </CardContent>
                 </Card>
               </div>
 
               {/* Sidebar */}
-              <div className="space-y-4 sm:space-y-6">
+              <div className="space-y-4 sm:space-y-6" data-tour-step="5">
                 {/* 
                 <Card>
                   <CardHeader>
@@ -1935,13 +2231,20 @@ export default function ProviderProfilePage(_props: Props) {
                 {/* Contact Info */}
                 <Card>
                   <CardHeader className="p-4 sm:p-6">
-                    <CardTitle className="text-base sm:text-lg">Contact Information</CardTitle>
+                    <CardTitle className="text-base sm:text-lg">
+                      Contact Information
+                    </CardTitle>
                   </CardHeader>
                   <CardContent className="p-4 sm:p-6 space-y-3 sm:space-y-4">
                     {isEditing ? (
                       <>
                         <div>
-                          <Label htmlFor="sidebar-email" className="text-xs sm:text-sm">Email</Label>
+                          <Label
+                            htmlFor="sidebar-email"
+                            className="text-xs sm:text-sm"
+                          >
+                            Email
+                          </Label>
                           <Input
                             id="sidebar-email"
                             type="email"
@@ -1949,20 +2252,49 @@ export default function ProviderProfilePage(_props: Props) {
                             disabled={true}
                             className="bg-gray-50 text-sm sm:text-base"
                           />
-                          <p className="text-xs text-gray-500 mt-1">Contact support to change email</p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Contact support to change email
+                          </p>
                         </div>
                         <div>
-                          <Label htmlFor="sidebar-phone" className="text-xs sm:text-sm">Phone</Label>
+                          <Label
+                            htmlFor="sidebar-phone"
+                            className="text-xs sm:text-sm"
+                          >
+                            Phone
+                          </Label>
                           <Input
                             id="sidebar-phone"
                             value={profileData.phone}
-                            disabled={true}
-                            className="bg-gray-50 text-sm sm:text-base"
+                            disabled={!!(profileData.phone && profileData.phone.trim())}
+                            onChange={(e) =>
+                              handleInputChange("phone", e.target.value)
+                            }
+                            placeholder={
+                              profileData.phone?.trim()
+                                ? undefined
+                                : "Add your phone number"
+                            }
+                            className={`text-sm sm:text-base ${profileData.phone?.trim() ? "bg-gray-50" : ""} ${profileFormErrors.phone ? "border-red-500" : ""}`}
                           />
-                          <p className="text-xs text-gray-500 mt-1">Contact support to change phone</p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {profileData.phone?.trim()
+                              ? "Contact support to change phone"
+                              : "You can add your phone number once"}
+                          </p>
+                          {profileFormErrors.phone && (
+                            <p className="text-xs text-red-600 mt-1">
+                              {profileFormErrors.phone}
+                            </p>
+                          )}
                         </div>
                         <div>
-                          <Label htmlFor="sidebar-website" className="text-xs sm:text-sm">Website</Label>
+                          <Label
+                            htmlFor="sidebar-website"
+                            className="text-xs sm:text-sm"
+                          >
+                            Website
+                          </Label>
                           <Input
                             id="sidebar-website"
                             value={profileData.website}
@@ -1978,7 +2310,9 @@ export default function ProviderProfilePage(_props: Props) {
                           )}
                         </div>
                         <div className="space-y-3 sm:space-y-4">
-                          <Label className="text-xs sm:text-sm">Languages *</Label>
+                          <Label className="text-xs sm:text-sm">
+                            Languages *
+                          </Label>
                           <p className="text-xs sm:text-sm text-gray-600">
                             Add languages you can communicate in
                           </p>
@@ -1989,7 +2323,7 @@ export default function ProviderProfilePage(_props: Props) {
                           )}
 
                           <div className="flex flex-col sm:flex-row gap-2">
-                          <Input
+                            <Input
                               value={customLanguage}
                               onChange={(e) =>
                                 setCustomLanguage(e.target.value)
@@ -2047,7 +2381,7 @@ export default function ProviderProfilePage(_props: Props) {
                               {commonLanguages
                                 .filter(
                                   (language) =>
-                                    !profileData.languages.includes(language)
+                                    !profileData.languages.includes(language),
                                 )
                                 .map((language) => (
                                   <Badge
@@ -2068,23 +2402,35 @@ export default function ProviderProfilePage(_props: Props) {
                     ) : (
                       <>
                         <div>
-                          <p className="text-xs sm:text-sm text-gray-600">Email</p>
-                          <p className="font-medium text-sm sm:text-base break-words">{profileData.email}</p>
+                          <p className="text-xs sm:text-sm text-gray-600">
+                            Email
+                          </p>
+                          <p className="font-medium text-sm sm:text-base break-words">
+                            {profileData.email}
+                          </p>
                         </div>
                         <div>
-                          <p className="text-xs sm:text-sm text-gray-600">Phone</p>
-                          <p className="font-medium text-sm sm:text-base break-words">{profileData.phone}</p>
+                          <p className="text-xs sm:text-sm text-gray-600">
+                            Phone
+                          </p>
+                          <p className="font-medium text-sm sm:text-base break-words">
+                            {profileData.phone}
+                          </p>
                         </div>
                         <div>
-                          <p className="text-xs sm:text-sm text-gray-600">Website</p>
+                          <p className="text-xs sm:text-sm text-gray-600">
+                            Website
+                          </p>
                           {profileData.website ? (
-                          <a
-                            href={profileData.website}
-                            className="font-medium text-sm sm:text-base text-blue-600 active:text-blue-800 sm:hover:underline flex items-center gap-1 break-all"
-                          >
-                            {profileData.website}
-                            <ExternalLink className="w-3 h-3 flex-shrink-0" />
-                          </a>
+                            <a
+                              href={ensureAbsoluteUrl(profileData.website)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="font-medium text-sm sm:text-base text-blue-600 active:text-blue-800 sm:hover:underline flex items-center gap-1 break-all"
+                            >
+                              {profileData.website}
+                              <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                            </a>
                           ) : (
                             <p className="font-medium text-sm sm:text-base text-gray-500">
                               No website provided
@@ -2092,7 +2438,9 @@ export default function ProviderProfilePage(_props: Props) {
                           )}
                         </div>
                         <div>
-                          <p className="text-xs sm:text-sm text-gray-600">Languages</p>
+                          <p className="text-xs sm:text-sm text-gray-600">
+                            Languages
+                          </p>
                           <div className="flex flex-wrap gap-1 mt-1">
                             {profileData.languages.map((language, index) => (
                               <Badge
@@ -2118,19 +2466,23 @@ export default function ProviderProfilePage(_props: Props) {
                 {/* Portfolio URLs */}
                 <Card>
                   <CardHeader className="p-4 sm:p-6">
-                    <CardTitle className="text-base sm:text-lg">Portfolio Links</CardTitle>
+                    <CardTitle className="text-base sm:text-lg">
+                      Portfolio Links
+                    </CardTitle>
                   </CardHeader>
                   <CardContent className="p-4 sm:p-6 space-y-3 sm:space-y-4">
                     {isEditing ? (
                       <>
                         <p className="text-xs sm:text-sm text-gray-600">
-                          Add links to your GitHub, LinkedIn, portfolio website, or other
-                          professional profiles
+                          Add links to your GitHub, LinkedIn, portfolio website,
+                          or other professional profiles
                         </p>
                         <div className="flex flex-col sm:flex-row gap-2">
                           <Input
                             value={newPortfolioLink}
-                            onChange={(e) => setNewPortfolioLink(e.target.value)}
+                            onChange={(e) =>
+                              setNewPortfolioLink(e.target.value)
+                            }
                             placeholder="https://github.com/yourusername"
                             type="url"
                             onKeyPress={(e) =>
@@ -2157,7 +2509,8 @@ export default function ProviderProfilePage(_props: Props) {
                         {profileData.portfolioLinks.length > 0 && (
                           <div className="space-y-2">
                             <Label className="text-xs sm:text-sm font-medium">
-                              Portfolio Links ({profileData.portfolioLinks.length})
+                              Portfolio Links (
+                              {profileData.portfolioLinks.length})
                             </Label>
                             <div className="space-y-2">
                               {profileData.portfolioLinks.map((url, index) => (
@@ -2166,7 +2519,7 @@ export default function ProviderProfilePage(_props: Props) {
                                   className="flex items-center justify-between p-2 sm:p-3 bg-gray-50 border rounded-lg gap-2"
                                 >
                                   <a
-                                    href={url}
+                                    href={ensureAbsoluteUrl(url)}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="text-blue-600 active:text-blue-800 sm:hover:text-blue-700 text-xs sm:text-sm truncate flex-1 break-all"
@@ -2191,10 +2544,13 @@ export default function ProviderProfilePage(_props: Props) {
                         {profileData.portfolioLinks.length === 0 && (
                           <div className="text-center py-6 sm:py-8 text-gray-500 border-2 border-dashed border-gray-200 rounded-lg">
                             <Globe className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-3 sm:mb-4 text-gray-300" />
-                            <p className="text-sm sm:text-base">No portfolio links added yet</p>
+                            <p className="text-sm sm:text-base">
+                              No portfolio links added yet
+                            </p>
                             <p className="text-xs sm:text-sm mt-1">
                               Add links to showcase your work and professional
-                              profiles (e.g., GitHub, LinkedIn, portfolio website)
+                              profiles (e.g., GitHub, LinkedIn, portfolio
+                              website)
                             </p>
                           </div>
                         )}
@@ -2205,7 +2561,7 @@ export default function ProviderProfilePage(_props: Props) {
                           profileData.portfolioLinks.map((url, index) => (
                             <a
                               key={index}
-                              href={url}
+                              href={ensureAbsoluteUrl(url)}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="flex items-center gap-2 text-blue-600 active:text-blue-800 sm:hover:underline break-all"
@@ -2234,7 +2590,9 @@ export default function ProviderProfilePage(_props: Props) {
               <div className="space-y-3 sm:space-y-4">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
                   <div>
-                    <h2 className="text-xl sm:text-2xl font-bold">Projects Completed</h2>
+                    <h2 className="text-xl sm:text-2xl font-bold">
+                      Projects Completed
+                    </h2>
                     <p className="text-sm sm:text-base text-gray-600 mt-1">
                       Projects you&apos;ve completed on this platform
                     </p>
@@ -2264,7 +2622,10 @@ export default function ProviderProfilePage(_props: Props) {
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                     {portfolioProjects.map((project) => (
-                      <Card key={project.id} className="active:shadow-md sm:hover:shadow-lg transition-shadow">
+                      <Card
+                        key={project.id}
+                        className="active:shadow-md sm:hover:shadow-lg transition-shadow"
+                      >
                         <div className="relative bg-gradient-to-br from-blue-50 to-purple-50 h-40 sm:h-48 flex items-center justify-center rounded-t-lg">
                           <div className="text-center p-3 sm:p-4">
                             <div className="w-12 h-12 sm:w-16 sm:h-16 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-2">
@@ -2276,33 +2637,52 @@ export default function ProviderProfilePage(_props: Props) {
                           </div>
                         </div>
                         <CardContent className="p-3 sm:p-4">
-                          <h3 className="font-semibold text-base sm:text-lg mb-2 line-clamp-1 break-words">{project.title}</h3>
-                          <p className="text-gray-600 text-xs sm:text-sm mb-3 line-clamp-2 break-words">{project.description || "No description provided"}</p>
-                          {project.technologies && project.technologies.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mb-3">
-                              {project.technologies.slice(0, 6).map((tech: string, index: number) => (
-                                <Badge key={index} variant="secondary" className="text-xs">
-                                  {tech}
-                                </Badge>
-                              ))}
-                              {project.technologies.length > 6 && (
-                                <Badge variant="secondary" className="text-xs">
-                                  +{project.technologies.length - 6} more
-                                </Badge>
-                              )}
-                            </div>
-                          )}
+                          <h3 className="font-semibold text-base sm:text-lg mb-2 line-clamp-1 break-words">
+                            {project.title}
+                          </h3>
+                          <p className="text-gray-600 text-xs sm:text-sm mb-3 line-clamp-2 break-words">
+                            {project.description || "No description provided"}
+                          </p>
+                          {project.technologies &&
+                            project.technologies.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mb-3">
+                                {project.technologies
+                                  .slice(0, 6)
+                                  .map((tech: string, index: number) => (
+                                    <Badge
+                                      key={index}
+                                      variant="secondary"
+                                      className="text-xs"
+                                    >
+                                      {tech}
+                                    </Badge>
+                                  ))}
+                                {project.technologies.length > 6 && (
+                                  <Badge
+                                    variant="secondary"
+                                    className="text-xs"
+                                  >
+                                    +{project.technologies.length - 6} more
+                                  </Badge>
+                                )}
+                              </div>
+                            )}
                           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 sm:gap-0 text-xs sm:text-sm text-gray-500 mb-2">
-                            <span className="font-medium break-words">{project.client}</span>
+                            <span className="font-medium break-words">
+                              {project.client}
+                            </span>
                             {project.completedDate && (
                               <span>
-                                {new Date(project.completedDate).toLocaleDateString()}
+                                {new Date(
+                                  project.completedDate,
+                                ).toLocaleDateString()}
                               </span>
                             )}
                           </div>
                           {project.approvedPrice && (
                             <div className="text-xs sm:text-sm text-green-600 font-semibold">
-                              RM {Number(project.approvedPrice).toLocaleString()}
+                              RM{" "}
+                              {Number(project.approvedPrice).toLocaleString()}
                             </div>
                           )}
                         </CardContent>
@@ -2322,21 +2702,24 @@ export default function ProviderProfilePage(_props: Props) {
                     </p>
                   </div>
                   {isEditing && (
-                    <Button onClick={() => {
-                      setPortfolioFormData({
-                        title: "",
-                        description: "",
-                        techStack: [],
-                        client: "",
-                        date: "",
-                        imageUrl: "",
-                        externalUrl: "",
-                      });
-                      setNewTechStack("");
-                      setPortfolioFormErrors({});
-                      setEditingPortfolioIndex(null);
-                      setShowPortfolioDialog(true);
-                    }} className="w-full sm:w-auto text-xs sm:text-sm">
+                    <Button
+                      onClick={() => {
+                        setPortfolioFormData({
+                          title: "",
+                          description: "",
+                          techStack: [],
+                          client: "",
+                          date: "",
+                          imageUrl: "",
+                          externalUrl: "",
+                        });
+                        setNewTechStack("");
+                        setPortfolioFormErrors({});
+                        setEditingPortfolioIndex(null);
+                        setShowPortfolioDialog(true);
+                      }}
+                      className="w-full sm:w-auto text-xs sm:text-sm"
+                    >
                       <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                       Add Portfolio Item
                     </Button>
@@ -2358,7 +2741,7 @@ export default function ProviderProfilePage(_props: Props) {
                         No portfolio items yet
                       </h3>
                       <p className="text-sm sm:text-base text-gray-600">
-                        {isEditing 
+                        {isEditing
                           ? "Add your external work, studies, or projects to showcase your experience."
                           : "No portfolio items added yet."}
                       </p>
@@ -2367,17 +2750,28 @@ export default function ProviderProfilePage(_props: Props) {
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                     {portfolioItems.map((item, index) => (
-                      <Card key={item.id} className="active:shadow-md sm:hover:shadow-lg transition-shadow">
+                      <Card
+                        key={item.id}
+                        className="active:shadow-md sm:hover:shadow-lg transition-shadow"
+                      >
                         {item.imageUrl ? (
                           <div className="relative h-40 sm:h-48 overflow-hidden rounded-t-lg bg-gray-100">
                             {(() => {
                               // Use getProfileImageUrl helper for consistent URL handling
-                              const imageUrl = getProfileImageUrl(item.imageUrl);
-                              
+                              const imageUrl = getProfileImageUrl(
+                                item.imageUrl,
+                              );
+
                               // Check if it's an image file
-                              const normalizedUrl = item.imageUrl.replace(/\\/g, "/");
-                              const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(normalizedUrl);
-                              
+                              const normalizedUrl = item.imageUrl.replace(
+                                /\\/g,
+                                "/",
+                              );
+                              const isImage =
+                                /\.(jpg|jpeg|png|gif|webp)$/i.test(
+                                  normalizedUrl,
+                                );
+
                               if (isImage) {
                                 return (
                                   <Image
@@ -2398,7 +2792,8 @@ export default function ProviderProfilePage(_props: Props) {
                                         <FileText className="w-8 h-8 text-gray-400" />
                                       </div>
                                       <p className="text-xs text-gray-500 truncate max-w-[200px]">
-                                        {normalizedUrl.split("/").pop() || "File"}
+                                        {normalizedUrl.split("/").pop() ||
+                                          "File"}
                                       </p>
                                     </div>
                                   </div>
@@ -2420,7 +2815,9 @@ export default function ProviderProfilePage(_props: Props) {
                         )}
                         <CardContent className="p-3 sm:p-4">
                           <div className="flex items-start justify-between mb-2 gap-2">
-                            <h3 className="font-semibold text-base sm:text-lg line-clamp-1 flex-1 break-words">{item.title}</h3>
+                            <h3 className="font-semibold text-base sm:text-lg line-clamp-1 flex-1 break-words">
+                              {item.title}
+                            </h3>
                             {isEditing && (
                               <div className="flex gap-1 flex-shrink-0">
                                 <Button
@@ -2432,7 +2829,11 @@ export default function ProviderProfilePage(_props: Props) {
                                       description: item.description || "",
                                       techStack: item.techStack || [],
                                       client: item.client || "",
-                                      date: item.date ? new Date(item.date).toISOString().split('T')[0] : "",
+                                      date: item.date
+                                        ? new Date(item.date)
+                                            .toISOString()
+                                            .split("T")[0]
+                                        : "",
                                       imageUrl: item.imageUrl || "",
                                       externalUrl: item.externalUrl || "",
                                     });
@@ -2449,30 +2850,53 @@ export default function ProviderProfilePage(_props: Props) {
                                   variant="ghost"
                                   size="sm"
                                   onClick={async () => {
-                                    if (confirm("Are you sure you want to delete this portfolio item?")) {
+                                    if (
+                                      confirm(
+                                        "Are you sure you want to delete this portfolio item?",
+                                      )
+                                    ) {
                                       try {
                                         await deletePortfolioItem(item.id);
                                         toast({
                                           title: "Success",
-                                          description: "Portfolio item deleted successfully",
+                                          description:
+                                            "Portfolio item deleted successfully",
                                         });
                                         // Reload portfolio items
-                                        const itemsResponse = await getProviderPortfolioItems();
-                                        if (itemsResponse.success && itemsResponse.data) {
+                                        const itemsResponse =
+                                          await getProviderPortfolioItems();
+                                        if (
+                                          itemsResponse.success &&
+                                          itemsResponse.data
+                                        ) {
                                           setPortfolioItems(itemsResponse.data);
                                         }
                                         // Reload completion
                                         try {
-                                          const completionResponse = await getProviderProfileCompletion();
+                                          const completionResponse =
+                                            await getProviderProfileCompletion();
                                           if (completionResponse.success) {
-                                            setProfileCompletion(completionResponse.data.completion || 0);
-                                            setCompletionSuggestions(completionResponse.data.suggestions || []);
+                                            setProfileCompletion(
+                                              completionResponse.data
+                                                .completion ?? 0,
+                                            );
+                                            setCompletionSuggestions(
+                                              completionResponse.data
+                                                .suggestions || [],
+                                            );
                                           }
+                                          await refetchCompletion();
                                         } catch (error) {
-                                          console.error("Failed to fetch completion:", error);
+                                          console.error(
+                                            "Failed to fetch completion:",
+                                            error,
+                                          );
                                         }
                                       } catch (error: unknown) {
-                                        const errorMessage = error instanceof Error ? error.message : "Failed to delete portfolio item";
+                                        const errorMessage =
+                                          error instanceof Error
+                                            ? error.message
+                                            : "Failed to delete portfolio item";
                                         toast({
                                           title: "Error",
                                           description: errorMessage,
@@ -2488,14 +2912,22 @@ export default function ProviderProfilePage(_props: Props) {
                               </div>
                             )}
                           </div>
-                          <p className="text-gray-600 text-xs sm:text-sm mb-3 line-clamp-2 break-words">{item.description || "No description provided"}</p>
+                          <p className="text-gray-600 text-xs sm:text-sm mb-3 line-clamp-2 break-words">
+                            {item.description || "No description provided"}
+                          </p>
                           {item.techStack && item.techStack.length > 0 && (
                             <div className="flex flex-wrap gap-1 mb-3">
-                              {item.techStack.slice(0, 6).map((tech: string, techIndex: number) => (
-                                <Badge key={techIndex} variant="secondary" className="text-xs">
-                                  {tech}
-                                </Badge>
-                              ))}
+                              {item.techStack
+                                .slice(0, 6)
+                                .map((tech: string, techIndex: number) => (
+                                  <Badge
+                                    key={techIndex}
+                                    variant="secondary"
+                                    className="text-xs"
+                                  >
+                                    {tech}
+                                  </Badge>
+                                ))}
                               {item.techStack.length > 6 && (
                                 <Badge variant="secondary" className="text-xs">
                                   +{item.techStack.length - 6} more
@@ -2504,7 +2936,11 @@ export default function ProviderProfilePage(_props: Props) {
                             </div>
                           )}
                           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 sm:gap-0 text-xs sm:text-sm text-gray-500 mb-2">
-                            {item.client && <span className="font-medium break-words">{item.client}</span>}
+                            {item.client && (
+                              <span className="font-medium break-words">
+                                {item.client}
+                              </span>
+                            )}
                             {item.date && (
                               <span>
                                 {new Date(item.date).toLocaleDateString()}
@@ -2513,7 +2949,7 @@ export default function ProviderProfilePage(_props: Props) {
                           </div>
                           {item.externalUrl && (
                             <a
-                              href={item.externalUrl}
+                              href={ensureAbsoluteUrl(item.externalUrl)}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="text-xs sm:text-sm text-blue-600 active:text-blue-800 sm:hover:underline flex items-center gap-1"
@@ -2536,17 +2972,13 @@ export default function ProviderProfilePage(_props: Props) {
             <div className="space-y-4 sm:space-y-6">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
                 <div>
-                  <h2 className="text-xl sm:text-2xl font-bold">Skills & Expertise</h2>
+                  <h2 className="text-xl sm:text-2xl font-bold">
+                    Skills & Expertise
+                  </h2>
                   <p className="text-sm sm:text-base text-gray-600 mt-1">
                     Showcase your technical skills and expertise
                   </p>
                 </div>
-                {isEditing && (
-                <Button className="w-full sm:w-auto text-xs sm:text-sm">
-                  <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                  Add Skill
-                </Button>
-                )}
               </div>
 
               {isEditing ? (
@@ -2554,18 +2986,20 @@ export default function ProviderProfilePage(_props: Props) {
                   <CardContent className="p-4 sm:p-6">
                     <div className="space-y-3 sm:space-y-4">
                       <div className="space-y-3 sm:space-y-4">
-                        <Label className="text-xs sm:text-sm">Technical Skills *</Label>
+                        <Label className="text-xs sm:text-sm">
+                          Technical Skills *
+                        </Label>
                         <p className="text-xs sm:text-sm text-gray-600">
                           Add your technical skills and expertise
                         </p>
-                          {profileFormErrors.skills && (
-                            <p className="text-xs text-red-600">
-                              {profileFormErrors.skills}
-                            </p>
-                          )}
+                        {profileFormErrors.skills && (
+                          <p className="text-xs text-red-600">
+                            {profileFormErrors.skills}
+                          </p>
+                        )}
 
                         <div className="flex flex-col sm:flex-row gap-2">
-                        <Input
+                          <Input
                             value={customSkill}
                             onChange={(e) => setCustomSkill(e.target.value)}
                             placeholder="Type a skill and press Add"
@@ -2617,7 +3051,7 @@ export default function ProviderProfilePage(_props: Props) {
                           <div className="flex flex-wrap gap-1.5 sm:gap-2 max-h-40 overflow-y-auto p-2 sm:p-3 border rounded-lg bg-gray-50">
                             {popularSkills
                               .filter(
-                                (skill) => !profileData.skills.includes(skill)
+                                (skill) => !profileData.skills.includes(skill),
                               )
                               .map((skill) => (
                                 <Badge
@@ -2631,10 +3065,13 @@ export default function ProviderProfilePage(_props: Props) {
                               ))}
                           </div>
                         </div>
-                        </div>
+                      </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                         <div>
-                          <Label htmlFor="yearsExperience" className="text-xs sm:text-sm">
+                          <Label
+                            htmlFor="yearsExperience"
+                            className="text-xs sm:text-sm"
+                          >
                             Years of Experience
                           </Label>
                           <Input
@@ -2645,7 +3082,7 @@ export default function ProviderProfilePage(_props: Props) {
                             onChange={(e) =>
                               handleInputChange(
                                 "yearsExperience",
-                                Number(e.target.value) || 0
+                                Number(e.target.value) || 0,
                               )
                             }
                             className={`text-sm sm:text-base ${profileFormErrors.yearsExperience ? "border-red-500" : ""}`}
@@ -2655,9 +3092,12 @@ export default function ProviderProfilePage(_props: Props) {
                               {profileFormErrors.yearsExperience}
                             </p>
                           )}
-                      </div>
+                        </div>
                         <div>
-                          <Label htmlFor="workPreference" className="text-xs sm:text-sm">
+                          <Label
+                            htmlFor="workPreference"
+                            className="text-xs sm:text-sm"
+                          >
                             Work Preference
                           </Label>
                           <Select
@@ -2679,7 +3119,10 @@ export default function ProviderProfilePage(_props: Props) {
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                         <div>
-                          <Label htmlFor="minimumProjectBudget" className="text-xs sm:text-sm">
+                          <Label
+                            htmlFor="minimumProjectBudget"
+                            className="text-xs sm:text-sm"
+                          >
                             Minimum Project Budget (RM)
                           </Label>
                           <Input
@@ -2690,7 +3133,7 @@ export default function ProviderProfilePage(_props: Props) {
                             onChange={(e) =>
                               handleInputChange(
                                 "minimumProjectBudget",
-                                Number(e.target.value) || 0
+                                Number(e.target.value) || 0,
                               )
                             }
                             className={`text-sm sm:text-base ${profileFormErrors.minimumProjectBudget ? "border-red-500" : ""}`}
@@ -2702,7 +3145,10 @@ export default function ProviderProfilePage(_props: Props) {
                           )}
                         </div>
                         <div>
-                          <Label htmlFor="maximumProjectBudget" className="text-xs sm:text-sm">
+                          <Label
+                            htmlFor="maximumProjectBudget"
+                            className="text-xs sm:text-sm"
+                          >
                             Maximum Project Budget (RM)
                           </Label>
                           <Input
@@ -2713,7 +3159,7 @@ export default function ProviderProfilePage(_props: Props) {
                             onChange={(e) =>
                               handleInputChange(
                                 "maximumProjectBudget",
-                                Number(e.target.value) || 0
+                                Number(e.target.value) || 0,
                               )
                             }
                             className={`text-sm sm:text-base ${profileFormErrors.maximumProjectBudget ? "border-red-500" : ""}`}
@@ -2727,7 +3173,10 @@ export default function ProviderProfilePage(_props: Props) {
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                         <div>
-                          <Label htmlFor="preferredProjectDuration" className="text-xs sm:text-sm">
+                          <Label
+                            htmlFor="preferredProjectDuration"
+                            className="text-xs sm:text-sm"
+                          >
                             Preferred Project Duration
                           </Label>
                           <Input
@@ -2736,7 +3185,7 @@ export default function ProviderProfilePage(_props: Props) {
                             onChange={(e) =>
                               handleInputChange(
                                 "preferredProjectDuration",
-                                e.target.value
+                                e.target.value,
                               )
                             }
                             placeholder="e.g., 1-3 months, 3-6 months..."
@@ -2749,7 +3198,12 @@ export default function ProviderProfilePage(_props: Props) {
                           )}
                         </div>
                         <div>
-                          <Label htmlFor="teamSize" className="text-xs sm:text-sm">Team Size</Label>
+                          <Label
+                            htmlFor="teamSize"
+                            className="text-xs sm:text-sm"
+                          >
+                            Team Size
+                          </Label>
                           <Input
                             id="teamSize"
                             type="number"
@@ -2758,7 +3212,7 @@ export default function ProviderProfilePage(_props: Props) {
                             onChange={(e) =>
                               handleInputChange(
                                 "teamSize",
-                                Number(e.target.value) || 1
+                                Number(e.target.value) || 1,
                               )
                             }
                             className={`text-sm sm:text-base ${profileFormErrors.teamSize ? "border-red-500" : ""}`}
@@ -2771,8 +3225,8 @@ export default function ProviderProfilePage(_props: Props) {
                         </div>
                       </div>
                     </div>
-                    </CardContent>
-                  </Card>
+                  </CardContent>
+                </Card>
               ) : (
                 <div className="space-y-4">
                   <Card>
@@ -2791,10 +3245,10 @@ export default function ProviderProfilePage(_props: Props) {
                         {profileData.skills.length === 0 && (
                           <p className="text-gray-500">No skills added yet</p>
                         )}
-              </div>
+                      </div>
                     </CardContent>
                   </Card>
-                  
+
                   <div className="grid md:grid-cols-2 gap-6">
                     <Card>
                       <CardContent className="p-6">
@@ -2827,7 +3281,7 @@ export default function ProviderProfilePage(_props: Props) {
                         </div>
                       </CardContent>
                     </Card>
-                    
+
                     <Card>
                       <CardContent className="p-6">
                         <h3 className="font-semibold mb-4">
@@ -2888,7 +3342,7 @@ export default function ProviderProfilePage(_props: Props) {
               <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                 <div className="flex items-start">
                   <AlertCircle className="w-5 h-5 text-blue-600 mr-2 mt-0.5 flex-shrink-0" />
-              <div>
+                  <div>
                     <p className="text-sm text-blue-800 font-medium">
                       Why add certifications?
                     </p>
@@ -2896,9 +3350,9 @@ export default function ProviderProfilePage(_props: Props) {
                       Certifications help build trust with clients and showcase
                       your expertise in specific technologies.
                     </p>
+                  </div>
+                </div>
               </div>
-                  </div>
-                  </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -2939,7 +3393,7 @@ export default function ProviderProfilePage(_props: Props) {
                     </p>
                   )}
                 </div>
-                  </div>
+              </div>
 
               <div className="space-y-2">
                 <Label htmlFor="certDate">Issue Date *</Label>
@@ -2959,7 +3413,7 @@ export default function ProviderProfilePage(_props: Props) {
                     {certFormErrors.issuedDate}
                   </p>
                 )}
-                  </div>
+              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -2980,7 +3434,7 @@ export default function ProviderProfilePage(_props: Props) {
                       {certFormErrors.serialNumber}
                     </p>
                   )}
-              </div>
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor="certLink">
                     Verification Link (optional*)
@@ -3006,7 +3460,7 @@ export default function ProviderProfilePage(_props: Props) {
                     *At least one of Serial Number or Verification Link is
                     required.
                   </p>
-            </div>
+                </div>
               </div>
             </div>
             <DialogFooter>
@@ -3047,7 +3501,10 @@ export default function ProviderProfilePage(_props: Props) {
         </Dialog>
 
         {/* Portfolio Item Dialog */}
-        <Dialog open={showPortfolioDialog} onOpenChange={setShowPortfolioDialog}>
+        <Dialog
+          open={showPortfolioDialog}
+          onOpenChange={setShowPortfolioDialog}
+        >
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
             <DialogHeader>
               <DialogTitle className="text-lg sm:text-xl">
@@ -3056,7 +3513,8 @@ export default function ProviderProfilePage(_props: Props) {
                   : "Add Portfolio Item"}
               </DialogTitle>
               <DialogDescription className="text-xs sm:text-sm">
-                Add your external work, studies, or projects to showcase your experience
+                Add your external work, studies, or projects to showcase your
+                experience
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-3 sm:space-y-4 py-3 sm:py-4">
@@ -3068,8 +3526,10 @@ export default function ProviderProfilePage(_props: Props) {
                       What is a Portfolio Item?
                     </p>
                     <p className="text-sm text-green-700">
-                      Portfolio items are work, studies, or projects you&apos;ve completed outside this platform. 
-                      This is different from &quot;Projects Completed&quot; which shows your work done on this platform.
+                      Portfolio items are work, studies, or projects you&apos;ve
+                      completed outside this platform. This is different from
+                      &quot;Projects Completed&quot; which shows your work done
+                      on this platform.
                     </p>
                   </div>
                 </div>
@@ -3258,7 +3718,10 @@ export default function ProviderProfilePage(_props: Props) {
                           });
                         }
                       } catch (error: unknown) {
-                        const errorMessage = error instanceof Error ? error.message : "Failed to upload file";
+                        const errorMessage =
+                          error instanceof Error
+                            ? error.message
+                            : "Failed to upload file";
                         toast({
                           title: "Upload failed",
                           description: errorMessage,
@@ -3275,19 +3738,23 @@ export default function ProviderProfilePage(_props: Props) {
                     className="hidden"
                   />
                   <p className="text-xs text-gray-500">
-                    Optional: Upload an image or file (JPG, PNG, GIF, WebP, PDF, DOC, DOCX) or enter a URL. Max 10MB.
+                    Optional: Upload an image or file (JPG, PNG, GIF, WebP, PDF,
+                    DOC, DOCX) or enter a URL. Max 10MB.
                   </p>
                   {portfolioFormData.imageUrl && (
                     <div className="mt-2">
                       {(() => {
-                        const normalizedUrl = portfolioFormData.imageUrl.replace(/\\/g, "/");
-                        const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(normalizedUrl);
+                        const normalizedUrl =
+                          portfolioFormData.imageUrl.replace(/\\/g, "/");
+                        const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(
+                          normalizedUrl,
+                        );
                         const imageUrl = normalizedUrl.startsWith("http")
                           ? normalizedUrl
                           : normalizedUrl.startsWith("/")
-                          ? `${API_BASE}${normalizedUrl}`
-                          : `${API_BASE}/${normalizedUrl}`;
-                        
+                            ? `${API_BASE}${normalizedUrl}`
+                            : `${API_BASE}/${normalizedUrl}`;
+
                         if (isImage) {
                           return (
                             <Image

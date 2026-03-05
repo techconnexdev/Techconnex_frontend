@@ -39,6 +39,7 @@ import {
   Clock,
 } from "lucide-react";
 import { CustomerLayout } from "@/components/customer-layout";
+import { CustomerReviewsTour } from "@/components/customer/CustomerReviewsTour";
 import { useToast } from "@/hooks/use-toast";
 import {
   useCompanyReviews,
@@ -399,8 +400,12 @@ export default function CustomerReviewsPage() {
 
   return (
     <CustomerLayout>
+      <CustomerReviewsTour />
       <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div
+          className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
+          data-tour-step="0"
+        >
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
               Company Reviews
@@ -416,13 +421,17 @@ export default function CustomerReviewsPage() {
               projectsLoading || availableProjectsForReview.length === 0
             }
             className="w-full sm:w-auto"
+            data-tour-step="1"
           >
             <Plus className="mr-2 h-4 w-4" />
             Write Review
           </Button>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+        <div
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6"
+          data-tour-step="2"
+        >
           <StatsCard
             title="Total Reviews"
             value={
@@ -451,7 +460,7 @@ export default function CustomerReviewsPage() {
           />
         </div>
 
-        <Card>
+        <Card data-tour-step="3">
           <CardContent className="p-4 sm:p-6">
             <div className="flex flex-col gap-3 sm:gap-4 lg:flex-row lg:items-center">
               <div className="flex flex-1 items-center gap-2">
@@ -494,6 +503,7 @@ export default function CustomerReviewsPage() {
           </CardContent>
         </Card>
 
+        <div data-tour-step="4">
         <Tabs
           value={activeTab}
           onValueChange={(value) =>
@@ -543,6 +553,7 @@ export default function CustomerReviewsPage() {
             />
           </TabsContent>
         </Tabs>
+        </div>
 
         <ReviewDialog
           open={isReviewDialogOpen}

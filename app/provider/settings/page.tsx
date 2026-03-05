@@ -17,6 +17,8 @@ import { Separator } from "@/components/ui/separator";
 import { Bell, Shield, CreditCard, Trash2 } from "lucide-react";
 import Loading from "../projects/loading";
 import { ProviderLayout } from "@/components/provider-layout";
+import { ProviderSettingsTour } from "@/components/provider/ProviderSettingsTour";
+import { clearOnboardingCache } from "@/components/provider/ProviderOnboardingPromptDialog";
 
 type NotificationSettings = {
   emailNotifications: boolean;
@@ -87,6 +89,7 @@ export default function CustomerSettingsPage() {
         setTimeout(() => {
           localStorage.removeItem("token");
           localStorage.removeItem("user");
+          clearOnboardingCache();
           sessionStorage.clear();
           window.location.href = "/auth/login"; // Redirect to login page
         }, 2000);
@@ -343,9 +346,9 @@ export default function CustomerSettingsPage() {
         <Tabs defaultValue="privacy" className="space-y-6">
           <TabsList className="grid w-full grid-cols-2">
             {/* <TabsTrigger value="notifications">Notifications</TabsTrigger> */}
-            <TabsTrigger value="privacy">Privacy</TabsTrigger>
+            <TabsTrigger value="privacy" data-tour-step="1">Privacy</TabsTrigger>
             {/* <TabsTrigger value="billing">Billing</TabsTrigger> */}
-            <TabsTrigger value="security">Security</TabsTrigger>
+            <TabsTrigger value="security" data-tour-step="2">Security</TabsTrigger>
           </TabsList>
 
           {/* Notifications */}
@@ -478,7 +481,7 @@ export default function CustomerSettingsPage() {
 
           {/* Privacy */}
           <TabsContent value="privacy">
-            <Card>
+            <Card data-tour-step="priv-card">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Shield className="w-5 h-5" />
@@ -642,7 +645,7 @@ export default function CustomerSettingsPage() {
           {/* Security */}
           <TabsContent value="security">
             <div className="grid gap-6">
-              <Card>
+              <Card data-tour-step="sec-card">
                 <CardHeader>
                   <CardTitle>Change Password</CardTitle>
                   <CardDescription>
@@ -767,7 +770,7 @@ export default function CustomerSettingsPage() {
                 </CardContent> */}
               </Card>
 
-              <Card className="border-red-200">
+              <Card className="border-red-200" data-tour-step="del-card">
                 <CardHeader>
                   <CardTitle className="text-red-600 flex items-center gap-2">
                     <Trash2 className="w-5 h-5" />

@@ -39,8 +39,8 @@ export default function ProviderCard({
     const avatarUrl = getProfileImageUrl(provider.avatar);
     router.push(
       `/customer/messages?userId=${provider.id}&name=${encodeURIComponent(
-        provider.name
-      )}&avatar=${encodeURIComponent(avatarUrl)}`
+        provider.name,
+      )}&avatar=${encodeURIComponent(avatarUrl)}`,
     );
   };
 
@@ -74,7 +74,7 @@ export default function ProviderCard({
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-        }
+        },
       );
 
       if (response.ok) {
@@ -89,14 +89,12 @@ export default function ProviderCard({
     }
   };
   return (
-    <Card className="group relative hover:shadow-lg transition-shadow">
-      <CardHeader className="pb-3 sm:pb-4 p-4 sm:p-6">
+    <Card className="group relative hover:shadow-lg transition-shadow h-full flex flex-col">
+      <CardHeader className="pb-3 sm:pb-4 p-4 sm:p-6 flex-shrink-0">
         <div className="flex items-start space-x-3 sm:space-x-4">
           <div className="relative flex-shrink-0">
             <Avatar className="w-12 h-12 sm:w-14 sm:h-14 lg:w-16 lg:h-16">
-              <AvatarImage
-                src={getProfileImageUrl(provider.avatar)}
-              />
+              <AvatarImage src={getProfileImageUrl(provider.avatar)} />
               <AvatarFallback className="text-xs sm:text-sm lg:text-base">
                 {provider.name.charAt(0)}
               </AvatarFallback>
@@ -142,7 +140,7 @@ export default function ProviderCard({
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-3 sm:space-y-4 p-4 sm:p-6 pt-0">
+      <CardContent className="space-y-3 sm:space-y-4 p-4 sm:p-6 pt-0 flex-1 flex flex-col min-h-0">
         {/* AI Badge Indicator */}
         {provider.aiExplanation && (
           <div className="absolute top-3 right-3 opacity-0 lg:group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
@@ -220,8 +218,8 @@ export default function ProviderCard({
                 provider.availability === "available"
                   ? "bg-green-500"
                   : provider.availability === "busy"
-                  ? "bg-yellow-500"
-                  : "bg-gray-400"
+                    ? "bg-yellow-500"
+                    : "bg-gray-400"
               }`}
             />
             <span className="text-gray-600 capitalize">
@@ -321,15 +319,17 @@ export default function ProviderCard({
           </div>
         )}
 
-        <div className="flex flex-col gap-2.5 pt-3 border-t border-gray-100">
-          <Button
-            size="sm"
-            className="w-full bg-gray-900 hover:bg-gray-800 text-white font-medium shadow-sm transition-all duration-200 h-9 sm:h-10"
-            onClick={handleContact}
-          >
-            <MessageSquare className="w-4 h-4 mr-2" />
-            Contact
-          </Button>
+        <div className="flex flex-col gap-2.5 pt-3 border-t border-gray-100 mt-auto flex-shrink-0">
+          {provider.allowMessages !== false && (
+            <Button
+              size="sm"
+              className="w-full bg-gray-900 hover:bg-gray-800 text-white font-medium shadow-sm transition-all duration-200 h-9 sm:h-10"
+              onClick={handleContact}
+            >
+              <MessageSquare className="w-4 h-4 mr-2" />
+              Contact
+            </Button>
+          )}
           <div className="flex gap-2">
             <Button
               size="sm"
@@ -347,7 +347,10 @@ export default function ProviderCard({
                 }`}
               />
             </Button>
-            <Link href={`/customer/providers/${provider.id}`} className="flex-1">
+            <Link
+              href={`/customer/providers/${provider.id}`}
+              className="flex-1"
+            >
               <Button
                 size="sm"
                 variant="outline"

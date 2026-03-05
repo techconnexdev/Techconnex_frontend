@@ -82,7 +82,11 @@ import {
   type Milestone,
 } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
-import { formatTimeline, formatDurationDays, timelineToDays } from "@/lib/timeline-utils";
+import {
+  formatTimeline,
+  formatDurationDays,
+  timelineToDays,
+} from "@/lib/timeline-utils";
 import { cn } from "@/lib/utils";
 import { MarkdownViewer } from "@/components/markdown/MarkdownViewer";
 import { RichEditor } from "@/components/markdown/RichTextEditor";
@@ -874,14 +878,21 @@ export default function ProjectDetailsPage({
         (a, b) => ((a.order as number) ?? 0) - ((b.order as number) ?? 0),
       );
       const withDuration = sortedLoad.map((m, i) => {
-        const prev = sortedLoad[i - 1] as { daysFromStart?: number } | undefined;
-        const currDays = (m as Milestone & { daysFromStart?: number }).daysFromStart ?? 0;
+        const prev = sortedLoad[i - 1] as
+          | { daysFromStart?: number }
+          | undefined;
+        const currDays =
+          (m as Milestone & { daysFromStart?: number }).daysFromStart ?? 0;
         const prevDays = prev?.daysFromStart ?? 0;
         const durationDays = currDays - prevDays;
         return {
           ...m,
           durationAmount: durationDays > 0 ? String(durationDays) : "",
-          durationUnit: (durationDays > 0 ? "day" : "") as "day" | "week" | "month" | "",
+          durationUnit: (durationDays > 0 ? "day" : "") as
+            | "day"
+            | "week"
+            | "month"
+            | "",
         } as Milestone & { durationAmount?: string; durationUnit?: string };
       });
       setProjectMilestones(withDuration);
@@ -994,14 +1005,21 @@ export default function ProjectDetailsPage({
           (a, b) => ((a.order as number) ?? 0) - ((b.order as number) ?? 0),
         );
         const withDuration2 = sortedLoad2.map((m, i) => {
-          const prev = sortedLoad2[i - 1] as { daysFromStart?: number } | undefined;
-          const currDays = (m as Milestone & { daysFromStart?: number }).daysFromStart ?? 0;
+          const prev = sortedLoad2[i - 1] as
+            | { daysFromStart?: number }
+            | undefined;
+          const currDays =
+            (m as Milestone & { daysFromStart?: number }).daysFromStart ?? 0;
           const prevDays = prev?.daysFromStart ?? 0;
           const durationDays = currDays - prevDays;
           return {
             ...m,
             durationAmount: durationDays > 0 ? String(durationDays) : "",
-            durationUnit: (durationDays > 0 ? "day" : "") as "day" | "week" | "month" | "",
+            durationUnit: (durationDays > 0 ? "day" : "") as
+              | "day"
+              | "week"
+              | "month"
+              | "",
           } as Milestone & { durationAmount?: string; durationUnit?: string };
         });
         setProjectMilestones(withDuration2);
@@ -1307,12 +1325,22 @@ export default function ProjectDetailsPage({
   const handleSaveProjectMilestones = async () => {
     if (!project?.id) return;
 
-    type Err = { title?: string; description?: string; dueDate?: string; daysFromStart?: string; durationAmount?: string; durationUnit?: string };
+    type Err = {
+      title?: string;
+      description?: string;
+      dueDate?: string;
+      daysFromStart?: string;
+      durationAmount?: string;
+      durationUnit?: string;
+    };
     const errors: Record<number, Err> = {};
     let hasErrors = false;
     projectMilestones.forEach((m, idx) => {
       const milestoneErrors: Err = {};
-      const mm = m as Milestone & { durationAmount?: string; durationUnit?: string };
+      const mm = m as Milestone & {
+        durationAmount?: string;
+        durationUnit?: string;
+      };
 
       if (!m.title || !m.title.trim()) {
         milestoneErrors.title = "Title is required.";
@@ -1322,17 +1350,20 @@ export default function ProjectDetailsPage({
         milestoneErrors.description = "Description is required.";
         hasErrors = true;
       }
-      const durAmount = mm.durationAmount != null ? String(mm.durationAmount).trim() : "";
+      const durAmount =
+        mm.durationAmount != null ? String(mm.durationAmount).trim() : "";
       const durUnit = mm.durationUnit || "";
       if (!durAmount || Number(durAmount) <= 0) {
-        milestoneErrors.durationAmount = "Duration amount is required and must be > 0.";
+        milestoneErrors.durationAmount =
+          "Duration amount is required and must be > 0.";
         hasErrors = true;
       }
       if (!durUnit) {
         milestoneErrors.durationUnit = "Unit is required.";
         hasErrors = true;
       }
-      if (Object.keys(milestoneErrors).length > 0) errors[idx] = milestoneErrors;
+      if (Object.keys(milestoneErrors).length > 0)
+        errors[idx] = milestoneErrors;
     });
 
     // Validate milestone sum equals bid amount
@@ -1384,8 +1415,14 @@ export default function ProjectDetailsPage({
       const sorted = normalizeMilestoneSequences(projectMilestones);
       let cum = 0;
       const payload = sorted.map((m) => {
-        const mm = m as Milestone & { durationAmount?: string; durationUnit?: string };
-        const d = timelineToDays(Number(mm.durationAmount || 0), mm.durationUnit || "");
+        const mm = m as Milestone & {
+          durationAmount?: string;
+          durationUnit?: string;
+        };
+        const d = timelineToDays(
+          Number(mm.durationAmount || 0),
+          mm.durationUnit || "",
+        );
         cum += d;
         return {
           sequence: m.sequence ?? m.order,
@@ -1456,13 +1493,18 @@ export default function ProjectDetailsPage({
       );
       const withDurationRef = sortedRef.map((m, i) => {
         const prev = sortedRef[i - 1] as { daysFromStart?: number } | undefined;
-        const currDays = (m as Milestone & { daysFromStart?: number }).daysFromStart ?? 0;
+        const currDays =
+          (m as Milestone & { daysFromStart?: number }).daysFromStart ?? 0;
         const prevDays = prev?.daysFromStart ?? 0;
         const durationDays = currDays - prevDays;
         return {
           ...m,
           durationAmount: durationDays > 0 ? String(durationDays) : "",
-          durationUnit: (durationDays > 0 ? "day" : "") as "day" | "week" | "month" | "",
+          durationUnit: (durationDays > 0 ? "day" : "") as
+            | "day"
+            | "week"
+            | "month"
+            | "",
         } as Milestone & { durationAmount?: string; durationUnit?: string };
       });
 
@@ -1647,18 +1689,27 @@ export default function ProjectDetailsPage({
           (a, b) => ((a.order as number) ?? 0) - ((b.order as number) ?? 0),
         );
         const withDurationDraft = sortedDraft.map((m, i) => {
-          const prev = sortedDraft[i - 1] as { daysFromStart?: number } | undefined;
-          const currDays = (m as Milestone & { daysFromStart?: number }).daysFromStart ?? 0;
+          const prev = sortedDraft[i - 1] as
+            | { daysFromStart?: number }
+            | undefined;
+          const currDays =
+            (m as Milestone & { daysFromStart?: number }).daysFromStart ?? 0;
           const prevDays = prev?.daysFromStart ?? 0;
           const durationDays = currDays - prevDays;
           return {
             ...m,
             durationAmount: durationDays > 0 ? String(durationDays) : "",
-            durationUnit: (durationDays > 0 ? "day" : "") as "day" | "week" | "month" | "",
+            durationUnit: (durationDays > 0 ? "day" : "") as
+              | "day"
+              | "week"
+              | "month"
+              | "",
           } as Milestone & { durationAmount?: string; durationUnit?: string };
         });
         setMilestonesDraft(withDurationDraft);
-        setOriginalMilestonesDraft(JSON.parse(JSON.stringify(withDurationDraft)));
+        setOriginalMilestonesDraft(
+          JSON.parse(JSON.stringify(withDurationDraft)),
+        );
         setMilestoneApprovalStateModal({
           milestonesLocked: milestoneData.milestonesLocked,
           companyApproved: milestoneData.companyApproved,
@@ -1689,12 +1740,22 @@ export default function ProjectDetailsPage({
   const handleSaveAcceptedMilestones = async () => {
     if (!activeProjectId) return;
 
-    type Err = { title?: string; description?: string; dueDate?: string; daysFromStart?: string; durationAmount?: string; durationUnit?: string };
+    type Err = {
+      title?: string;
+      description?: string;
+      dueDate?: string;
+      daysFromStart?: string;
+      durationAmount?: string;
+      durationUnit?: string;
+    };
     const errors: Record<number, Err> = {};
     let hasErrors = false;
     milestonesDraft.forEach((m, idx) => {
       const milestoneErrors: Err = {};
-      const mm = m as Milestone & { durationAmount?: string; durationUnit?: string };
+      const mm = m as Milestone & {
+        durationAmount?: string;
+        durationUnit?: string;
+      };
       if (!m.title || !m.title.trim()) {
         milestoneErrors.title = "Title is required.";
         hasErrors = true;
@@ -1703,17 +1764,20 @@ export default function ProjectDetailsPage({
         milestoneErrors.description = "Description is required.";
         hasErrors = true;
       }
-      const durAmount = mm.durationAmount != null ? String(mm.durationAmount).trim() : "";
+      const durAmount =
+        mm.durationAmount != null ? String(mm.durationAmount).trim() : "";
       const durUnit = mm.durationUnit || "";
       if (!durAmount || Number(durAmount) <= 0) {
-        milestoneErrors.durationAmount = "Duration amount is required and must be > 0.";
+        milestoneErrors.durationAmount =
+          "Duration amount is required and must be > 0.";
         hasErrors = true;
       }
       if (!durUnit) {
         milestoneErrors.durationUnit = "Unit is required.";
         hasErrors = true;
       }
-      if (Object.keys(milestoneErrors).length > 0) errors[idx] = milestoneErrors;
+      if (Object.keys(milestoneErrors).length > 0)
+        errors[idx] = milestoneErrors;
     });
 
     const projectData = project || {};
@@ -1768,8 +1832,14 @@ export default function ProjectDetailsPage({
       );
       let cum = 0;
       const payload = sortedDraft.map((m) => {
-        const mm = m as Milestone & { durationAmount?: string; durationUnit?: string };
-        const d = timelineToDays(Number(mm.durationAmount || 0), mm.durationUnit || "");
+        const mm = m as Milestone & {
+          durationAmount?: string;
+          durationUnit?: string;
+        };
+        const d = timelineToDays(
+          Number(mm.durationAmount || 0),
+          mm.durationUnit || "",
+        );
         cum += d;
         return {
           sequence: m.sequence ?? 0,
@@ -1808,13 +1878,18 @@ export default function ProjectDetailsPage({
       );
       const withDurationDr = sortedDr.map((m, i) => {
         const prev = sortedDr[i - 1] as { daysFromStart?: number } | undefined;
-        const currDays = (m as Milestone & { daysFromStart?: number }).daysFromStart ?? 0;
+        const currDays =
+          (m as Milestone & { daysFromStart?: number }).daysFromStart ?? 0;
         const prevDays = prev?.daysFromStart ?? 0;
         const durationDays = currDays - prevDays;
         return {
           ...m,
           durationAmount: durationDays > 0 ? String(durationDays) : "",
-          durationUnit: (durationDays > 0 ? "day" : "") as "day" | "week" | "month" | "",
+          durationUnit: (durationDays > 0 ? "day" : "") as
+            | "day"
+            | "week"
+            | "month"
+            | "",
         } as Milestone & { durationAmount?: string; durationUnit?: string };
       });
 
@@ -2226,7 +2301,7 @@ export default function ProjectDetailsPage({
             </Button>
             */}
 
-            <Button
+            {/* <Button
               variant="outline"
               className="flex-1 sm:flex-initial text-xs sm:text-sm"
               onClick={() =>
@@ -2245,7 +2320,7 @@ export default function ProjectDetailsPage({
               <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
               <span className="hidden sm:inline">Message Provider</span>
               <span className="sm:hidden">Message</span>
-            </Button>
+            </Button> */}
             {Boolean(currentDispute) ? (
               <Button
                 variant="outline"
@@ -2274,6 +2349,31 @@ export default function ProjectDetailsPage({
             ) : null}
           </div>
         </div>
+
+        {/* Company approval reminder - outside tabs */}
+        {!milestoneApprovalState.companyApproved &&
+          projectMilestones &&
+          projectMilestones.length > 0 && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 sm:px-4 sm:py-3.5 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-amber-900">
+                  Approve milestones to proceed
+                </p>
+                <p className="text-xs sm:text-sm text-amber-800 mt-0.5">
+                  Please review and approve the milestone plan in the{" "}
+                  <Button
+                    variant="link"
+                    className="h-auto p-0 text-amber-800 underline font-semibold"
+                    onClick={() => setActiveTab("milestones")}
+                  >
+                    Milestones
+                  </Button>{" "}
+                  tab so the project can move forward.
+                </p>
+              </div>
+            </div>
+          )}
 
         {/* Project Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
@@ -2509,105 +2609,115 @@ export default function ProjectDetailsPage({
 
           {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-4 sm:space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-              <Card>
-                <CardHeader className="p-4 sm:p-6">
-                  <CardTitle className="text-base sm:text-lg">
-                    Project Details
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3 sm:space-y-4 p-4 sm:p-6 pt-0">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            {/* Overview details: Project Details first */}
+            <Card>
+              <CardHeader className="p-4 sm:p-6">
+                <CardTitle className="text-base sm:text-lg">
+                  Project Details
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 sm:space-y-4 p-4 sm:p-6 pt-0">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                  <div>
+                    <Label className="text-xs sm:text-sm font-medium text-gray-500">
+                      Category
+                    </Label>
+                    <div className="mt-1">
+                      <Badge variant="secondary" className="text-xs sm:text-sm">
+                        {project.category}
+                      </Badge>
+                    </div>
+                  </div>
+                  {(typeof project.budgetMin === "number" ||
+                    typeof project.budgetMax === "number" ||
+                    (project.budgetMin != null &&
+                      project.budgetMax != null)) && (
                     <div>
                       <Label className="text-xs sm:text-sm font-medium text-gray-500">
-                        Category
+                        Budget Range
                       </Label>
-                      <div className="mt-1">
-                        <Badge
-                          variant="secondary"
-                          className="text-xs sm:text-sm"
-                        >
-                          {project.category}
-                        </Badge>
-                      </div>
+                      <p className="text-base sm:text-lg mt-1 break-words">
+                        {currency}{" "}
+                        {fmt(
+                          typeof project.budgetMin === "number"
+                            ? project.budgetMin
+                            : Number(project.budgetMin) || 0,
+                        )}{" "}
+                        - {currency}{" "}
+                        {fmt(
+                          typeof project.budgetMax === "number"
+                            ? project.budgetMax
+                            : Number(project.budgetMax) || 0,
+                        )}
+                      </p>
                     </div>
-                    {(typeof project.budgetMin === "number" ||
-                      typeof project.budgetMax === "number" ||
-                      (project.budgetMin != null &&
-                        project.budgetMax != null)) && (
-                      <div>
-                        <Label className="text-xs sm:text-sm font-medium text-gray-500">
-                          Budget Range
-                        </Label>
-                        <p className="text-base sm:text-lg mt-1 break-words">
-                          {currency}{" "}
-                          {fmt(
-                            typeof project.budgetMin === "number"
-                              ? project.budgetMin
-                              : Number(project.budgetMin) || 0,
-                          )}{" "}
-                          - {currency}{" "}
-                          {fmt(
-                            typeof project.budgetMax === "number"
-                              ? project.budgetMax
-                              : Number(project.budgetMax) || 0,
-                          )}
-                        </p>
-                      </div>
-                    )}
-                    {approvedPriceValue > 0 && (
-                      <div>
-                        <Label className="text-xs sm:text-sm font-medium text-gray-500">
-                          Approved Price
-                        </Label>
-                        <p className="text-base sm:text-lg font-semibold text-green-600 mt-1">
-                          {currency} {fmt(approvedPriceValue)}
-                        </p>
-                      </div>
-                    )}
-                    <div className="sm:col-span-2">
+                  )}
+                  {approvedPriceValue > 0 && (
+                    <div>
                       <Label className="text-xs sm:text-sm font-medium text-gray-500">
-                        Timeline
+                        Approved Price
                       </Label>
-                      <div className="space-y-2 mt-1">
-                        {project.originalTimeline ? (
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">
-                              Original Timeline (Company):
-                            </p>
-                            <p className="text-sm text-gray-900 font-medium">
-                              {formatTimeline(project.originalTimeline)}
-                            </p>
-                          </div>
-                        ) : null}
-                        {project.providerProposedTimeline ? (
-                          <div>
-                            <p className="text-xs text-gray-500 mb-1">
-                              Provider&apos;s Proposed Timeline:
-                            </p>
-                            <p className="text-sm text-gray-900 font-medium">
-                              {formatTimeline(
-                                project.providerProposedTimeline,
-                                "day",
-                              )}
-                            </p>
-                          </div>
-                        ) : null}
-                        {milestoneApprovalState.milestonesLocked &&
+                      <p className="text-base sm:text-lg font-semibold text-green-600 mt-1">
+                        {currency} {fmt(approvedPriceValue)}
+                      </p>
+                    </div>
+                  )}
+                  <div className="sm:col-span-2">
+                    <Label className="text-xs sm:text-sm font-medium text-gray-500">
+                      Timeline
+                    </Label>
+                    <div className="space-y-2 mt-1">
+                      {(() => {
+                        const statusNorm = String(
+                          project.status ?? "",
+                        ).toUpperCase();
+                        const isOpenOrPending =
+                          (project.type === "ServiceRequest" &&
+                            statusNorm === "OPEN") ||
+                          statusNorm === "PENDING" ||
+                          statusNorm === "OPEN";
+                        const milestonesLocked =
+                          milestoneApprovalState.milestonesLocked &&
                           projectMilestones &&
-                          projectMilestones.length > 0 && (() => {
-                            const sorted = [...projectMilestones].sort(
-                              (a, b) => (a.order ?? a.sequence ?? 0) - (b.order ?? b.sequence ?? 0),
-                            );
-                            const last = sorted[sorted.length - 1] as Milestone & { daysFromStart?: number };
-                            const totalDays = last?.daysFromStart ?? 0;
-                            const lastDueDate = last?.dueDate;
+                          projectMilestones.length > 0;
+
+                        if (isOpenOrPending) {
+                          const companyTimeline =
+                            project.originalTimeline ?? project.timeline;
+                          return companyTimeline ? (
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">
+                                Timeline (Company):
+                              </p>
+                              <p className="text-sm text-gray-900 font-medium">
+                                {formatTimeline(companyTimeline)}
+                              </p>
+                            </div>
+                          ) : (
+                            <p className="text-sm text-gray-600">
+                              Not specified
+                            </p>
+                          );
+                        }
+
+                        if (milestonesLocked) {
+                          const sorted = [...projectMilestones].sort(
+                            (a, b) =>
+                              (a.order ?? a.sequence ?? 0) -
+                              (b.order ?? b.sequence ?? 0),
+                          );
+                          const last = sorted[
+                            sorted.length - 1
+                          ] as Milestone & { daysFromStart?: number };
+                          const totalDays = last?.daysFromStart ?? 0;
+                          const lastDueDate = last?.dueDate;
+                          if (totalDays > 0 || lastDueDate) {
                             return (
                               <>
                                 {totalDays > 0 && (
                                   <div>
                                     <p className="text-xs text-gray-500 mb-1">
-                                      Approved Timeline:
+                                      Approved Timeline (Company & Provider):
                                     </p>
                                     <p className="text-sm font-semibold text-green-600">
                                       {formatDurationDays(totalDays)}
@@ -2620,42 +2730,188 @@ export default function ProjectDetailsPage({
                                       Due date (project):
                                     </p>
                                     <p className="text-sm font-semibold text-green-600">
-                                      {new Date(lastDueDate).toLocaleDateString()}
+                                      {new Date(
+                                        lastDueDate,
+                                      ).toLocaleDateString()}
                                     </p>
                                   </div>
                                 )}
                               </>
                             );
-                          })()}
-                        {!project.originalTimeline &&
-                          !project.providerProposedTimeline &&
-                          !(milestoneApprovalState.milestonesLocked && projectMilestones?.length) && (
-                            <p className="text-sm text-gray-600">
-                              Not specified
+                          }
+                        }
+
+                        if (project.providerProposedTimeline) {
+                          return (
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">
+                                Agreed Timeline (Company & Provider):
+                              </p>
+                              <p className="text-sm text-gray-900 font-medium">
+                                {formatTimeline(
+                                  project.providerProposedTimeline,
+                                  "day",
+                                )}
+                              </p>
+                            </div>
+                          );
+                        }
+
+                        const fallbackCompanyTimeline =
+                          project.originalTimeline ?? project.timeline;
+                        return fallbackCompanyTimeline ? (
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1">
+                              Timeline (Company):
                             </p>
-                          )}
-                      </div>
-                    </div>
-                    <div className="sm:col-span-2">
-                      <Label className="text-xs sm:text-sm font-medium text-gray-500">
-                        Required Skills
-                      </Label>
-                      <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-1">
-                        {skills.map((skill) => (
-                          <Badge
-                            key={skill}
-                            variant="outline"
-                            className="text-xs"
-                          >
-                            {skill}
-                          </Badge>
-                        ))}
-                      </div>
+                            <p className="text-sm text-gray-900 font-medium">
+                              {formatTimeline(fallbackCompanyTimeline)}
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-600">Not specified</p>
+                        );
+                      })()}
                     </div>
                   </div>
-                </CardContent>
-              </Card>
+                  <div className="sm:col-span-2">
+                    <Label className="text-xs sm:text-sm font-medium text-gray-500">
+                      Required Skills
+                    </Label>
+                    <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-1">
+                      {skills.map((skill) => (
+                        <Badge
+                          key={skill}
+                          variant="outline"
+                          className="text-xs"
+                        >
+                          {skill}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
+            {/* Provider Details - when provider is available and both are matched */}
+            {(project.assignedProvider || project.provider) && (() => {
+              const provider = project.assignedProvider || project.provider as {
+                id?: string;
+                name?: string;
+                avatar?: string;
+                providerProfile?: {
+                  profileImageUrl?: string;
+                  rating?: number | string;
+                  bio?: string;
+                  major?: string;
+                  location?: string;
+                  completedJobs?: number;
+                };
+              } | undefined;
+              if (!provider) return null;
+              const providerId = provider.id ?? (project as { providerId?: string }).providerId;
+              const profile = provider.providerProfile as { profileImageUrl?: string; rating?: number | string; bio?: string; major?: string; location?: string; completedJobs?: number } | undefined;
+              const profileImageUrl = profile?.profileImageUrl || provider.avatar;
+              const rating = profile?.rating ?? 0;
+              const bio = profile?.bio;
+              const major = profile?.major;
+              const location = profile?.location;
+              const completedJobs = profile?.completedJobs ?? 0;
+              return (
+                <Card>
+                  <CardHeader className="p-4 sm:p-6">
+                    <CardTitle className="text-base sm:text-lg">
+                      Provider Details
+                    </CardTitle>
+                    <CardDescription className="text-xs sm:text-sm">
+                      Assigned provider for this project
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="p-4 sm:p-6 pt-0">
+                    <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+                      <div className="flex items-center space-x-3 sm:space-x-4 flex-shrink-0">
+                        <Avatar className="w-12 h-12 sm:w-14 sm:h-14">
+                          <AvatarImage
+                            src={getProfileImageUrl(profileImageUrl)}
+                          />
+                          <AvatarFallback>
+                            {provider.name?.charAt(0) || "?"}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0">
+                          <h3 className="font-semibold text-sm sm:text-base truncate">
+                            {provider.name || "Unknown Provider"}
+                          </h3>
+                          <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm text-gray-500 mt-0.5">
+                            <div className="flex items-center gap-1">
+                              <Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-yellow-400 fill-current flex-shrink-0" />
+                              <span>{Number(rating) || 0}</span>
+                            </div>
+                            <span className="hidden sm:inline">•</span>
+                            <span>{completedJobs} jobs completed</span>
+                            {(major || location) && (
+                              <>
+                                <span className="hidden sm:inline">•</span>
+                                <span className="truncate">
+                                  {[major, location].filter(Boolean).join(" · ")}
+                                </span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      {(bio || major || location) && (
+                        <div className="flex-1 text-xs sm:text-sm text-gray-600 border-t sm:border-t-0 sm:border-l pt-3 sm:pt-0 sm:pl-4 sm:border-gray-200">
+                          {bio && (
+                            <p className="line-clamp-3">{bio}</p>
+                          )}
+                          {!bio && (major || location) && (
+                            <p>
+                              {major && <span>{major}</span>}
+                              {major && location && " · "}
+                              {location && <span>{location}</span>}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2 mt-4">
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="text-xs sm:text-sm"
+                        onClick={() =>
+                          handleContact(
+                            providerId,
+                            provider.name,
+                            typeof profileImageUrl === "string" ? profileImageUrl : undefined,
+                          )
+                        }
+                      >
+                        <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+                        Message
+                      </Button>
+                      {providerId && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-xs sm:text-sm"
+                          asChild
+                        >
+                          <NextLink href={`/customer/providers/${providerId}`}>
+                            View Profile
+                          </NextLink>
+                        </Button>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })()}
+
+            {/* Requirements and Deliverables side by side */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
               <Card>
                 <CardHeader className="p-4 sm:p-6">
                   <CardTitle className="text-base sm:text-lg">
@@ -2670,26 +2926,26 @@ export default function ProjectDetailsPage({
                   />
                 </CardContent>
               </Card>
+              <Card>
+                <CardHeader className="p-4 sm:p-6">
+                  <CardTitle className="text-base sm:text-lg">
+                    Deliverables
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 sm:p-6 pt-0">
+                  <MarkdownViewer
+                    content={deliverables}
+                    emptyMessage="No deliverables specified."
+                    className="text-xs sm:text-sm"
+                  />
+                </CardContent>
+              </Card>
             </div>
 
+            {/* AI Recommended Providers under all overview details */}
             {project?.type === "ServiceRequest" && project?.id && (
               <AIRecommendedProvidersSection serviceRequestId={project.id} />
             )}
-
-            <Card>
-              <CardHeader className="p-4 sm:p-6">
-                <CardTitle className="text-base sm:text-lg">
-                  Deliverables
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 sm:p-6 pt-0">
-                <MarkdownViewer
-                  content={deliverables}
-                  emptyMessage="No deliverables specified."
-                  className="text-xs sm:text-sm"
-                />
-              </CardContent>
-            </Card>
           </TabsContent>
 
           {/* Milestones Tab */}
@@ -2713,11 +2969,16 @@ export default function ProjectDetailsPage({
                     </Badge>
                     {milestoneApprovalState.milestonesLocked &&
                       projectMilestones &&
-                      projectMilestones.length > 0 && (() => {
+                      projectMilestones.length > 0 &&
+                      (() => {
                         const sorted = [...projectMilestones].sort(
-                          (a, b) => (a.order ?? a.sequence ?? 0) - (b.order ?? b.sequence ?? 0),
+                          (a, b) =>
+                            (a.order ?? a.sequence ?? 0) -
+                            (b.order ?? b.sequence ?? 0),
                         );
-                        const last = sorted[sorted.length - 1] as { daysFromStart?: number } | undefined;
+                        const last = sorted[sorted.length - 1] as
+                          | { daysFromStart?: number }
+                          | undefined;
                         const totalDays = last?.daysFromStart ?? 0;
                         return totalDays > 0 ? (
                           <span className="text-xs sm:text-sm text-green-600 font-medium">
@@ -2800,19 +3061,45 @@ export default function ProjectDetailsPage({
                               <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
                               <span>
                                 {(() => {
-                                  const sorted = [...(projectMilestones || [])].sort(
-                                    (a, b) => (a.order ?? a.sequence ?? 0) - (b.order ?? b.sequence ?? 0),
+                                  const sorted = [
+                                    ...(projectMilestones || []),
+                                  ].sort(
+                                    (a, b) =>
+                                      (a.order ?? a.sequence ?? 0) -
+                                      (b.order ?? b.sequence ?? 0),
                                   );
-                                  const idx = sorted.findIndex((x) => x.id === milestone.id);
-                                  if (idx < 0) return milestone.dueDate ? `Due: ${new Date(milestone.dueDate).toLocaleDateString()}` : "—";
-                                  const prev = sorted[idx - 1] as { daysFromStart?: number } | undefined;
-                                  const currDays = (milestone as Milestone & { daysFromStart?: number }).daysFromStart ?? 0;
+                                  const idx = sorted.findIndex(
+                                    (x) => x.id === milestone.id,
+                                  );
+                                  if (idx < 0)
+                                    return milestone.dueDate
+                                      ? `Due: ${new Date(milestone.dueDate).toLocaleDateString()}`
+                                      : "—";
+                                  const prev = sorted[idx - 1] as
+                                    | { daysFromStart?: number }
+                                    | undefined;
+                                  const currDays =
+                                    (
+                                      milestone as Milestone & {
+                                        daysFromStart?: number;
+                                      }
+                                    ).daysFromStart ?? 0;
                                   const prevDays = prev?.daysFromStart ?? 0;
                                   const durationDays = currDays - prevDays;
-                                  const durationStr = durationDays > 0 ? `Duration: ${formatDurationDays(durationDays)}` : "";
-                                  const dueStr = milestone.dueDate ? `Due: ${new Date(milestone.dueDate).toLocaleDateString()}` : "";
-                                  if (milestoneApprovalState.milestonesLocked && dueStr) {
-                                    return [durationStr, dueStr].filter(Boolean).join(" · ");
+                                  const durationStr =
+                                    durationDays > 0
+                                      ? `Duration: ${formatDurationDays(durationDays)}`
+                                      : "";
+                                  const dueStr = milestone.dueDate
+                                    ? `Due: ${new Date(milestone.dueDate).toLocaleDateString()}`
+                                    : "";
+                                  if (
+                                    milestoneApprovalState.milestonesLocked &&
+                                    dueStr
+                                  ) {
+                                    return [durationStr, dueStr]
+                                      .filter(Boolean)
+                                      .join(" · ");
                                   }
                                   return durationStr || dueStr || "—";
                                 })()}
@@ -3454,530 +3741,497 @@ export default function ProjectDetailsPage({
                         }}
                       >
                         {proposals.slice(0, 5).map((p) => (
-                        <div
-                          key={p.id}
-                          ref={(el) => {
-                            cardRefsMap.current[p.id] = el;
-                          }}
-                          data-proposal-id={p.id}
-                          className="w-full"
-                        >
-                          <Card
-                            className="hover:shadow-md transition-shadow"
-                            onMouseEnter={() => {
-                              if (bidPanelLeaveTimeoutRef.current) {
-                                clearTimeout(bidPanelLeaveTimeoutRef.current);
-                                bidPanelLeaveTimeoutRef.current = null;
-                              }
-                              if (p.isTopFive) setOpenExplanationId(p.id);
+                          <div
+                            key={p.id}
+                            ref={(el) => {
+                              cardRefsMap.current[p.id] = el;
                             }}
+                            data-proposal-id={p.id}
+                            className="w-full"
                           >
-                            <CardContent className="p-4 sm:p-5 lg:p-6">
-                              {/* Small screens only: in-card AI summary when this card is expanded */}
-                              {cardSummaryViewId === p.id && (
-                                <div className="lg:hidden rounded-xl border border-gray-200 bg-gradient-to-br from-blue-50/80 to-indigo-50/80 p-4 shadow-sm">
-                                  <div className="flex items-center justify-between gap-2 mb-3">
-                                    <div className="flex items-center gap-2 min-w-0">
-                                      <div className="p-1.5 rounded-lg bg-blue-100 flex-shrink-0">
-                                        <Sparkles className="w-4 h-4 text-blue-600" />
-                                      </div>
-                                      <span className="text-sm font-semibold text-gray-900 truncate">
-                                        {p.providerName || "Provider"}
-                                      </span>
-                                    </div>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setCardSummaryViewId(null);
-                                        setOpenExplanationId(null);
-                                      }}
-                                      className="shrink-0 p-1.5 rounded-md text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                      aria-label="Close"
-                                    >
-                                      <X className="w-4 h-4" />
-                                    </button>
-                                  </div>
-                                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
-                                    Why this bid fits
-                                  </p>
-                                  {!p.aiFitExplanation &&
-                                  explanationLoading[p.id] ? (
-                                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                                      <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
-                                      <span>Loading…</span>
-                                    </div>
-                                  ) : (
-                                    <p className="text-sm text-gray-700 leading-relaxed">
-                                      {getBidSummary(
-                                        p.id,
-                                        p.aiFitExplanation,
-                                        explanationCache[p.id],
-                                      )}
-                                    </p>
-                                  )}
-                                </div>
-                              )}
-
-                              {/* Normal card content (hidden on small when this card is showing summary) */}
-                              <div
-                                className={cn(
-                                  "flex flex-col lg:flex-row gap-4 sm:gap-5 lg:gap-6",
-                                  cardSummaryViewId === p.id &&
-                                    "hidden lg:flex",
-                                )}
-                              >
-                                {/* Provider Info */}
-                                <div className="flex items-start space-x-3 sm:space-x-4 flex-1 min-w-0">
-                                  <Avatar className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0">
-                                    <AvatarImage
-                                      src={
-                                        p.providerAvatar &&
-                                        p.providerAvatar !==
-                                          "/placeholder.svg?height=40&width=40" &&
-                                        !p.providerAvatar.includes(
-                                          "/placeholder.svg",
-                                        )
-                                          ? p.providerAvatar
-                                          : "/placeholder.svg"
-                                      }
-                                    />
-                                    <AvatarFallback>
-                                      {String(p.providerName || "P")
-                                        .split(" ")
-                                        .filter(Boolean)
-                                        .map((n) => n[0])
-                                        .join("")}
-                                    </AvatarFallback>
-                                  </Avatar>
-
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex flex-wrap items-center gap-2 mb-1">
-                                      <h3 className="font-semibold text-gray-900 text-sm sm:text-base truncate">
-                                        {p.providerName || "Provider"}
-                                      </h3>
-                                      {p.isTopFive && (
-                                        <Badge
-                                          className="bg-blue-100 text-blue-800 border-blue-300 text-xs shrink-0"
-                                          title="One of the top 5 best-fit bids"
-                                        >
-                                          <Sparkles className="w-3 h-3 mr-1" />
-                                          Best {p.rank ?? ""}
-                                        </Badge>
-                                      )}
-                                      {p.matchScore != null &&
-                                        p.matchScore > 0 && (
-                                          <span className="text-xs text-gray-500">
-                                            {p.matchScore}% match
-                                          </span>
-                                        )}
-                                      <div className="flex items-center gap-1">
-                                        <Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-yellow-400 fill-current flex-shrink-0" />
-                                        <span className="text-xs sm:text-sm text-gray-600">
-                                          {p.providerRating ?? "No rating"}
+                            <Card
+                              className="hover:shadow-md transition-shadow"
+                              onMouseEnter={() => {
+                                if (bidPanelLeaveTimeoutRef.current) {
+                                  clearTimeout(bidPanelLeaveTimeoutRef.current);
+                                  bidPanelLeaveTimeoutRef.current = null;
+                                }
+                                if (p.isTopFive) setOpenExplanationId(p.id);
+                              }}
+                            >
+                              <CardContent className="p-4 sm:p-5 lg:p-6">
+                                {/* Small screens only: in-card AI summary when this card is expanded */}
+                                {cardSummaryViewId === p.id && (
+                                  <div className="lg:hidden rounded-xl border border-gray-200 bg-gradient-to-br from-blue-50/80 to-indigo-50/80 p-4 shadow-sm">
+                                    <div className="flex items-center justify-between gap-2 mb-3">
+                                      <div className="flex items-center gap-2 min-w-0">
+                                        <div className="p-1.5 rounded-lg bg-blue-100 flex-shrink-0">
+                                          <Sparkles className="w-4 h-4 text-blue-600" />
+                                        </div>
+                                        <span className="text-sm font-semibold text-gray-900 truncate">
+                                          {p.providerName || "Provider"}
                                         </span>
                                       </div>
-                                      {/* Mobile: tap to show AI summary in-card */}
-                                      {p.isTopFive && (
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setOpenExplanationId((prev) =>
-                                              prev === p.id ? null : p.id,
-                                            );
-                                            setCardSummaryViewId((prev) =>
-                                              prev === p.id ? null : p.id,
-                                            );
-                                          }}
-                                          className="lg:hidden inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-2 py-1"
-                                          aria-label="See why this bid is recommended"
-                                        >
-                                          <HelpCircle className="w-3.5 h-3.5" />
-                                          Tap here to see
-                                        </button>
-                                      )}
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setCardSummaryViewId(null);
+                                          setOpenExplanationId(null);
+                                        }}
+                                        className="shrink-0 p-1.5 rounded-md text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        aria-label="Close"
+                                      >
+                                        <X className="w-4 h-4" />
+                                      </button>
                                     </div>
-
-                                    {p.coverLetter && (
-                                      <p className="text-xs sm:text-sm text-gray-600 line-clamp-2 mb-2 break-words">
-                                        {p.coverLetter}
+                                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+                                      Why this bid fits
+                                    </p>
+                                    {!p.aiFitExplanation &&
+                                    explanationLoading[p.id] ? (
+                                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                                        <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
+                                        <span>Loading…</span>
+                                      </div>
+                                    ) : (
+                                      <p className="text-sm text-gray-700 leading-relaxed">
+                                        {getBidSummary(
+                                          p.id,
+                                          p.aiFitExplanation,
+                                          explanationCache[p.id],
+                                        )}
                                       </p>
                                     )}
+                                  </div>
+                                )}
 
-                                    {Array.isArray(p.skills) &&
-                                      p.skills.length > 0 && (
-                                        <div className="flex flex-wrap gap-1">
-                                          {p.skills
-                                            .slice(0, 3)
-                                            .map((skill: string) => (
+                                {/* Normal card content (hidden on small when this card is showing summary) */}
+                                <div
+                                  className={cn(
+                                    "flex flex-col lg:flex-row gap-4 sm:gap-5 lg:gap-6",
+                                    cardSummaryViewId === p.id &&
+                                      "hidden lg:flex",
+                                  )}
+                                >
+                                  {/* Provider Info */}
+                                  <div className="flex items-start space-x-3 sm:space-x-4 flex-1 min-w-0">
+                                    <Avatar className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0">
+                                      <AvatarImage
+                                        src={
+                                          p.providerAvatar &&
+                                          p.providerAvatar !==
+                                            "/placeholder.svg?height=40&width=40" &&
+                                          !p.providerAvatar.includes(
+                                            "/placeholder.svg",
+                                          )
+                                            ? p.providerAvatar
+                                            : "/placeholder.svg"
+                                        }
+                                      />
+                                      <AvatarFallback>
+                                        {String(p.providerName || "P")
+                                          .split(" ")
+                                          .filter(Boolean)
+                                          .map((n) => n[0])
+                                          .join("")}
+                                      </AvatarFallback>
+                                    </Avatar>
+
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                                        <h3 className="font-semibold text-gray-900 text-sm sm:text-base truncate">
+                                          {p.providerName || "Provider"}
+                                        </h3>
+                                        {p.isTopFive && (
+                                          <Badge
+                                            className="bg-blue-100 text-blue-800 border-blue-300 text-xs shrink-0"
+                                            title="One of the top 5 best-fit bids"
+                                          >
+                                            <Sparkles className="w-3 h-3 mr-1" />
+                                            Best {p.rank ?? ""}
+                                          </Badge>
+                                        )}
+                                        {p.matchScore != null &&
+                                          p.matchScore > 0 && (
+                                            <span className="text-xs text-gray-500">
+                                              {p.matchScore}% match
+                                            </span>
+                                          )}
+                                        <div className="flex items-center gap-1">
+                                          <Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-yellow-400 fill-current flex-shrink-0" />
+                                          <span className="text-xs sm:text-sm text-gray-600">
+                                            {p.providerRating ?? "No rating"}
+                                          </span>
+                                        </div>
+                                        {/* Mobile: tap to show AI summary in-card */}
+                                        {p.isTopFive && (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setOpenExplanationId((prev) =>
+                                                prev === p.id ? null : p.id,
+                                              );
+                                              setCardSummaryViewId((prev) =>
+                                                prev === p.id ? null : p.id,
+                                              );
+                                            }}
+                                            className="lg:hidden inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-2 py-1"
+                                            aria-label="See why this bid is recommended"
+                                          >
+                                            <HelpCircle className="w-3.5 h-3.5" />
+                                            Tap here to see
+                                          </button>
+                                        )}
+                                      </div>
+
+                                      {p.coverLetter && (
+                                        <p className="text-xs sm:text-sm text-gray-600 line-clamp-2 mb-2 break-words">
+                                          {p.coverLetter}
+                                        </p>
+                                      )}
+
+                                      {Array.isArray(p.skills) &&
+                                        p.skills.length > 0 && (
+                                          <div className="flex flex-wrap gap-1">
+                                            {p.skills
+                                              .slice(0, 3)
+                                              .map((skill: string) => (
+                                                <Badge
+                                                  key={skill}
+                                                  variant="secondary"
+                                                  className="text-[10px] leading-tight"
+                                                >
+                                                  {skill}
+                                                </Badge>
+                                              ))}
+                                            {p.skills.length > 3 && (
                                               <Badge
-                                                key={skill}
                                                 variant="secondary"
                                                 className="text-[10px] leading-tight"
                                               >
-                                                {skill}
+                                                +{p.skills.length - 3} more
                                               </Badge>
-                                            ))}
-                                          {p.skills.length > 3 && (
-                                            <Badge
-                                              variant="secondary"
-                                              className="text-[10px] leading-tight"
-                                            >
-                                              +{p.skills.length - 3} more
-                                            </Badge>
-                                          )}
-                                        </div>
-                                      )}
-                                  </div>
-                                </div>
-
-                                {/* Right column */}
-                                <div className="lg:w-80 space-y-2 sm:space-y-3">
-                                  {/* Status + submitted date */}
-                                  <div className="flex justify-between items-center">
-                                    <Badge
-                                      className={
-                                        p.status === "pending"
-                                          ? "bg-yellow-100 text-yellow-800"
-                                          : p.status === "accepted"
-                                            ? "bg-green-100 text-green-800"
-                                            : p.status === "rejected"
-                                              ? "bg-red-100 text-red-800"
-                                              : "bg-gray-100 text-gray-800"
-                                      }
-                                    >
-                                      {p.status === "pending"
-                                        ? "Pending"
-                                        : p.status === "accepted"
-                                          ? "Accepted"
-                                          : p.status === "rejected"
-                                            ? "Rejected"
-                                            : p.status}
-                                    </Badge>
-
-                                    <span className="text-sm text-gray-500">
-                                      {p.submittedAt &&
-                                      !isNaN(new Date(p.submittedAt).getTime())
-                                        ? new Date(
-                                            p.submittedAt,
-                                          ).toLocaleDateString()
-                                        : "—"}
-                                    </span>
-                                  </div>
-
-                                  {/* Bid / timeline */}
-                                  <div className="flex justify-between items-center">
-                                    <div>
-                                      <p className="text-sm text-gray-600">
-                                        Bid Amount
-                                      </p>
-                                      <p className="font-semibold text-lg">
-                                        RM{" "}
-                                        {Number(
-                                          p.bidAmount ?? 0,
-                                        ).toLocaleString()}
-                                      </p>
-                                    </div>
-                                    <div className="text-right">
-                                      <p className="text-sm text-gray-600">
-                                        Timeline
-                                      </p>
-                                      <p className="font-medium">
-                                        {p.proposedTimeline || "—"}
-                                      </p>
-                                    </div>
-                                  </div>
-
-                                  {/* Mini milestones preview */}
-                                  {!!p.milestones?.length && (
-                                    <div className="text-xs text-gray-600 bg-gray-50 rounded p-2">
-                                      <div className="font-medium text-gray-900 mb-1">
-                                        Proposed Milestones
-                                      </div>
-                                      <ul className="space-y-1 max-h-24 overflow-y-auto pr-1">
-                                        {p.milestones.map(
-                                          (
-                                            m: {
-                                              title: string;
-                                              amount: number;
-                                              dueDate?: string;
-                                              daysFromStart?: number;
-                                              order: number;
-                                              description?: string;
-                                            },
-                                            idx: number,
-                                          ) => (
-                                            <li
-                                              key={idx}
-                                              className="flex justify-between"
-                                            >
-                                              <span className="truncate">
-                                                {m.title ||
-                                                  `Milestone ${idx + 1}`}
-                                              </span>
-                                              <span>
-                                                RM{" "}
-                                                {Number(
-                                                  m.amount || 0,
-                                                ).toLocaleString()}
-                                              </span>
-                                            </li>
-                                          ),
+                                            )}
+                                          </div>
                                         )}
-                                      </ul>
                                     </div>
-                                  )}
+                                  </div>
 
-                                  {/* Actions - responsive: stack on small, row + wrap on large */}
-                                  <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:flex-wrap sm:gap-2">
-                                    {/* View Profile */}
-                                    <NextLink
-                                      href={`/customer/providers/${p.providerId}`}
-                                      className="w-full sm:flex-1 sm:min-w-[7rem]"
-                                    >
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="w-full min-h-[44px] sm:min-h-0 text-xs sm:text-sm justify-center"
+                                  {/* Right column */}
+                                  <div className="lg:w-80 space-y-2 sm:space-y-3">
+                                    {/* Status + submitted date */}
+                                    <div className="flex justify-between items-center">
+                                      <Badge
+                                        className={
+                                          p.status === "pending"
+                                            ? "bg-yellow-100 text-yellow-800"
+                                            : p.status === "accepted"
+                                              ? "bg-green-100 text-green-800"
+                                              : p.status === "rejected"
+                                                ? "bg-red-100 text-red-800"
+                                                : "bg-gray-100 text-gray-800"
+                                        }
                                       >
-                                        <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 shrink-0" />
+                                        {p.status === "pending"
+                                          ? "Pending"
+                                          : p.status === "accepted"
+                                            ? "Accepted"
+                                            : p.status === "rejected"
+                                              ? "Rejected"
+                                              : p.status}
+                                      </Badge>
+
+                                      <span className="text-sm text-gray-500">
+                                        {p.submittedAt &&
+                                        !isNaN(
+                                          new Date(p.submittedAt).getTime(),
+                                        )
+                                          ? new Date(
+                                              p.submittedAt,
+                                            ).toLocaleDateString()
+                                          : "—"}
+                                      </span>
+                                    </div>
+
+                                    {/* Bid / timeline */}
+                                    <div className="flex justify-between items-center">
+                                      <div>
+                                        <p className="text-sm text-gray-600">
+                                          Bid Amount
+                                        </p>
+                                        <p className="font-semibold text-lg">
+                                          RM{" "}
+                                          {Number(
+                                            p.bidAmount ?? 0,
+                                          ).toLocaleString()}
+                                        </p>
+                                      </div>
+                                      <div className="text-right">
+                                        <p className="text-sm text-gray-600">
+                                          Timeline
+                                        </p>
+                                        <p className="font-medium">
+                                          {p.proposedTimeline || "—"}
+                                        </p>
+                                      </div>
+                                    </div>
+
+                                    {/* Mini milestones preview */}
+                                    {!!p.milestones?.length && (
+                                      <div className="text-xs text-gray-600 bg-gray-50 rounded p-2">
+                                        <div className="font-medium text-gray-900 mb-1">
+                                          Proposed Milestones
+                                        </div>
+                                        <ul className="space-y-1 max-h-24 overflow-y-auto pr-1">
+                                          {p.milestones.map(
+                                            (
+                                              m: {
+                                                title: string;
+                                                amount: number;
+                                                dueDate?: string;
+                                                daysFromStart?: number;
+                                                order: number;
+                                                description?: string;
+                                              },
+                                              idx: number,
+                                            ) => (
+                                              <li
+                                                key={idx}
+                                                className="flex justify-between"
+                                              >
+                                                <span className="truncate">
+                                                  {m.title ||
+                                                    `Milestone ${idx + 1}`}
+                                                </span>
+                                                <span>
+                                                  RM{" "}
+                                                  {Number(
+                                                    m.amount || 0,
+                                                  ).toLocaleString()}
+                                                </span>
+                                              </li>
+                                            ),
+                                          )}
+                                        </ul>
+                                      </div>
+                                    )}
+
+                                    {/* Actions - column layout, View details highlighted */}
+                                    <div className="flex flex-col gap-2 pt-2">
+                                      <Button
+                                        size="sm"
+                                        className="w-full min-h-[44px] sm:min-h-[40px] text-xs sm:text-sm justify-center bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
+                                        onClick={() => {
+                                          // sync the dialog state to match requests page structure:
+                                          setSelectedProposalDetails({
+                                            ...p, // Include all proposal data
+                                            provider: {
+                                              id: p.providerId,
+                                              name: p.providerName,
+                                              avatar: p.providerAvatar,
+                                              rating: p.providerRating,
+                                              location: p.providerLocation,
+                                            },
+                                            projectTitle:
+                                              p.projectTitle ||
+                                              (project.title as string) ||
+                                              "",
+                                            bidAmount: p.bidAmount,
+                                            proposedTimeline:
+                                              p.proposedTimeline,
+                                            deliveryTime:
+                                              p.proposedTimeline?.replace(
+                                                " days",
+                                                "",
+                                              ) || p.proposedTimeline,
+                                            coverLetter: p.coverLetter,
+                                            createdAt: p.submittedAt,
+                                            submittedAt: p.submittedAt,
+                                            status: p.status,
+                                            milestones: p.milestones.map(
+                                              (m: {
+                                                title: string;
+                                                amount: number;
+                                                dueDate?: string;
+                                                daysFromStart?: number;
+                                                order: number;
+                                                description?: string;
+                                              }) => ({
+                                                title: m.title,
+                                                amount: m.amount,
+                                                dueDate: m.dueDate,
+                                                daysFromStart: m.daysFromStart,
+                                                sequence: m.order,
+                                                order: m.order,
+                                                description: m.description,
+                                              }),
+                                            ),
+                                            attachmentUrls: p.attachments || [],
+                                            attachments: p.attachments || [],
+                                            skills: p.skills || [],
+                                            portfolio: p.portfolio || [],
+                                            experience:
+                                              (
+                                                p as ProviderRequest & {
+                                                  experience?: string;
+                                                }
+                                              ).experience || "",
+                                          });
+                                          setProposalDetailsOpen(true);
+                                        }}
+                                      >
+                                        <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 shrink-0" />
                                         <span className="truncate">
-                                          View Profile
+                                          Show details
                                         </span>
                                       </Button>
-                                    </NextLink>
-
-                                    {/* View Details */}
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      className="w-full sm:flex-1 sm:min-w-[7rem] min-h-[44px] sm:min-h-0 text-xs sm:text-sm justify-center"
-                                      onClick={() => {
-                                        // sync the dialog state to match requests page structure:
-                                        setSelectedProposalDetails({
-                                          ...p, // Include all proposal data
-                                          provider: {
-                                            id: p.providerId,
-                                            name: p.providerName,
-                                            avatar: p.providerAvatar,
-                                            rating: p.providerRating,
-                                            location: p.providerLocation,
-                                          },
-                                          projectTitle:
-                                            p.projectTitle ||
-                                            (project.title as string) ||
-                                            "",
-                                          bidAmount: p.bidAmount,
-                                          proposedTimeline: p.proposedTimeline,
-                                          deliveryTime:
-                                            p.proposedTimeline?.replace(
-                                              " days",
-                                              "",
-                                            ) || p.proposedTimeline,
-                                          coverLetter: p.coverLetter,
-                                          createdAt: p.submittedAt,
-                                          submittedAt: p.submittedAt,
-                                          status: p.status,
-                                          milestones: p.milestones.map(
-                                            (m: {
-                                              title: string;
-                                              amount: number;
-                                              dueDate?: string;
-                                              daysFromStart?: number;
-                                              order: number;
-                                              description?: string;
-                                            }) => ({
-                                              title: m.title,
-                                              amount: m.amount,
-                                              dueDate: m.dueDate,
-                                              daysFromStart: m.daysFromStart,
-                                              sequence: m.order,
-                                              order: m.order,
-                                              description: m.description,
-                                            }),
-                                          ),
-                                          attachmentUrls: p.attachments || [],
-                                          attachments: p.attachments || [],
-                                          skills: p.skills || [],
-                                          portfolio: p.portfolio || [],
-                                          experience:
-                                            (
-                                              p as ProviderRequest & {
-                                                experience?: string;
-                                              }
-                                            ).experience || "",
-                                        });
-                                        setProposalDetailsOpen(true);
-                                      }}
-                                    >
-                                      <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 shrink-0" />
-                                      <span className="truncate">
-                                        View Details
-                                      </span>
-                                    </Button>
-
-                                    {/* Accept / Reject only if it's still pending */}
-                                    {p.status === "pending" && (
-                                      <>
-                                        <Button
-                                          size="sm"
-                                          onClick={() =>
-                                            handleAcceptProposal(p)
-                                          }
-                                          className="w-full sm:flex-1 sm:min-w-[7rem] min-h-[44px] sm:min-h-0 bg-green-600 hover:bg-green-700 text-xs sm:text-sm justify-center"
-                                          disabled={processingId === p.id}
-                                        >
-                                          {processingId === p.id ? (
-                                            <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 animate-spin shrink-0" />
-                                          ) : (
-                                            <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 shrink-0" />
-                                          )}
-                                          <span className="truncate">
-                                            {processingId === p.id
-                                              ? "Accepting..."
-                                              : "Accept"}
-                                          </span>
-                                        </Button>
-
+                                      <NextLink
+                                        href={`/customer/providers/${p.providerId}`}
+                                        className="w-full"
+                                      >
                                         <Button
                                           variant="outline"
                                           size="sm"
-                                          onClick={() =>
-                                            handleStartRejectProposal(p)
-                                          }
-                                          className="w-full sm:flex-1 sm:min-w-[7rem] min-h-[44px] sm:min-h-0 text-red-600 hover:text-red-700 hover:bg-red-50 text-xs sm:text-sm justify-center"
-                                          disabled={processingId === p.id}
+                                          className="w-full min-h-[44px] sm:min-h-[40px] text-xs sm:text-sm justify-center border-gray-300 hover:bg-gray-50"
                                         >
-                                          <X className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 shrink-0" />
+                                          <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 shrink-0" />
                                           <span className="truncate">
-                                            Reject
+                                            View Profile
                                           </span>
                                         </Button>
-                                      </>
-                                    )}
+                                      </NextLink>
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        </div>
-                      ))}
-                    </div>
+                              </CardContent>
+                            </Card>
+                          </div>
+                        ))}
+                      </div>
 
-                    {/* Right: AI summary panel (desktop hover only; small screens use in-card summary) */}
-                    {/* Backdrop only when drawer is used (not when in-card summary on mobile) */}
-                    {openExplanationId && !cardSummaryViewId && (
-                      <div
-                        className="fixed inset-0 z-40 bg-black/20 lg:hidden"
-                        aria-hidden
-                        onClick={() => {
-                          setOpenExplanationId(null);
-                          setCardSummaryViewId(null);
-                        }}
-                      />
-                    )}
-                    <div
-                      ref={rightPanelColumnRef}
-                      className={cn(
-                        "transition-all duration-300 ease-out",
-                        "hidden lg:block",
-                        "lg:overflow-hidden lg:flex-shrink-0",
-                        "fixed right-0 top-0 bottom-0 z-50 w-80 max-w-[85vw] lg:relative lg:top-auto lg:bottom-auto lg:right-auto lg:z-auto lg:max-w-none",
-                        openExplanationId
-                          ? "translate-x-0 lg:w-80"
-                          : "translate-x-full lg:translate-x-0 lg:w-0",
-                      )}
-                      onMouseEnter={() => {
-                        if (bidPanelLeaveTimeoutRef.current) {
-                          clearTimeout(bidPanelLeaveTimeoutRef.current);
-                          bidPanelLeaveTimeoutRef.current = null;
-                        }
-                      }}
-                      onMouseLeave={() => setOpenExplanationId(null)}
-                    >
-                      {/* Spacer so panel aligns vertically with the hovered card */}
-                      {openExplanationId && panelTopOffset > 0 && (
+                      {/* Right: AI summary panel (desktop hover only; small screens use in-card summary) */}
+                      {/* Backdrop only when drawer is used (not when in-card summary on mobile) */}
+                      {openExplanationId && !cardSummaryViewId && (
                         <div
-                          className="hidden lg:block shrink-0"
-                          style={{ height: panelTopOffset }}
+                          className="fixed inset-0 z-40 bg-black/20 lg:hidden"
                           aria-hidden
+                          onClick={() => {
+                            setOpenExplanationId(null);
+                            setCardSummaryViewId(null);
+                          }}
                         />
                       )}
                       <div
+                        ref={rightPanelColumnRef}
                         className={cn(
-                          "h-full lg:h-auto w-80 max-w-[85vw] lg:max-w-none min-h-[140px] rounded-none lg:rounded-xl border-0 lg:border border-gray-200 bg-white shadow-xl lg:shadow-lg p-4 lg:ml-0",
+                          "transition-all duration-300 ease-out",
+                          "hidden lg:block",
+                          "lg:overflow-hidden lg:flex-shrink-0",
+                          "fixed right-0 top-0 bottom-0 z-50 w-80 max-w-[85vw] lg:relative lg:top-auto lg:bottom-auto lg:right-auto lg:z-auto lg:max-w-none",
                           openExplanationId
-                            ? "translate-x-0 opacity-100"
-                            : "translate-x-4 opacity-0 lg:translate-x-0",
+                            ? "translate-x-0 lg:w-80"
+                            : "translate-x-full lg:translate-x-0 lg:w-0",
                         )}
-                        style={{
-                          transition:
-                            "opacity 0.3s ease-out, transform 0.3s ease-out",
+                        onMouseEnter={() => {
+                          if (bidPanelLeaveTimeoutRef.current) {
+                            clearTimeout(bidPanelLeaveTimeoutRef.current);
+                            bidPanelLeaveTimeoutRef.current = null;
+                          }
                         }}
+                        onMouseLeave={() => setOpenExplanationId(null)}
                       >
-                        {openExplanationId && (
-                          <>
-                            <div className="flex items-center justify-between gap-2 mb-3">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <div className="p-1.5 rounded-lg bg-blue-100 flex-shrink-0">
-                                  <Sparkles className="w-4 h-4 text-blue-600" />
-                                </div>
-                                <span className="text-sm font-semibold text-gray-900 truncate">
-                                  {proposals.find(
-                                    (x) => x.id === openExplanationId,
-                                  )?.providerName || "Provider"}
-                                </span>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => setOpenExplanationId(null)}
-                                className="lg:hidden p-1.5 rounded-md text-gray-500 hover:bg-gray-100 focus:outline-none flex-shrink-0"
-                                aria-label="Close"
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
-                            </div>
-                            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
-                              Why this bid fits
-                            </p>
-                            {!proposals.find((x) => x.id === openExplanationId)
-                              ?.aiFitExplanation &&
-                            explanationLoading[openExplanationId] ? (
-                              <div className="flex items-center gap-2 text-sm text-gray-600">
-                                <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
-                                <span>Loading…</span>
-                              </div>
-                            ) : (
-                              <p className="text-sm text-gray-700 leading-relaxed">
-                                {getBidSummary(
-                                  openExplanationId,
-                                  proposals.find(
-                                    (x) => x.id === openExplanationId,
-                                  )?.aiFitExplanation,
-                                  explanationCache[openExplanationId],
-                                )}
-                              </p>
-                            )}
-                          </>
+                        {/* Spacer so panel aligns vertically with the hovered card */}
+                        {openExplanationId && panelTopOffset > 0 && (
+                          <div
+                            className="hidden lg:block shrink-0"
+                            style={{ height: panelTopOffset }}
+                            aria-hidden
+                          />
                         )}
+                        <div
+                          className={cn(
+                            "h-full lg:h-auto w-80 max-w-[85vw] lg:max-w-none min-h-[140px] rounded-none lg:rounded-xl border-0 lg:border border-gray-200 bg-white shadow-xl lg:shadow-lg p-4 lg:ml-0",
+                            openExplanationId
+                              ? "translate-x-0 opacity-100"
+                              : "translate-x-4 opacity-0 lg:translate-x-0",
+                          )}
+                          style={{
+                            transition:
+                              "opacity 0.3s ease-out, transform 0.3s ease-out",
+                          }}
+                        >
+                          {openExplanationId && (
+                            <>
+                              <div className="flex items-center justify-between gap-2 mb-3">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div className="p-1.5 rounded-lg bg-blue-100 flex-shrink-0">
+                                    <Sparkles className="w-4 h-4 text-blue-600" />
+                                  </div>
+                                  <span className="text-sm font-semibold text-gray-900 truncate">
+                                    {proposals.find(
+                                      (x) => x.id === openExplanationId,
+                                    )?.providerName || "Provider"}
+                                  </span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setOpenExplanationId(null)}
+                                  className="lg:hidden p-1.5 rounded-md text-gray-500 hover:bg-gray-100 focus:outline-none flex-shrink-0"
+                                  aria-label="Close"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+                                Why this bid fits
+                              </p>
+                              {!proposals.find(
+                                (x) => x.id === openExplanationId,
+                              )?.aiFitExplanation &&
+                              explanationLoading[openExplanationId] ? (
+                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                  <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
+                                  <span>Loading…</span>
+                                </div>
+                              ) : (
+                                <p className="text-sm text-gray-700 leading-relaxed">
+                                  {getBidSummary(
+                                    openExplanationId,
+                                    proposals.find(
+                                      (x) => x.id === openExplanationId,
+                                    )?.aiFitExplanation,
+                                    explanationCache[openExplanationId],
+                                  )}
+                                </p>
+                              )}
+                            </>
+                          )}
+                        </div>
                       </div>
                     </div>
+                    {(() => {
+                      const bidsServiceRequestId =
+                        project?.type === "ServiceRequest"
+                          ? project?.id
+                          : ((project as Record<string, unknown>)
+                              ?.serviceRequestId as string | undefined);
+                      return bidsServiceRequestId ? (
+                        <div className="flex justify-center pt-4 mt-4 border-t border-gray-100">
+                          <NextLink
+                            href={`/customer/requests?project=${encodeURIComponent(bidsServiceRequestId)}`}
+                          >
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-xs sm:text-sm"
+                            >
+                              Show all proposals
+                            </Button>
+                          </NextLink>
+                        </div>
+                      ) : null;
+                    })()}
                   </div>
-                  {(() => {
-                    const bidsServiceRequestId =
-                      project?.type === "ServiceRequest"
-                        ? project?.id
-                        : (project as Record<string, unknown>)?.serviceRequestId as string | undefined;
-                    return bidsServiceRequestId ? (
-                      <div className="flex justify-center pt-4 mt-4 border-t border-gray-100">
-                        <NextLink href={`/customer/requests?project=${encodeURIComponent(bidsServiceRequestId)}`}>
-                          <Button variant="outline" size="sm" className="text-xs sm:text-sm">
-                            Show all proposals
-                          </Button>
-                        </NextLink>
-                      </div>
-                    ) : null;
-                  })()}
-                </div>
                 )}
               </CardContent>
             </Card>
@@ -4501,31 +4755,34 @@ export default function ProjectDetailsPage({
                     );
                   })}
                 </div>
-                <Separator className="my-4" />
-                {messages.length > 0 && (
-                  <div className="flex justify-center gap-2">
-                    <Button
-                      onClick={() =>
-                        handleContact(
-                          project.provider?.id,
-                          project.provider?.name,
-                          (
-                            project.provider as
-                              | {
-                                  providerProfile?: {
-                                    profileImageUrl?: string;
-                                  };
-                                }
-                              | undefined
-                          )?.providerProfile?.profileImageUrl ||
-                            project.assignedProvider?.providerProfile
-                              ?.profileImageUrl,
-                        )
-                      }
-                    >
-                      Contact
-                    </Button>
-                  </div>
+                {(project.assignedProvider || project.provider) && (
+                  <>
+                    <Separator className="my-3 sm:my-4" />
+                    <div className="flex justify-center gap-2">
+                      <Button
+                        className="w-full sm:w-auto text-xs sm:text-sm"
+                        onClick={() =>
+                          handleContact(
+                            project.provider?.id,
+                            project.provider?.name,
+                            (
+                              project.provider as
+                                | {
+                                    providerProfile?: {
+                                      profileImageUrl?: string;
+                                    };
+                                  }
+                                | undefined
+                            )?.providerProfile?.profileImageUrl ||
+                              project.assignedProvider?.providerProfile
+                                ?.profileImageUrl,
+                          )
+                        }
+                      >
+                        Contact
+                      </Button>
+                    </div>
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -4780,46 +5037,78 @@ export default function ProjectDetailsPage({
                           type="number"
                           min={1}
                           placeholder="e.g. 1"
-                          value={(m as Milestone & { durationAmount?: string }).durationAmount ?? ""}
+                          value={
+                            (m as Milestone & { durationAmount?: string })
+                              .durationAmount ?? ""
+                          }
                           onChange={(e) => {
                             updateProjectMilestone(i, {
                               durationAmount: e.target.value,
-                              durationUnit: (m as Milestone & { durationUnit?: string }).durationUnit || "",
+                              durationUnit:
+                                (m as Milestone & { durationUnit?: string })
+                                  .durationUnit || "",
                             } as Partial<Milestone>);
-                            if (milestoneErrors[i]?.durationAmount || milestoneErrors[i]?.durationUnit) {
+                            if (
+                              milestoneErrors[i]?.durationAmount ||
+                              milestoneErrors[i]?.durationUnit
+                            ) {
                               setMilestoneErrors((prev) => ({
                                 ...prev,
-                                [i]: { ...prev[i], durationAmount: undefined, durationUnit: undefined },
+                                [i]: {
+                                  ...prev[i],
+                                  durationAmount: undefined,
+                                  durationUnit: undefined,
+                                },
                               }));
                             }
                             if (milestoneErrors[-1]) {
                               setMilestoneErrors((prev) => {
-                                const next = { ...prev }; delete next[-1]; return next;
+                                const next = { ...prev };
+                                delete next[-1];
+                                return next;
                               });
                             }
                           }}
                           className={`text-sm sm:text-base flex-1 ${
-                            milestoneErrors[i]?.durationAmount ? "border-red-500 focus-visible:ring-red-500" : ""
+                            milestoneErrors[i]?.durationAmount
+                              ? "border-red-500 focus-visible:ring-red-500"
+                              : ""
                           }`}
                         />
                         <Select
-                          value={(m as Milestone & { durationUnit?: string }).durationUnit || ""}
+                          value={
+                            (m as Milestone & { durationUnit?: string })
+                              .durationUnit || ""
+                          }
                           onValueChange={(value: "day" | "week" | "month") => {
                             updateProjectMilestone(i, {
-                              durationAmount: (m as Milestone & { durationAmount?: string }).durationAmount ?? "",
+                              durationAmount:
+                                (m as Milestone & { durationAmount?: string })
+                                  .durationAmount ?? "",
                               durationUnit: value,
                             } as Partial<Milestone>);
                             if (milestoneErrors[i]?.durationUnit) {
-                              setMilestoneErrors((prev) => ({ ...prev, [i]: { ...prev[i], durationUnit: undefined } }));
+                              setMilestoneErrors((prev) => ({
+                                ...prev,
+                                [i]: { ...prev[i], durationUnit: undefined },
+                              }));
                             }
                             if (milestoneErrors[-1]) {
-                              setMilestoneErrors((prev) => { const next = { ...prev }; delete next[-1]; return next; });
+                              setMilestoneErrors((prev) => {
+                                const next = { ...prev };
+                                delete next[-1];
+                                return next;
+                              });
                             }
                           }}
                         >
-                          <SelectTrigger className={`text-sm sm:text-base w-[100px] ${
-                            milestoneErrors[i]?.durationUnit ? "border-red-500 focus:ring-red-500" : ""
-                          }`}>
+                          <SelectTrigger
+                            className={`text-sm sm:text-base w-[100px] ${
+                              milestoneErrors[i]?.durationUnit
+                                ? "border-red-500 focus:ring-red-500"
+                                : ""
+                            }`}
+                          >
                             <SelectValue placeholder="Unit" />
                           </SelectTrigger>
                           <SelectContent>
@@ -4829,9 +5118,11 @@ export default function ProjectDetailsPage({
                           </SelectContent>
                         </Select>
                       </div>
-                      {(milestoneErrors[i]?.durationAmount || milestoneErrors[i]?.durationUnit) && (
+                      {(milestoneErrors[i]?.durationAmount ||
+                        milestoneErrors[i]?.durationUnit) && (
                         <p className="text-xs text-red-600 mt-1">
-                          {milestoneErrors[i].durationAmount || milestoneErrors[i].durationUnit}
+                          {milestoneErrors[i].durationAmount ||
+                            milestoneErrors[i].durationUnit}
                         </p>
                       )}
                     </div>
@@ -4882,7 +5173,10 @@ export default function ProjectDetailsPage({
               </Card>
             ))}
 
-            <div className="flex flex-col sm:flex-row justify-between gap-3 sm:gap-2">
+            <p className="text-xs text-gray-600 pt-2 border-t border-gray-200 mt-2">
+              If you made any updates or changes to the milestones, save changes first before approving.
+            </p>
+            <div className="flex flex-col sm:flex-row justify-between gap-3 sm:gap-2 pt-2">
               <Button
                 variant="outline"
                 onClick={addProjectMilestone}
@@ -5080,32 +5374,41 @@ export default function ProjectDetailsPage({
 
       {/* Reject Dialog */}
       <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Reject Request</DialogTitle>
-            <DialogDescription>
+        <DialogContent className="p-5 sm:p-6 max-w-xl">
+          <DialogHeader className="space-y-1.5 text-left">
+            <DialogTitle className="text-lg sm:text-xl font-semibold tracking-tight">
+              Reject Request
+            </DialogTitle>
+            <DialogDescription className="text-sm text-gray-600 leading-relaxed">
               Please provide a reason for rejecting this request. This will help
               the provider improve their future proposals.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="rejectReason">Reason for rejection</Label>
+          <div className="space-y-3 pt-1">
+            <div className="space-y-2">
+              <Label
+                htmlFor="rejectReason"
+                className="text-sm font-semibold text-gray-900 tracking-tight"
+              >
+                Reason for rejection
+              </Label>
               <Textarea
                 id="rejectReason"
                 placeholder="Please explain why you're rejecting this request..."
                 value={rejectReason}
                 onChange={(e) => setRejectReason(e.target.value)}
                 rows={4}
+                className="text-sm resize-none"
               />
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end pt-4 border-t border-gray-100">
             <Button
               variant="outline"
               onClick={() => setRejectDialogOpen(false)}
+              className="w-full sm:w-auto text-sm"
             >
               Cancel
             </Button>
@@ -5113,7 +5416,7 @@ export default function ProjectDetailsPage({
               onClick={() =>
                 selectedProposalForAction && handleConfirmRejectProposal()
               }
-              className="bg-red-600 hover:bg-red-700"
+              className="w-full sm:w-auto text-sm bg-red-600 hover:bg-red-700"
               disabled={
                 !rejectReason.trim() ||
                 processingId === selectedProposalForAction?.id
@@ -5142,10 +5445,12 @@ export default function ProjectDetailsPage({
           }
         }}
       >
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Request Details</DialogTitle>
-            <DialogDescription>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-5 sm:p-6 text-base">
+          <DialogHeader className="space-y-1.5 text-left">
+            <DialogTitle className="text-lg sm:text-xl font-semibold tracking-tight">
+              Request Details
+            </DialogTitle>
+            <DialogDescription className="text-sm text-gray-600">
               Detailed information about{" "}
               {selectedProposalDetails?.provider?.name || "Provider"}&apos;s
               request
@@ -5153,10 +5458,10 @@ export default function ProjectDetailsPage({
           </DialogHeader>
 
           {selectedProposalDetails && (
-            <div className="space-y-6">
+            <div className="space-y-6 pt-1">
               {/* Provider Info */}
-              <div className="flex items-start space-x-4">
-                <Avatar className="w-16 h-16">
+              <div className="flex items-start gap-4">
+                <Avatar className="w-14 h-14 sm:w-16 sm:h-16 flex-shrink-0">
                   <AvatarImage
                     src={getProfileImageUrl(
                       selectedProposalDetails.providerAvatar ||
@@ -5177,19 +5482,19 @@ export default function ProjectDetailsPage({
                   </AvatarFallback>
                 </Avatar>
 
-                <div className="flex-1">
+                <div className="flex-1 min-w-0">
                   {/* Name + rating */}
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                    <div>
-                      <h3 className="text-xl font-semibold">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="text-base sm:text-lg font-semibold text-gray-900 tracking-tight">
                         {selectedProposalDetails.provider?.name ||
                           selectedProposalDetails.providerName ||
                           "Provider"}
                       </h3>
 
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600 mt-1">
-                        <div className="flex items-center gap-1">
-                          <Star className="w-4 h-4 text-yellow-400 fill-current" />
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600 mt-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <Star className="w-4 h-4 text-yellow-400 fill-current flex-shrink-0" />
                           <span>
                             {selectedProposalDetails.provider?.rating ||
                               selectedProposalDetails.providerRating ||
@@ -5200,20 +5505,20 @@ export default function ProjectDetailsPage({
                       </div>
 
                       {selectedProposalDetails.experience && (
-                        <p className="text-sm text-gray-600 mt-2">
+                        <p className="text-sm text-gray-600 mt-2 leading-relaxed">
                           {selectedProposalDetails.experience} experience
                         </p>
                       )}
 
                       {/* Skills inline preview */}
-                      <div className="flex flex-wrap gap-1 mt-2">
+                      <div className="flex flex-wrap gap-1.5 mt-2">
                         {asArray<string>(selectedProposalDetails.skills || [])
                           .slice(0, 4)
                           .map((skill: string) => (
                             <Badge
                               key={skill}
                               variant="secondary"
-                              className="text-[10px] leading-tight"
+                              className="text-xs leading-tight"
                             >
                               {skill}
                             </Badge>
@@ -5222,7 +5527,7 @@ export default function ProjectDetailsPage({
                           .length > 4 && (
                           <Badge
                             variant="secondary"
-                            className="text-[10px] leading-tight"
+                            className="text-xs leading-tight"
                           >
                             +
                             {asArray<string>(
@@ -5240,14 +5545,14 @@ export default function ProjectDetailsPage({
                         selectedProposalDetails.provider?.id ||
                         selectedProposalDetails.providerId
                       }`}
-                      className="self-start"
+                      className="sm:flex-shrink-0"
                     >
                       <Button
                         variant="outline"
                         size="sm"
-                        className="flex items-center"
+                        className="flex items-center text-sm"
                       >
-                        <Eye className="w-4 h-4 mr-1" />
+                        <Eye className="w-4 h-4 mr-1.5" />
                         View Profile
                       </Button>
                     </NextLink>
@@ -5255,25 +5560,31 @@ export default function ProjectDetailsPage({
                 </div>
               </div>
 
-              <Separator />
+              <Separator className="my-1" />
 
               {/* Project & Bid Info */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <h4 className="font-semibold mb-2">Project</h4>
-                  <p className="text-gray-900">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
+                <div className="space-y-1">
+                  <h4 className="text-sm font-semibold text-gray-900 tracking-tight">
+                    Project
+                  </h4>
+                  <p className="text-sm text-gray-700 leading-relaxed">
                     {selectedProposalDetails.projectTitle || project.title}
                   </p>
                 </div>
-                <div>
-                  <h4 className="font-semibold mb-2">Bid Amount</h4>
-                  <p className="text-2xl font-bold text-green-600">
+                <div className="space-y-1">
+                  <h4 className="text-sm font-semibold text-gray-900 tracking-tight">
+                    Bid Amount
+                  </h4>
+                  <p className="text-xl sm:text-2xl font-bold text-green-600">
                     RM{fmt(selectedProposalDetails.bidAmount || 0)}
                   </p>
                 </div>
-                <div>
-                  <h4 className="font-semibold mb-2">Proposed Timeline</h4>
-                  <p className="text-gray-900">
+                <div className="space-y-1">
+                  <h4 className="text-sm font-semibold text-gray-900 tracking-tight">
+                    Proposed Timeline
+                  </h4>
+                  <p className="text-sm text-gray-700 leading-relaxed">
                     {formatTimeline(selectedProposalDetails.proposedTimeline) ||
                       (selectedProposalDetails.deliveryTime
                         ? formatTimeline(
@@ -5284,8 +5595,10 @@ export default function ProjectDetailsPage({
                       "—"}
                   </p>
                 </div>
-                <div>
-                  <h4 className="font-semibold mb-2">Status</h4>
+                <div className="space-y-1">
+                  <h4 className="text-sm font-semibold text-gray-900 tracking-tight">
+                    Status
+                  </h4>
                   <Badge
                     className={getStatusColor(
                       selectedProposalDetails.status || "pending",
@@ -5299,25 +5612,29 @@ export default function ProjectDetailsPage({
                 </div>
               </div>
 
-              <Separator />
+              <Separator className="my-1" />
 
               {/* Cover Letter */}
-              <div>
-                <h4 className="font-semibold mb-2">Cover Letter</h4>
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="text-gray-700 whitespace-pre-wrap">
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-gray-900 tracking-tight">
+                  Cover Letter
+                </h4>
+                <div className="bg-gray-50/80 p-4 rounded-lg border border-gray-100">
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
                     {selectedProposalDetails.coverLetter}
                   </p>
                 </div>
               </div>
 
               {/* Skills */}
-              <div>
-                <h4 className="font-semibold mb-2">Skills</h4>
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-gray-900 tracking-tight">
+                  Skills
+                </h4>
                 <div className="flex flex-wrap gap-2">
                   {asArray<string>(selectedProposalDetails.skills || []).map(
                     (skill: string) => (
-                      <Badge key={skill} variant="secondary">
+                      <Badge key={skill} variant="secondary" className="text-xs">
                         {skill}
                       </Badge>
                     ),
@@ -5326,9 +5643,11 @@ export default function ProjectDetailsPage({
               </div>
 
               {/* Portfolio */}
-              <div>
-                <h4 className="font-semibold mb-2">Portfolio</h4>
-                <div className="space-y-2">
+              <div className="space-y-2">
+                <h4 className="text-sm font-semibold text-gray-900 tracking-tight">
+                  Portfolio
+                </h4>
+                <div className="space-y-1.5">
                   {asArray<string>(selectedProposalDetails.portfolio || []).map(
                     (link: string, index: number) => (
                       <a
@@ -5336,7 +5655,7 @@ export default function ProjectDetailsPage({
                         href={link}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="block text-blue-600 hover:text-blue-800 underline"
+                        className="block text-sm text-blue-600 hover:text-blue-800 underline break-all"
                       >
                         {link}
                       </a>
@@ -5354,16 +5673,22 @@ export default function ProjectDetailsPage({
               {/* Proposed Milestones */}
               {selectedProposalDetails.milestones &&
                 selectedProposalDetails.milestones.length > 0 && (
-                  <div>
-                    <h4 className="font-semibold mb-2">Proposed Milestones</h4>
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-semibold text-gray-900 tracking-tight">
+                      Proposed Milestones
+                    </h4>
 
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                       {(() => {
-                        const sorted = [...selectedProposalDetails.milestones].sort(
+                        const sorted = [
+                          ...selectedProposalDetails.milestones,
+                        ].sort(
                           (
                             a: { order?: number; sequence?: number },
                             b: { order?: number; sequence?: number },
-                          ) => (a.order || a.sequence || 0) - (b.order || b.sequence || 0),
+                          ) =>
+                            (a.order || a.sequence || 0) -
+                            (b.order || b.sequence || 0),
                         );
                         return sorted.map(
                           (
@@ -5378,7 +5703,9 @@ export default function ProjectDetailsPage({
                             },
                             idx: number,
                           ) => {
-                            const prev = sorted[idx - 1] as { daysFromStart?: number } | undefined;
+                            const prev = sorted[idx - 1] as
+                              | { daysFromStart?: number }
+                              | undefined;
                             const currDays = m.daysFromStart ?? 0;
                             const prevDays = prev?.daysFromStart ?? 0;
                             const durationDays = currDays - prevDays;
@@ -5389,22 +5716,25 @@ export default function ProjectDetailsPage({
                                 ? `Due: ${new Date(m.dueDate).toLocaleDateString()}`
                                 : "—";
                             return (
-                              <Card key={idx} className="border border-gray-200">
-                                <CardContent className="p-4 space-y-2 text-sm">
+                              <Card
+                                key={idx}
+                                className="border border-gray-200"
+                              >
+                                <CardContent className="p-4 space-y-2">
                                   <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
-                                    <div className="flex items-center gap-2">
-                                      <Badge variant="secondary">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <Badge variant="secondary" className="text-xs flex-shrink-0">
                                         #{m.order || m.sequence || idx + 1}
                                       </Badge>
-                                      <span className="font-medium text-gray-900">
+                                      <span className="font-medium text-sm text-gray-900 break-words">
                                         {m.title || "Untitled milestone"}
                                       </span>
                                     </div>
-                                    <div className="text-right">
-                                      <span className="text-sm text-gray-500 block">
+                                    <div className="text-left sm:text-right flex-shrink-0">
+                                      <span className="text-xs text-gray-500 block">
                                         Amount
                                       </span>
-                                      <span className="text-lg font-semibold text-gray-900">
+                                      <span className="text-base font-semibold text-gray-900">
                                         RM{" "}
                                         {Number(m.amount || 0).toLocaleString()}
                                       </span>
@@ -5412,15 +5742,13 @@ export default function ProjectDetailsPage({
                                   </div>
                                   {m.description &&
                                     m.description.trim() !== "" && (
-                                      <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                                      <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
                                         {m.description}
                                       </p>
                                     )}
-                                  <div className="text-sm text-gray-600 flex flex-wrap gap-x-4 gap-y-1">
-                                    <div className="flex items-center gap-1">
-                                      <Clock className="w-4 h-4" />
-                                      <span>{displayText}</span>
-                                    </div>
+                                  <div className="text-sm text-gray-600 flex items-center gap-1.5">
+                                    <Clock className="w-4 h-4 flex-shrink-0" />
+                                    <span>{displayText}</span>
                                   </div>
                                 </CardContent>
                               </Card>
@@ -5435,8 +5763,8 @@ export default function ProjectDetailsPage({
               {/* Attachments */}
               {Array.isArray(selectedProposalDetails.attachments) &&
                 selectedProposalDetails.attachments.length > 0 && (
-                  <div className="mt-6">
-                    <h4 className="font-semibold mb-3 flex items-center text-gray-900">
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-semibold text-gray-900 tracking-tight">
                       Attachments
                     </h4>
 
@@ -5492,16 +5820,15 @@ export default function ProjectDetailsPage({
                                     }
                                   : undefined
                               }
-                              className="flex items-start gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2 hover:bg-gray-50 hover:shadow-sm transition"
+                              className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2.5 hover:bg-gray-50 hover:shadow-sm transition text-left"
                             >
                               {/* Icon circle */}
                               <div className="flex h-9 w-9 flex-none items-center justify-center rounded-md border border-gray-300 bg-gray-100 text-gray-700 text-xs font-medium">
-                                {/* If you want, you can make this dynamic based on extension */}
                                 PDF
                               </div>
 
                               {/* File info */}
-                              <div className="flex flex-col min-w-0">
+                              <div className="flex flex-col min-w-0 flex-1">
                                 <span className="text-sm font-medium text-gray-900 break-all leading-snug">
                                   {fileName}
                                 </span>
@@ -5536,9 +5863,22 @@ export default function ProjectDetailsPage({
             </div>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end pt-4 mt-2 border-t border-gray-100">
             {selectedProposalDetails?.status === "pending" && (
-              <div className="flex gap-2">
+              <>
+                <Button
+                  onClick={() => {
+                    if (!selectedProposalDetails) return;
+                    setProposalDetailsOpen(false);
+                    setSelectedProposalDetails(null);
+                    handleAcceptProposal(selectedProposalDetails);
+                  }}
+                  disabled={processingId === selectedProposalDetails?.id}
+                  className="w-full sm:w-auto text-sm"
+                >
+                  <Check className="w-4 h-4 mr-2" />
+                  Accept
+                </Button>
                 <Button
                   variant="outline"
                   onClick={() => {
@@ -5546,29 +5886,12 @@ export default function ProjectDetailsPage({
                     setProposalDetailsOpen(false);
                     setSelectedProposalForAction(selectedProposalDetails);
                   }}
-                  className="text-red-600 hover:text-red-700"
+                  className="w-full sm:w-auto text-sm text-red-600 hover:text-red-700"
                 >
                   <X className="w-4 h-4 mr-2" />
                   Reject
                 </Button>
-                <Button
-                  onClick={() => {
-                    handleAcceptProposal(selectedProposalDetails);
-                    setProposalDetailsOpen(false);
-                  }}
-                  className="bg-green-600 hover:bg-green-700"
-                  disabled={processingId === selectedProposalDetails?.id}
-                >
-                  {processingId === selectedProposalDetails?.id ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <Check className="w-4 h-4 mr-2" />
-                  )}
-                  {processingId === selectedProposalDetails?.id
-                    ? "Accepting..."
-                    : "Accept Request"}
-                </Button>
-              </div>
+              </>
             )}
             {selectedProposalDetails?.status !== "pending" && (
               <Button
@@ -5577,6 +5900,7 @@ export default function ProjectDetailsPage({
                   setProposalDetailsOpen(false);
                   setSelectedProposalDetails(null);
                 }}
+                className="w-full sm:w-auto text-sm"
               >
                 Close
               </Button>
@@ -5675,46 +5999,76 @@ export default function ProjectDetailsPage({
                           type="number"
                           min={1}
                           placeholder="e.g. 1"
-                          value={(m as Milestone & { durationAmount?: string }).durationAmount ?? ""}
+                          value={
+                            (m as Milestone & { durationAmount?: string })
+                              .durationAmount ?? ""
+                          }
                           onChange={(e) => {
                             const updated = [...milestonesDraft];
                             updated[i] = {
                               ...updated[i],
                               durationAmount: e.target.value,
-                              durationUnit: (m as Milestone & { durationUnit?: string }).durationUnit || "",
+                              durationUnit:
+                                (m as Milestone & { durationUnit?: string })
+                                  .durationUnit || "",
                             } as (typeof milestonesDraft)[0];
                             setMilestonesDraft(updated);
-                            if (milestoneDraftErrors[i]?.durationAmount || milestoneDraftErrors[i]?.durationUnit) {
+                            if (
+                              milestoneDraftErrors[i]?.durationAmount ||
+                              milestoneDraftErrors[i]?.durationUnit
+                            ) {
                               setMilestoneDraftErrors((prev) => ({
                                 ...prev,
-                                [i]: { ...prev[i], durationAmount: undefined, durationUnit: undefined },
+                                [i]: {
+                                  ...prev[i],
+                                  durationAmount: undefined,
+                                  durationUnit: undefined,
+                                },
                               }));
                             }
                             if (milestoneDraftErrors[-1]) {
-                              setMilestoneDraftErrors((prev) => { const next = { ...prev }; delete next[-1]; return next; });
+                              setMilestoneDraftErrors((prev) => {
+                                const next = { ...prev };
+                                delete next[-1];
+                                return next;
+                              });
                             }
                           }}
                           className={`flex-1 ${milestoneDraftErrors[i]?.durationAmount ? "border-red-500 focus-visible:ring-red-500" : ""}`}
                         />
                         <Select
-                          value={(m as Milestone & { durationUnit?: string }).durationUnit || ""}
+                          value={
+                            (m as Milestone & { durationUnit?: string })
+                              .durationUnit || ""
+                          }
                           onValueChange={(value: "day" | "week" | "month") => {
                             const updated = [...milestonesDraft];
                             updated[i] = {
                               ...updated[i],
-                              durationAmount: (m as Milestone & { durationAmount?: string }).durationAmount ?? "",
+                              durationAmount:
+                                (m as Milestone & { durationAmount?: string })
+                                  .durationAmount ?? "",
                               durationUnit: value,
                             } as (typeof milestonesDraft)[0];
                             setMilestonesDraft(updated);
                             if (milestoneDraftErrors[i]?.durationUnit) {
-                              setMilestoneDraftErrors((prev) => ({ ...prev, [i]: { ...prev[i], durationUnit: undefined } }));
+                              setMilestoneDraftErrors((prev) => ({
+                                ...prev,
+                                [i]: { ...prev[i], durationUnit: undefined },
+                              }));
                             }
                             if (milestoneDraftErrors[-1]) {
-                              setMilestoneDraftErrors((prev) => { const next = { ...prev }; delete next[-1]; return next; });
+                              setMilestoneDraftErrors((prev) => {
+                                const next = { ...prev };
+                                delete next[-1];
+                                return next;
+                              });
                             }
                           }}
                         >
-                          <SelectTrigger className={`w-[100px] ${milestoneDraftErrors[i]?.durationUnit ? "border-red-500 focus:ring-red-500" : ""}`}>
+                          <SelectTrigger
+                            className={`w-[100px] ${milestoneDraftErrors[i]?.durationUnit ? "border-red-500 focus:ring-red-500" : ""}`}
+                          >
                             <SelectValue placeholder="Unit" />
                           </SelectTrigger>
                           <SelectContent>
@@ -5724,9 +6078,11 @@ export default function ProjectDetailsPage({
                           </SelectContent>
                         </Select>
                       </div>
-                      {(milestoneDraftErrors[i]?.durationAmount || milestoneDraftErrors[i]?.durationUnit) && (
+                      {(milestoneDraftErrors[i]?.durationAmount ||
+                        milestoneDraftErrors[i]?.durationUnit) && (
                         <p className="text-xs text-red-600 mt-1">
-                          {milestoneDraftErrors[i].durationAmount || milestoneDraftErrors[i].durationUnit}
+                          {milestoneDraftErrors[i].durationAmount ||
+                            milestoneDraftErrors[i].durationUnit}
                         </p>
                       )}
                     </div>
@@ -5780,7 +6136,10 @@ export default function ProjectDetailsPage({
               </Card>
             ))}
 
-            <div className="flex justify-between">
+            <p className="text-xs text-gray-600 pt-2 border-t border-gray-200 mt-2">
+              If you made any updates or changes to the milestones, save changes first before approving.
+            </p>
+            <div className="flex justify-between pt-2">
               <Button
                 variant="outline"
                 onClick={() => {
@@ -5794,7 +6153,7 @@ export default function ProjectDetailsPage({
                       durationAmount: "",
                       durationUnit: "" as "day" | "week" | "month" | "",
                     },
-                  ] as (typeof milestonesDraft));
+                  ] as typeof milestonesDraft);
                 }}
               >
                 + Add Milestone

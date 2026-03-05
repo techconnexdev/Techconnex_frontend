@@ -81,6 +81,24 @@ export default function VerificationSection({
       ? AlertCircle
       : XCircle;
 
+  const isProvider = documentType === "PROVIDER_ID";
+  const title = isProvider ? "Provider Verification Status" : "Company Verification Status";
+  const description = isProvider
+    ? "Upload required documents to verify your identity as a provider"
+    : "Upload required documents to verify and authorize your company";
+  const requiredDocs = isProvider
+    ? [
+        { label: "Government-issued ID", hint: "Passport, NRIC or driving license" },
+        { label: "Proof of address", hint: "Utility bill or bank statement (within 3 months)" },
+        { label: "Professional credentials (optional)", hint: "Certifications or licenses" },
+      ]
+    : [
+        { label: "Business Registration (SSM)", hint: "Required for verification" },
+        { label: "Tax Identification Number", hint: "Required for verification" },
+        { label: "Bank Account Statement", hint: "Required for verification" },
+        { label: "Director's Identification", hint: "Required for verification" },
+      ];
+
   const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
@@ -337,9 +355,9 @@ export default function VerificationSection({
       <CardHeader className="p-4 sm:p-6">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
           <div className="flex-1 min-w-0">
-            <CardTitle className="text-base sm:text-lg">Company Verification Status</CardTitle>
+            <CardTitle className="text-base sm:text-lg">{title}</CardTitle>
             <CardDescription className="text-xs sm:text-sm">
-              Upload required documents to verify and authorize your company
+              {description}
             </CardDescription>
           </div>
           <Badge
@@ -411,22 +429,15 @@ export default function VerificationSection({
         <div className="space-y-2.5 sm:space-y-3">
           <h3 className="text-base sm:text-lg font-semibold">Required Documents</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
-            {[
-              "Business Registration (SSM)",
-              "Tax Identification Number",
-              "Bank Account Statement",
-              "Director's Identification",
-            ].map((t) => (
+            {requiredDocs.map(({ label, hint }) => (
               <div
-                key={t}
+                key={label}
                 className="p-3 border rounded-lg bg-gray-50 flex items-start gap-2"
               >
                 <FileText className="w-5 h-5 text-blue-600 mt-0.5" />
                 <div>
-                  <p className="font-medium text-sm">{t}</p>
-                  <p className="text-xs text-gray-500">
-                    Required for verification
-                  </p>
+                  <p className="font-medium text-sm">{label}</p>
+                  <p className="text-xs text-gray-500">{hint}</p>
                 </div>
               </div>
             ))}

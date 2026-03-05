@@ -25,6 +25,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -43,14 +44,17 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { CustomerLayout } from "@/components/customer-layout";
+import { CustomerProjectsTour } from "@/components/customer/CustomerProjectsTour";
 import { useRouter } from "next/navigation";
 import {
+  API_BASE_URL,
   getCompanyProjects,
   updateCompanyProject,
   exportCompanyProjects,
   getProfileImageUrl,
 } from "@/lib/api";
 import { Download } from "lucide-react";
+import { POST_PROJECT_REQUIRED } from "@/contexts/CustomerCompletionContext";
 
 type ProjectProvider = {
   id?: string;
@@ -87,7 +91,9 @@ function getProjectDueDate(project: CustomerProject): string | null {
   if (project.type !== "Project") return null;
   const milestones = project.milestones;
   if (!milestones?.length) return null;
-  const sorted = [...milestones].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const sorted = [...milestones].sort(
+    (a, b) => (a.order ?? 0) - (b.order ?? 0),
+  );
   const last = sorted[sorted.length - 1];
   return last?.dueDate ?? null;
 }
@@ -99,12 +105,43 @@ export default function CustomerProjectsPage() {
   const [viewMode, setViewMode] = useState("grid");
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<CustomerProject | null>(
-    null
+    null,
   );
   const [projects, setProjects] = useState<CustomerProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [gateModalOpen, setGateModalOpen] = useState(false);
+  const [newProjectChecking, setNewProjectChecking] = useState(false);
   const router = useRouter();
+
+  const handleNewProjectClick = async () => {
+    setNewProjectChecking(true);
+    try {
+      const token =
+        typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      if (!token) {
+        setGateModalOpen(true);
+        return;
+      }
+      const res = await fetch(
+        `${API_BASE_URL}/company/profile/completion`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      const json = await res.json();
+      const data = json.data ?? json;
+      const completion =
+        typeof data?.completion === "number" ? data.completion : 0;
+      if (completion >= POST_PROJECT_REQUIRED) {
+        router.push("/customer/projects/new");
+      } else {
+        setGateModalOpen(true);
+      }
+    } catch {
+      setGateModalOpen(true);
+    } finally {
+      setNewProjectChecking(false);
+    }
+  };
 
   // Fetch projects on component mount
   useEffect(() => {
@@ -125,7 +162,7 @@ export default function CustomerProjectsPage() {
       } catch (err) {
         console.error("Error fetching projects:", err);
         setError(
-          err instanceof Error ? err.message : "Failed to fetch projects"
+          err instanceof Error ? err.message : "Failed to fetch projects",
         );
       } finally {
         setLoading(false);
@@ -137,13 +174,13 @@ export default function CustomerProjectsPage() {
   const handleContact = (
     providerId?: string,
     providerName?: string,
-    providerAvatar?: string
+    providerAvatar?: string,
   ) => {
     if (!providerId || !providerName) return;
     router.push(
       `/customer/messages?userId=${providerId}&name=${encodeURIComponent(
-        providerName
-      )}&avatar=${encodeURIComponent(providerAvatar || "")}`
+        providerName,
+      )}&avatar=${encodeURIComponent(providerAvatar || "")}`,
     );
   };
   const getStatusColor = (status: string, type: string) => {
@@ -305,12 +342,14 @@ export default function CustomerProjectsPage() {
 
       const { project: updated } = await updateCompanyProject(
         editingProject.id,
-        payload
+        payload,
       );
 
       // Update local list
       setProjects((prev) =>
-        prev.map((p) => (p.id === editingProject.id ? { ...p, ...updated } : p))
+        prev.map((p) =>
+          p.id === editingProject.id ? { ...p, ...updated } : p,
+        ),
       );
 
       toast({
@@ -379,9 +418,13 @@ export default function CustomerProjectsPage() {
 
   return (
     <CustomerLayout>
+      <CustomerProjectsTour />
       <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
+        <div
+          className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4"
+          data-tour-step="0"
+        >
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
               My Projects
@@ -427,17 +470,23 @@ export default function CustomerProjectsPage() {
               <Download className="w-4 h-4 mr-2" />
               Export
             </Button>
-            <Link href="/customer/projects/new" className="w-full sm:w-auto">
-              <Button className="w-full sm:w-auto">
-                <Plus className="w-4 h-4 mr-2" />
-                New Project
-              </Button>
-            </Link>
+            <Button
+              className="w-full sm:w-auto"
+              data-tour-step="1"
+              disabled={newProjectChecking}
+              onClick={handleNewProjectClick}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              {newProjectChecking ? "Checking…" : "New Project"}
+            </Button>
           </div>
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 lg:gap-6">
+        <div
+          className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 lg:gap-6"
+          data-tour-step="2"
+        >
           <Card>
             <CardContent className="p-3 sm:p-4 lg:p-6">
               <div className="flex items-center justify-between">
@@ -518,7 +567,7 @@ export default function CustomerProjectsPage() {
         </div>
 
         {/* Filters */}
-        <Card>
+        <Card data-tour-step="3">
           <CardContent className="p-4 sm:p-5 lg:p-6">
             <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
               <div className="flex-1 w-full">
@@ -586,235 +635,31 @@ export default function CustomerProjectsPage() {
         </Card>
 
         {/* Projects */}
-        <Tabs
-          value={viewMode}
-          onValueChange={setViewMode}
-          className="space-y-6"
-        >
-          <TabsContent value="grid">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 lg:gap-6">
-              {sortedProjects.map((project) => (
-                <Card
-                  key={project.id}
-                  className="hover:shadow-lg transition-shadow flex flex-col h-full"
-                >
-                  <CardHeader className="p-4 sm:p-6">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start gap-3 flex-1">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-2 flex-wrap">
-                            <CardTitle className="text-base sm:text-lg truncate">
-                              {project.title}
-                            </CardTitle>
-                            <Badge
-                              className={`${getStatusColor(
-                                project.status,
-                                project.type
-                              )} text-xs`}
-                            >
-                              {getStatusText(project.status, project.type)}
-                            </Badge>
-                            <Badge variant="outline" className="text-xs">
-                              {project.type}
-                            </Badge>
-                            <Badge
-                              className={`${getPriorityColor(
-                                project.priority
-                              )} text-xs`}
-                              variant="outline"
-                            >
-                              {project.priority}
-                            </Badge>
-                            {(project.priority === "High" ||
-                              project.priority === "high") && (
-                              <Badge variant="destructive" className="text-xs">
-                                Urgent
-                              </Badge>
-                            )}
-                          </div>
-                          <CardDescription className="mt-1 line-clamp-3 text-xs sm:text-sm">
-                            {project.description}
-                          </CardDescription>
-                        </div>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-3 sm:space-y-4 flex-1 flex flex-col p-4 sm:p-6 pt-0">
-                    <div className="flex items-center space-x-2 sm:space-x-3">
-                      <Avatar className="w-8 h-8 sm:w-10 sm:h-10 flex-shrink-0">
-                        <AvatarImage
-                          src={getProfileImageUrl(
-                            project.provider?.providerProfile?.profileImageUrl
-                          )}
-                        />
-                        <AvatarFallback>
-                          {project.provider?.name
-                            ? project.provider.name.charAt(0)
-                            : project.type.charAt(0)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 min-w-0">
-                        {project.provider?.id && project.provider?.name ? (
-                          <Link
-                            href={`/customer/providers/${project.provider.id}`}
-                            className="text-xs sm:text-sm font-medium hover:text-blue-600 hover:underline transition-colors truncate block"
-                          >
-                            {project.provider.name}
-                          </Link>
-                        ) : (
-                          <p className="text-xs sm:text-sm font-medium truncate">
-                            {project.provider?.name || "No Provider Assigned"}
-                          </p>
-                        )}
-                        <p className="text-xs text-gray-500 truncate">
-                          {project.category}
-                        </p>
-                      </div>
-                    </div>
-
-                    {project.type === "Project" &&
-                      project.status === "IN_PROGRESS" && (
-                        <div>
-                          <div className="flex justify-between text-xs sm:text-sm mb-1 flex-wrap gap-1">
-                            <span>Progress: {project.progress || 0}%</span>
-                            <span className="text-xs">
-                              {project.completedMilestones || 0}/
-                              {project.totalMilestones || 0} milestones
-                            </span>
-                          </div>
-                          <Progress
-                            value={project.progress || 0}
-                            className="h-2"
-                          />
-                        </div>
-                      )}
-
-                    <div className="grid grid-cols-2 gap-3 sm:gap-4 text-xs sm:text-sm">
-                      <div className="min-w-0">
-                        <p className="text-gray-500 truncate">
-                          {project.type === "Project" &&
-                          (project.status === "IN_PROGRESS" ||
-                            project.status === "COMPLETED") &&
-                          project.approvedPrice
-                            ? "Approved Price"
-                            : "Budget"}
-                        </p>
-                        <p className="font-semibold truncate">
-                          {project.type === "Project" &&
-                          (project.status === "IN_PROGRESS" ||
-                            project.status === "COMPLETED") &&
-                          project.approvedPrice
-                            ? `RM${project.approvedPrice.toLocaleString()}`
-                            : `RM${
-                                project.budgetMin?.toLocaleString() || 0
-                              } - RM${
-                                project.budgetMax?.toLocaleString() || 0
-                              }`}
-                        </p>
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-gray-500 truncate">Timeline</p>
-                        <p className="font-semibold truncate">
-                          {project.timeline || "Not specified"}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between text-xs sm:text-sm text-gray-500 flex-wrap gap-1">
-                      <div className="flex items-center">
-                        <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 flex-shrink-0" />
-                        <span className="truncate">
-                          Due:{" "}
-                          {getProjectDueDate(project)
-                            ? new Date(getProjectDueDate(project)!).toLocaleDateString()
-                            : "—"}
-                        </span>
-                      </div>
-                      {project.type === "Project" && (
-                        <span className="text-xs">
-                          {project.completedMilestones || 0}/
-                          {project.totalMilestones || 0} milestones
-                        </span>
-                      )}
-                    </div>
-
-                    {project.type === "Project" &&
-                      project.status === "COMPLETED" && (
-                        <div className="flex items-center gap-1 flex-wrap">
-                          <span className="text-xs sm:text-sm text-gray-500">
-                            Status:
-                          </span>
-                          <Badge className="bg-green-100 text-green-800 text-xs">
-                            Completed
-                          </Badge>
-                        </div>
-                      )}
-
-                    <div className="flex gap-2 mt-auto">
-                      <Button
-                        size="sm"
-                        className="flex-1 text-xs sm:text-sm"
-                        onClick={() =>
-                          router.push(`/customer/projects/${project.id}`)
-                        }
-                      >
-                        <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                        View
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="text-xs sm:text-sm"
-                        onClick={() =>
-                          handleContact(
-                            project.provider?.id,
-                            project.provider?.name,
-                            project.provider?.providerProfile?.profileImageUrl
-                          )
-                        }
-                      >
-                        <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="list">
-            <Card>
-              <CardContent className="p-0">
-                <div className="divide-y">
-                  {sortedProjects.map((project) => (
-                    <div
-                      key={project.id}
-                      className="p-4 sm:p-5 lg:p-6 hover:bg-gray-50 transition-colors min-h-[200px] flex items-center"
-                    >
-                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between w-full gap-4 sm:gap-6">
-                        <div className="flex items-start sm:items-center space-x-3 sm:space-x-4 flex-1 min-w-0 w-full sm:w-auto">
-                          <Avatar className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12">
-                            <AvatarImage
-                              src={getProfileImageUrl(
-                                project.provider?.providerProfile
-                                  ?.profileImageUrl
-                              )}
-                            />
-                            <AvatarFallback>
-                              {project.provider?.name
-                                ? project.provider.name.charAt(0)
-                                : project.type.charAt(0)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="flex-1 min-w-0 w-full sm:w-auto">
-                            <div className="flex items-center gap-2 sm:gap-3 mb-1.5 sm:mb-1 flex-wrap">
-                              <h3 className="font-semibold text-gray-900 text-sm sm:text-base truncate">
+        <div data-tour-step="4">
+          <Tabs
+            value={viewMode}
+            onValueChange={setViewMode}
+            className="space-y-6"
+          >
+            <TabsContent value="grid">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 lg:gap-6">
+                {sortedProjects.map((project) => (
+                  <Card
+                    key={project.id}
+                    className="hover:shadow-lg transition-shadow flex flex-col h-full"
+                  >
+                    <CardHeader className="p-4 sm:p-6">
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-start gap-3 flex-1">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-2 flex-wrap">
+                              <CardTitle className="text-base sm:text-lg truncate">
                                 {project.title}
-                              </h3>
+                              </CardTitle>
                               <Badge
                                 className={`${getStatusColor(
                                   project.status,
-                                  project.type
+                                  project.type,
                                 )} text-xs`}
                               >
                                 {getStatusText(project.status, project.type)}
@@ -824,7 +669,7 @@ export default function CustomerProjectsPage() {
                               </Badge>
                               <Badge
                                 className={`${getPriorityColor(
-                                  project.priority
+                                  project.priority,
                                 )} text-xs`}
                                 variant="outline"
                               >
@@ -840,123 +685,340 @@ export default function CustomerProjectsPage() {
                                 </Badge>
                               )}
                             </div>
-                            <p className="text-xs sm:text-sm text-gray-600 mb-2 line-clamp-2 sm:line-clamp-3">
+                            <CardDescription className="mt-1 line-clamp-3 text-xs sm:text-sm">
                               {project.description}
-                            </p>
-                            <div className="flex items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-500 flex-wrap">
-                              {project.provider?.id &&
-                              project.provider?.name ? (
-                                <Link
-                                  href={`/customer/providers/${project.provider.id}`}
-                                  className="hover:text-blue-600 hover:underline transition-colors truncate"
-                                >
-                                  {project.provider.name}
-                                </Link>
-                              ) : (
-                                <span className="truncate">
-                                  {project.provider?.name || "No Provider"}
-                                </span>
-                              )}
-                              <span className="hidden sm:inline">•</span>
-                              <span className="truncate">
-                                {project.category}
-                              </span>
-                              <span className="hidden sm:inline">•</span>
-                              <span className="truncate">
-                                Due:{" "}
-                                {getProjectDueDate(project)
-                                  ? new Date(getProjectDueDate(project)!).toLocaleDateString()
-                                  : "—"}
-                              </span>
-                              {project.timeline && (
-                                <>
-                                  <span className="hidden sm:inline">•</span>
-                                  <span className="truncate">
-                                    Timeline: {project.timeline}
-                                  </span>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-3 sm:space-y-0 sm:space-x-4 lg:space-x-6 flex-shrink-0 w-full sm:w-auto">
-                          <div className="text-left sm:text-right w-full sm:w-auto">
-                            <p className="text-xs sm:text-sm text-gray-500">
-                              {project.type === "Project" &&
-                              (project.status === "IN_PROGRESS" ||
-                                project.status === "COMPLETED") &&
-                              project.approvedPrice
-                                ? "Approved Price"
-                                : "Budget"}
-                            </p>
-                            <p className="font-semibold text-sm sm:text-base">
-                              {project.type === "Project" &&
-                              (project.status === "IN_PROGRESS" ||
-                                project.status === "COMPLETED") &&
-                              project.approvedPrice
-                                ? `RM${project.approvedPrice.toLocaleString()}`
-                                : `RM${
-                                    project.budgetMin?.toLocaleString() || 0
-                                  } - RM${
-                                    project.budgetMax?.toLocaleString() || 0
-                                  }`}
-                            </p>
-                          </div>
-                          {project.type === "Project" &&
-                            project.status === "IN_PROGRESS" && (
-                              <div className="w-full sm:w-24">
-                                <div className="flex justify-between text-xs mb-1 flex-wrap gap-1">
-                                  <span>
-                                    Progress: {project.progress || 0}%
-                                  </span>
-                                  <span>
-                                    {project.completedMilestones || 0}/
-                                    {project.totalMilestones || 0}
-                                  </span>
-                                </div>
-                                <Progress
-                                  value={project.progress || 0}
-                                  className="h-2"
-                                />
-                              </div>
-                            )}
-                          <div className="flex gap-2 w-full sm:w-auto">
-                            <Button
-                              size="sm"
-                              className="flex-1 sm:flex-initial text-xs sm:text-sm"
-                              onClick={() =>
-                                router.push(`/customer/projects/${project.id}`)
-                              }
-                            >
-                              <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                              View
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-xs sm:text-sm"
-                              onClick={(e) => {
-                                e.preventDefault(); // prevents Link from triggering navigation
-                                handleContact(
-                                  project.provider?.id,
-                                  project.provider?.name,
-                                  project.provider?.providerProfile
-                                    ?.profileImageUrl
-                                );
-                              }}
-                            >
-                              <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                            </Button>
+                            </CardDescription>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+                    </CardHeader>
+                    <CardContent className="space-y-3 sm:space-y-4 flex-1 flex flex-col p-4 sm:p-6 pt-0">
+                      <div className="flex items-center space-x-2 sm:space-x-3">
+                        <Avatar className="w-8 h-8 sm:w-10 sm:h-10 flex-shrink-0">
+                          <AvatarImage
+                            src={getProfileImageUrl(
+                              project.provider?.providerProfile
+                                ?.profileImageUrl,
+                            )}
+                          />
+                          <AvatarFallback>
+                            {project.provider?.name
+                              ? project.provider.name.charAt(0)
+                              : project.type.charAt(0)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          {project.provider?.id && project.provider?.name ? (
+                            <Link
+                              href={`/customer/providers/${project.provider.id}`}
+                              className="text-xs sm:text-sm font-medium hover:text-blue-600 hover:underline transition-colors truncate block"
+                            >
+                              {project.provider.name}
+                            </Link>
+                          ) : (
+                            <p className="text-xs sm:text-sm font-medium truncate">
+                              {project.provider?.name || "No Provider Assigned"}
+                            </p>
+                          )}
+                          <p className="text-xs text-gray-500 truncate">
+                            {project.category}
+                          </p>
+                        </div>
+                      </div>
+
+                      {project.type === "Project" &&
+                        project.status === "IN_PROGRESS" && (
+                          <div>
+                            <div className="flex justify-between text-xs sm:text-sm mb-1 flex-wrap gap-1">
+                              <span>Progress: {project.progress || 0}%</span>
+                              <span className="text-xs">
+                                {project.completedMilestones || 0}/
+                                {project.totalMilestones || 0} milestones
+                              </span>
+                            </div>
+                            <Progress
+                              value={project.progress || 0}
+                              className="h-2"
+                            />
+                          </div>
+                        )}
+
+                      <div className="grid grid-cols-2 gap-3 sm:gap-4 text-xs sm:text-sm">
+                        <div className="min-w-0">
+                          <p className="text-gray-500 truncate">
+                            {project.type === "Project" &&
+                            (project.status === "IN_PROGRESS" ||
+                              project.status === "COMPLETED") &&
+                            project.approvedPrice
+                              ? "Approved Price"
+                              : "Budget"}
+                          </p>
+                          <p className="font-semibold truncate">
+                            {project.type === "Project" &&
+                            (project.status === "IN_PROGRESS" ||
+                              project.status === "COMPLETED") &&
+                            project.approvedPrice
+                              ? `RM${project.approvedPrice.toLocaleString()}`
+                              : `RM${
+                                  project.budgetMin?.toLocaleString() || 0
+                                } - RM${
+                                  project.budgetMax?.toLocaleString() || 0
+                                }`}
+                          </p>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-gray-500 truncate">Timeline</p>
+                          <p className="font-semibold truncate">
+                            {project.timeline || "Not specified"}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs sm:text-sm text-gray-500 flex-wrap gap-1">
+                        <div className="flex items-center">
+                          <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 flex-shrink-0" />
+                          <span className="truncate">
+                            Due:{" "}
+                            {getProjectDueDate(project)
+                              ? new Date(
+                                  getProjectDueDate(project)!,
+                                ).toLocaleDateString()
+                              : "—"}
+                          </span>
+                        </div>
+                        {project.type === "Project" && (
+                          <span className="text-xs">
+                            {project.completedMilestones || 0}/
+                            {project.totalMilestones || 0} milestones
+                          </span>
+                        )}
+                      </div>
+
+                      {project.type === "Project" &&
+                        project.status === "COMPLETED" && (
+                          <div className="flex items-center gap-1 flex-wrap">
+                            <span className="text-xs sm:text-sm text-gray-500">
+                              Status:
+                            </span>
+                            <Badge className="bg-green-100 text-green-800 text-xs">
+                              Completed
+                            </Badge>
+                          </div>
+                        )}
+
+                      <div className="flex gap-2 mt-auto">
+                        <Button
+                          size="sm"
+                          className="flex-1 text-xs sm:text-sm"
+                          onClick={() =>
+                            router.push(`/customer/projects/${project.id}`)
+                          }
+                        >
+                          <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+                          View
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-xs sm:text-sm"
+                          onClick={() =>
+                            handleContact(
+                              project.provider?.id,
+                              project.provider?.name,
+                              project.provider?.providerProfile
+                                ?.profileImageUrl,
+                            )
+                          }
+                        >
+                          <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </TabsContent>
+
+            <TabsContent value="list">
+              <Card>
+                <CardContent className="p-0">
+                  <div className="divide-y">
+                    {sortedProjects.map((project) => (
+                      <div
+                        key={project.id}
+                        className="p-4 sm:p-5 lg:p-6 hover:bg-gray-50 transition-colors min-h-[200px] flex items-center"
+                      >
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between w-full gap-4 sm:gap-6">
+                          <div className="flex items-start sm:items-center space-x-3 sm:space-x-4 flex-1 min-w-0 w-full sm:w-auto">
+                            <Avatar className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12">
+                              <AvatarImage
+                                src={getProfileImageUrl(
+                                  project.provider?.providerProfile
+                                    ?.profileImageUrl,
+                                )}
+                              />
+                              <AvatarFallback>
+                                {project.provider?.name
+                                  ? project.provider.name.charAt(0)
+                                  : project.type.charAt(0)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 min-w-0 w-full sm:w-auto">
+                              <div className="flex items-center gap-2 sm:gap-3 mb-1.5 sm:mb-1 flex-wrap">
+                                <h3 className="font-semibold text-gray-900 text-sm sm:text-base truncate">
+                                  {project.title}
+                                </h3>
+                                <Badge
+                                  className={`${getStatusColor(
+                                    project.status,
+                                    project.type,
+                                  )} text-xs`}
+                                >
+                                  {getStatusText(project.status, project.type)}
+                                </Badge>
+                                <Badge variant="outline" className="text-xs">
+                                  {project.type}
+                                </Badge>
+                                <Badge
+                                  className={`${getPriorityColor(
+                                    project.priority,
+                                  )} text-xs`}
+                                  variant="outline"
+                                >
+                                  {project.priority}
+                                </Badge>
+                                {(project.priority === "High" ||
+                                  project.priority === "high") && (
+                                  <Badge
+                                    variant="destructive"
+                                    className="text-xs"
+                                  >
+                                    Urgent
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-xs sm:text-sm text-gray-600 mb-2 line-clamp-2 sm:line-clamp-3">
+                                {project.description}
+                              </p>
+                              <div className="flex items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-500 flex-wrap">
+                                {project.provider?.id &&
+                                project.provider?.name ? (
+                                  <Link
+                                    href={`/customer/providers/${project.provider.id}`}
+                                    className="hover:text-blue-600 hover:underline transition-colors truncate"
+                                  >
+                                    {project.provider.name}
+                                  </Link>
+                                ) : (
+                                  <span className="truncate">
+                                    {project.provider?.name || "No Provider"}
+                                  </span>
+                                )}
+                                <span className="hidden sm:inline">•</span>
+                                <span className="truncate">
+                                  {project.category}
+                                </span>
+                                <span className="hidden sm:inline">•</span>
+                                <span className="truncate">
+                                  Due:{" "}
+                                  {getProjectDueDate(project)
+                                    ? new Date(
+                                        getProjectDueDate(project)!,
+                                      ).toLocaleDateString()
+                                    : "—"}
+                                </span>
+                                {project.timeline && (
+                                  <>
+                                    <span className="hidden sm:inline">•</span>
+                                    <span className="truncate">
+                                      Timeline: {project.timeline}
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-3 sm:space-y-0 sm:space-x-4 lg:space-x-6 flex-shrink-0 w-full sm:w-auto">
+                            <div className="text-left sm:text-right w-full sm:w-auto">
+                              <p className="text-xs sm:text-sm text-gray-500">
+                                {project.type === "Project" &&
+                                (project.status === "IN_PROGRESS" ||
+                                  project.status === "COMPLETED") &&
+                                project.approvedPrice
+                                  ? "Approved Price"
+                                  : "Budget"}
+                              </p>
+                              <p className="font-semibold text-sm sm:text-base">
+                                {project.type === "Project" &&
+                                (project.status === "IN_PROGRESS" ||
+                                  project.status === "COMPLETED") &&
+                                project.approvedPrice
+                                  ? `RM${project.approvedPrice.toLocaleString()}`
+                                  : `RM${
+                                      project.budgetMin?.toLocaleString() || 0
+                                    } - RM${
+                                      project.budgetMax?.toLocaleString() || 0
+                                    }`}
+                              </p>
+                            </div>
+                            {project.type === "Project" &&
+                              project.status === "IN_PROGRESS" && (
+                                <div className="w-full sm:w-24">
+                                  <div className="flex justify-between text-xs mb-1 flex-wrap gap-1">
+                                    <span>
+                                      Progress: {project.progress || 0}%
+                                    </span>
+                                    <span>
+                                      {project.completedMilestones || 0}/
+                                      {project.totalMilestones || 0}
+                                    </span>
+                                  </div>
+                                  <Progress
+                                    value={project.progress || 0}
+                                    className="h-2"
+                                  />
+                                </div>
+                              )}
+                            <div className="flex gap-2 w-full sm:w-auto">
+                              <Button
+                                size="sm"
+                                className="flex-1 sm:flex-initial text-xs sm:text-sm"
+                                onClick={() =>
+                                  router.push(
+                                    `/customer/projects/${project.id}`,
+                                  )
+                                }
+                              >
+                                <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+                                View
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-xs sm:text-sm"
+                                onClick={(e) => {
+                                  e.preventDefault(); // prevents Link from triggering navigation
+                                  handleContact(
+                                    project.provider?.id,
+                                    project.provider?.name,
+                                    project.provider?.providerProfile
+                                      ?.profileImageUrl,
+                                  );
+                                }}
+                              >
+                                <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </div>
 
         {/* Edit Project Dialog */}
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
@@ -1169,17 +1231,48 @@ export default function CustomerProjectsPage() {
               </p>
 
               {!searchQuery && statusFilter === "all" && (
-                <Link href="/customer/projects/new">
-                  <Button className="text-sm sm:text-base">
-                    <Plus className="w-4 h-4 mr-2" />
-                    Create Your First Project
-                  </Button>
-                </Link>
+                <Button
+                  className="text-sm sm:text-base"
+                  disabled={newProjectChecking}
+                  onClick={handleNewProjectClick}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  {newProjectChecking
+                    ? "Checking…"
+                    : "Create Your First Project"}
+                </Button>
               )}
             </CardContent>
           </Card>
         )}
       </div>
+
+      {/* Profile completion gate: must be 60%+ to create projects */}
+      <Dialog open={gateModalOpen} onOpenChange={setGateModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Complete your profile</DialogTitle>
+            <DialogDescription>
+              Complete your profile to at least {POST_PROJECT_REQUIRED}% to
+              create projects.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setGateModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                setGateModalOpen(false);
+                router.push("/customer/onboarding");
+              }}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              👉 Complete Now
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </CustomerLayout>
   );
 }

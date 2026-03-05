@@ -18,6 +18,11 @@ export function getProfileImageUrl(imageUrl: string | null | undefined): string 
     return imageUrl;
   }
 
+  // Paths like /portfolio/xxx are R2 keys - normalize to portfolio/xxx for R2 lookup
+  if (imageUrl.startsWith("/portfolio/")) {
+    imageUrl = imageUrl.slice(1);
+  }
+
   // If it's a local path (old format starting with /), prepend API base URL
   if (imageUrl.startsWith("/")) {
     return `${API_BASE_URL}${imageUrl}`;
@@ -30,8 +35,8 @@ export function getProfileImageUrl(imageUrl: string | null | undefined): string 
     return `${API_BASE_URL}${normalizedPath}`;
   }
 
-  // Check if it's an R2 key for media gallery or profile images (public files)
-  const r2PublicPrefixes = ["media-gallery/", "profile-images/"];
+  // Check if it's an R2 key for media gallery, profile images, or portfolio files (public files)
+  const r2PublicPrefixes = ["media-gallery/", "profile-images/", "portfolio/"];
   const isR2PublicKey = r2PublicPrefixes.some(prefix => imageUrl.startsWith(prefix)) ||
                         (!imageUrl.includes("://") && !imageUrl.startsWith("/") && !imageUrl.includes(API_BASE_URL));
 
@@ -205,6 +210,20 @@ export type SupportConversation = {
   messages: SupportMessage[];
 };
 
+export type SupportSessionItem = {
+  id: string;
+  userId: string;
+  status: string;
+  updatedAt: string;
+  messageCount: number;
+  lastMessage: {
+    id: string;
+    content: string;
+    senderType: string;
+    createdAt: string;
+  } | null;
+};
+
 export async function getSupportConversation(): Promise<{ success: boolean; data: SupportConversation }> {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : undefined;
   if (!token) throw new Error("Not authenticated");
@@ -213,6 +232,43 @@ export async function getSupportConversation(): Promise<{ success: boolean; data
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data?.message || "Failed to load support chat");
+  return data;
+}
+
+/** List current user's support sessions (for history). Optional status filter. */
+export async function getSupportSessions(status?: string): Promise<{ success: boolean; data: SupportSessionItem[] }> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : undefined;
+  if (!token) throw new Error("Not authenticated");
+  const q = status && status !== "ALL" ? `?status=${encodeURIComponent(status)}` : "";
+  const res = await fetch(`${API_BASE}/support-chat/sessions${q}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.message || "Failed to load support sessions");
+  return data;
+}
+
+/** Get a single support conversation by id (for viewing history). Only returns if owned by current user. */
+export async function getSupportConversationById(id: string): Promise<{ success: boolean; data: SupportConversation }> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : undefined;
+  if (!token) throw new Error("Not authenticated");
+  const res = await fetch(`${API_BASE}/support-chat/sessions/${encodeURIComponent(id)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.message || "Conversation not found");
+  return data;
+}
+
+export async function startNewSupportConversation(): Promise<{ success: boolean; data: SupportConversation }> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : undefined;
+  if (!token) throw new Error("Not authenticated");
+  const res = await fetch(`${API_BASE}/support-chat/start-new`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.message || "Failed to start new conversation");
   return data;
 }
 
@@ -232,6 +288,10 @@ export async function sendSupportMessage(content: string, attachmentUrls: string
   return data;
 }
 
+/**
+ * Upload KYC document(s) via POST /kyc/upload (multipart: type + documents).
+ * Backend uploads files to R2 and creates KYC records. Requires auth token.
+ */
 export async function uploadKyc(files: File[], type: "PROVIDER_ID" | "COMPANY_REG" | "COMPANY_DIRECTOR_ID") {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : undefined;
   if (!token) throw new Error("Not authenticated");
@@ -242,11 +302,11 @@ export async function uploadKyc(files: File[], type: "PROVIDER_ID" | "COMPANY_RE
 
   const res = await fetch(`${API_BASE}/kyc/upload`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}` }, // don't set Content-Type when sending FormData
+    headers: { Authorization: `Bearer ${token}` },
     body: fd,
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data?.error || "KYC upload failed");
+  if (!res.ok) throw new Error(data?.message || data?.error || "KYC upload failed");
   return data;
 }
 
@@ -787,7 +847,7 @@ export async function getProviderOpportunityById(opportunityId: string) {
   return data;
 }
 
-export async function sendProposal(formData: FormData) {
+export async function sendProposal(formData: FormData, explicitFiles?: File[]) {
   const token =
     typeof window !== "undefined"
       ? localStorage.getItem("token")
@@ -795,27 +855,29 @@ export async function sendProposal(formData: FormData) {
 
   if (!token) throw new Error("Not authenticated");
 
-  // Extract attachments from FormData and upload to R2
-  const attachments = formData.getAll("attachments") as File[];
+  // Use explicitly passed files when provided (e.g. from proposal form state); otherwise fall back to FormData
+  const fileList = explicitFiles && explicitFiles.length > 0
+    ? explicitFiles
+    : (formData.getAll("attachments") as File[]).filter((f): f is File => f instanceof File);
   const attachmentResults: Array<{ key: string; url: string }> = [];
 
-  if (attachments.length > 0) {
+  if (fileList.length > 0) {
     const { uploadFiles } = await import("./upload");
-    
+
     // Upload all attachments to R2 with private visibility (proposal attachments should be private)
-    const uploadResults = await uploadFiles(attachments, {
+    const uploadResults = await uploadFiles(fileList, {
       prefix: "proposals",
       visibility: "private",
       category: "document",
     });
 
-    // Collect successful uploads
+    // Collect successful uploads (use key for storage; backend stores these in attachmentUrls)
     attachmentResults.push(
       ...uploadResults
-        .filter((result) => result.success)
+        .filter((result) => result.success && result.key)
         .map((result) => ({
           key: result.key,
-          url: result.url || result.key, // URL will be empty for private files, use key
+          url: result.url || result.key, // URL empty for private files; backend uses key
         }))
     );
   }
@@ -2689,6 +2751,32 @@ export async function adminSendNotification({
   return data;
 }
 
+/** Send announcement notification to all users (admin). Categorized as Announcements. */
+export async function adminBroadcastNotification({
+  title,
+  content,
+}: {
+  title: string;
+  content: string;
+}) {
+  const token = getToken();
+  if (!token) throw new Error("Not authenticated");
+
+  const res = await fetch(`${API_BASE}/admin/users/notifications/broadcast`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ title, content }),
+  });
+
+  const data = await res.json();
+  if (!res.ok)
+    throw new Error(data?.message || "Failed to send announcement");
+  return data;
+}
+
 export async function getAdminDisputeById(disputeId: string) {
   const token = getToken();
   if (!token) throw new Error("Not authenticated");
@@ -2811,6 +2899,18 @@ export async function reindexAdminSupportReference(documentId: string) {
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data?.message || "Failed to reindex");
+  return data;
+}
+
+export async function deleteAdminSupportReference(documentId: string) {
+  const token = getToken();
+  if (!token) throw new Error("Not authenticated");
+  const res = await fetch(`${API_BASE}/admin/support/references/${documentId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.message || "Failed to delete reference");
   return data;
 }
 

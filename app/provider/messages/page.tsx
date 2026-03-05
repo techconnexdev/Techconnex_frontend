@@ -19,9 +19,14 @@ import {
 import io, { Socket } from "socket.io-client";
 import { useSearchParams } from "next/navigation";
 import { ProviderLayout } from "@/components/provider-layout";
+import { ProviderMessagesTour } from "@/components/provider/ProviderMessagesTour";
 import Link from "next/link";
 import Image from "next/image";
-import { getProfileImageUrl, getMessageAttachmentUrl, checkCanChatWithUser } from "@/lib/api";
+import {
+  getProfileImageUrl,
+  getMessageAttachmentUrl,
+  checkCanChatWithUser,
+} from "@/lib/api";
 import { ReportConversationDialog } from "@/components/messages/ReportConversationDialog";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -124,7 +129,7 @@ export default function CustomerMessagesPage() {
           const projects = data.projects ?? data.data;
           const availableProjects = projects.filter(
             (proj: Record<string, unknown>) =>
-              proj.status === "IN_PROGRESS" || proj.status === "DISPUTED"
+              proj.status === "IN_PROGRESS" || proj.status === "DISPUTED",
           );
           setProjects(availableProjects);
         }
@@ -243,7 +248,7 @@ export default function CustomerMessagesPage() {
       console.log("✅ Message sent confirmation:", message);
       // Replace optimistic message with real one
       setMessages((prev) =>
-        prev.map((msg) => (msg.id.startsWith("temp-") ? message : msg))
+        prev.map((msg) => (msg.id.startsWith("temp-") ? message : msg)),
       );
     });
 
@@ -254,10 +259,10 @@ export default function CustomerMessagesPage() {
           prev.map((msg) =>
             msg.id === data.messageId
               ? { ...msg, isRead: true, readAt: data.readAt }
-              : msg
-          )
+              : msg,
+          ),
         );
-      }
+      },
     );
 
     // Handle user online/offline status
@@ -265,8 +270,8 @@ export default function CustomerMessagesPage() {
       console.log("🟢 User online:", data.userId);
       setConversations((prev) =>
         prev.map((conv) =>
-          conv.userId === data.userId ? { ...conv, online: true } : conv
-        )
+          conv.userId === data.userId ? { ...conv, online: true } : conv,
+        ),
       );
     });
 
@@ -274,8 +279,8 @@ export default function CustomerMessagesPage() {
       console.log("🔴 User offline:", data.userId);
       setConversations((prev) =>
         prev.map((conv) =>
-          conv.userId === data.userId ? { ...conv, online: false } : conv
-        )
+          conv.userId === data.userId ? { ...conv, online: false } : conv,
+        ),
       );
     });
 
@@ -285,7 +290,7 @@ export default function CustomerMessagesPage() {
         prev.map((conv) => ({
           ...conv,
           online: data.userIds.includes(conv.userId),
-        }))
+        })),
       );
     });
 
@@ -336,45 +341,45 @@ export default function CustomerMessagesPage() {
   }, [token]);
 
   // Fetch messages for a specific conversation
-  const fetchMessages = useCallback(async (
-    otherUserId: string,
-    skipLoadingCheck = false
-  ) => {
-    if (!token || !otherUserId) return;
-    if (loading && !skipLoadingCheck) return; // prevents re-fetching while still loading
+  const fetchMessages = useCallback(
+    async (otherUserId: string, skipLoadingCheck = false) => {
+      if (!token || !otherUserId) return;
+      if (loading && !skipLoadingCheck) return; // prevents re-fetching while still loading
 
-    try {
-      if (!skipLoadingCheck) setLoading(true);
-      const response = await fetch(
-        `${API_URL}/messages?otherUserId=${otherUserId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
+      try {
+        if (!skipLoadingCheck) setLoading(true);
+        const response = await fetch(
+          `${API_URL}/messages?otherUserId=${otherUserId}`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
           },
-        }
-      );
-
-      const data = await response.json();
-
-      if (data.success) {
-        setMessages(data.data);
-
-        // Mark conversation as read in the list
-        setConversations((prev) =>
-          prev.map((conv) =>
-            conv.userId === otherUserId ? { ...conv, unreadCount: 0 } : conv
-          )
         );
-      } else {
-        console.error("Failed to fetch messages:", data.message);
+
+        const data = await response.json();
+
+        if (data.success) {
+          setMessages(data.data);
+
+          // Mark conversation as read in the list
+          setConversations((prev) =>
+            prev.map((conv) =>
+              conv.userId === otherUserId ? { ...conv, unreadCount: 0 } : conv,
+            ),
+          );
+        } else {
+          console.error("Failed to fetch messages:", data.message);
+        }
+      } catch (error) {
+        console.error("Error fetching messages:", error);
+      } finally {
+        if (!skipLoadingCheck) setLoading(false);
       }
-    } catch (error) {
-      console.error("Error fetching messages:", error);
-    } finally {
-      if (!skipLoadingCheck) setLoading(false);
-    }
-  }, [token, loading]);
+    },
+    [token, loading],
+  );
 
   // Load conversations on mount
   useEffect(() => {
@@ -432,7 +437,15 @@ export default function CustomerMessagesPage() {
       console.log("📨 Fetching messages for user:", userIdParam);
       fetchMessages(userIdParam, true);
     }
-  }, [userIdParam, chatName, chatAvatar, token, loading, conversations, fetchMessages]);
+  }, [
+    userIdParam,
+    chatName,
+    chatAvatar,
+    token,
+    loading,
+    conversations,
+    fetchMessages,
+  ]);
 
   // Handle conversation selection
   const handleSelectConversation = (conversation: Conversation) => {
@@ -446,7 +459,7 @@ export default function CustomerMessagesPage() {
   };
 
   const handleFileSelect = async (
-    event: React.ChangeEvent<HTMLInputElement>
+    event: React.ChangeEvent<HTMLInputElement>,
   ) => {
     const file = event.target.files?.[0];
     if (!file || !token || !socket || !selectedChat) return;
@@ -488,11 +501,15 @@ export default function CustomerMessagesPage() {
       messageType: "file",
       attachments: [pendingAttachmentUrl],
     };
-    socket.emit("send_message", messageData, (response: { success?: boolean; error?: string }) => {
-      if (!response?.success) {
-        alert("Failed to send file: " + response.error);
-      }
-    });
+    socket.emit(
+      "send_message",
+      messageData,
+      (response: { success?: boolean; error?: string }) => {
+        if (!response?.success) {
+          alert("Failed to send file: " + response.error);
+        }
+      },
+    );
     setPendingAttachmentUrl(null);
     setShowAttachmentPicker(false);
   };
@@ -547,54 +564,61 @@ export default function CustomerMessagesPage() {
       setNewMessage(""); // Clear input immediately
 
       // Send via socket with callback
-      socket.emit("send_message", messageData, (response: { success?: boolean; error?: string }) => {
-        console.log("📨 Socket callback response:", response);
-        if (response?.success) {
-          console.log("✅ Message sent successfully via socket");
-          // The message_sent event will handle replacing the temp message
-        } else {
-          console.error(
-            "❌ Failed to send message via socket:",
-            response?.error
-          );
-          // Remove the optimistic message on error
-          setMessages((prev) =>
-            prev.filter((msg) => msg.id !== optimisticMessage.id)
-          );
-          // Optionally show error to user
-          alert("Failed to send message: " + response?.error);
-        }
-      });
+      socket.emit(
+        "send_message",
+        messageData,
+        (response: { success?: boolean; error?: string }) => {
+          console.log("📨 Socket callback response:", response);
+          if (response?.success) {
+            console.log("✅ Message sent successfully via socket");
+            // The message_sent event will handle replacing the temp message
+          } else {
+            console.error(
+              "❌ Failed to send message via socket:",
+              response?.error,
+            );
+            // Remove the optimistic message on error
+            setMessages((prev) =>
+              prev.filter((msg) => msg.id !== optimisticMessage.id),
+            );
+            // Optionally show error to user
+            alert("Failed to send message: " + response?.error);
+          }
+        },
+      );
     } catch (error) {
       console.error("❌ Error in send message:", error);
     }
   };
 
   // Mark messages as read
-  const markMessagesAsRead = useCallback(async (messageIds: string[]) => {
-    if (!token) return;
+  const markMessagesAsRead = useCallback(
+    async (messageIds: string[]) => {
+      if (!token) return;
 
-    try {
-      await Promise.all(
-        messageIds.map((id) =>
-          fetch(`${API_URL}/messages/${id}/read`, {
-            method: "PUT",
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          })
-        )
-      );
-    } catch (error) {
-      console.error("Error marking messages as read:", error);
-    }
-  }, [token]);
+      try {
+        await Promise.all(
+          messageIds.map((id) =>
+            fetch(`${API_URL}/messages/${id}/read`, {
+              method: "PUT",
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            }),
+          ),
+        );
+      } catch (error) {
+        console.error("Error marking messages as read:", error);
+      }
+    },
+    [token],
+  );
 
   // Auto-mark messages as read when they become visible
   useEffect(() => {
     if (selectedChat && messages.length > 0 && socket) {
       const unreadMessages = messages.filter(
-        (msg) => !msg.isRead && msg.receiverId === currentUserId
+        (msg) => !msg.isRead && msg.receiverId === currentUserId,
       );
 
       if (unreadMessages.length > 0) {
@@ -610,7 +634,7 @@ export default function CustomerMessagesPage() {
   }, [messages, selectedChat, currentUserId, socket, markMessagesAsRead]);
 
   const selectedConversation = conversations.find(
-    (c) => c.userId === selectedChat
+    (c) => c.userId === selectedChat,
   );
 
   if (!token || !user) {
@@ -625,6 +649,7 @@ export default function CustomerMessagesPage() {
 
   return (
     <ProviderLayout>
+      <ProviderMessagesTour />
       <div className="h-[calc(100vh-8rem)] flex flex-col md:flex-row gap-4 md:gap-6">
         {/* 🧾 Conversations List */}
         <div
@@ -632,7 +657,10 @@ export default function CustomerMessagesPage() {
             showConversationsList ? "flex" : "hidden"
           } md:flex w-full md:w-1/3 flex-col`}
         >
-          <Card className="h-full flex flex-col overflow-hidden">
+          <Card
+            className="h-full flex flex-col overflow-hidden"
+            data-tour-step="0"
+          >
             <CardHeader className="pb-3 flex-shrink-0">
               <CardTitle className="flex items-center justify-between text-base md:text-lg">
                 <span>Messages</span>
@@ -692,7 +720,7 @@ export default function CustomerMessagesPage() {
                             <div className="flex items-center gap-1 md:gap-2 flex-shrink-0 ml-2">
                               <span className="text-xs text-gray-500">
                                 {new Date(
-                                  conversation.lastMessageAt
+                                  conversation.lastMessageAt,
                                 ).toLocaleTimeString([], {
                                   hour: "2-digit",
                                   minute: "2-digit",
@@ -729,7 +757,10 @@ export default function CustomerMessagesPage() {
             !showConversationsList || selectedChat ? "flex" : "hidden"
           } md:flex flex-1 flex-col min-h-0`}
         >
-          <Card className="h-full flex flex-col overflow-hidden">
+          <Card
+            className="h-full flex flex-col overflow-hidden"
+            data-tour-step="1"
+          >
             {/* Header */}
             <CardHeader className="border-b pb-3 flex-shrink-0">
               <div className="flex items-center justify-between">
@@ -750,7 +781,9 @@ export default function CustomerMessagesPage() {
                       <div className="relative flex-shrink-0">
                         <Avatar className="w-10 h-10 md:w-12 md:h-12">
                           <AvatarImage
-                            src={getProfileImageUrl(selectedConversation.avatar)}
+                            src={getProfileImageUrl(
+                              selectedConversation.avatar,
+                            )}
                           />
                           <AvatarFallback>
                             {selectedConversation.name.charAt(0)}
@@ -840,13 +873,17 @@ export default function CustomerMessagesPage() {
                           >
                             {message.messageType === "file" ? (
                               message.attachments.map((fileUrl, index) => {
-                                const attachmentUrl = getMessageAttachmentUrl(fileUrl);
+                                const attachmentUrl =
+                                  getMessageAttachmentUrl(fileUrl);
                                 const isImage =
                                   /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(
-                                    fileUrl
+                                    fileUrl,
                                   );
                                 const isPDF = /\.pdf$/i.test(fileUrl);
-                                const fileName = fileUrl.split("/").pop() || fileUrl.split("\\").pop() || "attachment";
+                                const fileName =
+                                  fileUrl.split("/").pop() ||
+                                  fileUrl.split("\\").pop() ||
+                                  "attachment";
 
                                 return (
                                   <div key={index} className="mt-2">
@@ -925,7 +962,7 @@ export default function CustomerMessagesPage() {
                                 {
                                   hour: "2-digit",
                                   minute: "2-digit",
-                                }
+                                },
                               )}
                               {isOwn && (
                                 <span className="ml-2">
@@ -947,84 +984,91 @@ export default function CustomerMessagesPage() {
               <div className="border-t p-2 md:p-4 relative flex-shrink-0">
                 {!canChat ? (
                   <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 text-center text-sm text-amber-800">
-                    Messaging is disabled for this conversation. One user has reported the other.
+                    Messaging is disabled for this conversation. One user has
+                    reported the other.
                   </div>
                 ) : (
-                <>
-                <div className="flex items-end gap-1 md:gap-2">
-                  <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 md:h-10 md:w-10"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      <Paperclip className="w-4 h-4 md:w-5 md:h-5" />
-                    </Button>
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      className="hidden"
-                      onChange={handleFileSelect}
-                    />
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <Textarea
-                      placeholder="Type your message..."
-                      value={newMessage}
-                      onChange={(e) => {
-                        console.log("Typed:", e.target.value);
-                        setNewMessage(e.target.value);
-                      }}
-                      className="min-h-[36px] md:min-h-[40px] max-h-24 md:max-h-32 resize-none text-sm md:text-base"
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          handleSendMessage();
-                        }
-                      }}
-                    />
-                  </div>
-                  <Button
-                    onClick={handleSendMessage}
-                    disabled={!newMessage.trim() || !selectedChat}
-                    className="bg-blue-500 hover:bg-blue-600 text-white h-8 w-8 md:h-10 md:w-10 flex-shrink-0 p-0"
-                  >
-                    <Send className="w-4 h-4" />
-                  </Button>
-                </div>
-                {showAttachmentPicker && (
-                  <div className="absolute bottom-14 md:bottom-16 left-2 md:left-4 bg-white border rounded-lg p-2 max-h-60 overflow-y-auto shadow-lg z-10 w-[calc(100%-1rem)] md:w-64">
-                    <div className="p-2 text-sm text-gray-700">
-                      This file is associated with a project. Please select a
-                      project to continue:
-                    </div>
-                    {projects.length > 0 ? (
-                      projects.map((proj) => (
-                        <div
-                          key={proj.id}
-                          className="p-2 hover:bg-gray-100 cursor-pointer"
-                          onClick={() => sendAttachmentMessage(proj.id)}
+                  <>
+                    <div className="flex items-end gap-1 md:gap-2">
+                      <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 md:h-10 md:w-10"
+                          onClick={() => fileInputRef.current?.click()}
                         >
-                          <p className="text-sm font-medium">{proj.title}</p>
-                          <p className="text-xs text-gray-500">{proj.status}</p>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-sm text-gray-500">No open projects</p>
-                    )}
-                    <div className="p-2 border-t">
+                          <Paperclip className="w-4 h-4 md:w-5 md:h-5" />
+                        </Button>
+                        <input
+                          type="file"
+                          ref={fileInputRef}
+                          className="hidden"
+                          onChange={handleFileSelect}
+                        />
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <Textarea
+                          placeholder="Type your message..."
+                          value={newMessage}
+                          onChange={(e) => {
+                            console.log("Typed:", e.target.value);
+                            setNewMessage(e.target.value);
+                          }}
+                          className="min-h-[36px] md:min-h-[40px] max-h-24 md:max-h-32 resize-none text-sm md:text-base"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && !e.shiftKey) {
+                              e.preventDefault();
+                              handleSendMessage();
+                            }
+                          }}
+                        />
+                      </div>
                       <Button
-                        onClick={() => sendAttachmentMessage()}
-                        className="w-full"
+                        onClick={handleSendMessage}
+                        disabled={!newMessage.trim() || !selectedChat}
+                        className="bg-blue-500 hover:bg-blue-600 text-white h-8 w-8 md:h-10 md:w-10 flex-shrink-0 p-0"
                       >
-                        Send without project
+                        <Send className="w-4 h-4" />
                       </Button>
                     </div>
-                  </div>
-                )}
-                </>
+                    {showAttachmentPicker && (
+                      <div className="absolute bottom-14 md:bottom-16 left-2 md:left-4 bg-white border rounded-lg p-2 max-h-60 overflow-y-auto shadow-lg z-10 w-[calc(100%-1rem)] md:w-64">
+                        <div className="p-2 text-sm text-gray-700">
+                          This file is associated with a project. Please select
+                          a project to continue:
+                        </div>
+                        {projects.length > 0 ? (
+                          projects.map((proj) => (
+                            <div
+                              key={proj.id}
+                              className="p-2 hover:bg-gray-100 cursor-pointer"
+                              onClick={() => sendAttachmentMessage(proj.id)}
+                            >
+                              <p className="text-sm font-medium">
+                                {proj.title}
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                {proj.status}
+                              </p>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-sm text-gray-500">
+                            No open projects
+                          </p>
+                        )}
+                        <div className="p-2 border-t">
+                          <Button
+                            onClick={() => sendAttachmentMessage()}
+                            className="w-full"
+                          >
+                            Send without project
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}

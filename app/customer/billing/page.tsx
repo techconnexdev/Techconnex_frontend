@@ -150,7 +150,7 @@ export default function CustomerBillingPage() {
   });
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [upcomingPayments, setUpcomingPayments] = useState<UpcomingPayment[]>(
-    []
+    [],
   );
   const [loading, setLoading] = useState(true);
 
@@ -272,7 +272,7 @@ export default function CustomerBillingPage() {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
-        }
+        },
       );
 
       if (!res.ok) {
@@ -381,7 +381,8 @@ export default function CustomerBillingPage() {
           pendingPayments: overviewRes.data.pendingPayments,
           thisMonth: overviewRes.data.thisMonthSpent,
           averageTransaction: overviewRes.data.averageTransaction,
-          averageTransactionByYear: overviewRes.data.averageTransactionByYear ?? [],
+          averageTransactionByYear:
+            overviewRes.data.averageTransactionByYear ?? [],
           completedPayments: overviewRes.data.recentTransactions.length,
         });
         // Budgets feature is commented out, so we don't set budgets state
@@ -410,7 +411,7 @@ export default function CustomerBillingPage() {
               amount: (txn.amount as number) || 0,
               type: isRefunded ? "refund" : "payment",
             };
-          })
+          }),
         );
         setUpcomingPayments(
           (upcomingRes.data || []).flatMap((project: Record<string, unknown>) =>
@@ -424,9 +425,9 @@ export default function CustomerBillingPage() {
                 amount: (milestone.amount as number) || 0,
                 dueDate: (milestone.dueDate as string) || "",
                 sequence: index,
-              })
-            )
-          )
+              }),
+            ),
+          ),
         );
       } catch (error) {
         console.error("Failed to fetch billing data:", error);
@@ -459,7 +460,11 @@ export default function CustomerBillingPage() {
             </p>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
-            <Button variant="outline" onClick={handleExportReport} className="w-full sm:w-auto text-xs md:text-sm">
+            <Button
+              variant="outline"
+              onClick={handleExportReport}
+              className="w-full sm:w-auto text-xs md:text-sm"
+            >
               <Download className="w-3 h-3 md:w-4 md:h-4 mr-2" />
               Export Report
             </Button>
@@ -492,8 +497,12 @@ export default function CustomerBillingPage() {
           className="space-y-6"
         >
           <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="overview" className="text-xs md:text-sm">Overview</TabsTrigger>
-            <TabsTrigger value="transactions" className="text-xs md:text-sm">Transactions</TabsTrigger>
+            <TabsTrigger value="overview" className="text-xs md:text-sm">
+              Overview
+            </TabsTrigger>
+            <TabsTrigger value="transactions" className="text-xs md:text-sm">
+              Transactions
+            </TabsTrigger>
             {/* <TabsTrigger value="invoices">Invoices</TabsTrigger>
             <TabsTrigger value="methods">Payment Methods</TabsTrigger>
             <TabsTrigger value="budgets">Budgets</TabsTrigger> */}
@@ -507,7 +516,9 @@ export default function CustomerBillingPage() {
                 <CardContent className="p-4 md:p-6">
                   <div className="flex items-center justify-between">
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs md:text-sm text-gray-500">Total Spent</p>
+                      <p className="text-xs md:text-sm text-gray-500">
+                        Total Spent
+                      </p>
                       <p className="text-xl md:text-2xl font-bold">
                         RM{(stats?.totalSpent || 0).toLocaleString()}
                       </p>
@@ -525,7 +536,9 @@ export default function CustomerBillingPage() {
                 <CardContent className="p-4 md:p-6">
                   <div className="flex items-center justify-between">
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs md:text-sm text-gray-500">Pending Payments</p>
+                      <p className="text-xs md:text-sm text-gray-500">
+                        Pending Payments
+                      </p>
                       <p className="text-xl md:text-2xl font-bold">
                         RM{(stats?.pendingPayments || 0).toLocaleString()}
                       </p>
@@ -549,7 +562,9 @@ export default function CustomerBillingPage() {
                 <CardContent className="p-4 md:p-6">
                   <div className="flex items-center justify-between">
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs md:text-sm text-gray-500">This Month</p>
+                      <p className="text-xs md:text-sm text-gray-500">
+                        This Month
+                      </p>
                       <p className="text-xl md:text-2xl font-bold">
                         RM{(stats?.thisMonth || 0).toLocaleString()}
                       </p>
@@ -568,14 +583,24 @@ export default function CustomerBillingPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
-                        <p className="text-xs md:text-sm text-gray-500">Avg. Transaction (YTD)</p>
+                        <p className="text-xs md:text-sm text-gray-500">
+                          Avg. Transaction (YTD)
+                        </p>
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>
                               <HelpCircle className="h-3.5 w-3.5 md:h-4 md:w-4 text-gray-400 hover:text-gray-600 cursor-help shrink-0" />
                             </TooltipTrigger>
-                            <TooltipContent side="top" className="max-w-[260px]">
-                              <p>Average payment amount per completed transaction (escrowed, released, or transferred) for the current year. The chart shows year-over-year comparison across recent years.</p>
+                            <TooltipContent
+                              side="top"
+                              className="max-w-[260px]"
+                            >
+                              <p>
+                                Average payment amount per completed transaction
+                                (escrowed, released, or transferred) for the
+                                current year. The chart shows year-over-year
+                                comparison across recent years.
+                              </p>
                             </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
@@ -583,7 +608,7 @@ export default function CustomerBillingPage() {
                       <p className="text-xl md:text-2xl font-bold mt-1">
                         RM
                         {Math.round(
-                          stats?.averageTransaction || 0
+                          stats?.averageTransaction || 0,
                         ).toLocaleString()}
                       </p>
                       <div className="flex items-center mt-2 text-purple-600 text-xs md:text-sm">
@@ -600,15 +625,25 @@ export default function CustomerBillingPage() {
                           className="h-full w-full !aspect-auto [&_.recharts-cartesian-grid]:opacity-0"
                         >
                           <BarChart
-                            data={[...(stats.averageTransactionByYear ?? [])].reverse().map((d) => ({
-                              year: String(d.year).slice(-2),
-                              average: Math.round(d.average),
-                            }))}
+                            data={[...(stats.averageTransactionByYear ?? [])]
+                              .reverse()
+                              .map((d) => ({
+                                year: String(d.year).slice(-2),
+                                average: Math.round(d.average),
+                              }))}
                             margin={{ top: 2, right: 2, bottom: 2, left: 2 }}
                           >
-                            <XAxis type="category" dataKey="year" tick={{ fontSize: 9 }} />
+                            <XAxis
+                              type="category"
+                              dataKey="year"
+                              tick={{ fontSize: 9 }}
+                            />
                             <YAxis type="number" hide />
-                            <Bar dataKey="average" fill="rgb(147 51 234)" radius={[4, 4, 0, 0]} />
+                            <Bar
+                              dataKey="average"
+                              fill="rgb(147 51 234)"
+                              radius={[4, 4, 0, 0]}
+                            />
                           </BarChart>
                         </ChartContainer>
                       </div>
@@ -662,7 +697,9 @@ export default function CustomerBillingPage() {
             {/* ===== Upcoming Payments ===== */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-base md:text-lg">Upcoming Payments</CardTitle>
+                <CardTitle className="text-base md:text-lg">
+                  Upcoming Payments
+                </CardTitle>
                 <CardDescription className="text-xs md:text-sm">
                   Scheduled and pending payments
                 </CardDescription>
@@ -703,7 +740,9 @@ export default function CustomerBillingPage() {
                           </span>
                         </div>
                         <div className="flex items-center gap-2 mb-2">
-                          <Badge className={`${getStatusColor(payment.status)} text-xs`}>
+                          <Badge
+                            className={`${getStatusColor(payment.status)} text-xs`}
+                          >
                             {getStatusIcon(payment.status)}
                             <span className="ml-1 capitalize">
                               {payment.status}
@@ -714,7 +753,7 @@ export default function CustomerBillingPage() {
                           upcomingPayments.find(
                             (p) =>
                               p.projectId === payment.projectId &&
-                              p.sequence === payment.sequence - 1
+                              p.sequence === payment.sequence - 1,
                           )?.status === "APPROVED") && (
                           <Button
                             size="sm"
@@ -737,7 +776,9 @@ export default function CustomerBillingPage() {
               <CardHeader>
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                   <div>
-                    <CardTitle className="text-base md:text-lg">Recent Transactions</CardTitle>
+                    <CardTitle className="text-base md:text-lg">
+                      Recent Transactions
+                    </CardTitle>
                     <CardDescription className="text-xs md:text-sm">
                       Your latest payment activities
                     </CardDescription>
@@ -791,7 +832,9 @@ export default function CustomerBillingPage() {
                           {transaction.amount.toLocaleString() ?? "0.00"}
                         </span>
                         <div className="flex items-center gap-2 mt-1">
-                          <Badge className={`${getStatusColor(transaction.status)} text-xs`}>
+                          <Badge
+                            className={`${getStatusColor(transaction.status)} text-xs`}
+                          >
                             {getStatusIcon(transaction.status)}
                             <span className="ml-1 capitalize">
                               {transaction.status}
@@ -893,7 +936,9 @@ export default function CustomerBillingPage() {
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Badge className={`${getStatusColor(transaction.status)} text-xs`}>
+                          <Badge
+                            className={`${getStatusColor(transaction.status)} text-xs`}
+                          >
                             {getStatusIcon(transaction.status)}
                             <span className="ml-1 capitalize">
                               {transaction.status}
@@ -1338,7 +1383,7 @@ export default function CustomerBillingPage() {
                       <h4 className="font-semibold mb-2">Issue Date:</h4>
                       <p className="text-sm text-gray-600">
                         {new Date(
-                          selectedInvoice.issueDate
+                          selectedInvoice.issueDate,
                         ).toLocaleDateString()}
                       </p>
                     </div>
@@ -1353,7 +1398,7 @@ export default function CustomerBillingPage() {
                       <p className="text-sm text-gray-600">
                         {selectedInvoice.paidDate
                           ? new Date(
-                              selectedInvoice.paidDate
+                              selectedInvoice.paidDate,
                             ).toLocaleDateString()
                           : "Not paid yet"}
                       </p>
@@ -1383,7 +1428,7 @@ export default function CustomerBillingPage() {
                               rate: number;
                               amount: number;
                             },
-                            index: number
+                            index: number,
                           ) => (
                             <TableRow key={index}>
                               <TableCell>{item.description}</TableCell>
@@ -1395,7 +1440,7 @@ export default function CustomerBillingPage() {
                                 RM{item.amount.toLocaleString() ?? "0.00"}
                               </TableCell>
                             </TableRow>
-                          )
+                          ),
                         )}
                       </TableBody>
                     </Table>

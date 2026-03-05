@@ -10,9 +10,13 @@ import { Eye, MapPin, MessageSquare, Star, Heart, Building2, Sparkles, ChevronRi
 import type { Company } from "../types";
 import { useRouter } from "next/navigation";
 import { getProfileImageUrl } from "@/lib/api";
+import { useProviderCompletion, CONTACT_REQUIRED } from "@/contexts/ProviderCompletionContext";
+import { ProfileCompletionGateModal } from "@/components/provider/ProfileCompletionGateModal";
 
 export default function CompanyCard({ company }: { company: Company }) {
   const router = useRouter();
+  const { canContact } = useProviderCompletion();
+  const [contactGateOpen, setContactGateOpen] = useState(false);
   const [saved, setSaved] = useState<boolean>(!!company.saved);
   const [expanded, setExpanded] = useState<boolean>(false);
 
@@ -22,7 +26,10 @@ export default function CompanyCard({ company }: { company: Company }) {
   }, [company.saved]);
 
   const handleContact = () => {
-    // Navigate to chat with this company
+    if (!canContact) {
+      setContactGateOpen(true);
+      return;
+    }
     const avatarUrl = getProfileImageUrl(company.avatar);
     router.push(
       `/provider/messages?userId=${company.id}&name=${encodeURIComponent(
@@ -77,8 +84,9 @@ export default function CompanyCard({ company }: { company: Company }) {
   };
 
   return (
-    <Card className="group relative active:shadow-md sm:hover:shadow-lg transition-shadow">
-      <CardHeader className="pb-3 sm:pb-4 p-4 sm:p-6">
+    <>
+    <Card className="group relative active:shadow-md sm:hover:shadow-lg transition-shadow flex flex-col h-full">
+      <CardHeader className="pb-3 sm:pb-4 p-4 sm:p-6 shrink-0">
         <div className="flex items-start space-x-3 sm:space-x-4">
           <div className="relative flex-shrink-0">
             <Avatar className="w-12 h-12 sm:w-16 sm:h-16">
@@ -122,7 +130,7 @@ export default function CompanyCard({ company }: { company: Company }) {
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-3 sm:space-y-4 p-4 sm:p-6">
+      <CardContent className="space-y-3 sm:space-y-4 p-4 sm:p-6 flex flex-col flex-1 min-h-0">
         {/* AI Badge Indicator */}
         {company.aiExplanation && (
           <div className="absolute top-2 right-2 sm:top-3 sm:right-3 opacity-0 lg:group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
@@ -262,7 +270,7 @@ export default function CompanyCard({ company }: { company: Company }) {
           </div>
         )}
 
-        <div className="flex flex-col gap-2 pt-4 border-t border-gray-200">
+        <div className="flex flex-col gap-2 pt-4 border-t border-gray-200 mt-auto shrink-0">
           {company.allowMessages !== false && (
             <Button
               size="sm"
@@ -304,5 +312,12 @@ export default function CompanyCard({ company }: { company: Company }) {
         </div>
       </CardContent>
     </Card>
+    <ProfileCompletionGateModal
+      open={contactGateOpen}
+      onOpenChange={setContactGateOpen}
+      requiredPercent={CONTACT_REQUIRED}
+      actionLabel="contact users"
+    />
+  </>
   );
 }

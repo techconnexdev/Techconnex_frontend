@@ -551,6 +551,26 @@ export default function ProviderDetailClient({
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2.5 sm:space-y-3 text-xs sm:text-sm p-4 sm:p-6 pt-0">
+              {provider.availability && (
+                <div>
+                  <p className="text-gray-500">Availability</p>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <div
+                      className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                        provider.availability === "available" ||
+                        provider.availability === "Available"
+                          ? "bg-green-500"
+                          : provider.availability === "busy"
+                            ? "bg-yellow-500"
+                            : "bg-gray-400"
+                      }`}
+                    />
+                    <p className="font-medium capitalize">
+                      {provider.availability}
+                    </p>
+                  </div>
+                </div>
+              )}
               {provider.workPreference && (
                 <div>
                   <p className="text-gray-500">Work Preference</p>
@@ -662,7 +682,12 @@ export default function ProviderDetailClient({
                           )}
                           {cert.sourceUrl && (
                             <a
-                              href={cert.sourceUrl}
+                              href={
+                                cert.sourceUrl.startsWith("http://") ||
+                                cert.sourceUrl.startsWith("https://")
+                                  ? cert.sourceUrl
+                                  : `https://${cert.sourceUrl.trim()}`
+                              }
                               target="_blank"
                               rel="noopener noreferrer"
                               className="text-xs text-blue-600 hover:underline mt-1 inline-block"

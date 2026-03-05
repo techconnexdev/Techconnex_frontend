@@ -3,10 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -31,10 +28,8 @@ import {
 } from "lucide-react";
 import ProviderCard from "./sections/ProviderCard";
 import type { Provider, Option } from "./types";
-import {
-  getProviderAiDrafts,
-  getProfileImageUrl,
-} from "@/lib/api";
+import { getProviderAiDrafts, getProfileImageUrl } from "@/lib/api";
+import { CustomerProvidersTour } from "../CustomerProvidersTour";
 
 // Extended provider type for recommended providers with AI-specific fields
 type RecommendedProvider = Provider & {
@@ -61,7 +56,9 @@ export default function FindProvidersClient({
   const [loading, setLoading] = useState(true);
 
   // Recommended providers state
-  const [recommendedProviders, setRecommendedProviders] = useState<RecommendedProvider[]>([]);
+  const [recommendedProviders, setRecommendedProviders] = useState<
+    RecommendedProvider[]
+  >([]);
   const [loadingRecommended, setLoadingRecommended] = useState(true);
   const [errorRecommended, setErrorRecommended] = useState<string | null>(null);
   const [recommendationsCacheInfo, setRecommendationsCacheInfo] = useState<{
@@ -69,7 +66,7 @@ export default function FindProvidersClient({
     nextRefreshAt: number | null;
   }>({ cachedAt: null, nextRefreshAt: null });
   const [expandedProviderId, setExpandedProviderId] = useState<string | null>(
-    null
+    null,
   );
 
   // Fetch all providers
@@ -77,7 +74,7 @@ export default function FindProvidersClient({
     const fetchProviders = async () => {
       try {
         setLoading(true);
-        
+
         // Get userId from localStorage to include in API call for saved status
         const userJson =
           typeof window !== "undefined" ? localStorage.getItem("user") : null;
@@ -105,7 +102,7 @@ export default function FindProvidersClient({
           }/providers?${params.toString()}`,
           {
             headers: token ? { Authorization: `Bearer ${token}` } : {},
-          }
+          },
         );
         const data = await res.json();
 
@@ -114,9 +111,23 @@ export default function FindProvidersClient({
 
           // Apply verified filter on frontend since API might not support it
           if (verifiedFilter === "verified") {
-            filtered = filtered.filter((p: Provider & { isVerified?: boolean; profileId?: string | null }) => p.isVerified === true);
+            filtered = filtered.filter(
+              (
+                p: Provider & {
+                  isVerified?: boolean;
+                  profileId?: string | null;
+                },
+              ) => p.isVerified === true,
+            );
           } else if (verifiedFilter === "unverified") {
-            filtered = filtered.filter((p: Provider & { isVerified?: boolean; profileId?: string | null }) => p.isVerified !== true);
+            filtered = filtered.filter(
+              (
+                p: Provider & {
+                  isVerified?: boolean;
+                  profileId?: string | null;
+                },
+              ) => p.isVerified !== true,
+            );
           }
 
           // For "All" tab: Only use AI drafts, ignore any aiExplanation from search results
@@ -128,16 +139,23 @@ export default function FindProvidersClient({
               const draftRes = await getProviderAiDrafts(profileIds);
               if (draftRes?.success && Array.isArray(draftRes.drafts)) {
                 const draftMap = new Map(
-                  draftRes.drafts.map((d: { referenceId: string; summary: string }) => [d.referenceId, d.summary])
+                  draftRes.drafts.map(
+                    (d: { referenceId: string; summary: string }) => [
+                      d.referenceId,
+                      d.summary,
+                    ],
+                  ),
                 );
-                filtered = filtered.map((p: Provider & { profileId?: string | null }) => ({
-                  ...p,
-                  // Only use draft summary for "All" tab, ignore any aiExplanation from search API
-                  aiExplanation:
-                    p.profileId && draftMap.has(p.profileId)
-                      ? draftMap.get(p.profileId) || null
-                      : null,
-                }));
+                filtered = filtered.map(
+                  (p: Provider & { profileId?: string | null }) => ({
+                    ...p,
+                    // Only use draft summary for "All" tab, ignore any aiExplanation from search API
+                    aiExplanation:
+                      p.profileId && draftMap.has(p.profileId)
+                        ? draftMap.get(p.profileId) || null
+                        : null,
+                  }),
+                );
               }
             } catch (err) {
               console.warn("Failed to fetch AI drafts for providers", err);
@@ -187,36 +205,47 @@ export default function FindProvidersClient({
         }/providers/recommended?${params.toString()}`,
         {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
-        }
+        },
       );
       const response = await res.json();
 
       if (response.success) {
         const raw = response.recommendations || [];
-        const mappedProviders: RecommendedProvider[] = raw.map((provider: Record<string, unknown>) => ({
-          id: provider.id as string,
-          profileId: (provider.profileId as string | undefined) || null,
-          name: provider.name as string,
-          specialty: (provider.major as string | undefined) || "ICT Professional",
-          rating: (provider.rating as number | undefined) || 0,
-          completedJobs: (provider.completedJobs as number | undefined) || 0,
-          hourlyRate: (provider.hourlyRate as number | undefined) || 0,
-          location: (provider.location as string | undefined) || "Malaysia",
-          avatar: getProfileImageUrl(provider.avatar as string | undefined),
-          skills: Array.isArray(provider.skills) ? (provider.skills as string[]) : [],
-          verified: (provider.isVerified as boolean | undefined) || false,
-          saved: (provider.saved as boolean | undefined) || false,
-          matchScore: provider.matchScore as number | undefined,
-          recommendedFor: provider.recommendedForServiceRequest as { title: string } | undefined,
-          aiExplanation: (provider.aiExplanation as string | undefined) || null,
-          yearsExperience: provider.yearsExperience as number | undefined,
-          successRate: provider.successRate as number | undefined,
-          responseTime: (provider.responseTime as string | undefined) || "",
-          reviewCount: (provider.reviewCount as number | undefined) || 0,
-          availability: (provider.availability as string | undefined) || "",
-          workPreference: (provider.workPreference as string | undefined) || "",
-          specialties: Array.isArray(provider.specialties) ? (provider.specialties as string[]) : [],
-        }));
+        const mappedProviders: RecommendedProvider[] = raw.map(
+          (provider: Record<string, unknown>) => ({
+            id: provider.id as string,
+            profileId: (provider.profileId as string | undefined) || null,
+            name: provider.name as string,
+            specialty:
+              (provider.major as string | undefined) || "ICT Professional",
+            rating: (provider.rating as number | undefined) || 0,
+            completedJobs: (provider.completedJobs as number | undefined) || 0,
+            hourlyRate: (provider.hourlyRate as number | undefined) || 0,
+            location: (provider.location as string | undefined) || "Malaysia",
+            avatar: getProfileImageUrl(provider.avatar as string | undefined),
+            skills: Array.isArray(provider.skills)
+              ? (provider.skills as string[])
+              : [],
+            verified: (provider.isVerified as boolean | undefined) || false,
+            saved: (provider.saved as boolean | undefined) || false,
+            matchScore: provider.matchScore as number | undefined,
+            recommendedFor: provider.recommendedForServiceRequest as
+              | { title: string }
+              | undefined,
+            aiExplanation:
+              (provider.aiExplanation as string | undefined) || null,
+            yearsExperience: provider.yearsExperience as number | undefined,
+            successRate: provider.successRate as number | undefined,
+            responseTime: (provider.responseTime as string | undefined) || "",
+            reviewCount: (provider.reviewCount as number | undefined) || 0,
+            availability: (provider.availability as string | undefined) || "",
+            workPreference:
+              (provider.workPreference as string | undefined) || "",
+            specialties: Array.isArray(provider.specialties)
+              ? (provider.specialties as string[])
+              : [],
+          }),
+        );
 
         setRecommendedProviders(mappedProviders);
         setRecommendationsCacheInfo({
@@ -231,7 +260,7 @@ export default function FindProvidersClient({
       setErrorRecommended(
         err instanceof Error
           ? err.message
-          : "Failed to fetch recommended providers"
+          : "Failed to fetch recommended providers",
       );
       setRecommendedProviders([]);
     } finally {
@@ -263,8 +292,12 @@ export default function FindProvidersClient({
 
   return (
     <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
+      <CustomerProvidersTour />
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
+      <div
+        className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4"
+        data-tour-step="0"
+      >
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
             Find ICT Professionals
@@ -274,7 +307,11 @@ export default function FindProvidersClient({
           </p>
         </div>
         <div className="flex gap-2 sm:gap-3 w-full sm:w-auto">
-          <Link href="/customer/providers/saved" className="w-full sm:w-auto">
+          <Link
+            href="/customer/providers/saved"
+            className="w-full sm:w-auto"
+            data-tour-step="1"
+          >
             <Button
               variant="outline"
               className="w-full sm:w-auto text-xs sm:text-sm"
@@ -287,7 +324,7 @@ export default function FindProvidersClient({
       </div>
 
       {/* Filters (Search + Rating + Verified) */}
-      <Card>
+      <Card data-tour-step="2">
         <CardContent className="p-4 sm:p-5 lg:p-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             <div className="relative">
@@ -328,7 +365,7 @@ export default function FindProvidersClient({
       </Card>
 
       {/* Tabs */}
-      <Tabs defaultValue="all" className="space-y-4 sm:space-y-6">
+      <Tabs defaultValue="all" className="space-y-4 sm:space-y-6" data-tour-step="3">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
           <TabsList>
             <TabsTrigger value="all">All</TabsTrigger>
@@ -348,7 +385,7 @@ export default function FindProvidersClient({
         </div>
 
         {/* All Providers Tab */}
-        <TabsContent value="all" className="space-y-4 sm:space-y-6">
+        <TabsContent value="all" className="space-y-4 sm:space-y-6" data-tour-step="4">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
             <p className="text-sm sm:text-base text-gray-600">
               {filteredProviders.length} providers found
@@ -494,8 +531,8 @@ export default function FindProvidersClient({
                                   provider.matchScore >= 80
                                     ? "bg-green-100 text-green-700 border-green-300"
                                     : provider.matchScore >= 60
-                                    ? "bg-blue-100 text-blue-700 border-blue-300"
-                                    : "bg-yellow-100 text-yellow-700 border-yellow-300"
+                                      ? "bg-blue-100 text-blue-700 border-blue-300"
+                                      : "bg-yellow-100 text-yellow-700 border-yellow-300"
                                 }`}
                               >
                                 {provider.matchScore}% match
@@ -544,8 +581,8 @@ export default function FindProvidersClient({
                                   provider.availability === "available"
                                     ? "bg-green-500"
                                     : provider.availability === "busy"
-                                    ? "bg-yellow-500"
-                                    : "bg-gray-400"
+                                      ? "bg-yellow-500"
+                                      : "bg-gray-400"
                                 }`}
                               />
                               <span className="text-gray-600 capitalize">
@@ -594,7 +631,7 @@ export default function FindProvidersClient({
                             <button
                               onClick={() =>
                                 setExpandedProviderId(
-                                  isExpanded ? null : provider.id
+                                  isExpanded ? null : provider.id,
                                 )
                               }
                               className="flex items-center gap-2 text-xs text-blue-600 hover:text-blue-700 active:text-blue-800 font-medium touch-manipulation"
@@ -698,24 +735,26 @@ export default function FindProvidersClient({
                             <ChevronRight className="w-3.5 h-3.5 ml-1.5 group-hover:translate-x-1 transition-transform" />
                           </Button>
                         </Link>
-                        <Link
-                          href={`/customer/messages?userId=${
-                            provider.id
-                          }&name=${encodeURIComponent(
-                            provider.name
-                          )}&avatar=${encodeURIComponent(
-                            provider.avatar || ""
-                          )}`}
-                          className="flex-1"
-                        >
-                          <Button
-                            size="sm"
-                            className="w-full text-xs sm:text-sm group-hover:bg-blue-600 group-hover:text-white transition-all duration-300"
+                        {provider.allowMessages !== false && (
+                          <Link
+                            href={`/customer/messages?userId=${
+                              provider.id
+                            }&name=${encodeURIComponent(
+                              provider.name,
+                            )}&avatar=${encodeURIComponent(
+                              provider.avatar || "",
+                            )}`}
+                            className="flex-1"
                           >
-                            <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                            Contact
-                          </Button>
-                        </Link>
+                            <Button
+                              size="sm"
+                              className="w-full text-xs sm:text-sm group-hover:bg-blue-600 group-hover:text-white transition-all duration-300"
+                            >
+                              <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+                              Contact
+                            </Button>
+                          </Link>
+                        )}
                       </div>
                     </CardContent>
                   </Card>

@@ -59,15 +59,20 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { ProviderLayout } from "@/components/provider-layout";
+import { PROPOSAL_REQUIRED } from "@/contexts/ProviderCompletionContext";
+import { ProfileCompletionGateModal } from "@/components/provider/ProfileCompletionGateModal";
+import { ProviderOpportunitiesTour } from "@/components/provider/ProviderOpportunitiesTour";
 import { toast } from "sonner";
 import {
   getProviderOpportunities,
   getProviderRecommendedOpportunities,
   getProviderProfile,
+  getProviderProfileCompletion,
   sendProposal,
   getServiceRequestAiDrafts,
   getProfileImageUrl,
 } from "@/lib/api";
+import { validateFileBeforeUpload } from "@/lib/upload";
 import {
   formatTimeline,
   buildTimelineData,
@@ -164,6 +169,8 @@ export default function ProviderOpportunitiesPage() {
   /** True if the URL had no "tags" param when first read (e.g. refresh or clean link). Don't auto-add tags in that case. */
   const urlHadNoTagsOnLoad = useRef(true);
 
+  const [proposalCompletionChecking, setProposalCompletionChecking] = useState(false);
+  const [proposalGateOpen, setProposalGateOpen] = useState(false);
   const [selectedProject, setSelectedProject] =
     useState<OpportunityData | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
@@ -212,6 +219,7 @@ export default function ProviderOpportunitiesPage() {
   const [recommendationsCacheInfo, setRecommendationsCacheInfo] = useState<{
     cachedAt: number | null;
     nextRefreshAt: number | null;
+    requiresSkills?: boolean;
   }>({ cachedAt: null, nextRefreshAt: null });
   const [expandedOpportunityId, setExpandedOpportunityId] = useState<
     string | null
@@ -525,6 +533,7 @@ export default function ProviderOpportunitiesPage() {
           setRecommendationsCacheInfo({
             cachedAt: response.cachedAt,
             nextRefreshAt: response.nextRefreshAt,
+            requiresSkills: !!response.requiresSkills,
           });
         }
       } catch (err) {
@@ -675,17 +684,33 @@ export default function ProviderOpportunitiesPage() {
     return matchesSearch && matchesSubmission && matchesTags;
   });
 
-  const handleSubmitProposal = (opportunity: OpportunityData) => {
-    setSelectedProject(opportunity);
-    setIsProposalModalOpen(true);
-    setProposalData({
-      coverLetter: "",
-      bidAmount: "",
-      timelineAmount: "",
-      timelineUnit: "",
-      milestones: [],
-      attachments: [],
-    });
+  const handleSubmitProposal = async (opportunity: OpportunityData) => {
+    setProposalCompletionChecking(true);
+    try {
+      const res = await getProviderProfileCompletion();
+      const data = res?.data ?? res;
+      const completion = typeof (data as { completion?: number })?.completion === "number"
+        ? (data as { completion: number }).completion
+        : 0;
+      if (completion < PROPOSAL_REQUIRED) {
+        setProposalGateOpen(true);
+        return;
+      }
+      setSelectedProject(opportunity);
+      setIsProposalModalOpen(true);
+      setProposalData({
+        coverLetter: "",
+        bidAmount: "",
+        timelineAmount: "",
+        timelineUnit: "",
+        milestones: [],
+        attachments: [],
+      });
+    } catch {
+      setProposalGateOpen(true);
+    } finally {
+      setProposalCompletionChecking(false);
+    }
   };
   // --- Proposal validation helpers ---
   // --- Proposal validation ---
@@ -808,10 +833,12 @@ export default function ProviderOpportunitiesPage() {
           milestoneFieldErrors[idx].amount = errorMsg;
           messages.push(`Milestone #${idx + 1}: amount must be > 0.`);
         }
-        const durAmount = m.durationAmount != null ? String(m.durationAmount).trim() : "";
+        const durAmount =
+          m.durationAmount != null ? String(m.durationAmount).trim() : "";
         const durUnit = m.durationUnit || "";
         if (!durAmount || isNaN(Number(durAmount)) || Number(durAmount) <= 0) {
-          milestoneFieldErrors[idx].durationAmount = "Amount is required and must be > 0.";
+          milestoneFieldErrors[idx].durationAmount =
+            "Amount is required and must be > 0.";
           messages.push(`Milestone #${idx + 1}: duration amount is required.`);
         }
         if (!durUnit) {
@@ -822,7 +849,10 @@ export default function ProviderOpportunitiesPage() {
 
       if (deliveryTimeDays > 0 && form.milestones.length > 0) {
         const milestonesDurationDays = form.milestones.reduce((sum, m) => {
-          const d = timelineToDays(Number(m.durationAmount || 0), m.durationUnit || "");
+          const d = timelineToDays(
+            Number(m.durationAmount || 0),
+            m.durationUnit || "",
+          );
           return sum + (d > 0 ? d : 0);
         }, 0);
         if (milestonesDurationDays !== deliveryTimeDays) {
@@ -968,7 +998,8 @@ export default function ProviderOpportunitiesPage() {
         formDataToSend.append("attachments", file);
       });
 
-      const response = await sendProposal(formDataToSend);
+      // Pass attachments explicitly so they are uploaded to R2 and saved to attachmentUrls
+      const response = await sendProposal(formDataToSend, proposalData.attachments);
 
       if (response.success) {
         toast.success("Proposal submitted successfully!");
@@ -1077,13 +1108,27 @@ export default function ProviderOpportunitiesPage() {
     // --- Reset previous attachment errors ---
     setProposalErrors((prev) => ({ ...prev, attachments: undefined }));
 
-    // --- Check file sizes ---
+    // --- Check file sizes (10 MB per file for proposals) ---
     for (const file of incoming) {
       if (file.size > MAX_SIZE_BYTES) {
         toast.error(`"${file.name}" is larger than 10 MB`);
         setProposalErrors((prev) => ({
           ...prev,
           attachments: `"${file.name}" exceeds 10 MB.`,
+        }));
+        event.target.value = "";
+        return;
+      }
+    }
+
+    // --- Check file types (documents + images; same as backend) ---
+    for (const file of incoming) {
+      const { valid, error } = validateFileBeforeUpload(file, "document");
+      if (!valid) {
+        toast.error(error || `"${file.name}" is not an allowed file type`);
+        setProposalErrors((prev) => ({
+          ...prev,
+          attachments: error || "Invalid file type.",
         }));
         event.target.value = "";
         return;
@@ -1121,9 +1166,13 @@ export default function ProviderOpportunitiesPage() {
 
   return (
     <ProviderLayout>
+      <ProviderOpportunitiesTour />
       <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
+        <div
+          className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4"
+          data-tour-step="0"
+        >
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
               Job Opportunities
@@ -1141,7 +1190,7 @@ export default function ProviderOpportunitiesPage() {
         </div>
 
         {/* Top filter bar (LinkedIn-style): search + status + sort + Filters panel */}
-        <Card>
+        <Card data-tour-step="1">
           <CardContent className="p-4 sm:p-6">
             <div className="flex flex-col gap-3 sm:gap-4">
               <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 flex-wrap">
@@ -1315,6 +1364,7 @@ export default function ProviderOpportunitiesPage() {
               searchParams.get("tab") === "recommended" ? "recommended" : "all"
             }
             className="space-y-4 sm:space-y-6"
+            data-tour-step="2"
           >
             <TabsList className="grid w-full grid-cols-2 h-auto">
               <TabsTrigger
@@ -1633,10 +1683,15 @@ export default function ProviderOpportunitiesPage() {
                                 onClick={() =>
                                   handleSubmitProposal(opportunity)
                                 }
+                                disabled={proposalCompletionChecking}
                                 className="w-full sm:w-auto text-xs sm:text-sm"
                               >
-                                <ThumbsUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                                Submit Proposal
+                                {proposalCompletionChecking ? (
+                                  <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 animate-spin" />
+                                ) : (
+                                  <ThumbsUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+                                )}
+                                {proposalCompletionChecking ? "Checking…" : "Submit Proposal"}
                               </Button>
                             )}
                           </div>
@@ -1691,12 +1746,22 @@ export default function ProviderOpportunitiesPage() {
                       <Sparkles className="w-6 h-6 sm:w-8 sm:h-8 text-gray-400" />
                     </div>
                     <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
-                      No recommended opportunities found
+                      {recommendationsCacheInfo.requiresSkills
+                        ? "Add skills to see recommendations"
+                        : "No recommended opportunities found"}
                     </h3>
-                    <p className="text-sm sm:text-base text-gray-600">
-                      Check back later for AI-matched opportunities based on
-                      your skills and preferences.
+                    <p className="text-sm sm:text-base text-gray-600 mb-4">
+                      {recommendationsCacheInfo.requiresSkills
+                        ? "Match score and AI insights are based on your profile skills. Add skills in your profile to get personalized recommendations."
+                        : "Check back later for AI-matched opportunities based on your skills and preferences."}
                     </p>
+                    {recommendationsCacheInfo.requiresSkills && (
+                      <Link href="/provider/profile">
+                        <Button variant="default" className="text-xs sm:text-sm">
+                          Go to Profile
+                        </Button>
+                      </Link>
+                    )}
                   </CardContent>
                 </Card>
               ) : (
@@ -1969,10 +2034,15 @@ export default function ProviderOpportunitiesPage() {
                                       onClick={() =>
                                         handleSubmitProposal(opportunity)
                                       }
+                                      disabled={proposalCompletionChecking}
                                       className="w-full sm:w-auto sm:group-hover:bg-blue-600 sm:group-hover:text-white transition-all duration-300 text-xs sm:text-sm"
                                     >
-                                      <ThumbsUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                                      Submit Proposal
+                                      {proposalCompletionChecking ? (
+                                        <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 animate-spin" />
+                                      ) : (
+                                        <ThumbsUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+                                      )}
+                                      {proposalCompletionChecking ? "Checking…" : "Submit Proposal"}
                                     </Button>
                                   )}
                                 </div>
@@ -2193,14 +2263,16 @@ export default function ProviderOpportunitiesPage() {
                 onClick={() => {
                   setIsDetailsModalOpen(false);
                   if (selectedProject) {
-                    handleSubmitProposal(selectedProject);
+                    void handleSubmitProposal(selectedProject);
                   }
                 }}
-                disabled={selectedProject?.hasSubmitted}
+                disabled={selectedProject?.hasSubmitted || proposalCompletionChecking}
               >
                 {selectedProject?.hasSubmitted
                   ? "Already Submitted"
-                  : "Submit Proposal"}
+                  : proposalCompletionChecking
+                    ? "Checking…"
+                    : "Submit Proposal"}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -2486,35 +2558,50 @@ export default function ProviderOpportunitiesPage() {
                                     durationAmount: e.target.value,
                                     durationUnit: m.durationUnit || "",
                                   });
-                                  if (proposalErrors.milestoneFields?.[i]?.durationAmount) {
+                                  if (
+                                    proposalErrors.milestoneFields?.[i]
+                                      ?.durationAmount
+                                  ) {
                                     setProposalErrors((prev) => ({
                                       ...prev,
                                       milestoneFields: {
                                         ...prev.milestoneFields,
-                                        [i]: { ...prev.milestoneFields?.[i], durationAmount: undefined },
+                                        [i]: {
+                                          ...prev.milestoneFields?.[i],
+                                          durationAmount: undefined,
+                                        },
                                       },
                                     }));
                                   }
                                 }}
                                 className={
-                                  proposalErrors.milestoneFields?.[i]?.durationAmount
+                                  proposalErrors.milestoneFields?.[i]
+                                    ?.durationAmount
                                     ? "border-red-500 focus-visible:ring-red-500"
                                     : ""
                                 }
                               />
                               <Select
                                 value={m.durationUnit || ""}
-                                onValueChange={(value: "day" | "week" | "month") => {
+                                onValueChange={(
+                                  value: "day" | "week" | "month",
+                                ) => {
                                   updateProposalMilestone(i, {
                                     durationAmount: m.durationAmount ?? "",
                                     durationUnit: value,
                                   });
-                                  if (proposalErrors.milestoneFields?.[i]?.durationUnit) {
+                                  if (
+                                    proposalErrors.milestoneFields?.[i]
+                                      ?.durationUnit
+                                  ) {
                                     setProposalErrors((prev) => ({
                                       ...prev,
                                       milestoneFields: {
                                         ...prev.milestoneFields,
-                                        [i]: { ...prev.milestoneFields?.[i], durationUnit: undefined },
+                                        [i]: {
+                                          ...prev.milestoneFields?.[i],
+                                          durationUnit: undefined,
+                                        },
                                       },
                                     }));
                                   }
@@ -2522,7 +2609,8 @@ export default function ProviderOpportunitiesPage() {
                               >
                                 <SelectTrigger
                                   className={
-                                    proposalErrors.milestoneFields?.[i]?.durationUnit
+                                    proposalErrors.milestoneFields?.[i]
+                                      ?.durationUnit
                                       ? "border-red-500 focus:ring-red-500"
                                       : ""
                                   }
@@ -2532,15 +2620,21 @@ export default function ProviderOpportunitiesPage() {
                                 <SelectContent>
                                   <SelectItem value="day">Day(s)</SelectItem>
                                   <SelectItem value="week">Week(s)</SelectItem>
-                                  <SelectItem value="month">Month(s)</SelectItem>
+                                  <SelectItem value="month">
+                                    Month(s)
+                                  </SelectItem>
                                 </SelectContent>
                               </Select>
                             </div>
-                            {(proposalErrors.milestoneFields?.[i]?.durationAmount ||
-                              proposalErrors.milestoneFields?.[i]?.durationUnit) && (
+                            {(proposalErrors.milestoneFields?.[i]
+                              ?.durationAmount ||
+                              proposalErrors.milestoneFields?.[i]
+                                ?.durationUnit) && (
                               <p className="text-xs text-red-600 mt-1">
-                                {proposalErrors.milestoneFields[i].durationAmount ||
-                                  proposalErrors.milestoneFields[i].durationUnit}
+                                {proposalErrors.milestoneFields[i]
+                                  .durationAmount ||
+                                  proposalErrors.milestoneFields[i]
+                                    .durationUnit}
                               </p>
                             )}
                           </div>
@@ -2620,15 +2714,16 @@ export default function ProviderOpportunitiesPage() {
                         Number(proposalData.timelineAmount || 0),
                         proposalData.timelineUnit || "",
                       );
-                      const milestonesDurationDays = proposalData.milestones.reduce(
-                        (sum, m) =>
-                          sum +
-                          (timelineToDays(
-                            Number(m.durationAmount || 0),
-                            m.durationUnit || "",
-                          ) || 0),
-                        0,
-                      );
+                      const milestonesDurationDays =
+                        proposalData.milestones.reduce(
+                          (sum, m) =>
+                            sum +
+                            (timelineToDays(
+                              Number(m.durationAmount || 0),
+                              m.durationUnit || "",
+                            ) || 0),
+                          0,
+                        );
                       const timeMatch =
                         deliveryTimeDays > 0 &&
                         milestonesDurationDays === deliveryTimeDays;
@@ -2656,9 +2751,12 @@ export default function ProviderOpportunitiesPage() {
                           <div className="flex justify-between flex-wrap gap-2 border-t pt-2">
                             <div>
                               <div className="font-medium">
-                                Milestones duration total: {milestonesDurationDays} days
+                                Milestones duration total:{" "}
+                                {milestonesDurationDays} days
                               </div>
-                              <div>Your delivery timeline: {deliveryTimeDays} days</div>
+                              <div>
+                                Your delivery timeline: {deliveryTimeDays} days
+                              </div>
                             </div>
                             <div
                               className={
@@ -2699,7 +2797,7 @@ export default function ProviderOpportunitiesPage() {
                     onChange={handleFileUpload}
                     className="hidden"
                     id="file-upload"
-                    accept=".pdf,.doc,.docx,.txt,.jpg,.png"
+                    accept=".pdf,.doc,.docx,.txt,.csv,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp"
                   />
                   <label htmlFor="file-upload" className="cursor-pointer">
                     <Paperclip className="w-8 h-8 mx-auto text-gray-400 mb-2" />
@@ -2707,7 +2805,7 @@ export default function ProviderOpportunitiesPage() {
                       Click to upload portfolio, resume, or relevant documents
                     </p>
                     <p className="text-xs text-gray-500 mt-1">
-                      PDF, DOC, DOCX, TXT, JPG, PNG (Max 10MB each)
+                      PDF, DOC, DOCX, TXT, CSV, XLS, XLSX, JPG, PNG, GIF, WEBP (Max 10MB each)
                     </p>
                   </label>
                 </div>
@@ -2793,6 +2891,12 @@ export default function ProviderOpportunitiesPage() {
           </DialogContent>
         </Dialog>
       </div>
+      <ProfileCompletionGateModal
+        open={proposalGateOpen}
+        onOpenChange={setProposalGateOpen}
+        requiredPercent={PROPOSAL_REQUIRED}
+        actionLabel="submit proposals"
+      />
     </ProviderLayout>
   );
 }

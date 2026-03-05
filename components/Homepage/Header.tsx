@@ -1,15 +1,37 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { Button } from "../ui/button";
 import MenuIcon from "@/public/assets/icon-menu.svg";
 import Image from "next/image";
 import Link from "next/link";
 
+function getDashboardHref(): string | null {
+  if (typeof window === "undefined") return null;
+  const userJson = localStorage.getItem("user");
+  const token = localStorage.getItem("token");
+  if (!userJson || !token) return null;
+  try {
+    const userData = JSON.parse(userJson);
+    const roles = Array.isArray(userData?.role) ? userData.role : userData?.role ? [userData.role] : [];
+    if (roles.includes("ADMIN")) return "/admin/dashboard";
+    if (roles.includes("PROVIDER")) return "/provider/dashboard";
+    if (roles.includes("CUSTOMER")) return "/customer/dashboard";
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
 const Header = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [dashboardHref, setDashboardHref] = useState<string | null>(null);
   const pathname = usePathname();
   const isHomePage = pathname === "/";
+
+  useEffect(() => {
+    setDashboardHref(getDashboardHref());
+  }, [pathname]);
 
   const scrollToSection = (sectionId: string) => {
     const element = document.getElementById(sectionId);
@@ -90,12 +112,20 @@ const Header = () => {
             </nav>
           </div>
           <div className="flex gap-4 items-center">
-            <Link href="/auth/login">
-              <Button variant="ghost">Sign in</Button>
-            </Link>
-            <Link href="/auth/register">
-              <Button>Register</Button>
-            </Link>
+            {dashboardHref ? (
+              <Link href={dashboardHref}>
+                <Button>Dashboard</Button>
+              </Link>
+            ) : (
+              <>
+                <Link href="/auth/login">
+                  <Button variant="ghost">Sign in</Button>
+                </Link>
+                <Link href="/auth/register">
+                  <Button>Register</Button>
+                </Link>
+              </>
+            )}
             <button
               type="button"
               onClick={() => setIsMobileMenuOpen((prev) => !prev)}

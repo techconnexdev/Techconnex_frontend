@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import Link from "next/link";
@@ -18,8 +18,13 @@ import {
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Mail, Lock, Eye, EyeOff, Building, User } from "lucide-react";
-import Cookies from "js-cookie"; // install via `npm i js-cookie`
+import Cookies from "js-cookie";
 import Image from "next/image";
+
+type GoogleAccountsId = {
+  initialize: (config: { client_id: string; callback: (response: { credential?: string }) => void }) => void;
+  renderButton: (el: HTMLElement, opts: { type?: string; theme?: string; size?: string; text?: string; width?: number }) => void;
+};
 
 const fadeInUp = {
   initial: { opacity: 0, y: 30 },
@@ -33,6 +38,76 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const router = useRouter();
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+
+  const handleGoogleCredential = (idToken: string) => {
+    setError("");
+    setIsLoading(true);
+    fetch(`${API_URL}/auth/google`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idToken }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (!data.token || !data.user) throw new Error(data.message || data.error || "Google sign-in failed");
+        localStorage.setItem("token", data.token);
+        localStorage.setItem("user", JSON.stringify(data.user));
+        Cookies.set("token", data.token, {
+          path: "/",
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+        });
+        const roles: string[] = data.user?.role || [];
+        if (roles.includes("CUSTOMER")) router.push("/customer/dashboard");
+        else if (roles.includes("PROVIDER")) router.push("/provider/dashboard");
+        else if (roles.includes("ADMIN")) router.push("/admin/dashboard");
+        else router.push("/dashboard");
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : "Google sign-in failed"))
+      .finally(() => setIsLoading(false));
+  };
+
+  useEffect(() => {
+    const container = document.getElementById("google-login-button-container");
+    if (!container) return;
+    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+    if (!clientId) {
+      container.innerHTML = "";
+      return;
+    }
+    const initGoogle = () => {
+      const win = window as unknown as { google?: { accounts?: { id?: GoogleAccountsId } } };
+      const g = win.google;
+      if (!g?.accounts?.id) return;
+      g.accounts.id.initialize({
+        client_id: clientId,
+        callback: (response: { credential?: string }) => {
+          if (response?.credential) handleGoogleCredential(response.credential);
+        },
+      });
+      container.innerHTML = "";
+      g.accounts.id.renderButton(container, {
+        type: "standard",
+        theme: "outline",
+        size: "large",
+        text: "continue_with",
+        width: 320,
+      });
+    };
+    const win = window as unknown as { google?: { accounts?: { id?: GoogleAccountsId } } };
+    if (win.google?.accounts?.id) {
+      initGoogle();
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.onload = initGoogle;
+    document.head.appendChild(script);
+    return () => {
+      container.innerHTML = "";
+    };
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -118,6 +193,15 @@ export default function LoginPage() {
           </CardHeader>
           <CardContent>
             {error && <ErrorMessage message={error} />}
+            <div id="google-login-button-container" className="flex justify-center min-h-[44px] mb-4" />
+            <div className="relative my-4">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t border-gray-200" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-white px-2 text-gray-500">Or sign in with email</span>
+              </div>
+            </div>
             <Tabs defaultValue="email" className="w-full">
               <TabsContent value="email">
                 <form onSubmit={handleLogin} className="space-y-4">
@@ -138,21 +222,14 @@ export default function LoginPage() {
                     togglePassword={() => setShowPassword(!showPassword)}
                   />
 
-                  {/* <div className="flex items-center justify-between text-sm">
-                    <label className="flex items-center space-x-2 text-gray-600">
-                      <input
-                        type="checkbox"
-                        className="rounded border-gray-300"
-                      />
-                      <span>Remember me</span>
-                    </label>
+                  <div className="flex items-center justify-end text-sm">
                     <Link
                       href="/auth/forgot-password"
-                      className="text-blue-600 hover:text-blue-700"
+                      className="text-blue-600 hover:text-blue-700 font-medium"
                     >
                       Forgot password?
                     </Link>
-                  </div> */}
+                  </div>
 
                   <motion.div
                     whileHover={{ scale: 1.02 }}

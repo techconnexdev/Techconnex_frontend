@@ -1162,6 +1162,31 @@ export default function ProviderProjectDetailsPage() {
           </div>
         </div>
 
+        {/* Provider approval reminder - outside tabs */}
+        {!milestoneApprovalState.providerApproved &&
+          projectMilestones &&
+          projectMilestones.length > 0 && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 sm:px-4 sm:py-3.5 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-amber-900">
+                  Approve milestones to proceed
+                </p>
+                <p className="text-xs sm:text-sm text-amber-800 mt-0.5">
+                  Please review and approve the milestone plan in the{" "}
+                  <Button
+                    variant="link"
+                    className="h-auto p-0 text-amber-800 underline font-semibold"
+                    onClick={() => setActiveTab("milestones")}
+                  >
+                    Milestones
+                  </Button>{" "}
+                  tab so the project can move forward.
+                </p>
+              </div>
+            </div>
+          )}
+
         {/* Project Overview */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
           {/* Main Content */}
@@ -3218,7 +3243,10 @@ export default function ProviderProjectDetailsPage() {
                 </Card>
               ))}
 
-              <div className="flex justify-between">
+              <p className="text-xs text-gray-600 pt-2 border-t border-gray-200 mt-2">
+                If you made any updates or changes to the milestones, save changes first before approving.
+              </p>
+              <div className="flex justify-between pt-2">
                 <Button variant="outline" onClick={addProjectMilestone}>
                   + Add Milestone
                 </Button>

@@ -46,7 +46,9 @@ import {
   Eye,
 } from "lucide-react";
 import { ProviderLayout } from "@/components/provider-layout";
-import { getProviderOpportunityById, sendProposal } from "@/lib/api";
+import { PROPOSAL_REQUIRED } from "@/contexts/ProviderCompletionContext";
+import { ProfileCompletionGateModal } from "@/components/provider/ProfileCompletionGateModal";
+import { getProviderOpportunityById, getProviderProfileCompletion, sendProposal } from "@/lib/api";
 import {
   formatTimeline,
   buildTimelineData,
@@ -128,6 +130,8 @@ export default function OpportunityDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
+  const [proposalCompletionChecking, setProposalCompletionChecking] = useState(false);
+  const [proposalGateOpen, setProposalGateOpen] = useState(false);
   const [isProposalModalOpen, setIsProposalModalOpen] = useState(false);
   const [submittingProposal, setSubmittingProposal] = useState(false);
 
@@ -714,22 +718,43 @@ export default function OpportunityDetailsPage() {
               </Button>
             ) : (
               <Button
-                onClick={() => {
-                  setIsProposalModalOpen(true);
-                  setProposalData({
-                    coverLetter: "",
-                    bidAmount: "",
-                    timelineAmount: "",
-                    timelineUnit: "",
-                    milestones: [],
-                    attachments: [],
-                  });
-                  setProposalErrors({});
+                onClick={async () => {
+                  setProposalCompletionChecking(true);
+                  try {
+                    const res = await getProviderProfileCompletion();
+                    const data = res?.data ?? res;
+                    const completion = typeof (data as { completion?: number })?.completion === "number"
+                      ? (data as { completion: number }).completion
+                      : 0;
+                    if (completion < PROPOSAL_REQUIRED) {
+                      setProposalGateOpen(true);
+                      return;
+                    }
+                    setIsProposalModalOpen(true);
+                    setProposalData({
+                      coverLetter: "",
+                      bidAmount: "",
+                      timelineAmount: "",
+                      timelineUnit: "",
+                      milestones: [],
+                      attachments: [],
+                    });
+                    setProposalErrors({});
+                  } catch {
+                    setProposalGateOpen(true);
+                  } finally {
+                    setProposalCompletionChecking(false);
+                  }
                 }}
+                disabled={proposalCompletionChecking}
                 className="bg-blue-600 active:bg-blue-700 sm:hover:bg-blue-700 text-white w-full sm:w-auto text-xs sm:text-sm"
               >
-                <ThumbsUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                Submit Proposal
+                {proposalCompletionChecking ? (
+                  <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 animate-spin" />
+                ) : (
+                  <ThumbsUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+                )}
+                {proposalCompletionChecking ? "Checking…" : "Submit Proposal"}
               </Button>
             )}
           </div>
@@ -740,7 +765,7 @@ export default function OpportunityDetailsPage() {
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-4 sm:space-y-6">
             <Tabs defaultValue="overview" className="space-y-4 sm:space-y-6">
-              <TabsList className="grid w-full grid-cols-2 h-auto">
+              <TabsList className="grid w-full grid-cols-1 h-auto">
                 <TabsTrigger
                   value="overview"
                   className="text-xs sm:text-sm px-2 sm:px-4"
@@ -1692,6 +1717,12 @@ export default function OpportunityDetailsPage() {
           </DialogContent>
         </Dialog>
       </div>
+      <ProfileCompletionGateModal
+        open={proposalGateOpen}
+        onOpenChange={setProposalGateOpen}
+        requiredPercent={PROPOSAL_REQUIRED}
+        actionLabel="submit proposals"
+      />
     </ProviderLayout>
   );
 }

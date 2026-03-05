@@ -42,6 +42,7 @@ import {
   HelpCircle,
 } from "lucide-react";
 import { CustomerLayout } from "@/components/customer-layout";
+import { CustomerRequestsTour } from "@/components/customer/CustomerRequestsTour";
 import { useToast } from "@/hooks/use-toast";
 import { formatDurationDays, timelineToDays } from "@/lib/timeline-utils";
 import {
@@ -93,6 +94,9 @@ interface ProviderRequest {
     order: number;
   }>;
   aiFitExplanation?: string | null;
+  matchScore?: number | null;
+  rank?: number | null;
+  isTopFive?: boolean;
 }
 
 interface ApiProposal {
@@ -314,6 +318,9 @@ export default function CustomerRequestsPage() {
                 ? proposal.milestones
                 : [],
               aiFitExplanation: (proposal as unknown as Record<string, unknown>).aiFitExplanation as string | undefined ?? null,
+              matchScore: (proposal as unknown as Record<string, unknown>).matchScore as number | undefined ?? null,
+              rank: (proposal as unknown as Record<string, unknown>).rank as number | undefined ?? null,
+              isTopFive: (proposal as unknown as Record<string, unknown>).isTopFive as boolean | undefined,
             };
           }
         );
@@ -428,6 +435,8 @@ export default function CustomerRequestsPage() {
         return a.bidAmount - b.bidAmount;
       case "rating":
         return b.providerRating - a.providerRating;
+      case "highest-match":
+        return (b.matchScore ?? 0) - (a.matchScore ?? 0);
       default:
         return 0;
     }
@@ -718,9 +727,13 @@ export default function CustomerRequestsPage() {
 
   return (
     <CustomerLayout>
+      <CustomerRequestsTour />
       <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
+        <div
+          className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4"
+          data-tour-step="0"
+        >
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
               Provider Requests
@@ -729,7 +742,10 @@ export default function CustomerRequestsPage() {
               Manage requests from providers for your projects
             </p>
           </div>
-          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
+          <div
+            className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto"
+            data-tour-step="1"
+          >
             <Button
               variant="outline"
               onClick={async () => {
@@ -776,7 +792,10 @@ export default function CustomerRequestsPage() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 lg:gap-6">
+        <div
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 lg:gap-6"
+          data-tour-step="2"
+        >
           <Card>
             <CardContent className="p-4 sm:p-5 lg:p-6">
               <div className="flex items-center justify-between">
@@ -893,6 +912,7 @@ export default function CustomerRequestsPage() {
                   <SelectContent>
                     <SelectItem value="newest">Newest</SelectItem>
                     <SelectItem value="oldest">Oldest</SelectItem>
+                    <SelectItem value="highest-match">Highest match score</SelectItem>
                     <SelectItem value="highest-bid">Highest Bid</SelectItem>
                     <SelectItem value="lowest-bid">Lowest Bid</SelectItem>
                     <SelectItem value="rating">Rating</SelectItem>
@@ -904,7 +924,7 @@ export default function CustomerRequestsPage() {
         </Card>
 
         {/* Requests List + AI summary panel (same design as project Bids tab) */}
-        <div className="space-y-3 sm:space-y-4">
+        <div className="space-y-3 sm:space-y-4" data-tour-step="4">
           {loading ? (
             <Card>
               <CardContent className="p-8 sm:p-12 text-center">
@@ -1050,6 +1070,11 @@ export default function CustomerRequestsPage() {
                                 <h3 className="font-semibold text-sm sm:text-base text-gray-900">
                                   {request.providerName}
                                 </h3>
+                                {request.matchScore != null && request.matchScore > 0 && (
+                                  <span className="text-xs text-gray-500">
+                                    {request.matchScore}% match
+                                  </span>
+                                )}
                                 <div className="flex items-center gap-1">
                                   <Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-yellow-400 fill-current flex-shrink-0" />
                                   <span className="text-xs sm:text-sm text-gray-600">
@@ -1144,64 +1169,28 @@ export default function CustomerRequestsPage() {
                               </div>
                             </div>
 
-                            <div className="flex flex-col gap-2.5 pt-3 border-t border-gray-100">
-                              {request.status === "pending" && (
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleAcceptRequest(request.id)}
-                                  className="w-full bg-green-600 hover:bg-green-700 text-white font-medium shadow-sm transition-all duration-200 h-9 sm:h-10"
-                                  disabled={processingId === request.id}
-                                >
-                                  {processingId === request.id ? (
-                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                  ) : (
-                                    <Check className="w-4 h-4 mr-2" />
-                                  )}
-                                  {processingId === request.id ? "Accepting..." : "Accept Request"}
-                                </Button>
-                              )}
-
-                              <div className="flex flex-wrap gap-2">
-                                <Link
-                                  href={`/customer/providers/${request.providerId}`}
-                                  className="flex-1 min-w-[100px]"
-                                >
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="w-full h-9 sm:h-10 border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 text-gray-700 font-medium transition-all duration-200"
-                                  >
-                                    <Eye className="w-4 h-4 mr-2 shrink-0" />
-                                    <span className="truncate">View Profile</span>
-                                  </Button>
-                                </Link>
-
+                            <div className="flex flex-col gap-2 pt-3 border-t border-gray-100">
+                              <Button
+                                size="sm"
+                                onClick={() => handleViewDetails(request)}
+                                className="w-full min-h-[44px] sm:min-h-[40px] text-xs sm:text-sm justify-center bg-blue-600 hover:bg-blue-700 text-white shadow-sm font-medium"
+                              >
+                                <MessageSquare className="w-4 h-4 mr-2 shrink-0" />
+                                <span className="truncate">Show details</span>
+                              </Button>
+                              <Link
+                                href={`/customer/providers/${request.providerId}`}
+                                className="w-full"
+                              >
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => handleViewDetails(request)}
-                                  className="flex-1 min-w-[100px] h-9 sm:h-10 border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 text-gray-700 font-medium transition-all duration-200"
+                                  className="w-full min-h-[44px] sm:min-h-[40px] text-xs sm:text-sm justify-center border-gray-300 hover:bg-gray-50 font-medium"
                                 >
-                                  <MessageSquare className="w-4 h-4 mr-2 shrink-0" />
-                                  <span className="truncate">Details</span>
+                                  <Eye className="w-4 h-4 mr-2 shrink-0" />
+                                  <span className="truncate">View Profile</span>
                                 </Button>
-
-                                {request.status === "pending" && (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      setSelectedRequest(request);
-                                      setRejectDialogOpen(true);
-                                    }}
-                                    className="flex-1 min-w-[100px] h-9 sm:h-10 border-red-200 hover:border-red-300 bg-white hover:bg-red-50 text-red-600 hover:text-red-700 font-medium transition-all duration-200"
-                                    disabled={processingId === request.id}
-                                  >
-                                    <X className="w-4 h-4 mr-2 shrink-0" />
-                                    <span className="truncate">Reject</span>
-                                  </Button>
-                                )}
-                              </div>
+                              </Link>
                             </div>
                           </div>
                         </div>
@@ -1298,21 +1287,23 @@ export default function CustomerRequestsPage() {
 
         {/* View Details Dialog */}
         <Dialog open={viewDetailsOpen} onOpenChange={setViewDetailsOpen}>
-          <DialogContent className="max-w-xl sm:max-w-2xl lg:max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-xl sm:max-w-2xl lg:max-w-4xl max-h-[90vh] overflow-y-auto p-5 sm:p-6 text-base">
             {selectedRequest && (
               <>
-                <DialogHeader>
-                  <DialogTitle className="text-base sm:text-lg">Request Details</DialogTitle>
-                  <DialogDescription className="text-xs sm:text-sm">
+                <DialogHeader className="space-y-1.5 text-left">
+                  <DialogTitle className="text-lg sm:text-xl font-semibold tracking-tight">
+                    Request Details
+                  </DialogTitle>
+                  <DialogDescription className="text-sm text-gray-600">
                     Detailed information about {selectedRequest.providerName}&apos;s
                     request
                   </DialogDescription>
                 </DialogHeader>
 
-                <div className="space-y-4 sm:space-y-5 lg:space-y-6">
+                <div className="space-y-5 sm:space-y-6 pt-1">
                   {/* Provider Info */}
                   <div className="flex flex-col sm:flex-row items-start gap-3 sm:gap-4">
-                    <Avatar className="w-12 h-12 sm:w-14 sm:h-14 lg:w-16 lg:h-16 flex-shrink-0 mx-auto sm:mx-0">
+                    <Avatar className="w-14 h-14 sm:w-16 sm:h-16 flex-shrink-0 mx-auto sm:mx-0">
                       <AvatarImage
                         src={
                           selectedRequest.providerAvatar && 
@@ -1332,77 +1323,63 @@ export default function CustomerRequestsPage() {
                     </Avatar>
 
                     <div className="flex-1 min-w-0 w-full sm:w-auto text-center sm:text-left">
-                      {/* Name + rating */}
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3">
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                         <div className="flex-1 min-w-0">
-                          <h3 className="text-base sm:text-lg lg:text-xl font-semibold break-words">
+                          <h3 className="text-base sm:text-lg font-semibold text-gray-900 tracking-tight break-words">
                             {selectedRequest.providerName}
                           </h3>
 
-                          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-3 sm:gap-x-4 gap-y-1 text-xs sm:text-sm text-gray-600 mt-1">
-                            <div className="flex items-center gap-1">
-                              <Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-yellow-400 fill-current flex-shrink-0" />
-                              <span>
-                                {selectedRequest.providerRating} rating
-                              </span>
+                          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-3 sm:gap-x-4 gap-y-1 text-sm text-gray-600 mt-1.5">
+                            <div className="flex items-center gap-1.5">
+                              <Star className="w-4 h-4 text-yellow-400 fill-current flex-shrink-0" />
+                              <span>{selectedRequest.providerRating} rating</span>
                             </div>
-
-                            <div className="flex items-center gap-1">
-                              <MapPin className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
+                            <div className="flex items-center gap-1.5">
+                              <MapPin className="w-4 h-4 flex-shrink-0" />
                               <span className="truncate">{selectedRequest.providerLocation || "—"}</span>
                             </div>
-
-                            <div className="flex items-center gap-1">
-                              <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
+                            <div className="flex items-center gap-1.5">
+                              <Clock className="w-4 h-4 flex-shrink-0" />
                               <span className="truncate">{selectedRequest.providerResponseTime} response time</span>
                             </div>
                           </div>
 
                           {selectedRequest.experience && (
-                            <p className="text-xs sm:text-sm text-gray-600 mt-1.5 sm:mt-2 break-words">
+                            <p className="text-sm text-gray-600 mt-2 leading-relaxed break-words">
                               {selectedRequest.experience} experience
                             </p>
                           )}
 
-                          {/* ⬅ NEW: top skills inline preview */}
-                          <div className="flex flex-wrap gap-1 mt-1.5 sm:mt-2 justify-center sm:justify-start">
+                          <div className="flex flex-wrap gap-1.5 mt-2 justify-center sm:justify-start">
                             {asArray<string>(selectedRequest.skills)
                               .slice(0, 4)
                               .map((skill) => (
                                 <Badge
                                   key={skill}
                                   variant="secondary"
-                                  className="text-[10px] leading-tight"
+                                  className="text-xs leading-tight"
                                 >
                                   {skill}
                                 </Badge>
                               ))}
-                            {asArray<string>(selectedRequest.skills).length >
-                              4 && (
-                              <Badge
-                                variant="secondary"
-                                className="text-[10px] leading-tight"
-                              >
-                                +
-                                {asArray<string>(selectedRequest.skills)
-                                  .length - 4}{" "}
-                                more
+                            {asArray<string>(selectedRequest.skills).length > 4 && (
+                              <Badge variant="secondary" className="text-xs leading-tight">
+                                +{asArray<string>(selectedRequest.skills).length - 4} more
                               </Badge>
                             )}
                           </div>
                         </div>
 
-                        {/* ⬅ NEW: View profile button */}
                         <Link
                           href={`/customer/providers/${selectedRequest.providerId}`}
-                          className="self-center sm:self-start"
+                          className="sm:flex-shrink-0 self-center sm:self-start"
                         >
                           <Button
                             variant="outline"
                             size="sm"
-                            className="flex items-center text-xs sm:text-sm w-full sm:w-auto border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 text-gray-700 font-medium transition-all duration-200"
+                            className="flex items-center text-sm"
                           >
-                            <Eye className="w-4 h-4 mr-2" />
+                            <Eye className="w-4 h-4 mr-1.5" />
                             View Profile
                           </Button>
                         </Link>
@@ -1410,30 +1387,30 @@ export default function CustomerRequestsPage() {
                     </div>
                   </div>
 
-                  <Separator />
+                  <Separator className="my-1" />
 
                   {/* Project & Bid Info */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5 lg:gap-6">
-                    <div>
-                      <h4 className="font-semibold text-sm sm:text-base mb-1.5 sm:mb-2">Project</h4>
-                      <p className="text-xs sm:text-sm text-gray-900 break-words">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
+                    <div className="space-y-1">
+                      <h4 className="text-sm font-semibold text-gray-900 tracking-tight">Project</h4>
+                      <p className="text-sm text-gray-700 leading-relaxed break-words">
                         {selectedRequest.projectTitle}
                       </p>
                     </div>
-                    <div>
-                      <h4 className="font-semibold text-sm sm:text-base mb-1.5 sm:mb-2">Bid Amount</h4>
+                    <div className="space-y-1">
+                      <h4 className="text-sm font-semibold text-gray-900 tracking-tight">Bid Amount</h4>
                       <p className="text-xl sm:text-2xl font-bold text-green-600">
                         RM{fmt(selectedRequest.bidAmount)}
                       </p>
                     </div>
-                    <div>
-                      <h4 className="font-semibold text-sm sm:text-base mb-1.5 sm:mb-2">Proposed Timeline</h4>
-                      <p className="text-xs sm:text-sm text-gray-900">
+                    <div className="space-y-1">
+                      <h4 className="text-sm font-semibold text-gray-900 tracking-tight">Proposed Timeline</h4>
+                      <p className="text-sm text-gray-700 leading-relaxed">
                         {selectedRequest.proposedTimeline}
                       </p>
                     </div>
-                    <div>
-                      <h4 className="font-semibold text-sm sm:text-base mb-1.5 sm:mb-2">Status</h4>
+                    <div className="space-y-1">
+                      <h4 className="text-sm font-semibold text-gray-900 tracking-tight">Status</h4>
                       <Badge className={`text-xs ${getStatusColor(selectedRequest.status)}`}>
                         {selectedRequest.status.charAt(0).toUpperCase() +
                           selectedRequest.status.slice(1)}
@@ -1441,24 +1418,24 @@ export default function CustomerRequestsPage() {
                     </div>
                   </div>
 
-                  <Separator />
+                  <Separator className="my-1" />
 
                   {/* Cover Letter */}
-                  <div>
-                    <h4 className="font-semibold text-sm sm:text-base mb-1.5 sm:mb-2">Cover Letter</h4>
-                    <div className="bg-gray-50 p-3 sm:p-4 rounded-lg">
-                      <p className="text-xs sm:text-sm text-gray-700 whitespace-pre-wrap break-words">
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-semibold text-gray-900 tracking-tight">Cover Letter</h4>
+                    <div className="bg-gray-50/80 p-4 rounded-lg border border-gray-100">
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed break-words">
                         {selectedRequest.coverLetter}
                       </p>
                     </div>
                   </div>
 
                   {/* Skills */}
-                  <div>
-                    <h4 className="font-semibold text-sm sm:text-base mb-1.5 sm:mb-2">Skills</h4>
-                    <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-semibold text-gray-900 tracking-tight">Skills</h4>
+                    <div className="flex flex-wrap gap-2">
                       {asArray<string>(selectedRequest.skills).map((skill) => (
-                        <Badge key={skill} variant="secondary" className="text-[10px] sm:text-xs">
+                        <Badge key={skill} variant="secondary" className="text-xs">
                           {skill}
                         </Badge>
                       ))}
@@ -1487,12 +1464,12 @@ export default function CustomerRequestsPage() {
                   {/* Proposed Milestones */}
                   {selectedRequest.milestones &&
                     selectedRequest.milestones.length > 0 && (
-                      <div>
-                        <h4 className="font-semibold text-sm sm:text-base mb-2">
+                      <div className="space-y-3">
+                        <h4 className="text-sm font-semibold text-gray-900 tracking-tight">
                           Proposed Milestones
                         </h4>
 
-                        <div className="space-y-3 sm:space-y-4">
+                        <div className="space-y-3">
                           {(() => {
                             const sorted = [...selectedRequest.milestones].sort(
                               (a, b) => (a.order ?? 0) - (b.order ?? 0),
@@ -1513,41 +1490,33 @@ export default function CustomerRequestsPage() {
                                   key={idx}
                                   className="border border-gray-200"
                                 >
-                                  <CardContent className="p-3 sm:p-4 space-y-2">
+                                  <CardContent className="p-4 space-y-2">
                                     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
-                                      <div className="flex items-center gap-2 flex-1 min-w-0">
-                                        <Badge variant="secondary" className="text-[10px] sm:text-xs flex-shrink-0">
+                                      <div className="flex items-center gap-2 min-w-0">
+                                        <Badge variant="secondary" className="text-xs flex-shrink-0">
                                           #{m.order || idx + 1}
                                         </Badge>
-                                        <span className="font-medium text-xs sm:text-sm text-gray-900 break-words">
+                                        <span className="font-medium text-sm text-gray-900 break-words">
                                           {m.title || "Untitled milestone"}
                                         </span>
                                       </div>
-                                      <div className="text-left sm:text-right">
-                                        <span className="text-xs sm:text-sm text-gray-500 block">
-                                          Amount
-                                        </span>
-                                        <span className="text-base sm:text-lg font-semibold text-gray-900">
-                                          RM{" "}
-                                          {Number(m.amount || 0).toLocaleString()}
+                                      <div className="text-left sm:text-right flex-shrink-0">
+                                        <span className="text-xs text-gray-500 block">Amount</span>
+                                        <span className="text-base font-semibold text-gray-900">
+                                          RM {Number(m.amount || 0).toLocaleString()}
                                         </span>
                                       </div>
                                     </div>
-                                    {m.description &&
-                                      m.description.trim() !== "" && (
-                                        <p className="text-xs sm:text-sm text-gray-700 whitespace-pre-wrap break-words">
-                                          {m.description}
-                                        </p>
-                                      )}
-                                    <div className="text-xs sm:text-sm text-gray-600 flex flex-wrap gap-x-3 sm:gap-x-4 gap-y-1">
-                                      <div className="flex items-center gap-1">
-                                        <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
-                                        <span>
-                                          {durationDays > 0
-                                            ? `Duration: ${durationLabel}`
-                                            : durationLabel}
-                                        </span>
-                                      </div>
+                                    {m.description && m.description.trim() !== "" && (
+                                      <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed break-words">
+                                        {m.description}
+                                      </p>
+                                    )}
+                                    <div className="text-sm text-gray-600 flex items-center gap-1.5">
+                                      <Clock className="w-4 h-4 flex-shrink-0" />
+                                      <span>
+                                        {durationDays > 0 ? `Duration: ${durationLabel}` : durationLabel}
+                                      </span>
                                     </div>
                                   </CardContent>
                                 </Card>
@@ -1561,8 +1530,8 @@ export default function CustomerRequestsPage() {
                   {/* Attachments */}
                   {Array.isArray(selectedRequest.attachments) &&
                     selectedRequest.attachments.length > 0 && (
-                      <div className="mt-4 sm:mt-5 lg:mt-6">
-                        <h4 className="font-semibold text-sm sm:text-base mb-2 sm:mb-3 flex items-center text-gray-900">
+                      <div className="space-y-3">
+                        <h4 className="text-sm font-semibold text-gray-900 tracking-tight">
                           Attachments
                         </h4>
 
@@ -1599,20 +1568,17 @@ export default function CustomerRequestsPage() {
                                     });
                                   }
                                 } : undefined}
-                                className="flex items-start gap-2 sm:gap-3 rounded-lg border border-gray-200 bg-white px-2.5 sm:px-3 py-2 hover:bg-gray-50 hover:shadow-sm transition"
+                                className="flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2.5 hover:bg-gray-50 hover:shadow-sm transition text-left"
                               >
-                                {/* Icon circle */}
-                                <div className="flex h-8 w-8 sm:h-9 sm:w-9 flex-none items-center justify-center rounded-md border border-gray-300 bg-gray-100 text-gray-700 text-[10px] sm:text-xs font-medium">
-                                  {/* If you want, you can make this dynamic based on extension */}
+                                <div className="flex h-9 w-9 flex-none items-center justify-center rounded-md border border-gray-300 bg-gray-100 text-gray-700 text-xs font-medium">
                                   PDF
                                 </div>
 
-                                {/* File info */}
                                 <div className="flex flex-col min-w-0 flex-1">
-                                  <span className="text-xs sm:text-sm font-medium text-gray-900 break-all leading-snug">
+                                  <span className="text-sm font-medium text-gray-900 break-all leading-snug">
                                     {fileName}
                                   </span>
-                                  <span className="text-[10px] sm:text-xs text-gray-500 leading-snug">
+                                  <span className="text-xs text-gray-500 leading-snug">
                                     Click to preview / download
                                   </span>
                                 </div>
@@ -1641,38 +1607,40 @@ export default function CustomerRequestsPage() {
                     )}
                 </div>
 
-                <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-3">
-                  {selectedRequest.status === "pending" && (
+                <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end pt-4 mt-2 border-t border-gray-100">
+                  {selectedRequest.status === "pending" ? (
                     <>
+                      <Button
+                        onClick={() => {
+                          setViewDetailsOpen(false);
+                          handleAcceptRequest(selectedRequest.id);
+                        }}
+                        disabled={processingId === selectedRequest.id}
+                        className="w-full sm:w-auto text-sm"
+                      >
+                        <Check className="w-4 h-4 mr-2" />
+                        Accept
+                      </Button>
                       <Button
                         variant="outline"
                         onClick={() => {
                           setRejectDialogOpen(true);
                           setViewDetailsOpen(false);
                         }}
-                        className="w-full sm:w-auto border-red-200 hover:border-red-300 bg-white hover:bg-red-50 text-red-600 hover:text-red-700 font-medium transition-all duration-200"
+                        className="w-full sm:w-auto text-sm border-red-200 hover:border-red-300 bg-white hover:bg-red-50 text-red-600 hover:text-red-700"
                       >
                         <X className="w-4 h-4 mr-2" />
                         Reject
                       </Button>
-                      <Button
-                        onClick={() => {
-                          handleAcceptRequest(selectedRequest.id);
-                          setViewDetailsOpen(false);
-                        }}
-                        className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white font-medium shadow-sm transition-all duration-200"
-                        disabled={processingId === selectedRequest.id}
-                      >
-                        {processingId === selectedRequest.id ? (
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        ) : (
-                          <Check className="w-4 h-4 mr-2" />
-                        )}
-                        {processingId === selectedRequest.id
-                          ? "Accepting..."
-                          : "Accept Request"}
-                      </Button>
                     </>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      onClick={() => setViewDetailsOpen(false)}
+                      className="w-full sm:w-auto text-sm"
+                    >
+                      Close
+                    </Button>
                   )}
                 </DialogFooter>
               </>
@@ -1682,30 +1650,34 @@ export default function CustomerRequestsPage() {
 
         {/* Reject Dialog */}
         <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
-          <DialogContent className="max-w-xl sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="text-base sm:text-lg">Reject Request</DialogTitle>
-              <DialogDescription className="text-xs sm:text-sm">
+          <DialogContent className="max-w-xl sm:max-w-2xl max-h-[90vh] overflow-y-auto p-5 sm:p-6">
+            <DialogHeader className="space-y-1.5 text-left">
+              <DialogTitle className="text-lg sm:text-xl font-semibold tracking-tight">
+                Reject Request
+              </DialogTitle>
+              <DialogDescription className="text-sm text-gray-600 leading-relaxed">
                 Please provide a reason for rejecting this request. This will
                 help the provider improve their future proposals.
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-3 sm:space-y-4">
-              <div>
-                <Label htmlFor="rejectReason" className="text-sm sm:text-base">Reason for rejection</Label>
+            <div className="space-y-3 pt-1">
+              <div className="space-y-2">
+                <Label htmlFor="rejectReason" className="text-sm font-semibold text-gray-900 tracking-tight">
+                  Reason for rejection
+                </Label>
                 <Textarea
                   id="rejectReason"
                   placeholder="Please explain why you're rejecting this request..."
                   value={rejectReason}
                   onChange={(e) => setRejectReason(e.target.value)}
                   rows={4}
-                  className="text-sm sm:text-base mt-1.5"
+                  className="text-sm resize-none"
                 />
               </div>
             </div>
 
-            <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-3">
+            <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end pt-4 border-t border-gray-100">
               <Button
                 variant="outline"
                 onClick={() => setRejectDialogOpen(false)}
@@ -1917,7 +1889,10 @@ export default function CustomerRequestsPage() {
               </Card>
             ))}
 
-            <div className="flex flex-col sm:flex-row justify-between gap-2 sm:gap-3 pt-2 border-t border-gray-200">
+            <p className="text-xs text-gray-600 pt-2 border-t border-gray-200 mt-2">
+              If you made any updates or changes to the milestones, save changes first before approving.
+            </p>
+            <div className="flex flex-col sm:flex-row justify-between gap-2 sm:gap-3 pt-2">
               <Button 
                 variant="outline" 
                 onClick={addMilestone} 

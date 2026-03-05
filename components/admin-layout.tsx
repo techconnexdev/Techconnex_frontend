@@ -19,7 +19,6 @@ import {
   User,
   CreditCard,
   LogOut,
-  Zap,
   Star,
   MessageSquare,
   Headphones,
@@ -54,6 +53,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge as BadgeComponent } from "@/components/ui/badge";
 import { getUnreadMessageCount } from "@/lib/api";
+import Image from "next/image";
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -130,10 +130,36 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       if (typeof window === "undefined") return;
 
       const token = localStorage.getItem("token");
+      const userJson = localStorage.getItem("user");
 
       if (!token) {
         router.push("/auth/login");
         return;
+      }
+
+      // Only admins can access admin routes
+      if (userJson) {
+        try {
+          const userData = JSON.parse(userJson);
+          const roles = Array.isArray(userData?.role)
+            ? userData.role
+            : userData?.role
+              ? [userData.role]
+              : [];
+          if (!roles.includes("ADMIN")) {
+            if (roles.includes("CUSTOMER")) {
+              router.push("/customer/dashboard");
+            } else if (roles.includes("PROVIDER")) {
+              router.push("/provider/dashboard");
+            } else {
+              router.push("/auth/login");
+            }
+            return;
+          }
+        } catch {
+          router.push("/auth/login");
+          return;
+        }
       }
 
       try {
@@ -307,9 +333,13 @@ export function AdminLayout({ children }: AdminLayoutProps) {
         <div className="fixed inset-y-0 left-0 flex w-full max-w-xs flex-col bg-white">
           <div className="flex h-16 items-center justify-between px-4 border-b">
             <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                <Zap className="w-5 h-5 text-white" />
-              </div>
+              <Image
+                src="/logo.png"
+                alt="TechConnex"
+                width={40}
+                height={40}
+                className="h-10 w-10 rounded-xl object-contain"
+              />
               <span className="text-xl font-bold text-gray-900">
                 Techconnex
               </span>
@@ -352,9 +382,13 @@ export function AdminLayout({ children }: AdminLayoutProps) {
         <div className="flex flex-col flex-grow bg-white border-r border-gray-200">
           <div className="flex items-center h-16 px-4 border-b">
             <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                <Zap className="w-5 h-5 text-white" />
-              </div>
+              <Image
+                src="/logo.png"
+                alt="TechConnex"
+                width={40}
+                height={40}
+                className="h-10 w-10 rounded-xl object-contain"
+              />
               <span className="text-xl font-bold text-gray-900">
                 Techconnex
               </span>

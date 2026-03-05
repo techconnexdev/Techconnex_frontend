@@ -758,6 +758,12 @@ export default function AdminProjectDetailPage() {
               Files
             </TabsTrigger>
             <TabsTrigger
+              value="media"
+              className="text-xs sm:text-sm px-2 sm:px-4"
+            >
+              Media gallery
+            </TabsTrigger>
+            <TabsTrigger
               value="messages"
               className="text-xs sm:text-sm px-2 sm:px-4"
             >
@@ -2463,6 +2469,206 @@ export default function AdminProjectDetailPage() {
                             </div>
                             <div className="ml-auto flex items-center text-gray-500 active:text-gray-700 sm:hover:text-gray-700">
                               <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                            </div>
+                          </a>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="media" className="space-y-4 sm:space-y-6">
+            <Card>
+              <CardHeader className="p-4 sm:p-6">
+                <CardTitle className="text-lg sm:text-xl">
+                  Media gallery
+                </CardTitle>
+                <CardDescription className="text-xs sm:text-sm">
+                  All images and files from proposals, milestones, messages, and disputes in one view
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-4 sm:p-6">
+                {(() => {
+                  type MediaItem = {
+                    url: string;
+                    label: string;
+                    source: string;
+                    isImage: boolean;
+                  };
+                  const items: MediaItem[] = [];
+
+                  const addUrl = (url: string, label: string, source: string) => {
+                    const normalized = url.replace(/\\/g, "/");
+                    const isImage =
+                      /\.(jpg|jpeg|png|gif|webp)$/i.test(normalized) ||
+                      normalized.includes("support-chat") ||
+                      normalized.includes("image");
+                    items.push({ url, label, source, isImage });
+                  };
+
+                  if (project.proposals && Array.isArray(project.proposals)) {
+                    project.proposals.forEach((proposal) => {
+                      const attachments =
+                        proposal.attachments || proposal.attachmentUrls || [];
+                      if (Array.isArray(attachments) && attachments.length > 0) {
+                        attachments.forEach((url: string) => {
+                          addUrl(
+                            url,
+                            (url.split("/").pop() || "Attachment") as string,
+                            `Proposal · ${proposal.provider?.name || "Provider"}`
+                          );
+                        });
+                      }
+                    });
+                  }
+
+                  milestonesArray.forEach((milestone) => {
+                    if (milestone.submissionAttachmentUrl) {
+                      addUrl(
+                        milestone.submissionAttachmentUrl,
+                        (milestone.submissionAttachmentUrl.split("/").pop() ||
+                          "Submission") as string,
+                        `Milestone: ${milestone.title || "Untitled"}`
+                      );
+                    }
+                    if (
+                      milestone.submissionHistory &&
+                      Array.isArray(milestone.submissionHistory)
+                    ) {
+                      milestone.submissionHistory.forEach((history) => {
+                        if (history.submissionAttachmentUrl) {
+                          addUrl(
+                            history.submissionAttachmentUrl,
+                            (history.submissionAttachmentUrl.split("/").pop() ||
+                              "Revision") as string,
+                            `Milestone: ${milestone.title || "Untitled"} (rev ${history.revisionNumber ?? "N/A"})`
+                          );
+                        }
+                      });
+                    }
+                  });
+
+                  if (messages && Array.isArray(messages)) {
+                    messages.forEach((message: Record<string, unknown>) => {
+                      if (String(message.projectId) !== String(projectId)) return;
+                      const attachments = message.attachments;
+                      if (Array.isArray(attachments) && attachments.length > 0) {
+                        const senderName =
+                          (message.sender as Record<string, unknown>)?.name ||
+                          (message.senderName as string) ||
+                          "Unknown";
+                        attachments.forEach((url: unknown) => {
+                          const urlStr =
+                            typeof url === "string" ? url : String(url);
+                          addUrl(
+                            urlStr,
+                            (urlStr.split("/").pop() || "Attachment") as string,
+                            `Message · ${senderName}`
+                          );
+                        });
+                      }
+                    });
+                  }
+
+                  if (disputes && Array.isArray(disputes)) {
+                    disputes.forEach((d) => {
+                      const attachments = d.attachments || [];
+                      if (Array.isArray(attachments) && attachments.length > 0) {
+                        attachments.forEach((url: string) => {
+                          addUrl(
+                            url,
+                            (url.split("/").pop() || "Attachment") as string,
+                            `Dispute · ${d.raisedBy?.name || "User"}`
+                          );
+                        });
+                      }
+                    });
+                  }
+
+                  if (items.length === 0) {
+                    return (
+                      <p className="text-xs sm:text-sm text-gray-500 text-center py-8 sm:py-12">
+                        No media or attachments yet
+                      </p>
+                    );
+                  }
+
+                  const handleClick = async (
+                    e: React.MouseEvent,
+                    item: MediaItem
+                  ) => {
+                    const attachmentUrl = getAttachmentUrl(item.url);
+                    const isR2Key =
+                      attachmentUrl === "#" ||
+                      (!attachmentUrl.startsWith("http") &&
+                        !attachmentUrl.startsWith("/uploads/") &&
+                        !attachmentUrl.includes(
+                          process.env.NEXT_PUBLIC_API_URL || "localhost"
+                        ));
+                    if (isR2Key) {
+                      e.preventDefault();
+                      try {
+                        const { downloadUrl } = await getR2DownloadUrl(item.url);
+                        window.open(downloadUrl, "_blank");
+                      } catch (err) {
+                        console.error(err);
+                        toastHook({
+                          title: "Error",
+                          description: "Failed to open file",
+                          variant: "destructive",
+                        });
+                      }
+                    }
+                  };
+
+                  return (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
+                      {items.map((item, idx) => {
+                        const fullUrl = getAttachmentUrl(item.url);
+                        const isR2Key =
+                          fullUrl === "#" ||
+                          (!fullUrl.startsWith("http") &&
+                            !fullUrl.startsWith("/uploads/") &&
+                            !fullUrl.includes(
+                              process.env.NEXT_PUBLIC_API_URL || "localhost"
+                            ));
+                        const href = isR2Key ? undefined : fullUrl;
+
+                        return (
+                          <a
+                            key={`${item.source}-${idx}-${item.url}`}
+                            href={href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => handleClick(e, item)}
+                            className="group rounded-lg border border-gray-200 bg-gray-50 overflow-hidden hover:border-gray-300 hover:shadow-md transition flex flex-col"
+                          >
+                            {item.isImage && !isR2Key ? (
+                              <div className="aspect-square relative bg-gray-100">
+                                <Image
+                                  src={fullUrl}
+                                  alt={item.label}
+                                  fill
+                                  className="object-cover"
+                                  sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, 20vw"
+                                  unoptimized
+                                />
+                              </div>
+                            ) : (
+                              <div className="aspect-square flex items-center justify-center bg-gray-100 text-gray-500">
+                                <Paperclip className="w-10 h-10 sm:w-12 sm:h-12" />
+                              </div>
+                            )}
+                            <div className="p-2 min-w-0">
+                              <p className="text-xs font-medium text-gray-900 truncate" title={item.label}>
+                                {item.label}
+                              </p>
+                              <p className="text-[10px] text-gray-500 truncate" title={item.source}>
+                                {item.source}
+                              </p>
                             </div>
                           </a>
                         );

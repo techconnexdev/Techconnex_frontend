@@ -4,6 +4,7 @@
  */
 
 export type NotificationCategory =
+  | "announcements"
   | "proposals"
   | "milestones"
   | "reviews"
@@ -12,6 +13,7 @@ export type NotificationCategory =
   | "system";
 
 export const DISPLAY_CATEGORIES: NotificationCategory[] = [
+  "announcements",
   "proposals",
   "milestones",
   "reviews",
@@ -21,12 +23,24 @@ export const DISPLAY_CATEGORIES: NotificationCategory[] = [
 ];
 
 export const CATEGORY_LABELS: Record<NotificationCategory, string> = {
+  announcements: "Announcements",
   proposals: "Proposals",
   milestones: "Milestones",
   reviews: "Reviews",
   payments: "Payments",
   project: "Project updates",
   system: "System",
+};
+
+/** Category accent colors for notification list UI */
+export const CATEGORY_COLORS: Record<NotificationCategory, string> = {
+  announcements: "#0EA5E9", // sky
+  proposals: "#3B82F6",   // blue
+  milestones: "#8B5CF6",  // violet
+  reviews: "#F59E0B",     // amber
+  payments: "#10B981",    // emerald
+  project: "#6366F1",     // indigo
+  system: "#6B7280",      // gray
 };
 
 /**
@@ -39,6 +53,7 @@ export function getNotificationCategory(
   const t = (type || "").trim();
   const e = (eventType || "").trim();
 
+  if (t === "announcement" || e === "announcement") return "announcements";
   if (t === "proposal") return "proposals";
   if (t === "milestone") return "milestones";
   if (t === "system" && e === "review_received") return "reviews";

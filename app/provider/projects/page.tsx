@@ -34,6 +34,12 @@ import {
 } from "lucide-react";
 import { ProviderLayout } from "@/components/provider-layout";
 import {
+  useProviderCompletion,
+  CONTACT_REQUIRED,
+} from "@/contexts/ProviderCompletionContext";
+import { ProfileCompletionGateModal } from "@/components/provider/ProfileCompletionGateModal";
+import { ProviderProjectsTour } from "@/components/provider/ProviderProjectsTour";
+import {
   getProviderProjects,
   getProviderProjectStats,
   exportProviderProjects,
@@ -83,13 +89,18 @@ type ProviderProject = {
 function getProjectDueDate(project: ProviderProject): string | null {
   const milestones = project.milestones;
   if (!milestones?.length) return null;
-  const sorted = [...milestones].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const sorted = [...milestones].sort(
+    (a, b) => (a.order ?? 0) - (b.order ?? 0),
+  );
   const last = sorted[sorted.length - 1];
   return last?.dueDate ?? null;
 }
 
 export default function ProviderProjectsPage() {
   const { toast } = useToast();
+  const router = useRouter();
+  const { canContact } = useProviderCompletion();
+  const [contactGateOpen, setContactGateOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [projects, setProjects] = useState<ProviderProject[]>([]);
@@ -103,7 +114,6 @@ export default function ProviderProjectsPage() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
 
   // Fetch projects and stats
   useEffect(() => {
@@ -191,13 +201,17 @@ export default function ProviderProjectsPage() {
   const handleContact = (
     customerId?: string,
     customerName?: string,
-    customerAvatar?: string
+    customerAvatar?: string,
   ) => {
     if (!customerId || !customerName) return;
+    if (!canContact) {
+      setContactGateOpen(true);
+      return;
+    }
     router.push(
       `/provider/messages?userId=${customerId}&name=${encodeURIComponent(
-        customerName
-      )}&avatar=${encodeURIComponent(customerAvatar || "")}`
+        customerName,
+      )}&avatar=${encodeURIComponent(customerAvatar || "")}`,
     );
   };
   // Since we're filtering on the server side, we can use projects directly
@@ -205,11 +219,17 @@ export default function ProviderProjectsPage() {
 
   return (
     <ProviderLayout>
+      <ProviderProjectsTour />
       <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
+        <div
+          className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4"
+          data-tour-step="0"
+        >
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">My Projects</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+              My Projects
+            </h1>
             <p className="text-sm sm:text-base text-gray-600">
               Manage and track all your active and completed projects
             </p>
@@ -258,7 +278,10 @@ export default function ProviderProjectsPage() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6">
+        <div
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6"
+          data-tour-step="1"
+        >
           <Card>
             <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
@@ -281,7 +304,9 @@ export default function ProviderProjectsPage() {
             <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs sm:text-sm font-medium text-gray-600">Active</p>
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">
+                    Active
+                  </p>
                   <p className="text-xl sm:text-2xl font-bold text-blue-600 mt-1">
                     {stats.activeProjects}
                   </p>
@@ -297,7 +322,9 @@ export default function ProviderProjectsPage() {
             <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs sm:text-sm font-medium text-gray-600">Completed</p>
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">
+                    Completed
+                  </p>
                   <p className="text-xl sm:text-2xl font-bold text-green-600 mt-1">
                     {stats.completedProjects}
                   </p>
@@ -313,7 +340,9 @@ export default function ProviderProjectsPage() {
             <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs sm:text-sm font-medium text-gray-600">Disputed</p>
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">
+                    Disputed
+                  </p>
                   <p className="text-xl sm:text-2xl font-bold text-red-600 mt-1">
                     {stats.disputedProjects}
                   </p>
@@ -345,7 +374,7 @@ export default function ProviderProjectsPage() {
         </div>
 
         {/* Filters */}
-        <Card>
+        <Card data-tour-step="2">
           <CardContent className="p-4 sm:p-6">
             <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
               <div className="flex-1">
@@ -407,12 +436,36 @@ export default function ProviderProjectsPage() {
             </CardContent>
           </Card>
         ) : (
-          <Tabs defaultValue="all" className="space-y-4 sm:space-y-6">
+          <Tabs
+            defaultValue="all"
+            className="space-y-4 sm:space-y-6"
+            data-tour-step="3"
+          >
             <TabsList className="grid w-full grid-cols-4 h-auto">
-              <TabsTrigger value="all" className="text-xs sm:text-sm px-2 sm:px-4">All Projects</TabsTrigger>
-              <TabsTrigger value="active" className="text-xs sm:text-sm px-2 sm:px-4">Active Projects</TabsTrigger>
-              <TabsTrigger value="completed" className="text-xs sm:text-sm px-2 sm:px-4">Completed</TabsTrigger>
-              <TabsTrigger value="disputed" className="text-xs sm:text-sm px-2 sm:px-4">Disputed</TabsTrigger>
+              <TabsTrigger
+                value="all"
+                className="text-xs sm:text-sm px-2 sm:px-4"
+              >
+                All Projects
+              </TabsTrigger>
+              <TabsTrigger
+                value="active"
+                className="text-xs sm:text-sm px-2 sm:px-4"
+              >
+                Active Projects
+              </TabsTrigger>
+              <TabsTrigger
+                value="completed"
+                className="text-xs sm:text-sm px-2 sm:px-4"
+              >
+                Completed
+              </TabsTrigger>
+              <TabsTrigger
+                value="disputed"
+                className="text-xs sm:text-sm px-2 sm:px-4"
+              >
+                Disputed
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="all">
@@ -446,7 +499,9 @@ export default function ProviderProjectsPage() {
                               <CardTitle className="text-lg sm:text-xl break-words">
                                 {project.title}
                               </CardTitle>
-                              <Badge className={`${getStatusColor(project.status)} text-xs shrink-0`}>
+                              <Badge
+                                className={`${getStatusColor(project.status)} text-xs shrink-0`}
+                              >
                                 {getStatusText(project.status)}
                               </Badge>
                             </div>
@@ -463,7 +518,7 @@ export default function ProviderProjectsPage() {
                               <AvatarImage
                                 src={getProfileImageUrl(
                                   project.customer?.customerProfile
-                                    ?.profileImageUrl
+                                    ?.profileImageUrl,
                                 )}
                               />
                               <AvatarFallback>
@@ -487,13 +542,16 @@ export default function ProviderProjectsPage() {
                               {project.approvedPrice
                                 ? formatCurrency(project.approvedPrice)
                                 : `${formatCurrency(
-                                    project.budgetMin ?? 0
+                                    project.budgetMin ?? 0,
                                   )} - ${formatCurrency(
-                                    project.budgetMax ?? 0
+                                    project.budgetMax ?? 0,
                                   )}`}
                             </p>
                             <p className="text-xs sm:text-sm text-gray-500">
-                              Due: {getProjectDueDate(project) ? formatDate(getProjectDueDate(project)!) : "—"}
+                              Due:{" "}
+                              {getProjectDueDate(project)
+                                ? formatDate(getProjectDueDate(project)!)
+                                : "—"}
                             </p>
                           </div>
                         </div>
@@ -541,15 +599,21 @@ export default function ProviderProjectsPage() {
                                 handleContact(
                                   project.customer?.id,
                                   project.customer?.name,
-                                  project.customer?.profileImageUrl
+                                  project.customer?.profileImageUrl,
                                 )
                               }
                             >
                               <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                               Message
                             </Button>
-                            <Link href={`/provider/projects/${project.id}`} className="w-full sm:w-auto">
-                              <Button size="sm" className="w-full sm:w-auto text-xs sm:text-sm">
+                            <Link
+                              href={`/provider/projects/${project.id}`}
+                              className="w-full sm:w-auto"
+                            >
+                              <Button
+                                size="sm"
+                                className="w-full sm:w-auto text-xs sm:text-sm"
+                              >
                                 <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                                 View Details
                               </Button>
@@ -579,7 +643,9 @@ export default function ProviderProjectsPage() {
                               <CardTitle className="text-lg sm:text-xl break-words">
                                 {project.title}
                               </CardTitle>
-                              <Badge className={`${getStatusColor(project.status)} text-xs shrink-0`}>
+                              <Badge
+                                className={`${getStatusColor(project.status)} text-xs shrink-0`}
+                              >
                                 {getStatusText(project.status)}
                               </Badge>
                             </div>
@@ -596,7 +662,7 @@ export default function ProviderProjectsPage() {
                               <AvatarImage
                                 src={getProfileImageUrl(
                                   project.customer?.customerProfile
-                                    ?.profileImageUrl
+                                    ?.profileImageUrl,
                                 )}
                               />
                               <AvatarFallback>
@@ -620,13 +686,16 @@ export default function ProviderProjectsPage() {
                               {project.approvedPrice
                                 ? formatCurrency(project.approvedPrice)
                                 : `${formatCurrency(
-                                    project.budgetMin ?? 0
+                                    project.budgetMin ?? 0,
                                   )} - ${formatCurrency(
-                                    project.budgetMax ?? 0
+                                    project.budgetMax ?? 0,
                                   )}`}
                             </p>
                             <p className="text-xs sm:text-sm text-gray-500">
-                              Due: {getProjectDueDate(project) ? formatDate(getProjectDueDate(project)!) : "—"}
+                              Due:{" "}
+                              {getProjectDueDate(project)
+                                ? formatDate(getProjectDueDate(project)!)
+                                : "—"}
                             </p>
                           </div>
                         </div>
@@ -674,15 +743,21 @@ export default function ProviderProjectsPage() {
                                 handleContact(
                                   project.customer?.id,
                                   project.customer?.name,
-                                  project.customer?.profileImageUrl
+                                  project.customer?.profileImageUrl,
                                 )
                               }
                             >
                               <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                               Message
                             </Button>
-                            <Link href={`/provider/projects/${project.id}`} className="w-full sm:w-auto">
-                              <Button size="sm" className="w-full sm:w-auto text-xs sm:text-sm">
+                            <Link
+                              href={`/provider/projects/${project.id}`}
+                              className="w-full sm:w-auto"
+                            >
+                              <Button
+                                size="sm"
+                                className="w-full sm:w-auto text-xs sm:text-sm"
+                              >
                                 <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                                 View Details
                               </Button>
@@ -711,7 +786,9 @@ export default function ProviderProjectsPage() {
                               <CardTitle className="text-lg sm:text-xl break-words">
                                 {project.title}
                               </CardTitle>
-                              <Badge className={`${getStatusColor(project.status)} text-xs shrink-0`}>
+                              <Badge
+                                className={`${getStatusColor(project.status)} text-xs shrink-0`}
+                              >
                                 {getStatusText(project.status)}
                               </Badge>
                             </div>
@@ -728,7 +805,7 @@ export default function ProviderProjectsPage() {
                               <AvatarImage
                                 src={getProfileImageUrl(
                                   project.customer?.customerProfile
-                                    ?.profileImageUrl
+                                    ?.profileImageUrl,
                                 )}
                               />
                               <AvatarFallback>
@@ -752,9 +829,9 @@ export default function ProviderProjectsPage() {
                               {project.approvedPrice
                                 ? formatCurrency(project.approvedPrice)
                                 : `${formatCurrency(
-                                    project.budgetMin ?? 0
+                                    project.budgetMin ?? 0,
                                   )} - ${formatCurrency(
-                                    project.budgetMax ?? 0
+                                    project.budgetMax ?? 0,
                                   )}`}
                             </p>
                             <p className="text-xs sm:text-sm text-gray-500">
@@ -774,8 +851,15 @@ export default function ProviderProjectsPage() {
                             </span>
                           </div>
                           <div className="flex gap-2 w-full sm:w-auto">
-                            <Link href={`/provider/projects/${project.id}`} className="w-full sm:w-auto">
-                              <Button size="sm" variant="outline" className="w-full sm:w-auto text-xs sm:text-sm">
+                            <Link
+                              href={`/provider/projects/${project.id}`}
+                              className="w-full sm:w-auto"
+                            >
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="w-full sm:w-auto text-xs sm:text-sm"
+                              >
                                 <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                                 View Details
                               </Button>
@@ -804,7 +888,9 @@ export default function ProviderProjectsPage() {
                               <CardTitle className="text-lg sm:text-xl break-words">
                                 {project.title}
                               </CardTitle>
-                              <Badge className={`${getStatusColor(project.status)} text-xs shrink-0`}>
+                              <Badge
+                                className={`${getStatusColor(project.status)} text-xs shrink-0`}
+                              >
                                 {getStatusText(project.status)}
                               </Badge>
                             </div>
@@ -821,7 +907,7 @@ export default function ProviderProjectsPage() {
                               <AvatarImage
                                 src={getProfileImageUrl(
                                   project.customer?.customerProfile
-                                    ?.profileImageUrl
+                                    ?.profileImageUrl,
                                 )}
                               />
                               <AvatarFallback>
@@ -845,13 +931,16 @@ export default function ProviderProjectsPage() {
                               {project.approvedPrice
                                 ? formatCurrency(project.approvedPrice)
                                 : `${formatCurrency(
-                                    project.budgetMin ?? 0
+                                    project.budgetMin ?? 0,
                                   )} - ${formatCurrency(
-                                    project.budgetMax ?? 0
+                                    project.budgetMax ?? 0,
                                   )}`}
                             </p>
                             <p className="text-xs sm:text-sm text-gray-500">
-                              Due: {getProjectDueDate(project) ? formatDate(getProjectDueDate(project)!) : "—"}
+                              Due:{" "}
+                              {getProjectDueDate(project)
+                                ? formatDate(getProjectDueDate(project)!)
+                                : "—"}
                             </p>
                           </div>
                         </div>
@@ -874,15 +963,21 @@ export default function ProviderProjectsPage() {
                                 handleContact(
                                   project.customer?.id,
                                   project.customer?.name,
-                                  project.customer?.profileImageUrl
+                                  project.customer?.profileImageUrl,
                                 )
                               }
                             >
                               <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                               Message
                             </Button>
-                            <Link href={`/provider/projects/${project.id}`} className="w-full sm:w-auto">
-                              <Button size="sm" className="w-full sm:w-auto text-xs sm:text-sm">
+                            <Link
+                              href={`/provider/projects/${project.id}`}
+                              className="w-full sm:w-auto"
+                            >
+                              <Button
+                                size="sm"
+                                className="w-full sm:w-auto text-xs sm:text-sm"
+                              >
                                 <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                                 View Details
                               </Button>
@@ -897,6 +992,12 @@ export default function ProviderProjectsPage() {
           </Tabs>
         )}
       </div>
+      <ProfileCompletionGateModal
+        open={contactGateOpen}
+        onOpenChange={setContactGateOpen}
+        requiredPercent={CONTACT_REQUIRED}
+        actionLabel="contact users"
+      />
     </ProviderLayout>
   );
 }

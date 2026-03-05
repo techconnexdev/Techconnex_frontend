@@ -18,6 +18,8 @@ import {
   Upload,
   Globe,
   ChevronRight,
+  Mail,
+  ShieldCheck,
 } from "lucide-react";
 import {
   Card,
@@ -31,6 +33,14 @@ import { Badge } from "@/components/ui/badge";
 import CustomerRegistration from "./components/company";
 import ProviderRegistration from "./components/Provider";
 import Image from "next/image";
+import Cookies from "js-cookie";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@radix-ui/react-checkbox";
 
 const fadeInUp = {
   initial: { opacity: 0, y: 30 },
@@ -38,30 +48,24 @@ const fadeInUp = {
   transition: { duration: 0.5, ease: "easeOut" },
 };
 
-// Registration steps for providers
+// Registration steps for providers (minimal: account + OTP only; rest in profile later)
 const PROVIDER_STEPS = [
   { id: 1, title: "Account Setup", description: "Basic account information" },
   {
     id: 2,
-    title: "Profile & CV",
-    description: "Professional info & resume upload",
+    title: "Email Verification",
+    description: "Verify your email address",
   },
-  { id: 3, title: "Skills & Experience", description: "Technical expertise" },
-  { id: 4, title: "Portfolio & Links", description: "Additional work samples" },
-  { id: 5, title: "Certifications", description: "Professional credentials" },
-  { id: 6, title: "Review & Submit", description: "Confirm your information" },
 ];
 
-// Registration steps for customers
+// Registration steps for customers (minimal: account + OTP only; rest in onboarding)
 const CUSTOMER_STEPS = [
   { id: 1, title: "Account Setup", description: "Basic account information" },
-  { id: 2, title: "Company Profile", description: "Basic company information" },
   {
-    id: 3,
-    title: "Company Details",
-    description: "Additional company information",
+    id: 2,
+    title: "Email Verification",
+    description: "Verify your email address",
   },
-  { id: 4, title: "Review & Submit", description: "Confirm your information" },
 ];
 
 export type Certification = {
@@ -120,6 +124,10 @@ export type RegistrationFormData = {
 export default function SignupPage() {
   const emailRef = useRef<HTMLInputElement>(null!);
   const [roleSelected, setRoleSelected] = useState(false);
+  /** 'email' = use website form; 'google' = use Google (button on same screen); null = show method choice */
+  const [registrationMethod, setRegistrationMethod] = useState<
+    "email" | "google" | null
+  >(null);
   const [currentStep, setCurrentStep] = useState(1);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -209,6 +217,13 @@ export default function SignupPage() {
   const [fieldErrors, setFieldErrors] = useState<{ email?: string }>({});
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [emailOtpSent, setEmailOtpSent] = useState(false);
+  const [emailOtpVerified, setEmailOtpVerified] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
+  const [otpError, setOtpError] = useState("");
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
   const router = useRouter();
   const searchParams = useSearchParams();
   const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
@@ -257,7 +272,189 @@ export default function SignupPage() {
     }
   };
 
-  const uploadResume = async (userId: string, file: File) => {
+  const sendEmailOtp = async () => {
+    const email = formData.email?.trim();
+    if (!email) {
+      setOtpError("Please enter your email first.");
+      return;
+    }
+    setOtpError("");
+    setIsSendingOtp(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/send-email-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Failed to send code");
+      setEmailOtpSent(true);
+      setResendCooldown(60);
+    } catch (e) {
+      setOtpError(e instanceof Error ? e.message : "Failed to send code.");
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
+  const verifyEmailOtp = async () => {
+    const email = formData.email?.trim();
+    if (!email || otpCode.length !== 6) {
+      setOtpError("Please enter the 6-digit code.");
+      return;
+    }
+    setOtpError("");
+    setIsVerifyingOtp(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/verify-email-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, otp: otpCode }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Verification failed");
+      setEmailOtpVerified(true);
+    } catch (e) {
+      setOtpError(e instanceof Error ? e.message : "Verification failed.");
+    } finally {
+      setIsVerifyingOtp(false);
+    }
+  };
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const t = setInterval(
+      () => setResendCooldown((c) => (c <= 1 ? 0 : c - 1)),
+      1000,
+    );
+    return () => clearInterval(t);
+  }, [resendCooldown]);
+
+  // Auto-send OTP when user lands on verification step
+  useEffect(() => {
+    if (
+      currentStep === 2 &&
+      formData.email?.trim() &&
+      !emailOtpSent &&
+      !isSendingOtp &&
+      emailStatus === "available"
+    ) {
+      sendEmailOtp();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep]);
+
+  // Load Google Sign-In and render button when on method choice screen
+  useEffect(() => {
+    if (!roleSelected || registrationMethod !== null || !userRole) return;
+    const container = document.getElementById(
+      "google-register-button-container",
+    );
+    if (!container) return;
+
+    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+    if (!clientId) {
+      container.innerHTML =
+        '<p class="text-sm text-amber-600">Google sign-in not configured</p>';
+      return;
+    }
+
+    const doGoogleAuth = (idToken: string) => {
+      setError("");
+      setIsLoading(true);
+      fetch(`${API_BASE}/auth/google`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken, role: userRole }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (!data.token || !data.user)
+            throw new Error(
+              data.message || data.error || "Google sign-in failed",
+            );
+          localStorage.setItem("token", data.token);
+          localStorage.setItem("user", JSON.stringify(data.user));
+          Cookies.set("token", data.token, {
+            path: "/",
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "lax",
+          });
+          const roles: string[] = data.user?.role || [];
+          if (roles.includes("CUSTOMER")) router.push("/customer/onboarding");
+          else if (roles.includes("PROVIDER"))
+            router.push("/provider/dashboard");
+          else router.push("/dashboard");
+        })
+        .catch((err) => {
+          setError(
+            err instanceof Error ? err.message : "Google sign-in failed",
+          );
+        })
+        .finally(() => setIsLoading(false));
+    };
+
+    type GoogleAccountsId = {
+      initialize: (config: {
+        client_id: string;
+        callback: (response: { credential?: string }) => void;
+      }) => void;
+      renderButton: (
+        el: HTMLElement,
+        opts: {
+          type?: string;
+          theme?: string;
+          size?: string;
+          text?: string;
+          width?: number;
+        },
+      ) => void;
+    };
+    const initGoogle = () => {
+      const g = (
+        window as unknown as {
+          google?: { accounts?: { id?: GoogleAccountsId } };
+        }
+      ).google;
+      if (!g?.accounts?.id) return;
+      g.accounts.id.initialize({
+        client_id: clientId,
+        callback: (response: { credential?: string }) => {
+          if (response?.credential) doGoogleAuth(response.credential);
+        },
+      });
+      container.innerHTML = "";
+      g.accounts.id.renderButton(container, {
+        type: "standard",
+        theme: "outline",
+        size: "large",
+        text: "continue_with",
+        width: 320,
+      });
+    };
+
+    const win = window as unknown as {
+      google?: { accounts?: { id?: GoogleAccountsId } };
+    };
+    if (win.google?.accounts?.id) {
+      initGoogle();
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.onload = initGoogle;
+    document.head.appendChild(script);
+    return () => {
+      container.innerHTML = "";
+    };
+  }, [roleSelected, registrationMethod, userRole, router]);
+
+  const uploadResume = async (
+    userId: string,
+    file: File,
+    options?: { forRegistration?: boolean },
+  ) => {
     // Validate file type
     if (file.type !== "application/pdf") {
       throw new Error(
@@ -314,18 +511,18 @@ export default function SignupPage() {
         throw new Error(uploadResult.error || "Failed to upload resume to R2");
       }
 
-      // Send R2 key/URL to backend
-      // Token is optional (for registration flows)
+      // During registration, do not send token so backend uses body.userId (avoids FK error).
       const token =
-        typeof window !== "undefined"
-          ? localStorage.getItem("token")
-          : undefined;
+        options?.forRegistration === true
+          ? undefined
+          : typeof window !== "undefined"
+            ? localStorage.getItem("token")
+            : undefined;
 
       const headers: HeadersInit = {
         "Content-Type": "application/json",
       };
 
-      // Add authorization header only if token exists
       if (token) {
         headers["Authorization"] = `Bearer ${token}`;
       }
@@ -567,12 +764,14 @@ export default function SignupPage() {
   const handleRoleSelection = (role: "customer" | "provider") => {
     setUserRole(role);
     setRoleSelected(true);
+    setRegistrationMethod(null);
     setCurrentStep(1);
     router.replace(`/auth/register?role=${role}`);
   };
 
   const handleChangeRole = () => {
     setRoleSelected(false);
+    setRegistrationMethod(null);
     setUserRole("");
     setCurrentStep(1);
     router.replace(`/auth/register`);
@@ -584,18 +783,23 @@ export default function SignupPage() {
     }
   };
 
+  const handleChooseEmailRegistration = () => {
+    setRegistrationMethod("email");
+  };
+
   const handleInputChange = (
     key: keyof RegistrationFormData,
     value: string,
   ) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
     if (key === "email") {
-      console.log(
-        `🔄 Email field changed to: ${value}, resetting email status to idle`,
-      );
       setEmailStatus("idle");
       setFieldErrors((p) => ({ ...p, email: undefined }));
       setError("");
+      setEmailOtpSent(false);
+      setEmailOtpVerified(false);
+      setOtpCode("");
+      setOtpError("");
     }
   };
   const handleBooleanInputChange = (
@@ -604,6 +808,109 @@ export default function SignupPage() {
   ) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
   };
+
+  /** Returns a clear message listing exactly which required fields are missing for the current step. */
+  const getMissingRequiredFields = (step: number): string => {
+    if (userRole === "customer") {
+      switch (step) {
+        case 1: {
+          const missing: string[] = [];
+          if (!formData.companyName?.trim()) missing.push("Company name");
+          if (!formData.email?.trim()) missing.push("Email");
+          if (!formData.password) missing.push("Password");
+          if (!formData.confirmPassword) missing.push("Confirm password");
+          if (!formData.phone?.trim()) missing.push("Phone number");
+          if (!formData.acceptedTerms) missing.push("Accept Terms of Service");
+          if (formData.password && !isStrongPassword(formData.password))
+            missing.push(
+              "Password must be strong (8+ chars, upper, lower, number, symbol)",
+            );
+          if (
+            formData.password &&
+            formData.confirmPassword &&
+            formData.password !== formData.confirmPassword
+          )
+            missing.push("Passwords must match");
+          if (missing.length)
+            return `Account Setup: please fill in ${missing.join(", ")}.`;
+          return "Please fill in all required account fields before proceeding.";
+        }
+        case 2:
+          return "Please verify your email with the 6-digit code we sent before continuing.";
+        default:
+          return "Please complete the required fields for this step before proceeding.";
+      }
+    }
+    // Provider
+    switch (step) {
+      case 1: {
+        const missing: string[] = [];
+        if (!formData.name?.trim()) missing.push("Full name");
+        if (!formData.email?.trim()) missing.push("Email");
+        if (!formData.password) missing.push("Password");
+        if (!formData.confirmPassword) missing.push("Confirm password");
+        if (!formData.phone?.trim()) missing.push("Phone number");
+        if (formData.password && !isStrongPassword(formData.password))
+          missing.push(
+            "Password must be strong (8+ chars, upper, lower, number, symbol)",
+          );
+        if (
+          formData.password &&
+          formData.confirmPassword &&
+          formData.password !== formData.confirmPassword
+        )
+          missing.push("Passwords must match");
+        if (missing.length)
+          return `Account Setup: please fill in ${missing.join(", ")}.`;
+        return "Please fill in all required account fields before proceeding.";
+      }
+      case 2:
+        return "Please verify your email with the 6-digit code we sent before continuing.";
+      case 3: {
+        const missing: string[] = [];
+        if (!formData.bio?.trim()) missing.push("Bio");
+        if (!formData.location?.trim()) missing.push("Location");
+        if (!resumeFile) missing.push("Resume (upload a file)");
+        if (!kycDocType || !kycFile)
+          missing.push("KYC document (select type and upload file)");
+        if (missing.length)
+          return `Profile & CV: please fill in ${missing.join(", ")}.`;
+        return "Please complete all required Profile & CV fields before proceeding.";
+      }
+      case 6: {
+        if (certifications.length === 0)
+          return "Please complete the required fields for this step before proceeding.";
+        const invalid: string[] = [];
+        const isValidDate = (s: string) => {
+          const t = (s || "").trim();
+          if (!t) return false;
+          return !Number.isNaN(new Date(t).getTime());
+        };
+        certifications.forEach((cert, i) => {
+          const serial = (cert.serialNumber || "").trim().toLowerCase();
+          const link = (cert.sourceUrl || "").trim().toLowerCase();
+          const hasSerial =
+            serial && serial !== "not specified" && serial !== "n/a";
+          const hasLink = link && link !== "not specified" && link !== "n/a";
+          if (!hasSerial && !hasLink)
+            invalid.push(
+              `Cert "${cert.name || "Unnamed"}" needs serial number or verification link`,
+            );
+          else if (!isValidDate(cert.issuedDate || ""))
+            invalid.push(
+              `Cert "${cert.name || "Unnamed"}" needs a valid issue date`,
+            );
+        });
+        if (invalid.length) return `Certifications: ${invalid.join(". ")}`;
+        return "Please complete the required fields for this step before proceeding.";
+      }
+      case 7:
+        return "You must accept the Terms of Service, Privacy Policy, and Cookie Policy to proceed.";
+      default:
+        return "Please complete the required fields for this step before proceeding.";
+    }
+  };
+
   const validateStep = (step: number): boolean => {
     if (userRole === "customer") {
       switch (step) {
@@ -613,7 +920,8 @@ export default function SignupPage() {
             !!formData.email &&
             !!formData.password &&
             !!formData.confirmPassword &&
-            !!formData.phone;
+            !!formData.phone &&
+            Boolean(formData.acceptedTerms);
 
           const strongAndMatch =
             isStrongPassword(formData.password) &&
@@ -622,25 +930,7 @@ export default function SignupPage() {
           return requiredFilled && strongAndMatch;
         }
         case 2:
-          return !!(formData.location && formData.industry);
-        case 3:
-          return !!(
-            formData.companyDescription &&
-            formData.companySize &&
-            formData.establishedYear &&
-            formData.annualRevenue &&
-            formData.fundingStage &&
-            formData.preferredContractTypes &&
-            formData.averageBudgetRange &&
-            formData.remotePolicy &&
-            formData.hiringFrequency &&
-            formData.categoriesHiringFor &&
-            formData.mission &&
-            formData.values
-          );
-        case 4:
-          return Boolean(formData.acceptedTerms); // or Boolean(formData.acceptedTerms) if using boolean
-
+          return emailOtpVerified;
         default:
           return true;
       }
@@ -658,46 +948,43 @@ export default function SignupPage() {
             formData.password === formData.confirmPassword;
           return requiredFilled && strongAndMatch;
         }
-        case 2: {
+        case 2:
+          return emailOtpVerified;
+        case 3: {
           const bioOk = !!formData.bio?.trim();
           const locOk = !!formData.location;
           const resumeOk = Boolean(resumeFile);
           const kycOk = Boolean(kycDocType) && Boolean(kycFile);
           return bioOk && locOk && resumeOk && kycOk;
         }
-        case 5: {
-          const allCertsValid =
-            certifications.length > 0 &&
-            certifications.every(
-              (cert) =>
-                !!cert.name &&
-                !!cert.issuer &&
-                !!cert.issuedDate &&
-                ((!!cert.serialNumber?.trim() &&
-                  cert.serialNumber.trim().toLowerCase() !== "not specified" &&
-                  cert.serialNumber.trim().toLowerCase() !== "n/a") ||
-                  (!!cert.sourceUrl?.trim() &&
-                    cert.sourceUrl.trim().toLowerCase() !== "not specified" &&
-                    cert.sourceUrl.trim().toLowerCase() !== "n/a")),
-            );
-
-          const newCertValid =
-            !!newCertification.name &&
-            !!newCertification.issuer &&
-            !!newCertification.issuedDate &&
-            ((!!newCertification.serialNumber?.trim() &&
-              newCertification.serialNumber.trim().toLowerCase() !==
-                "not specified" &&
-              newCertification.serialNumber.trim().toLowerCase() !== "n/a") ||
-              (!!newCertification.sourceUrl?.trim() &&
-                newCertification.sourceUrl.trim().toLowerCase() !==
-                  "not specified" &&
-                newCertification.sourceUrl.trim().toLowerCase() !== "n/a"));
-
-          return allCertsValid || newCertValid;
+        case 6: {
+          // If any certification is added, each must have (serial or link) and valid date
+          if (certifications.length === 0) return true;
+          const isValidDate = (s: string) => {
+            const t = (s || "").trim();
+            if (!t) return false;
+            const d = new Date(t);
+            return !Number.isNaN(d.getTime());
+          };
+          const hasSerialOrLink = (cert: {
+            serialNumber?: string;
+            sourceUrl?: string;
+          }) => {
+            const serial = (cert.serialNumber || "").trim().toLowerCase();
+            const link = (cert.sourceUrl || "").trim().toLowerCase();
+            const noSerial =
+              !serial || serial === "not specified" || serial === "n/a";
+            const noLink = !link || link === "not specified" || link === "n/a";
+            return !noSerial || !noLink;
+          };
+          const allValid = certifications.every(
+            (cert) =>
+              hasSerialOrLink(cert) && isValidDate(cert.issuedDate || ""),
+          );
+          return allValid;
         }
-        case 6:
-          return Boolean(formData.acceptedTerms); // or Boolean(formData.acceptedTerms) if using boolean
+        case 7:
+          return Boolean(formData.acceptedTerms);
 
         default:
           return true;
@@ -707,7 +994,7 @@ export default function SignupPage() {
 
   const nextStep = async () => {
     if (!validateStep(currentStep)) {
-      setError("Please fill in all required fields before proceeding.");
+      setError(getMissingRequiredFields(currentStep));
       return;
     }
 
@@ -740,6 +1027,7 @@ export default function SignupPage() {
       setError("");
     }
 
+    setError("");
     setCurrentStep((prev) => Math.min(prev + 1, getCurrentSteps().length));
   };
 
@@ -768,56 +1056,11 @@ export default function SignupPage() {
       };
 
       if (userRole === "customer") {
-        requestData.customerProfile = {
-          description: formData.companyDescription || "",
-          industry: formData.industry || "",
-          location: formData.location || "",
-          website: formData.website || null,
-          socialLinks: formData.socialLinks || null,
-          companySize: formData.companySize || null,
-          employeeCount: formData.employeeCount
-            ? parseInt(formData.employeeCount, 10)
-            : null,
-          establishedYear: formData.establishedYear
-            ? parseInt(formData.establishedYear, 10)
-            : null,
-          annualRevenue: formData.annualRevenue
-            ? parseFloat(formData.annualRevenue).toFixed(2)
-            : null,
-          fundingStage: formData.fundingStage || null,
-          preferredContractTypes: formData.preferredContractTypes || [],
-          averageBudgetRange: formData.averageBudgetRange || null,
-          remotePolicy: formData.remotePolicy || null,
-          hiringFrequency: formData.hiringFrequency || null,
-          categoriesHiringFor: formData.categoriesHiringFor || [],
-          mission: formData.mission || null,
-          values: formData.values || [],
-          languages: selectedLanguages,
-        };
+        // Minimal profile at registration; rest completed in customer onboarding
+        requestData.customerProfile = {};
       } else if (userRole === "provider") {
-        requestData.providerProfile = {
-          bio: formData.bio || "",
-          major: formData.major || null,
-          location: formData.location || "",
-          hourlyRate: formData.hourlyRate
-            ? parseFloat(formData.hourlyRate)
-            : null,
-          availability: formData.availability || null,
-          languages: selectedLanguages,
-          website: formData.website || null,
-          skills: selectedSkills,
-          yearsExperience: formData.yearsExperience
-            ? parseInt(formData.yearsExperience)
-            : null,
-          minimumProjectBudget: formData.minimumProjectBudget
-            ? parseFloat(formData.minimumProjectBudget)
-            : null,
-          maximumProjectBudget: formData.maximumProjectBudget
-            ? parseFloat(formData.maximumProjectBudget)
-            : null,
-          preferredProjectDuration: formData.preferredProjectDuration || null,
-          workPreference: formData.workPreference || "remote",
-        };
+        // Minimal profile at registration; rest can be completed in profile later
+        requestData.providerProfile = {};
       }
 
       const response = await fetch(endpoint, {
@@ -829,28 +1072,39 @@ export default function SignupPage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || "Registration failed");
 
-      const newUserId: string | undefined =
-        userRole === "provider" ? data?.user?.id : data?.user?.user.id;
-      if (!newUserId) throw new Error("User ID missing after registration");
-
-      // 2️⃣ Upload KYC only after successful registration
-      if (kycFile) {
-        const kycRes = await uploadKyc(newUserId);
-        if (!kycRes.ok) throw new Error("KYC upload failed, please try again.");
+      // Provider: minimal flow → auto-login and redirect to dashboard
+      if (userRole === "provider" && data.token && data.user) {
+        localStorage.setItem("token", data.token);
+        localStorage.setItem("user", JSON.stringify(data.user));
+        Cookies.set("token", data.token, {
+          path: "/",
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+        });
+        setSuccess("Account created! Redirecting to dashboard...");
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        router.push("/provider/dashboard");
+        return;
       }
 
-      // 3️⃣ Optional provider files
-      if (userRole === "provider") {
-        if (resumeFile) await uploadResume(newUserId, resumeFile);
-        if (certifications.length > 0)
-          await uploadCertifications(newUserId, certifications);
+      // Customer: minimal flow → auto-login and redirect to onboarding
+      if (userRole === "customer" && data.token && data.user) {
+        localStorage.setItem("token", data.token);
+        localStorage.setItem("user", JSON.stringify(data.user));
+        Cookies.set("token", data.token, {
+          path: "/",
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+        });
+        setSuccess(
+          "Account created! Redirecting to complete your company profile...",
+        );
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        router.push("/customer/onboarding");
+        return;
       }
 
-      // 4️⃣ Success → navigate to login
-      setSuccess("Account created successfully! Redirecting...");
-      setTimeout(() => {
-        window.location.href = "/auth/login";
-      }, 2000);
+      throw new Error("Registration succeeded but no token received");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -896,13 +1150,13 @@ export default function SignupPage() {
             animate="animate"
           >
             <Link href="/" className="inline-flex items-center space-x-2 group">
-            <Image
-              src="/logo.png"
-              alt="TechConnex"
-              width={40}
-              height={40}
-              className="h-10 w-10 rounded-xl object-contain"
-            />
+              <Image
+                src="/logo.png"
+                alt="TechConnex"
+                width={40}
+                height={40}
+                className="h-10 w-10 rounded-xl object-contain"
+              />
               <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
                 Techconnex
               </span>
@@ -1070,7 +1324,128 @@ export default function SignupPage() {
     );
   }
 
-  // Main Registration Flow
+  // Choose registration method: Email vs Google (after role is selected)
+  if (roleSelected && registrationMethod === null) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 flex items-center justify-center p-6">
+        <div className="fixed inset-0 overflow-hidden pointer-events-none">
+          <motion.div
+            className="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-blue-400/20 to-purple-400/20 rounded-full blur-3xl"
+            animate={{ rotate: 360 }}
+            transition={{
+              duration: 20,
+              repeat: Number.POSITIVE_INFINITY,
+              ease: "linear",
+            }}
+          />
+          <motion.div
+            className="absolute -bottom-40 -left-40 w-80 h-80 bg-gradient-to-br from-green-400/20 to-blue-400/20 rounded-full blur-3xl"
+            animate={{ rotate: -360 }}
+            transition={{
+              duration: 25,
+              repeat: Number.POSITIVE_INFINITY,
+              ease: "linear",
+            }}
+          />
+        </div>
+
+        <motion.div
+          className="w-full max-w-lg relative z-10"
+          initial={{ opacity: 0, scale: 0.96 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.4, ease: "easeOut" }}
+        >
+          <motion.div
+            className="text-center mb-6"
+            variants={fadeInUp}
+            initial="initial"
+            animate="animate"
+          >
+            <Link href="/" className="inline-flex items-center space-x-2 group">
+              <Image
+                src="/logo.png"
+                alt="TechConnex"
+                width={40}
+                height={40}
+                className="h-10 w-10 rounded-xl object-contain"
+              />
+              <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                Techconnex
+              </span>
+            </Link>
+          </motion.div>
+
+          <Card className="bg-white/80 backdrop-blur-sm border-white/20 shadow-xl overflow-hidden relative">
+            <CardHeader className="text-center pb-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setRoleSelected(false)}
+                className="absolute top-4 left-4 text-gray-500 hover:text-gray-700 z-10"
+              >
+                <ChevronLeft className="w-4 h-4 mr-1" />
+                Back
+              </Button>
+              <CardTitle className="text-xl font-bold text-gray-900 mt-6">
+                How do you want to sign up?
+              </CardTitle>
+              <CardDescription className="text-gray-600">
+                {userRole === "provider"
+                  ? "Create your freelancer account with email or use Google for a one-click sign up."
+                  : "Create your company account with email or use Google for a one-click sign up."}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-6 pt-2 space-y-4">
+              {error && (
+                <div className="rounded-lg bg-red-50 border border-red-200 text-red-800 text-sm p-3">
+                  {error}
+                </div>
+              )}
+              {isLoading && (
+                <p className="text-center text-sm text-gray-500">
+                  Signing you in...
+                </p>
+              )}
+              <div
+                id="google-register-button-container"
+                className="flex justify-center min-h-[44px]"
+              />
+              <div className="relative my-6">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t border-gray-200" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-white px-2 text-gray-500">
+                    Or register with email
+                  </span>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full h-12 border-2 border-gray-200 hover:border-blue-300 hover:bg-blue-50/50 font-medium"
+                onClick={handleChooseEmailRegistration}
+              >
+                <Mail className="w-5 h-5 mr-2 text-gray-600" />
+                Register with Email
+              </Button>
+              <p className="text-center text-sm text-gray-500 mt-4">
+                Already have an account?{" "}
+                <Link
+                  href="/auth/login"
+                  className="text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  Sign in
+                </Link>
+              </p>
+            </CardContent>
+          </Card>
+        </motion.div>
+      </div>
+    );
+  }
+
+  // Main Registration Flow (email registration only)
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 flex items-center justify-center p-6">
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
@@ -1107,7 +1482,7 @@ export default function SignupPage() {
           animate="animate"
         >
           <Link href="/" className="inline-flex items-center space-x-2 group">
-          <Image
+            <Image
               src="/logo.png"
               alt="TechConnex"
               width={40}
@@ -1201,9 +1576,143 @@ export default function SignupPage() {
                   exit={{ opacity: 0, x: -20 }}
                   transition={{ duration: 0.3 }}
                 >
-                  {userRole === "customer" ? (
+                  {currentStep === 2 ? (
+                    <motion.div
+                      variants={fadeInUp}
+                      initial="initial"
+                      animate="animate"
+                      className="space-y-6"
+                    >
+                      <div className="text-center mb-6">
+                        <div className="mx-auto w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center mb-4">
+                          <ShieldCheck className="w-7 h-7 text-blue-600" />
+                        </div>
+                        <h2 className="text-2xl font-bold text-gray-900">
+                          Verify your email
+                        </h2>
+                        <p className="text-gray-600 mt-1">
+                          We sent a 6-digit code to
+                        </p>
+                        <p className="font-medium text-gray-900 flex items-center justify-center gap-2 mt-1">
+                          <Mail className="w-4 h-4 text-gray-500" />
+                          {formData.email}
+                        </p>
+                      </div>
+
+                      {emailOtpVerified ? (
+                        <div className="space-y-4">
+                          <div className="rounded-xl border border-green-200 bg-green-50/80 p-6 text-center">
+                            <CheckCircle className="w-12 h-12 text-green-600 mx-auto mb-2" />
+                            <p className="text-green-800 font-medium">
+                              Email verified
+                            </p>
+                            <p className="text-sm text-green-700 mt-1">
+                              {userRole === "provider"
+                                ? "Accept the terms below and create your account to go to your dashboard."
+                                : "Click Next to continue your registration."}
+                            </p>
+                          </div>
+                          {userRole === "provider" && (
+                            <div className="rounded-lg border-2 border-gray-300 bg-white p-4 shadow-sm">
+                              <div className="flex items-start gap-3">
+                                <Checkbox
+                                  id="provider-terms"
+                                  checked={formData.acceptedTerms}
+                                  onCheckedChange={(checked) =>
+                                    handleBooleanInputChange(
+                                      "acceptedTerms",
+                                      checked === true,
+                                    )
+                                  }
+                                  className="mt-0.5 h-5 w-5 shrink-0 rounded border-2 border-gray-500 data-[state=checked]:border-blue-600 data-[state=checked]:bg-blue-600"
+                                />
+                                <label
+                                  htmlFor="provider-terms"
+                                  className="cursor-pointer text-sm font-medium text-gray-800 leading-snug"
+                                >
+                                  I accept the{" "}
+                                  <Link
+                                    href="/terms"
+                                    className="text-blue-600 underline hover:text-blue-700"
+                                    target="_blank"
+                                  >
+                                    Terms of Service
+                                  </Link>{" "}
+                                  and{" "}
+                                  <Link
+                                    href="/privacy"
+                                    className="text-blue-600 underline hover:text-blue-700"
+                                    target="_blank"
+                                  >
+                                    Privacy Policy
+                                  </Link>
+                                  .
+                                </label>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="space-y-5 max-w-sm mx-auto">
+                          <div className="space-y-2">
+                            <Label className="text-center block">
+                              Enter verification code
+                            </Label>
+                            <div className="flex justify-center">
+                              <InputOTP
+                                maxLength={6}
+                                value={otpCode}
+                                onChange={(value) => setOtpCode(value)}
+                                containerClassName="justify-center gap-1 sm:gap-2"
+                              >
+                                <InputOTPGroup className="bg-white/80 border-gray-200 rounded-lg p-2 gap-1 sm:gap-2">
+                                  {[0, 1, 2, 3, 4, 5].map((i) => (
+                                    <InputOTPSlot
+                                      key={i}
+                                      index={i}
+                                      className="h-12 w-10 sm:w-12 text-lg border-gray-300 rounded-md"
+                                    />
+                                  ))}
+                                </InputOTPGroup>
+                              </InputOTP>
+                            </div>
+                            {otpError && (
+                              <p className="text-center text-sm text-red-600">
+                                {otpError}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                            <Button
+                              type="button"
+                              onClick={verifyEmailOtp}
+                              disabled={otpCode.length !== 6 || isVerifyingOtp}
+                              className="bg-blue-600 hover:bg-blue-700 text-white min-w-[140px]"
+                            >
+                              {isVerifyingOtp ? "Verifying…" : "Verify code"}
+                            </Button>
+                            {resendCooldown > 0 ? (
+                              <span className="text-sm text-gray-500">
+                                Resend in {resendCooldown}s
+                              </span>
+                            ) : (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={sendEmailOtp}
+                                disabled={isSendingOtp}
+                                className="border-gray-300"
+                              >
+                                {isSendingOtp ? "Sending…" : "Resend code"}
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </motion.div>
+                  ) : userRole === "customer" ? (
                     <CustomerRegistration
-                      currentStep={currentStep}
+                      currentStep={currentStep === 1 ? 1 : currentStep - 1}
                       formData={formData}
                       handleInputChange={handleInputChange}
                       showPassword={showPassword}
@@ -1223,7 +1732,7 @@ export default function SignupPage() {
                     />
                   ) : (
                     <ProviderRegistration
-                      currentStep={currentStep}
+                      currentStep={currentStep === 1 ? 1 : currentStep - 1}
                       formData={formData}
                       handleInputChange={handleInputChange}
                       showPassword={showPassword}
@@ -1296,15 +1805,24 @@ export default function SignupPage() {
                   <Button
                     type="button"
                     onClick={nextStep}
-                    disabled={emailStatus === "checking" || isLoading}
+                    disabled={
+                      emailStatus === "checking" ||
+                      isLoading ||
+                      (currentStep === 2 && !emailOtpVerified)
+                    }
                     className={`bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white
               ${
-                emailStatus === "checking"
+                emailStatus === "checking" ||
+                (currentStep === 2 && !emailOtpVerified)
                   ? "opacity-50 cursor-not-allowed"
                   : ""
               }`}
                   >
-                    {emailStatus === "checking" ? "Checking..." : "Next"}
+                    {emailStatus === "checking"
+                      ? "Checking..."
+                      : currentStep === 2 && !emailOtpVerified
+                        ? "Verify email to continue"
+                        : "Next"}
                     <ChevronRight className="w-4 h-4 ml-2" />
                   </Button>
                 ) : (
@@ -1327,7 +1845,11 @@ export default function SignupPage() {
                     ) : (
                       <CheckCircle className="w-4 h-4 mr-2" />
                     )}
-                    {isLoading ? "Creating Account..." : "Create Account"}
+                    {isLoading
+                      ? "Creating Account..."
+                      : userRole === "provider"
+                        ? "Create account & go to dashboard"
+                        : "Create account & continue"}
                   </Button>
                 )}
               </div>

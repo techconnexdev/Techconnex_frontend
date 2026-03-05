@@ -425,13 +425,23 @@ export default function CompanyInfo({
     "One-time",
   ];
 
+  const editableCardClass = isEditing
+    ? "ring-2 ring-blue-300 border-blue-200 bg-blue-50/30"
+    : "";
+  const editableBadge = isEditing ? (
+    <span className="text-xs font-normal text-blue-700 bg-blue-100 px-2 py-0.5 rounded">
+      Editable
+    </span>
+  ) : null;
+
   return (
     <div className="space-y-4 sm:space-y-5 lg:space-y-6">
       {/* Business Profile */}
-      <Card>
+      <Card className={editableCardClass}>
         <CardHeader className="p-4 sm:p-6">
-          <CardTitle className="text-base sm:text-lg">
+          <CardTitle className="text-base sm:text-lg flex items-center gap-2">
             Business Profile
+            {editableBadge}
           </CardTitle>
           <CardDescription className="text-xs sm:text-sm">
             Core information about your company
@@ -634,10 +644,13 @@ export default function CompanyInfo({
       </Card>
 
       {/* Hiring Preferences */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Hiring Preferences</CardTitle>
-          <CardDescription>
+      <Card className={editableCardClass}>
+        <CardHeader className="p-4 sm:p-6">
+          <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+            Hiring Preferences
+            {editableBadge}
+          </CardTitle>
+          <CardDescription className="text-xs sm:text-sm">
             Your company&apos;s hiring and contract preferences
           </CardDescription>
         </CardHeader>
@@ -899,10 +912,13 @@ export default function CompanyInfo({
       </Card>
 
       {/* Branding & Culture */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Branding & Culture</CardTitle>
-          <CardDescription>
+      <Card className={editableCardClass}>
+        <CardHeader className="p-4 sm:p-6">
+          <CardTitle className="text-base sm:text-lg flex items-center gap-2">
+            Branding & Culture
+            {editableBadge}
+          </CardTitle>
+          <CardDescription className="text-xs sm:text-sm">
             Mission, values, and company culture
           </CardDescription>
         </CardHeader>

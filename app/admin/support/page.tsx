@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
+import io, { Socket } from "socket.io-client";
 import { AdminLayout } from "@/components/admin-layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,6 +16,7 @@ import {
   getAdminSupportReferences,
   uploadAdminSupportReference,
   reindexAdminSupportReference,
+  deleteAdminSupportReference,
 } from "@/lib/api";
 import { getMessageAttachmentUrl } from "@/lib/api";
 import {
@@ -22,6 +24,7 @@ import {
   Upload,
   RefreshCw,
   X,
+  Trash2,
 } from "lucide-react";
 import { uploadFile } from "@/lib/upload";
 
@@ -79,9 +82,11 @@ export default function AdminSupportPage() {
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [uploadingRef, setUploadingRef] = useState<string | null>(null);
   const [reindexing, setReindexing] = useState<string | null>(null);
+  const [deletingRef, setDeletingRef] = useState<string | null>(null);
   const [refUploadSlug, setRefUploadSlug] = useState("company_manual");
   const [refUploadName, setRefUploadName] = useState("Company Manual");
   const [refFile, setRefFile] = useState<File | null>(null);
+  const [socket, setSocket] = useState<Socket | null>(null);
 
   const loadConversations = useCallback(async () => {
     try {
@@ -109,15 +114,89 @@ export default function AdminSupportPage() {
     })();
   }, [loadConversations]);
 
-  // Real-time: poll conversations list so left panel updates (new conversations, last message, hasUnread)
+  // Socket.IO: connect for real-time support messages
   useEffect(() => {
-    const interval = setInterval(() => {
-      loadConversations();
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [loadConversations]);
+    const token =
+      typeof window !== "undefined" ? localStorage.getItem("token") : null;
+    if (!token) return;
+    const API_URL =
+      process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+    const s = io(API_URL, {
+      auth: { token },
+      transports: ["websocket", "polling"],
+    });
+    setSocket(s);
+    return () => {
+      s.disconnect();
+      setSocket(null);
+    };
+  }, []);
 
+  // Join/leave conversation room when selecting a conversation
   useEffect(() => {
+    if (!socket) return;
+    if (selectedId) {
+      socket.emit("support:join_conversation", { conversationId: selectedId });
+      return () => {
+        socket.emit("support:leave_conversation", {
+          conversationId: selectedId,
+        });
+      };
+    }
+  }, [socket, selectedId]);
+
+  // Real-time: listen for support_message (user messages, AI replies)
+  useEffect(() => {
+    if (!socket || !selectedId) return;
+    const currentId = selectedId;
+    const handler = (data: {
+      conversationId: string;
+      messages?: Array<{
+        id: string;
+        senderType: string;
+        senderUserId: string | null;
+        content: string;
+        attachments?: string[];
+        metadata?: unknown;
+        createdAt: string;
+      }>;
+      status?: string;
+    }) => {
+      if (data.conversationId !== currentId) return;
+      if (data.status) {
+        setConvDetail((c) => (c ? { ...c, status: data.status! } : null));
+      }
+      if (data.messages?.length) {
+        setConvDetail((c) => {
+          if (!c) return null;
+          const existingIds = new Set(c.messages.map((m) => m.id));
+          const toAdd = data.messages!.filter((m) => !existingIds.has(m.id)).map((m) => ({
+            id: m.id,
+            senderType: m.senderType,
+            senderUserId: m.senderUserId,
+            content: m.content,
+            attachments: m.attachments ?? [],
+            createdAt: m.createdAt,
+          }));
+          if (toAdd.length === 0) return c;
+          return {
+            ...c,
+            messages: [...c.messages, ...toAdd],
+          };
+        });
+      }
+      loadConversations(); // refresh list (last message, etc.)
+    };
+    socket.on("support_message", handler);
+    return () => {
+      socket.off("support_message", handler);
+    };
+  }, [socket, selectedId]);
+
+  // When switching conversation: clear draft and load the selected one
+  useEffect(() => {
+    setReply("");
+    setReplyAttachments([]);
     if (selectedId) {
       getAdminSupportConversation(selectedId)
         .then((res) => setConvDetail(res.data))
@@ -127,16 +206,11 @@ export default function AdminSupportPage() {
     }
   }, [selectedId]);
 
-  // Real-time: poll selected conversation so admin sees new user messages without refreshing
+  // Fallback: poll conversations list every 10s for new conversations
   useEffect(() => {
-    if (!selectedId) return;
-    const interval = setInterval(() => {
-      getAdminSupportConversation(selectedId)
-        .then((res) => setConvDetail(res.data))
-        .catch(() => {});
-    }, 3000);
+    const interval = setInterval(() => loadConversations(), 10000);
     return () => clearInterval(interval);
-  }, [selectedId]);
+  }, [loadConversations]);
 
   const sendReply = async () => {
     if (!selectedId || (!reply.trim() && replyAttachments.length === 0)) return;
@@ -216,6 +290,20 @@ export default function AdminSupportPage() {
     }
   };
 
+  const deleteRef = async (id: string, name: string) => {
+    if (!confirm(`Remove "${name}"? This will delete the document and all its RAG chunks. The file will be removed from storage.`)) return;
+    setDeletingRef(id);
+    try {
+      await deleteAdminSupportReference(id);
+      await loadRefs();
+    } catch (e) {
+      console.error(e);
+      alert((e as Error)?.message || "Failed to delete");
+    } finally {
+      setDeletingRef(null);
+    }
+  };
+
   const senderLabel = (m: {
     senderType: string;
     senderUserId: string | null;
@@ -239,7 +327,7 @@ export default function AdminSupportPage() {
       label: "Handoff requested",
       className:
         "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/50 dark:text-amber-200 dark:border-amber-700",
-      desc: "User asked for human — you can take over",
+      desc: "User asked for human — change status to Human taken to reply",
     },
     HUMAN_TAKEN: {
       label: "Human taken",
@@ -267,9 +355,7 @@ export default function AdminSupportPage() {
   };
 
   const canAdminReply =
-    convDetail &&
-    (convDetail.status === "HANDOFF_REQUESTED" ||
-      convDetail.status === "HUMAN_TAKEN");
+    convDetail && convDetail.status === "HUMAN_TAKEN";
 
   return (
     <AdminLayout>
@@ -352,12 +438,12 @@ export default function AdminSupportPage() {
                           : "—"}
                       </td>
                       <td className="p-2">{r.chunksCount}</td>
-                      <td className="p-2">
+                      <td className="p-2 flex flex-wrap gap-2">
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => reindex(r.id)}
-                          disabled={reindexing === r.id}
+                          disabled={reindexing === r.id || deletingRef === r.id}
                         >
                           {reindexing === r.id ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -365,6 +451,20 @@ export default function AdminSupportPage() {
                             <RefreshCw className="h-4 w-4" />
                           )}
                           Re-index
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          onClick={() => deleteRef(r.id, r.name)}
+                          disabled={reindexing === r.id || deletingRef === r.id}
+                        >
+                          {deletingRef === r.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
+                          Remove
                         </Button>
                       </td>
                     </tr>
@@ -558,6 +658,14 @@ export default function AdminSupportPage() {
                         Conversation is with AI. You can reply after the user
                         triggers a handoff or after you change status to{" "}
                         <strong>Human taken</strong>.
+                      </p>
+                    </div>
+                  )}
+                  {convDetail.status === "HANDOFF_REQUESTED" && (
+                    <div className="p-3 border-t bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-700 rounded-b">
+                      <p className="text-sm text-amber-800 dark:text-amber-200">
+                        Change status to <strong>Human taken</strong> above to
+                        start replying to the user.
                       </p>
                     </div>
                   )}

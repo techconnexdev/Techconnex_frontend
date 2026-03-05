@@ -102,7 +102,7 @@ const Hero = () => {
             variants={heroChildVariant}
             className="flex justify-center gap-4 mt-6 md:mt-10"
           >
-            <Link href="/auth/register">
+            <Link href="/dashboard">
               <Button>Connect with Talent</Button>
             </Link>
             <Button

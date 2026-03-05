@@ -32,10 +32,14 @@ import {
   Trash2,
   Building2,
   Plus,
+  AlertCircle,
 } from "lucide-react";
 import { ProviderLayout } from "@/components/provider-layout";
+import { ProviderEarningsTour } from "@/components/provider/ProviderEarningsTour";
 import { toast } from "@/components/ui/use-toast";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { getKycDocuments } from "@/lib/api";
 import {
   Dialog,
   DialogContent,
@@ -115,6 +119,7 @@ export default function ProviderEarningsPage() {
     accountEmail: "",
     walletId: "",
   });
+  const [isProviderVerified, setIsProviderVerified] = useState<boolean | null>(null);
 
   useEffect(() => {
     const fetchEarnings = async () => {
@@ -208,6 +213,30 @@ export default function ProviderEarningsPage() {
   // On component mount
   useEffect(() => {
     fetchPayoutMethods();
+  }, []);
+
+  // Fetch KYC status to show verification warning (unverified providers cannot receive payouts)
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) {
+          if (mounted) setIsProviderVerified(false);
+          return;
+        }
+        const kycResp = await getKycDocuments();
+        const docsData = (kycResp?.data?.documents ?? kycResp?.data ?? []) as Array<{ status?: string }>;
+        const verified = docsData.some((d) => {
+          const raw = String(d?.status ?? "").toLowerCase();
+          return raw === "verified" || raw === "approved";
+        });
+        if (mounted) setIsProviderVerified(verified);
+      } catch {
+        if (mounted) setIsProviderVerified(false);
+      }
+    })();
+    return () => { mounted = false; };
   }, []);
 
   // Save (create/update) payout method
@@ -515,9 +544,28 @@ export default function ProviderEarningsPage() {
 
   return (
     <ProviderLayout>
+      <ProviderEarningsTour />
       <div className="space-y-6 md:space-y-8 px-4 md:px-0">
+        {/* Verification warning: unverified providers cannot receive payouts */}
+        {isProviderVerified === false && (
+          <Link
+            href="/provider/profile?tab=verification"
+            className="flex flex-wrap items-center gap-2 sm:gap-3 py-3 px-4 rounded-lg border border-amber-200 bg-amber-50/90 hover:bg-amber-100/90 hover:border-amber-300 w-full text-left transition-colors"
+          >
+            <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-amber-800">
+                Provider not verified — you cannot receive payouts
+              </p>
+              <p className="text-xs text-amber-700 mt-0.5">
+                Complete identity verification to receive your earnings. Go to Profile → Verification.
+              </p>
+            </div>
+          </Link>
+        )}
+
         {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4" data-tour-step="0">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
               Earnings
@@ -526,7 +574,7 @@ export default function ProviderEarningsPage() {
               Track your income and payment history
             </p>
           </div>
-          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto" data-tour-step="1">
             <Select value={timeFilter} onValueChange={setTimeFilter}>
               <SelectTrigger className="w-full sm:w-48 text-sm md:text-base">
                 <SelectValue />
@@ -550,7 +598,7 @@ export default function ProviderEarningsPage() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6" data-tour-step="2">
           <Card>
             <CardContent className="p-4 md:p-6">
               <div className="flex items-center justify-between">
@@ -634,7 +682,7 @@ export default function ProviderEarningsPage() {
           </Card>
         </div>
 
-        <Tabs defaultValue="overview" className="space-y-6">
+        <Tabs defaultValue="overview" className="space-y-6" data-tour-step="3">
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="overview" className="text-xs md:text-sm">
               Overview
@@ -651,7 +699,7 @@ export default function ProviderEarningsPage() {
 
           {/* Overview */}
           <TabsContent value="overview">
-            <div className="grid lg:grid-cols-3 gap-4 md:gap-6">
+            <div className="grid lg:grid-cols-3 gap-4 md:gap-6" data-tour-step="4">
               <div className="lg:col-span-2 space-y-6">
                 {/* Monthly Earnings Chart */}
                 <Card>
@@ -798,7 +846,7 @@ export default function ProviderEarningsPage() {
               {/* Sidebar */}
               <div className="space-y-6">
                 {/* Quick Stats */}
-                <Card>
+                <Card data-tour-step="5">
                   <CardHeader>
                     <CardTitle className="text-base md:text-lg">
                       Quick Stats

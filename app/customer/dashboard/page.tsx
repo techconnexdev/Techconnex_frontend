@@ -2,20 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card";
 import {
   Plus,
   CheckCircle,
@@ -23,10 +13,12 @@ import {
   Briefcase,
   TrendingUp,
   Star,
+  ChevronRight,
 } from "lucide-react";
 import Link from "next/link";
 import { CustomerLayout } from "@/components/customer-layout";
 import {
+  API_BASE_URL,
   getCompanyProjects,
   getCompanyProjectStats,
   getProfileImageUrl,
@@ -35,7 +27,17 @@ import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import { useRecommendedProviders } from "@/hooks/useRecommendedProviders";
 import { RecommendedProvidersList } from "@/components/customer/RecommendedProvidersList";
+import { CustomerDashboardTour } from "@/components/customer/CustomerDashboardTour";
 import type { RecommendedProvider } from "@/hooks/useRecommendedProviders";
+import { POST_PROJECT_REQUIRED } from "@/contexts/CustomerCompletionContext";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 // Define Project type outside the component so it can be used in useState
 export type Project = {
@@ -52,32 +54,49 @@ export type Project = {
   [key: string]: unknown; // for any extra fields
 };
 
-/** Fetches and shows recommended providers for a single opportunity (used in hover card). */
-function RecommendationsForProjectPopover({ serviceRequestId }: { serviceRequestId: string }) {
-  const { providers, loading, error } = useRecommendedProviders(serviceRequestId);
+/** Right-panel content: recommended providers for a hovered project + View more link. */
+function RecommendationsPanel({ project }: { project: Project }) {
+  const { providers, loading, error } = useRecommendedProviders(project.id);
   const router = useRouter();
   const handleContact = (provider: RecommendedProvider) => {
     router.push(
-      `/customer/messages?userId=${provider.id}&name=${encodeURIComponent(provider.name)}&avatar=${encodeURIComponent(provider.avatar)}`
+      `/customer/messages?userId=${provider.id}&name=${encodeURIComponent(provider.name)}&avatar=${encodeURIComponent(provider.avatar)}`,
     );
   };
   return (
-    <div className="w-full">
-      <p className="text-xs font-semibold text-gray-700 mb-2">Recommended for this project</p>
-      <RecommendedProvidersList
-        providers={providers}
-        loading={loading}
-        error={error}
-        compact
-        onContact={handleContact}
-        emptyMessage="No recommendations for this project."
-      />
+    <div className="flex flex-col">
+      <p
+        className="text-sm font-semibold text-gray-900 mb-2 truncate"
+        title={project.title}
+      >
+        Recommended for: {project.title}
+      </p>
+      <div className="min-h-0">
+        <RecommendedProvidersList
+          providers={providers}
+          loading={loading}
+          error={error}
+          compact
+          onContact={handleContact}
+          emptyMessage="No recommendations for this project."
+        />
+      </div>
+      <Link
+        href={`/customer/projects/${project.id}`}
+        className="mt-4 flex items-center justify-center gap-2 w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 hover:border-gray-300 transition-colors flex-shrink-0"
+      >
+        View more
+        <ChevronRight className="w-4 h-4" />
+      </Link>
     </div>
   );
 }
 
 export default function CustomerDashboard() {
   const { toast } = useToast();
+  const router = useRouter();
+  const [gateModalOpen, setGateModalOpen] = useState(false);
+  const [newProjectChecking, setNewProjectChecking] = useState(false);
   const [stats, setStats] = useState<{
     activeProjects: number;
     completedProjects: number;
@@ -95,6 +114,8 @@ export default function CustomerDashboard() {
   const [recentProjects, setRecentProjects] = useState<Project[]>([]);
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** Project currently hovered (for showing recommended providers in right panel). */
+  const [hoveredProject, setHoveredProject] = useState<Project | null>(null);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -129,36 +150,45 @@ export default function CustomerDashboard() {
         });
         if (projectsResponse.success && projectsResponse.items) {
           // Map projects to expected structure
-          const mappedProjects = projectsResponse.items.map((project: Record<string, unknown>) => {
-            const provider = project.provider as Record<string, unknown> | undefined;
-            return {
-              id: project.id,
-              title: project.title,
-              provider: provider?.name as string | undefined,
-              providerName: provider?.name as string | undefined,
-              status: (project.status as string)?.toLowerCase() || "pending",
-              progress: project.progress || 0,
-              budget: project.budgetMax,
-              deadline: project.timeline,
-              avatar: getProfileImageUrl((provider?.providerProfile as Record<string, unknown> | undefined)?.profileImageUrl as string | undefined),
-              createdAt: project.createdAt,
-              category: project.category,
-              description: project.description,
-              type: project.type, // ServiceRequest or Project
-            };
-          });
+          const mappedProjects = projectsResponse.items.map(
+            (project: Record<string, unknown>) => {
+              const provider = project.provider as
+                | Record<string, unknown>
+                | undefined;
+              return {
+                id: project.id,
+                title: project.title,
+                provider: provider?.name as string | undefined,
+                providerName: provider?.name as string | undefined,
+                status: (project.status as string)?.toLowerCase() || "pending",
+                progress: project.progress || 0,
+                budget: project.budgetMax,
+                deadline: project.timeline,
+                avatar: getProfileImageUrl(
+                  (
+                    provider?.providerProfile as
+                      | Record<string, unknown>
+                      | undefined
+                  )?.profileImageUrl as string | undefined,
+                ),
+                createdAt: project.createdAt,
+                category: project.category,
+                description: project.description,
+                type: project.type, // ServiceRequest or Project
+              };
+            },
+          );
           setRecentProjects(mappedProjects);
         } else {
           // Set empty projects if API call fails or returns no data
           setRecentProjects([]);
         }
-
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
         setError(
           error instanceof Error
             ? error.message
-            : "Failed to load dashboard data"
+            : "Failed to load dashboard data",
         );
         toast({
           title: "Error",
@@ -240,27 +270,67 @@ export default function CustomerDashboard() {
 
   return (
     <CustomerLayout>
+      <CustomerDashboardTour />
       <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
+        <div
+          className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4"
+          data-tour-step="0"
+        >
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
               Dashboard
             </h1>
             <p className="text-sm sm:text-base text-gray-600 mt-1">
-              Welcome back! Here&apos;s what&apos;s happening with your projects.
+              Welcome back! Here&apos;s what&apos;s happening with your
+              projects.
             </p>
           </div>
-          <Link href="/customer/projects/new" className="w-full sm:w-auto">
-            <Button className="w-full sm:w-auto">
-              <Plus className="w-4 h-4 mr-2" />
-              New Project
-            </Button>
-          </Link>
+          <Button
+            className="w-full sm:w-auto"
+            data-tour-step="1"
+            disabled={newProjectChecking}
+            onClick={async () => {
+              setNewProjectChecking(true);
+              try {
+                const token =
+                  typeof window !== "undefined"
+                    ? localStorage.getItem("token")
+                    : null;
+                if (!token) {
+                  setGateModalOpen(true);
+                  return;
+                }
+                const res = await fetch(
+                  `${API_BASE_URL}/company/profile/completion`,
+                  { headers: { Authorization: `Bearer ${token}` } }
+                );
+                const json = await res.json();
+                const data = json.data ?? json;
+                const completion =
+                  typeof data?.completion === "number" ? data.completion : 0;
+                if (completion >= POST_PROJECT_REQUIRED) {
+                  router.push("/customer/projects/new");
+                } else {
+                  setGateModalOpen(true);
+                }
+              } catch {
+                setGateModalOpen(true);
+              } finally {
+                setNewProjectChecking(false);
+              }
+            }}
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            {newProjectChecking ? "Checking…" : "New Project"}
+          </Button>
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 lg:gap-6">
+        <div
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 lg:gap-6"
+          data-tour-step="2"
+        >
           <Card>
             <CardContent className="p-4 sm:p-5 lg:p-6">
               <div className="flex items-center justify-between">
@@ -324,11 +394,11 @@ export default function CustomerDashboard() {
                   </p>
                   <div className="flex items-center gap-1 mt-1">
                     <p className="text-xl sm:text-2xl font-bold text-gray-900">
-                      {stats.rating !== null && stats.rating !== undefined 
-                        ? stats.rating.toFixed(1) 
-                        : stats.reviewCount > 0 
-                        ? "0.0" 
-                        : "-"}
+                      {stats.rating !== null && stats.rating !== undefined
+                        ? stats.rating.toFixed(1)
+                        : stats.reviewCount > 0
+                          ? "0.0"
+                          : "-"}
                     </p>
                     <Star className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-400 fill-current flex-shrink-0" />
                   </div>
@@ -349,7 +419,7 @@ export default function CustomerDashboard() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
           {/* Recent Projects */}
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2" data-tour-step="3">
             <Card>
               <CardHeader className="p-4 sm:p-6">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
@@ -384,14 +454,26 @@ export default function CustomerDashboard() {
                   ) : (
                     recentProjects.map((project) => {
                       const row = (
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 sm:p-4 border rounded-lg hover:bg-gray-50 transition-colors cursor-pointer gap-3 sm:gap-4">
+                        <div
+                          className={`flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 sm:p-4 border rounded-lg transition-colors cursor-pointer gap-3 sm:gap-4 ${
+                            project.type === "ServiceRequest"
+                              ? "hover:bg-blue-50 hover:border-blue-200"
+                              : "hover:bg-gray-50"
+                          } ${hoveredProject?.id === project.id ? "bg-blue-50 border-blue-200 ring-1 ring-blue-200" : ""}`}
+                          onMouseEnter={() =>
+                            project.type === "ServiceRequest" &&
+                            setHoveredProject(project)
+                          }
+                        >
                           <div className="flex items-start sm:items-center space-x-3 sm:space-x-4 flex-1 min-w-0">
                             <Avatar className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0">
                               <AvatarImage
                                 src={project.avatar || "/placeholder.svg"}
                               />
                               <AvatarFallback>
-                                {(project.provider as string | undefined)?.charAt(0) ||
+                                {(
+                                  project.provider as string | undefined
+                                )?.charAt(0) ||
                                   project.title?.charAt(0) ||
                                   "P"}
                               </AvatarFallback>
@@ -409,10 +491,13 @@ export default function CustomerDashboard() {
                                 <Badge
                                   className={`${getStatusColor(
                                     project.status,
-                                    project.type as string | undefined
+                                    project.type as string | undefined,
                                   )} text-xs`}
                                 >
-                                  {getStatusText(project.status, project.type as string | undefined)}
+                                  {getStatusText(
+                                    project.status,
+                                    project.type as string | undefined,
+                                  )}
                                 </Badge>
                                 {project.type ? (
                                   <Badge variant="outline" className="text-xs">
@@ -451,22 +536,7 @@ export default function CustomerDashboard() {
                           key={project.id}
                           href={`/customer/projects/${project.id}`}
                         >
-                          {project.type === "ServiceRequest" ? (
-                            <HoverCard openDelay={400} closeDelay={100}>
-                              <HoverCardTrigger asChild>
-                                {row}
-                              </HoverCardTrigger>
-                              <HoverCardContent
-                                className="w-[min(24rem,90vw)] max-h-[70vh] overflow-y-auto p-3"
-                                side="right"
-                                align="start"
-                              >
-                                <RecommendationsForProjectPopover serviceRequestId={project.id} />
-                              </HoverCardContent>
-                            </HoverCard>
-                          ) : (
-                            row
-                          )}
+                          {row}
                         </Link>
                       );
                     })
@@ -475,8 +545,66 @@ export default function CustomerDashboard() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Right panel: recommended providers for hovered project */}
+          <div className="hidden lg:block lg:self-start" data-tour-step="4">
+            <Card className="min-h-[200px] w-full">
+              <CardHeader className="p-4 sm:p-5">
+                <CardTitle className="text-base">
+                  Recommended providers
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 sm:p-5 pt-0">
+                {hoveredProject ? (
+                  <RecommendationsPanel project={hoveredProject} />
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-8 px-4 text-center text-gray-500 text-sm min-h-[120px]">
+                    <Briefcase className="w-10 h-10 text-gray-300 mb-3" />
+                    <p>
+                      Hover over a project in the list to see recommended
+                      providers here.
+                    </p>
+                    {recentProjects.some(
+                      (p) => p.type === "ServiceRequest",
+                    ) ? null : (
+                      <p className="mt-2 text-xs">
+                        Only service requests show recommendations.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
+
+      {/* Profile completion gate: must be 60%+ to create projects */}
+      <Dialog open={gateModalOpen} onOpenChange={setGateModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Complete your profile</DialogTitle>
+            <DialogDescription>
+              Complete your profile to at least {POST_PROJECT_REQUIRED}% to
+              create projects.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setGateModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                setGateModalOpen(false);
+                router.push("/customer/onboarding");
+              }}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              👉 Complete Now
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </CustomerLayout>
   );
 }

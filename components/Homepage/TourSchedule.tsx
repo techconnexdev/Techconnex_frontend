@@ -161,7 +161,7 @@ const TourSchedule = () => {
                     {/* Action button */}
                     <div className="flex-shrink-0">
                       <Link
-                        href="/auth/register"
+                        href="/dashboard"
                         className="flex items-center gap-2 px-4 py-2 bg-black text-white rounded-full text-sm font-medium hover:bg-black/80 transition-colors"
                       >
                         <ExternalLink className="w-4 h-4" />
@@ -184,7 +184,7 @@ const TourSchedule = () => {
             {talentPoolConfig.bottomNote}
           </p>
           <Link
-            href="/auth/register"
+            href="/dashboard"
             className="inline-block px-8 py-4 bg-[#185df9] text-white font-display text-sm uppercase tracking-wider rounded-full hover:bg-[#1450d4] transition-colors shadow-lg"
           >
             {talentPoolConfig.bottomCtaText}

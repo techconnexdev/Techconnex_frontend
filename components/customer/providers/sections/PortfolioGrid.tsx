@@ -53,33 +53,44 @@ export default function PortfolioGrid({ items }: { items: PortfolioItem[] }) {
         // Handle both tags and techStack fields
         const techStack = (item as { techStack?: string[]; tags?: string[] }).techStack || item.tags || [];
         
+        const fileViewUrl = imageUrl; // Resolved URL to open image/file in new tab
+
         return (
           <Card key={item.id} className="hover:shadow-lg transition-shadow">
             {imageUrl ? (
               <div className="relative h-48 overflow-hidden rounded-t-lg bg-gray-100">
-                {isImage ? (
-                <Image
-                  src={imageUrl}
-                    alt={item.title || "Portfolio item"}
-                    width={400}
-                    height={192}
-                    className="w-full h-full object-cover"
-                  unoptimized
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center bg-gray-100">
-                    <div className="text-center p-4">
-                      <div className="w-16 h-16 bg-gray-200 rounded-lg flex items-center justify-center mx-auto mb-2">
-                        <FileText className="w-8 h-8 text-gray-400" />
-                            </div>
-                      <p className="text-xs text-gray-500 truncate max-w-[200px]">
-                        {normalizedImage.split("/").pop() || "File"}
-                      </p>
+                <a
+                  href={imageUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block w-full h-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset rounded-t-lg"
+                  title={isImage ? "View image" : "View file"}
+                >
+                  {isImage ? (
+                    <Image
+                      src={imageUrl}
+                      alt={item.title || "Portfolio item"}
+                      width={400}
+                      height={192}
+                      className="w-full h-full object-cover"
+                      unoptimized
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-gray-100 hover:bg-gray-50 transition-colors">
+                      <div className="text-center p-4">
+                        <div className="w-16 h-16 bg-gray-200 rounded-lg flex items-center justify-center mx-auto mb-2">
+                          <FileText className="w-8 h-8 text-gray-400" />
+                        </div>
+                        <p className="text-xs text-gray-500 truncate max-w-[200px]">
+                          {normalizedImage.split("/").pop() || "File"}
+                        </p>
+                        <p className="text-xs text-blue-600 mt-1">Click to open</p>
+                      </div>
                     </div>
-                  </div>
-                )}
-                </div>
-              ) : (
+                  )}
+                </a>
+              </div>
+            ) : (
               <div className="relative bg-gradient-to-br from-green-50 to-teal-50 h-48 flex items-center justify-center rounded-t-lg">
                 <div className="text-center p-4">
                   <div className="w-16 h-16 bg-green-100 rounded-lg flex items-center justify-center mx-auto mb-2">
@@ -126,17 +137,30 @@ export default function PortfolioGrid({ items }: { items: PortfolioItem[] }) {
                   </span>
                 )}
               </div>
-              {hasExternalLink && externalUrl && (
-                <a
-                  href={externalUrl}
+              <div className="flex flex-wrap items-center gap-3 gap-y-1">
+                {fileViewUrl && (
+                  <a
+                    href={fileViewUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                  className="text-sm text-blue-600 hover:underline flex items-center gap-1"
+                    className="text-sm text-blue-600 hover:underline flex items-center gap-1"
+                  >
+                    {isImage ? "View image" : "View file"}
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+                {hasExternalLink && externalUrl && (
+                  <a
+                    href={externalUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-blue-600 hover:underline flex items-center gap-1"
                   >
                     View Project
-                  <ExternalLink className="w-3 h-3" />
-                </a>
-              )}
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+              </div>
             </CardContent>
           </Card>
         );

@@ -20,7 +20,6 @@ import {
   Lock,
   Eye,
   EyeOff,
-  Phone,
   MapPin,
   Globe,
   Building,
@@ -31,9 +30,12 @@ import {
   Link,
   X,
   Plus,
+  Check,
 } from "lucide-react";
 import { RegistrationFormData } from "../page";
 import { useState } from "react";
+import { PhoneInputField } from "./PhoneInputField";
+import { CheckboxIndicator } from "@radix-ui/react-checkbox";
 
 const fadeInUp = {
   initial: { opacity: 0, y: 30 },
@@ -57,6 +59,8 @@ const malaysianStates = [
   "Sabah",
   "Sarawak",
 ];
+
+const LOCATION_OTHER = "Others";
 
 const fundingStages = [
   "Pre-seed",
@@ -171,6 +175,10 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
   setNewSocialUrl,
   handleBooleanInputChange,
 }) => {
+  const [locationIsOther, setLocationIsOther] = useState(
+    !!formData.location && !malaysianStates.includes(formData.location)
+  );
+
   const isStrongPassword = (pwd: string) =>
     /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_\-+={}[\]|;:'",.<>/?`~]).{8,}$/.test(
       pwd
@@ -262,8 +270,8 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
           className="space-y-6"
         >
           <div className="text-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">Account Setup</h2>
-            <p className="text-gray-600">
+            <h2 className="text-lg font-semibold text-gray-900">Account Setup</h2>
+            <p className="text-sm text-gray-600">
               Let&apos;s start with your basic information
             </p>
           </div>
@@ -325,21 +333,15 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
                 )}
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="phone">Phone Number *</Label>
-              <div className="relative">
-                <Phone className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                <Input
-                  id="phone"
-                  type="tel"
-                  placeholder="+60 12-345 6789"
-                  className="pl-10 bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
-                  value={formData.phone}
-                  onChange={(e) => handleInputChange("phone", e.target.value)}
-                  required
-                />
-              </div>
-            </div>
+            <PhoneInputField
+              id="phone"
+              label="Phone Number *"
+              value={formData.phone}
+              onChange={(val) => handleInputChange("phone", val)}
+              defaultCountry="MY"
+              placeholder="Enter phone number"
+              required
+            />
 
             <div className="space-y-2">
               <Label htmlFor="password">Password *</Label>
@@ -401,6 +403,57 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
                   </p>
                 )}
             </div>
+
+            <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-4">
+              <div className="flex items-start gap-4">
+                <Checkbox
+                  id="terms-step1"
+                  className="mt-0.5 h-5 w-5 shrink-0 rounded border-2 border-gray-400 bg-white focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 data-[state=checked]:border-blue-600 data-[state=checked]:bg-blue-600"
+                  checked={formData.acceptedTerms}
+                  onCheckedChange={(checked) =>
+                    handleBooleanInputChange("acceptedTerms", checked as boolean)
+                  }
+                  required
+                >
+                  <CheckboxIndicator className="flex items-center justify-center text-white">
+                    <Check className="h-3.5 w-3.5 stroke-[3]" />
+                  </CheckboxIndicator>
+                </Checkbox>
+                <Label
+                  htmlFor="terms-step1"
+                  className="cursor-pointer text-sm leading-snug text-gray-700"
+                >
+                  I agree to the{" "}
+                  <a
+                    href="/terms"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-blue-600 underline hover:text-blue-700"
+                  >
+                    Terms of Service
+                  </a>
+                  ,{" "}
+                  <a
+                    href="/privacy"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-blue-600 underline hover:text-blue-700"
+                  >
+                    Privacy Policy
+                  </a>
+                  , and{" "}
+                  <a
+                    href="/cookies"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-blue-600 underline hover:text-blue-700"
+                  >
+                    Cookie Policy
+                  </a>
+                  .
+                </Label>
+              </div>
+            </div>
           </div>
         </motion.div>
       );
@@ -414,25 +467,43 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
           className="space-y-6"
         >
           <div className="text-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">
+            <h2 className="text-lg font-semibold text-gray-900">
               Company Profile
             </h2>
-            <p className="text-gray-600">Tell us about your company</p>
+            <p className="text-sm text-gray-600">Tell us about your company</p>
           </div>
 
           <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="location">Location (State) *</Label>
               <div className="relative">
-                <MapPin className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                <MapPin className="absolute left-3 top-3 h-4 w-4 text-gray-400 z-10" />
                 <Select
-                  value={formData.location}
-                  onValueChange={(value) =>
-                    handleInputChange("location", value)
+                  value={
+                    locationIsOther
+                      ? LOCATION_OTHER
+                      : malaysianStates.includes(formData.location)
+                        ? formData.location
+                        : ""
                   }
+                  onValueChange={(value) => {
+                    if (value === LOCATION_OTHER) {
+                      setLocationIsOther(true);
+                      handleInputChange("location", "");
+                    } else {
+                      setLocationIsOther(false);
+                      handleInputChange("location", value);
+                    }
+                  }}
                 >
                   <SelectTrigger className="pl-10 bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500">
-                    <SelectValue placeholder="Select your state" />
+                    {locationIsOther && formData.location ? (
+                      <span className="text-left truncate">
+                        {formData.location}
+                      </span>
+                    ) : (
+                      <SelectValue placeholder="Select your state" />
+                    )}
                   </SelectTrigger>
                   <SelectContent>
                     {malaysianStates.map((state) => (
@@ -440,9 +511,25 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
                         {state}
                       </SelectItem>
                     ))}
+                    <SelectItem value={LOCATION_OTHER}>{LOCATION_OTHER}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+              {locationIsOther && (
+                <div className="relative mt-2">
+                  <MapPin className="absolute left-3 top-3 h-4 w-4 text-gray-400 pointer-events-none" />
+                  <Input
+                    id="location-other"
+                    type="text"
+                    placeholder="Specify your location (e.g. city or country)"
+                    className="pl-10 bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                    value={formData.location}
+                    onChange={(e) =>
+                      handleInputChange("location", e.target.value)
+                    }
+                  />
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -594,8 +681,8 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
               KYC Verification (Company)
             </h3>
             <p className="text-sm text-gray-600">
-              Upload your <strong>Company Registration</strong> document (PDF or
-              image).
+            Upload any document as proof of your company (PDF or
+              image). <br /> This is required for registration. Our admin team will review and verify it.
             </p>
 
             <div className="space-y-2">
@@ -628,10 +715,10 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
           className="space-y-6"
         >
           <div className="text-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">
+            <h2 className="text-lg font-semibold text-gray-900">
               Company Details
             </h2>
-            <p className="text-gray-600">
+            <p className="text-sm text-gray-600">
               Additional information about your company
             </p>
           </div>
@@ -669,7 +756,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="employeeCount">Employee Count</Label>
+                <Label htmlFor="employeeCount">Employee Count *</Label>
                 <Input
                   id="employeeCount"
                   type="number"
@@ -680,11 +767,12 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
                     handleInputChange("employeeCount", e.target.value)
                   }
                   min={1}
+                  required
                 />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="establishedYear">Established Year</Label>
+                <Label htmlFor="establishedYear">Established Year *</Label>
                 <Input
                   id="establishedYear"
                   type="number"
@@ -696,6 +784,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
                   }
                   min={1900}
                   max={new Date().getFullYear()}
+                  required
                 />
               </div>
 
@@ -914,20 +1003,21 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
               </h3>
 
               <div className="space-y-2">
-                <Label htmlFor="mission">Company Mission</Label>
+                <Label htmlFor="mission">Company Mission *</Label>
                 <Textarea
                   id="mission"
                   placeholder="Describe your company's mission and purpose..."
                   className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500 min-h-[100px]"
                   value={formData.mission}
                   onChange={(e) => handleInputChange("mission", e.target.value)}
+                  required
                 />
               </div>
 
               <div className="space-y-2">
-                <Label>Company Values</Label>
+                <Label>Company Values *</Label>
                 <p className="text-sm text-gray-600">
-                  Select values that represent your company culture
+                  Select at least one value that represents your company culture
                 </p>
 
                 <div className="flex gap-2">
@@ -1008,72 +1098,60 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
           variants={fadeInUp}
           initial="initial"
           animate="animate"
-          className="space-y-6"
+          className="space-y-5"
         >
-          <div className="text-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">
+          <div className="text-center mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">
               Review & Submit
             </h2>
-            <p className="text-gray-600">
+            <p className="text-sm text-gray-600">
               Please review your information before submitting
             </p>
           </div>
 
-          <div className="space-y-6">
+          <div className="space-y-4">
             <div className="p-4 border rounded-lg bg-white/50">
-              <h3 className="font-medium text-gray-900 mb-3 flex items-center">
-                <Users className="w-5 h-5 mr-2" />
-                Account Information
+              <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center">
+                <Users className="w-4 h-4 mr-2" />
+                Account (Step 1)
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
                 <div>
-                  <span className="text-gray-600">Name:</span>
-                  <span className="ml-2 font-medium">
-                    {formData.companyName}
-                  </span>
+                  <span className="text-gray-600">Company name:</span>
+                  <span className="ml-2 font-medium">{formData.companyName || "—"}</span>
                 </div>
                 <div>
                   <span className="text-gray-600">Email:</span>
-                  <span className="ml-2 font-medium">{formData.email}</span>
+                  <span className="ml-2 font-medium">{formData.email || "—"}</span>
                 </div>
                 <div>
                   <span className="text-gray-600">Phone:</span>
-                  <span className="ml-2 font-medium">{formData.phone}</span>
+                  <span className="ml-2 font-medium">{formData.phone || "—"}</span>
                 </div>
               </div>
             </div>
 
             <div className="p-4 border rounded-lg bg-white/50">
-              <h3 className="font-medium text-gray-900 mb-3 flex items-center">
-                <Building className="w-5 h-5 mr-2" />
-                Company Information
+              <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center">
+                <Building className="w-4 h-4 mr-2" />
+                Company Profile (Step 3)
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
                 <div>
-                  <span className="text-gray-600">Company:</span>
-                  <span className="ml-2 font-medium">
-                    {formData.companyName}
-                  </span>
+                  <span className="text-gray-600">Location:</span>
+                  <span className="ml-2 font-medium">{formData.location || "—"}</span>
                 </div>
                 <div>
                   <span className="text-gray-600">Industry:</span>
-                  <span className="ml-2 font-medium">{formData.industry}</span>
+                  <span className="ml-2 font-medium">{formData.industry || "—"}</span>
                 </div>
                 <div>
-                  <span className="text-gray-600">Location:</span>
-                  <span className="ml-2 font-medium">{formData.location}</span>
+                  <span className="text-gray-600">Company size:</span>
+                  <span className="ml-2 font-medium">{formData.companySize || "—"}</span>
                 </div>
-                {formData.companySize && (
-                  <div>
-                    <span className="text-gray-600">Size:</span>
-                    <span className="ml-2 font-medium">
-                      {formData.companySize}
-                    </span>
-                  </div>
-                )}
-                {formData.website && (
-                  <div>
-                    <span className="text-gray-600">Website:</span>
+                <div>
+                  <span className="text-gray-600">Website:</span>
+                  {formData.website ? (
                     <a
                       href={formData.website}
                       target="_blank"
@@ -1082,157 +1160,161 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
                     >
                       {formData.website}
                     </a>
-                  </div>
-                )}
-                {formData.socialLinks && (
-                  <div>
-                    <span className="text-gray-600">Social Links:</span>
-
-                    {formData.socialLinks}
+                  ) : (
+                    <span className="ml-2">—</span>
+                  )}
+                </div>
+                {Array.isArray(formData.socialLinks) && formData.socialLinks.length > 0 && (
+                  <div className="md:col-span-2">
+                    <span className="text-gray-600">Social links:</span>
+                    <ul className="ml-2 mt-0.5 list-disc list-inside">
+                      {formData.socialLinks.map((url, i) => (
+                        <li key={i}>
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-700"
+                          >
+                            {url}
+                          </a>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 )}
               </div>
             </div>
 
             <div className="p-4 border rounded-lg bg-white/50">
-              <h3 className="font-medium text-gray-900 mb-3 flex items-center">
-                <Briefcase className="w-5 h-5 mr-2" />
-                Company Details
+              <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center">
+                <Briefcase className="w-4 h-4 mr-2" />
+                Company Details (Step 4)
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                {formData.employeeCount && (
-                  <div>
-                    <span className="text-gray-600">Employee Count:</span>
-                    <span className="ml-2 font-medium">
-                      {formData.employeeCount}
-                    </span>
-                  </div>
-                )}
-                {formData.establishedYear && (
-                  <div>
-                    <span className="text-gray-600">Established Year:</span>
-                    <span className="ml-2 font-medium">
-                      {formData.establishedYear}
-                    </span>
-                  </div>
-                )}
-                {formData.annualRevenue && (
-                  <div>
-                    <span className="text-gray-600">Annual Revenue:</span>
-                    <span className="ml-2 font-medium">
-                      RM {formData.annualRevenue}
-                    </span>
-                  </div>
-                )}
-                {formData.fundingStage && (
-                  <div>
-                    <span className="text-gray-600">Funding Stage:</span>
-                    <span className="ml-2 font-medium">
-                      {formData.fundingStage}
-                    </span>
-                  </div>
-                )}
-                {formData.averageBudgetRange && (
-                  <div>
-                    <span className="text-gray-600">Average Budget:</span>
-                    <span className="ml-2 font-medium">
-                      {formData.averageBudgetRange}
-                    </span>
-                  </div>
-                )}
-                {formData.remotePolicy && (
-                  <div>
-                    <span className="text-gray-600">Remote Policy:</span>
-                    <span className="ml-2 font-medium">
-                      {formData.remotePolicy}
-                    </span>
-                  </div>
-                )}
-                {formData.hiringFrequency && (
-                  <div>
-                    <span className="text-gray-600">Hiring Frequency:</span>
-                    <span className="ml-2 font-medium">
-                      {formData.hiringFrequency}
-                    </span>
-                  </div>
-                )}
-                {formData.preferredContractTypes.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                <div className="md:col-span-2">
+                  <span className="text-gray-600">Company description:</span>
+                  <p className="ml-2 mt-0.5 font-medium">{formData.companyDescription?.trim() || "—"}</p>
+                </div>
+                <div>
+                  <span className="text-gray-600">Employee count:</span>
+                  <span className="ml-2 font-medium">{formData.employeeCount || "—"}</span>
+                </div>
+                <div>
+                  <span className="text-gray-600">Established year:</span>
+                  <span className="ml-2 font-medium">{formData.establishedYear || "—"}</span>
+                </div>
+                <div>
+                  <span className="text-gray-600">Annual revenue:</span>
+                  <span className="ml-2 font-medium">
+                    {formData.annualRevenue ? `RM ${formData.annualRevenue}` : "—"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-600">Funding stage:</span>
+                  <span className="ml-2 font-medium">{formData.fundingStage || "—"}</span>
+                </div>
+                <div>
+                  <span className="text-gray-600">Average budget:</span>
+                  <span className="ml-2 font-medium">{formData.averageBudgetRange || "—"}</span>
+                </div>
+                <div>
+                  <span className="text-gray-600">Remote policy:</span>
+                  <span className="ml-2 font-medium">{formData.remotePolicy || "—"}</span>
+                </div>
+                <div>
+                  <span className="text-gray-600">Hiring frequency:</span>
+                  <span className="ml-2 font-medium">{formData.hiringFrequency || "—"}</span>
+                </div>
+                {formData.preferredContractTypes?.length > 0 && (
                   <div className="md:col-span-2">
-                    <span className="text-gray-600">
-                      Preferred Contract Types:
-                    </span>
+                    <span className="text-gray-600">Preferred contract types:</span>
                     <span className="ml-2 font-medium">
                       {formData.preferredContractTypes.join(", ")}
                     </span>
                   </div>
                 )}
-                {formData.categoriesHiringFor.length > 0 && (
+                {formData.categoriesHiringFor?.length > 0 && (
                   <div className="md:col-span-2">
-                    <span className="text-gray-600">
-                      Categories Hiring For:
-                    </span>
+                    <span className="text-gray-600">Categories hiring for:</span>
                     <span className="ml-2 font-medium">
                       {formData.categoriesHiringFor.join(", ")}
                     </span>
                   </div>
                 )}
-                {formData.mission && (
+                {formData.mission?.trim() && (
                   <div className="md:col-span-2">
                     <span className="text-gray-600">Mission:</span>
-                    <p className="ml-2 font-medium mt-1">{formData.mission}</p>
+                    <p className="ml-2 mt-0.5 font-medium">{formData.mission}</p>
                   </div>
                 )}
-                {formData.values.length > 0 && (
+                {formData.values?.length > 0 && (
                   <div className="md:col-span-2">
                     <span className="text-gray-600">Values:</span>
-                    <span className="ml-2 font-medium">
-                      {formData.values.join(", ")}
-                    </span>
+                    <span className="ml-2 font-medium">{formData.values.join(", ")}</span>
                   </div>
                 )}
               </div>
             </div>
 
-            <div className="flex items-start space-x-2 p-4 border rounded-lg bg-blue-50">
+            <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-4">
+            <p className="mb-3 text-sm font-medium text-gray-900">
+              Agreement
+            </p>
+            <div className="flex items-start gap-4">
               <Checkbox
                 id="terms"
-                className="mt-1"
+                className="mt-0.5 h-5 w-5 shrink-0 rounded border-2 border-gray-400 bg-white focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 data-[state=checked]:border-blue-600 data-[state=checked]:bg-blue-600"
                 checked={formData.acceptedTerms}
                 onCheckedChange={(checked) =>
                   handleBooleanInputChange("acceptedTerms", checked as boolean)
                 }
                 required
-              />
+              >
+                <CheckboxIndicator className="flex items-center justify-center text-white">
+                  <Check className="h-3.5 w-3.5 stroke-[3]" />
+                </CheckboxIndicator>
+              </Checkbox>
               <Label
                 htmlFor="terms"
-                className="text-sm text-gray-700 leading-relaxed"
+                className="cursor-pointer text-sm leading-snug text-gray-700"
               >
                 I agree to the{" "}
-                <Link
+                <a
                   href="/terms"
-                  className="text-blue-600 hover:text-blue-700"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-blue-600 underline hover:text-blue-700"
                 >
                   Terms of Service
-                </Link>{" "}
-                and{" "}
-                <Link
+                </a>
+                ,{" "}
+                <a
                   href="/privacy"
-                  className="text-blue-600 hover:text-blue-700"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-blue-600 underline hover:text-blue-700"
                 >
                   Privacy Policy
-                </Link>
-                . I understand that my information will be used in accordance
-                with Malaysian data protection laws.
+                </a>
+                , and{" "}
+                <a
+                  href="/cookies"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-blue-600 underline hover:text-blue-700"
+                >
+                  Cookie Policy
+                </a>
+                .
               </Label>
             </div>
+          </div>
 
             {!formData.acceptedTerms && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                <p className="text-red-600 text-sm">
-                  You must accept the Terms of Service and Privacy Policy to
-                  continue.
-                </p>
-              </div>
+              <p className="text-sm text-red-600">
+                You must accept the Terms of Service, Privacy Policy, and Cookie Policy to continue.
+              </p>
             )}
           </div>
         </motion.div>

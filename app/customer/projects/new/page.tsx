@@ -40,9 +40,11 @@ import { toast } from "@/components/ui/use-toast";
 import { useRouter } from "next/navigation";
 import { buildTimelineData } from "@/lib/timeline-utils";
 import { RichEditor } from "@/components/markdown/RichTextEditor";
+import { useCustomerCompletion, POST_PROJECT_REQUIRED } from "@/contexts/CustomerCompletionContext";
 
 export default function NewProjectPage() {
   const router = useRouter();
+  const { canPostProject, loading: completionLoading } = useCustomerCompletion();
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     title: "",
@@ -458,6 +460,34 @@ export default function NewProjectPage() {
       setFieldSources((prev) => ({ ...prev, [field]: "manual" }));
     }
   };
+  // Soft gate: require 60% profile completion to create projects
+  if (!completionLoading && !canPostProject) {
+    return (
+      <CustomerLayout>
+        <div className="max-w-4xl mx-auto space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
+          <Card className="border-amber-200 bg-amber-50">
+            <CardHeader>
+              <CardTitle className="text-lg sm:text-xl text-amber-900">
+                Complete your profile
+              </CardTitle>
+              <CardDescription>
+                Complete your profile to at least {POST_PROJECT_REQUIRED}% to create projects.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button
+                onClick={() => router.push("/customer/profile/onboarding")}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                👉 Complete Now
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </CustomerLayout>
+    );
+  }
+
   return (
     <CustomerLayout>
       <div className="max-w-4xl mx-auto space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
@@ -1129,6 +1159,15 @@ export default function NewProjectPage() {
                 </div>
               </CardContent>
             </Card>
+
+            {Object.keys(errors).length > 0 && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-red-600 text-sm font-medium">Validation error</p>
+                <p className="text-red-600 text-sm mt-0.5">
+                  Please fix the fields above before submitting.
+                </p>
+              </div>
+            )}
 
             <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
               <Button
