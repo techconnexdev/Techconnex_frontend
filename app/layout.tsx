@@ -5,7 +5,7 @@ import type { Metadata } from "next";
 import { GeistSans, GeistMono } from "geist/font";
 import "./globals.css";
 import { Analytics } from "@vercel/analytics/next"
-const siteUrl = "https://www.techconnex.vip";
+const siteUrl = "https://techconnex.vip";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -17,8 +17,11 @@ export const metadata: Metadata = {
   publisher: 'Techconnex',
   themeColor: '#1E40AF', // your brand color
   icons: {
-    icon: "/favicon.ico",
-    apple: "/assets/favicon.svg",
+    icon: [
+      { url: `${siteUrl}/favicon.ico`, sizes: "any" },
+      { url: `${siteUrl}/favicon.ico`, type: "image/x-icon" },
+    ],
+    apple: `${siteUrl}/assets/favicon.svg`,
   },
   openGraph: {
     title: 'Techconnex - Freelancing Platform',

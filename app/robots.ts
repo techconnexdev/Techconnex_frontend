@@ -1,7 +1,7 @@
 import { MetadataRoute } from "next";
 
 export default function robots(): MetadataRoute.Robots {
-    const baseUrl = "https://www.techconnex.vip";
+    const baseUrl = "https://techconnex.vip";
   return {
     rules: {
       userAgent: "*",

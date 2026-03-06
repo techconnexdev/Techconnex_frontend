@@ -1,14 +1,21 @@
-"use client"
-import { useRef, useEffect } from 'react';
-import Image from 'next/image';
-import { gsap } from 'gsap';
-import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import { Ticket, ArrowRight } from 'lucide-react';
-import { parallaxGalleryConfig } from './config';
+"use client";
+import { useRef, useEffect } from "react";
+import Image from "next/image";
+import Link from "next/link";
+import { gsap } from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { Ticket, ArrowRight, Briefcase, DollarSign } from "lucide-react";
+import { parallaxGalleryConfig } from "./config";
+import type { HomepageJob } from "@/lib/homepage-api";
 
 gsap.registerPlugin(ScrollTrigger);
 
-const ParallaxGallery = () => {
+interface ParallaxGalleryProps {
+  /** Real latest jobs from API; when set, horizontal gallery shows these instead of config images */
+  latestJobs?: HomepageJob[];
+}
+
+const ParallaxGallery = ({ latestJobs }: ParallaxGalleryProps) => {
   const sectionRef = useRef<HTMLDivElement>(null);
   const parallaxContainerRef = useRef<HTMLDivElement>(null);
   const topRowRef = useRef<HTMLDivElement>(null);
@@ -25,8 +32,8 @@ const ParallaxGallery = () => {
       if (topRowRef.current && bottomRowRef.current) {
         const st1 = ScrollTrigger.create({
           trigger: parallaxContainerRef.current,
-          start: 'top bottom',
-          end: 'bottom top',
+          start: "top bottom",
+          end: "bottom top",
           scrub: 1,
           onUpdate: (self) => {
             const progress = self.progress;
@@ -52,7 +59,7 @@ const ParallaxGallery = () => {
 
         const st2 = ScrollTrigger.create({
           trigger: galleryRef.current,
-          start: 'top top',
+          start: "top top",
           end: () => `+=${trackWidth - viewportWidth}`,
           pin: true,
           scrub: 1,
@@ -69,24 +76,26 @@ const ParallaxGallery = () => {
 
     return () => {
       ctx.revert();
-      scrollTriggerRefs.current.forEach(st => st.kill());
+      scrollTriggerRefs.current.forEach((st) => st.kill());
       scrollTriggerRefs.current = [];
     };
   }, []);
 
-  // Null check: if config is empty, do not render (after all hooks)
+  const hasGalleryItems =
+    (latestJobs?.length ?? 0) > 0 ||
+    parallaxGalleryConfig.galleryImages.length > 0;
   if (
     parallaxGalleryConfig.parallaxImagesTop.length === 0 &&
-    parallaxGalleryConfig.galleryImages.length === 0 &&
+    !hasGalleryItems &&
     !parallaxGalleryConfig.sectionTitle
   ) {
     return null;
   }
 
   const scrollToTalent = () => {
-    const talentSection = document.getElementById('talent');
+    const talentSection = document.getElementById("talent");
     if (talentSection) {
-      talentSection.scrollIntoView({ behavior: 'smooth' });
+      talentSection.scrollIntoView({ behavior: "smooth" });
     }
   };
 
@@ -112,10 +121,7 @@ const ParallaxGallery = () => {
         </div>
 
         {/* Top row - moves left */}
-        <div
-          ref={topRowRef}
-          className="flex gap-4 mb-4 will-change-transform"
-        >
+        <div ref={topRowRef} className="flex gap-4 mb-4 will-change-transform">
           {parallaxGalleryConfig.parallaxImagesTop.map((image) => (
             <div
               key={image.id}
@@ -137,7 +143,7 @@ const ParallaxGallery = () => {
         <div
           ref={bottomRowRef}
           className="flex gap-4 will-change-transform"
-          style={{ transform: 'translateX(-150px)' }}
+          style={{ transform: "translateX(-150px)" }}
         >
           {parallaxGalleryConfig.parallaxImagesBottom.map((image) => (
             <div
@@ -176,10 +182,7 @@ const ParallaxGallery = () => {
       </div>
 
       {/* Horizontal Gallery Section */}
-      <div
-        ref={galleryRef}
-        className="relative h-screen overflow-hidden"
-      >
+      <div ref={galleryRef} className="relative h-screen overflow-hidden">
         {/* Gallery header */}
         <div className="absolute top-12 left-12">
           <p className="font-mono-custom text-xs text-[#185df9]/70 uppercase tracking-wider mb-2">
@@ -195,42 +198,92 @@ const ParallaxGallery = () => {
           ref={galleryTrackRef}
           className="flex items-center gap-8 h-full px-12 pt-24 will-change-transform"
         >
-          {parallaxGalleryConfig.galleryImages.map((image, index) => (
-            <div
-              key={image.id}
-              className="relative flex-shrink-0 group cursor-pointer"
-              style={{ marginTop: index % 2 === 0 ? '0' : '60px' }}
-            >
-              <div className="relative w-[450px] h-[300px] overflow-hidden rounded-xl">
-                <Image
-                  src={image.src}
-                  alt={image.title}
-                  width={450}
-                  height={300}
-                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
+          {latestJobs && latestJobs.length > 0 ? (
+            <>
+              {latestJobs.map((job, index) => (
+                <div
+                  key={job.id}
+                  className="relative flex-shrink-0 group"
+                  style={{ marginTop: index % 2 === 0 ? "0" : "60px" }}
+                >
+                  <div className="relative w-[450px] min-h-[300px] overflow-hidden rounded-xl bg-gradient-to-br from-slate-700 to-slate-900 border border-blue-200/30 shadow-xl flex flex-col">
+                    <div className="p-6 flex-1 flex flex-col justify-between">
+                      <div>
+                        <p className="font-mono-custom text-xs text-[#185df9] mb-2 uppercase tracking-wider">
+                          {job.category}
+                        </p>
+                        <h3 className="font-display text-2xl text-white drop-shadow-md mb-3 line-clamp-2">
+                          {job.title}
+                        </h3>
+                        <div className="flex items-center gap-2 text-white/90 text-sm mb-3">
+                          <DollarSign className="w-4 h-4 flex-shrink-0" />
+                          <span>
+                            ${job.budgetMin.toLocaleString()} – $
+                            {job.budgetMax.toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {(job.skills ?? []).slice(0, 4).map((skill) => (
+                            <span
+                              key={skill}
+                              className="px-2 py-0.5 bg-[#185df9]/20 text-blue-200 rounded text-xs"
+                            >
+                              {skill}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      <Link
+                        href="/auth/register?role=customer"
+                        className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-[#185df9] hover:text-blue-300 transition-colors"
+                      >
+                        <Briefcase className="w-4 h-4" />
+                        Sign up to apply
+                      </Link>
+                    </div>
+                    <div className="absolute inset-0 bg-[#185df9]/0 group-hover:bg-[#185df9]/10 transition-colors duration-300 pointer-events-none" />
+                  </div>
+                  <div className="absolute -top-8 -left-4 font-mono-custom text-7xl text-blue-700/50 font-bold">
+                    {String(index + 1).padStart(2, "0")}
+                  </div>
+                </div>
+              ))}
+            </>
+          ) : (
+            parallaxGalleryConfig.galleryImages.map((image, index) => (
+              <div
+                key={image.id}
+                className="relative flex-shrink-0 group cursor-pointer"
+                style={{ marginTop: index % 2 === 0 ? "0" : "60px" }}
+              >
+                <div className="relative w-[450px] h-[300px] overflow-hidden rounded-xl">
+                  <Image
+                    src={image.src}
+                    alt={image.title}
+                    width={450}
+                    height={300}
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
 
-                {/* Image info */}
-                <div className="absolute bottom-6 left-6">
-                  <p className="font-mono-custom text-xs text-[#185df9] mb-1">
-                    {image.date}
-                  </p>
-                  <h3 className="font-display text-2xl text-white drop-shadow-md">
-                    {image.title}
-                  </h3>
+                  <div className="absolute bottom-6 left-6">
+                    <p className="font-mono-custom text-xs text-[#185df9] mb-1">
+                      {image.date}
+                    </p>
+                    <h3 className="font-display text-2xl text-white drop-shadow-md">
+                      {image.title}
+                    </h3>
+                  </div>
+
+                  <div className="absolute inset-0 bg-[#185df9]/0 group-hover:bg-[#185df9]/10 transition-colors duration-300" />
                 </div>
 
-                {/* Hover overlay */}
-                <div className="absolute inset-0 bg-[#185df9]/0 group-hover:bg-[#185df9]/10 transition-colors duration-300" />
+                <div className="absolute -top-8 -left-4 font-mono-custom text-7xl text-blue-700/50 font-bold">
+                  {String(index + 1).padStart(2, "0")}
+                </div>
               </div>
-
-              {/* Index number */}
-              <div className="absolute -top-8 -left-4 font-mono-custom text-7xl text-blue-700/50 font-bold">
-                {String(index + 1).padStart(2, '0')}
-              </div>
-            </div>
-          ))}
+            ))
+          )}
 
           {/* End CTA */}
           <div className="flex-shrink-0 flex flex-col items-center justify-center w-[300px] h-[300px]">

@@ -10,6 +10,7 @@ import { WorldMapDemo } from "@/components/Homepage/WorldMap";
 import ParallaxGallery from "@/components/Homepage/ParallaxGallery";
 import TourSchedule from "@/components/Homepage/TourSchedule";
 import VideoPlayer from "@/components/Homepage/VideoPlayer";
+import { fetchHomepageData } from "@/lib/homepage-api";
 
 export const metadata: Metadata = {
   title: "Techconnex",
@@ -50,8 +51,11 @@ export const metadata: Metadata = {
  * Simple structure: no loading.tsx (was painting skeleton first and hurting LCP),
  * no client wrapper (was forcing one big bundle). Lenis removed from critical path.
  * Smooth scroll for anchor links via CSS in globals.
+ * Homepage hooks: fetch public data (jobs, freelancers, companies) server-side for unauthenticated visitors.
  */
-export default function LandingPage() {
+export default async function LandingPage() {
+  const homepageData = await fetchHomepageData();
+
   return (
     <div className="relative isolate">
       <Header />
@@ -62,8 +66,11 @@ export default function LandingPage() {
         <Features />
         <Services />
         <Milestone />
-        <ParallaxGallery />
-        <TourSchedule />
+        <ParallaxGallery latestJobs={homepageData?.latestJobs ?? undefined} />
+        <TourSchedule
+          topFreelancers={homepageData?.topFreelancers ?? undefined}
+          topCompanies={homepageData?.topCompanies ?? undefined}
+        />
         <WorldMapDemo />
         <Footer />
       </main>
