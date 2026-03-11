@@ -94,6 +94,7 @@ import MilestonePayment from "@/components/MilestonePayment";
 import { useRecommendedProviders } from "@/hooks/useRecommendedProviders";
 import { RecommendedProvidersList } from "@/components/customer/RecommendedProvidersList";
 import type { RecommendedProvider } from "@/hooks/useRecommendedProviders";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
 
 // Project type definition
 interface Project {
@@ -801,13 +802,12 @@ export default function ProjectDetailsPage({
           setProposals([]);
         }
       } catch (err: unknown) {
-        console.error("Failed to load project/proposals:", err);
-
-        const errorMessage =
-          err instanceof Error ? err.message : "Failed to load project";
+        const errorMessage = getUserFriendlyErrorMessage(
+          err,
+          "customer project detail load",
+        );
         setError(errorMessage);
         setBidsError(errorMessage);
-
         setProposals([]);
       } finally {
         setLoading(false);
@@ -1311,11 +1311,12 @@ export default function ProjectDetailsPage({
       toast({ title: "Saved", description: "Project updated successfully." });
       setIsEditOpen(false);
     } catch (err) {
-      console.error(err);
       toast({
         title: "Update failed",
-        description:
-          err instanceof Error ? err.message : "Could not update project",
+        description: getUserFriendlyErrorMessage(
+          err,
+          "customer project detail update",
+        ),
         variant: "destructive",
       });
     }
@@ -1520,8 +1521,10 @@ export default function ProjectDetailsPage({
     } catch (e) {
       toast({
         title: "Save failed",
-        description:
-          e instanceof Error ? e.message : "Could not save milestones",
+        description: getUserFriendlyErrorMessage(
+          e,
+          "customer project detail save milestones",
+        ),
         variant: "destructive",
       });
     } finally {
@@ -1561,8 +1564,10 @@ export default function ProjectDetailsPage({
     } catch (e) {
       toast({
         title: "Approval failed",
-        description:
-          e instanceof Error ? e.message : "Could not approve milestones",
+        description: getUserFriendlyErrorMessage(
+          e,
+          "customer project detail approve milestones",
+        ),
         variant: "destructive",
       });
     }
@@ -1584,8 +1589,10 @@ export default function ProjectDetailsPage({
     } catch (e) {
       toast({
         title: "Approval failed",
-        description:
-          e instanceof Error ? e.message : "Could not approve milestone",
+        description: getUserFriendlyErrorMessage(
+          e,
+          "customer project detail approve milestone",
+        ),
         variant: "destructive",
       });
     }
@@ -1634,8 +1641,10 @@ export default function ProjectDetailsPage({
     } catch (e) {
       toast({
         title: "Error",
-        description:
-          e instanceof Error ? e.message : "Could not request changes",
+        description: getUserFriendlyErrorMessage(
+          e,
+          "customer project detail request changes",
+        ),
         variant: "destructive",
       });
     }
@@ -1727,8 +1736,10 @@ export default function ProjectDetailsPage({
     } catch (err) {
       toast({
         title: "Error",
-        description:
-          err instanceof Error ? err.message : "Failed to accept request",
+        description: getUserFriendlyErrorMessage(
+          err,
+          "customer project detail accept request",
+        ),
         variant: "destructive",
       });
     } finally {
@@ -1903,8 +1914,10 @@ export default function ProjectDetailsPage({
     } catch (e) {
       toast({
         title: "Save failed",
-        description:
-          e instanceof Error ? e.message : "Could not save milestones",
+        description: getUserFriendlyErrorMessage(
+          e,
+          "customer project detail save accepted milestones",
+        ),
         variant: "destructive",
       });
     } finally {
@@ -1943,8 +1956,10 @@ export default function ProjectDetailsPage({
     } catch (e) {
       toast({
         title: "Approval failed",
-        description:
-          e instanceof Error ? e.message : "Could not approve milestones",
+        description: getUserFriendlyErrorMessage(
+          e,
+          "customer project detail approve accepted milestones",
+        ),
         variant: "destructive",
       });
     }
@@ -2014,8 +2029,10 @@ export default function ProjectDetailsPage({
     } catch (err) {
       toast({
         title: "Error",
-        description:
-          err instanceof Error ? err.message : "Failed to reject request",
+        description: getUserFriendlyErrorMessage(
+          err,
+          "customer project detail reject request",
+        ),
         variant: "destructive",
       });
     } finally {
@@ -2098,10 +2115,10 @@ export default function ProjectDetailsPage({
     } catch (error: unknown) {
       toast({
         title: "Error",
-        description:
-          error instanceof Error
-            ? error.message
-            : "Failed to create/update dispute",
+        description: getUserFriendlyErrorMessage(
+          error,
+          "customer project detail create dispute",
+        ),
         variant: "destructive",
       });
     } finally {
@@ -2120,8 +2137,10 @@ export default function ProjectDetailsPage({
     } catch (error: unknown) {
       toast({
         title: "Error",
-        description:
-          error instanceof Error ? error.message : "Failed to load dispute",
+        description: getUserFriendlyErrorMessage(
+          error,
+          "customer project detail load dispute",
+        ),
         variant: "destructive",
       });
     }
@@ -2166,8 +2185,10 @@ export default function ProjectDetailsPage({
     } catch (error: unknown) {
       toast({
         title: "Error",
-        description:
-          error instanceof Error ? error.message : "Failed to update dispute",
+        description: getUserFriendlyErrorMessage(
+          error,
+          "customer project detail update dispute",
+        ),
         variant: "destructive",
       });
     } finally {
@@ -3300,14 +3321,12 @@ export default function ProjectDetailsPage({
                                                 "_blank",
                                               );
                                             } catch (error) {
-                                              console.error(
-                                                "Failed to get download URL:",
-                                                error,
-                                              );
                                               toastHook({
                                                 title: "Error",
-                                                description:
-                                                  "Failed to download attachment",
+                                                description: getUserFriendlyErrorMessage(
+                                                  error,
+                                                  "customer project attachment download",
+                                                ),
                                                 variant: "destructive",
                                               });
                                             }
@@ -3510,14 +3529,12 @@ export default function ProjectDetailsPage({
                                                               "_blank",
                                                             );
                                                           } catch (error) {
-                                                            console.error(
-                                                              "Failed to get download URL:",
-                                                              error,
-                                                            );
                                                             toastHook({
                                                               title: "Error",
-                                                              description:
-                                                                "Failed to download attachment",
+                                                              description: getUserFriendlyErrorMessage(
+                                                                error,
+                                                                "customer project attachment download",
+                                                              ),
                                                               variant:
                                                                 "destructive",
                                                             });
@@ -4320,14 +4337,12 @@ export default function ProjectDetailsPage({
                                         "_blank",
                                       );
                                     } catch (error) {
-                                      console.error(
-                                        "Failed to get download URL:",
-                                        error,
-                                      );
                                       toastHook({
                                         title: "Error",
-                                        description:
-                                          "Failed to download attachment",
+                                        description: getUserFriendlyErrorMessage(
+                                          error,
+                                          "customer project attachment download",
+                                        ),
                                         variant: "destructive",
                                       });
                                     }
@@ -4470,14 +4485,12 @@ export default function ProjectDetailsPage({
                                         "_blank",
                                       );
                                     } catch (error) {
-                                      console.error(
-                                        "Failed to get download URL:",
-                                        error,
-                                      );
                                       toastHook({
                                         title: "Error",
-                                        description:
-                                          "Failed to download attachment",
+                                        description: getUserFriendlyErrorMessage(
+                                          error,
+                                          "customer project attachment download",
+                                        ),
                                         variant: "destructive",
                                       });
                                     }
@@ -4591,14 +4604,12 @@ export default function ProjectDetailsPage({
                                         "_blank",
                                       );
                                     } catch (error) {
-                                      console.error(
-                                        "Failed to get download URL:",
-                                        error,
-                                      );
                                       toastHook({
                                         title: "Error",
-                                        description:
-                                          "Failed to download attachment",
+                                        description: getUserFriendlyErrorMessage(
+                                          error,
+                                          "customer project attachment download",
+                                        ),
                                         variant: "destructive",
                                       });
                                     }
@@ -5806,14 +5817,12 @@ export default function ProjectDetailsPage({
                                           "_blank",
                                         );
                                       } catch (error) {
-                                        console.error(
-                                          "Failed to get download URL:",
-                                          error,
-                                        );
                                         toastHook({
                                           title: "Error",
-                                          description:
-                                            "Failed to download attachment",
+                                          description: getUserFriendlyErrorMessage(
+                                            error,
+                                            "customer project attachment download",
+                                          ),
                                           variant: "destructive",
                                         });
                                       }
@@ -6941,14 +6950,12 @@ export default function ProjectDetailsPage({
                                                   "_blank",
                                                 );
                                               } catch (error) {
-                                                console.error(
-                                                  "Failed to get download URL:",
-                                                  error,
-                                                );
                                                 toastHook({
                                                   title: "Error",
-                                                  description:
-                                                    "Failed to download attachment",
+                                                  description: getUserFriendlyErrorMessage(
+                                                    error,
+                                                    "customer project attachment download",
+                                                  ),
                                                   variant: "destructive",
                                                 });
                                               }

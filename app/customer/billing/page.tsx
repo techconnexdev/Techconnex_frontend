@@ -68,6 +68,7 @@ import { CustomerLayout } from "@/components/customer-layout";
 import { useToast } from "@/hooks/use-toast";
 import { apiFetch, API_BASE } from "@/lib/api";
 import Link from "next/link";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
 import MilestonePayment from "@/components/MilestonePayment";
 
 type Transaction = {
@@ -289,12 +290,12 @@ export default function CustomerBillingPage() {
         throw new Error("Invalid response from server");
       }
     } catch (e: unknown) {
-      console.error(e);
-      const errorMessage =
-        e instanceof Error ? e.message : "Failed to download receipt";
       toast({
         title: "Error downloading receipt",
-        description: errorMessage,
+        description: getUserFriendlyErrorMessage(
+          e,
+          "customer billing receipt download",
+        ),
         variant: "destructive",
       });
     }
@@ -330,12 +331,12 @@ export default function CustomerBillingPage() {
         throw new Error(data.message || "Failed to get download URL");
       }
     } catch (e: unknown) {
-      console.error(e);
-      const errorMessage =
-        e instanceof Error ? e.message : "Failed to export report";
       toast({
         title: "Error exporting report",
-        description: errorMessage,
+        description: getUserFriendlyErrorMessage(
+          e,
+          "customer billing export report",
+        ),
         variant: "destructive",
       });
     }
@@ -430,7 +431,7 @@ export default function CustomerBillingPage() {
           ),
         );
       } catch (error) {
-        console.error("Failed to fetch billing data:", error);
+        getUserFriendlyErrorMessage(error, "customer billing fetch");
       } finally {
         setLoading(false);
       }

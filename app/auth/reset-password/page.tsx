@@ -17,6 +17,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Lock, Eye, EyeOff, ArrowLeft } from "lucide-react";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
@@ -63,7 +64,7 @@ function ResetPasswordForm() {
       setSuccess(true);
       setTimeout(() => router.push("/auth/login"), 2000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Reset failed");
+      setError(getUserFriendlyErrorMessage(err, "auth reset-password"));
     } finally {
       setIsLoading(false);
     }

@@ -28,12 +28,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useState, useEffect } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   uploadCompanyMediaGalleryImages,
   getCompanyProfileCompletion,
@@ -60,6 +61,7 @@ export default function CompanyInfo({
   const [customValue, setCustomValue] = useState("");
   const [newMediaUrl, setNewMediaUrl] = useState("");
   const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   // Lightbox state
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -175,57 +177,47 @@ export default function CompanyInfo({
     }
   };
 
-  const handleMediaImageUpload = async (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const files = Array.from(event.target.files || []);
+  const ALLOWED_IMAGE_TYPES = [
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/gif",
+    "image/webp",
+  ];
+  const MAX_MEDIA_IMAGES = 10;
+  const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
+  const processMediaFiles = async (files: File[]) => {
     if (files.length === 0) return;
 
-    // Check current media gallery count
     const currentCount = value.customerProfile?.mediaGallery?.length || 0;
-    const MAX_IMAGES = 10;
 
-    if (currentCount >= MAX_IMAGES) {
+    if (currentCount >= MAX_MEDIA_IMAGES) {
       toast.error(
-        `Maximum ${MAX_IMAGES} images allowed. Please remove some images first.`
+        `Maximum ${MAX_MEDIA_IMAGES} images allowed. Please remove some images first.`
       );
-      event.target.value = "";
       return;
     }
 
-    // Check if adding these files would exceed the limit
-    if (currentCount + files.length > MAX_IMAGES) {
-      const allowed = MAX_IMAGES - currentCount;
+    if (currentCount + files.length > MAX_MEDIA_IMAGES) {
+      const allowed = MAX_MEDIA_IMAGES - currentCount;
       toast.error(
-        `You can only add ${allowed} more image(s). Maximum ${MAX_IMAGES} images allowed.`
+        `You can only add ${allowed} more image(s). Maximum ${MAX_MEDIA_IMAGES} images allowed.`
       );
-      event.target.value = "";
       return;
     }
 
-    // Validate file types
-    const allowedTypes = [
-      "image/jpeg",
-      "image/jpg",
-      "image/png",
-      "image/gif",
-      "image/webp",
-    ];
     const invalidFiles = files.filter(
-      (file) => !allowedTypes.includes(file.type)
+      (file) => !ALLOWED_IMAGE_TYPES.includes(file.type)
     );
     if (invalidFiles.length > 0) {
       toast.error("Only image files are allowed (JPEG, PNG, GIF, WebP)");
-      event.target.value = "";
       return;
     }
 
-    // Validate file sizes (10MB max)
-    const maxSize = 10 * 1024 * 1024; // 10MB
-    const oversizedFiles = files.filter((file) => file.size > maxSize);
+    const oversizedFiles = files.filter((file) => file.size > MAX_FILE_SIZE);
     if (oversizedFiles.length > 0) {
       toast.error("Some files exceed 10MB limit");
-      event.target.value = "";
       return;
     }
 
@@ -234,7 +226,6 @@ export default function CompanyInfo({
       const response = await uploadCompanyMediaGalleryImages(files);
 
       if (response.success && response.data?.mediaGallery) {
-        // Update the profile with new media gallery URLs
         onChange({
           ...value,
           customerProfile: {
@@ -243,7 +234,6 @@ export default function CompanyInfo({
           },
         });
         toast.success(`${files.length} image(s) uploaded successfully`);
-        // Reload completion percentage and suggestions
         if (onCompletionUpdate) {
           try {
             const completionResponse = await getCompanyProfileCompletion();
@@ -261,15 +251,55 @@ export default function CompanyInfo({
         toast.error(response.message || "Failed to upload images");
       }
     } catch (error: unknown) {
-      console.error("Error uploading media images:", error);
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to upload images";
-      toast.error(errorMessage);
+      toast.error(
+        getUserFriendlyErrorMessage(error, "customer profile company images"),
+      );
     } finally {
       setUploadingMedia(false);
-      // Reset file input
-      event.target.value = "";
     }
+  };
+
+  const handleMediaImageUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const files = Array.from(event.target.files || []);
+    await processMediaFiles(files);
+    event.target.value = "";
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (uploadingMedia || (value.customerProfile?.mediaGallery?.length || 0) >= MAX_MEDIA_IMAGES) return;
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+    if (uploadingMedia || (value.customerProfile?.mediaGallery?.length || 0) >= MAX_MEDIA_IMAGES) return;
+    const items = e.dataTransfer?.items;
+    const files: File[] = [];
+    if (items) {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.kind === "file") {
+          const file = item.getAsFile();
+          if (file && ALLOWED_IMAGE_TYPES.includes(file.type)) files.push(file);
+        }
+      }
+    } else {
+      const dropped = Array.from(e.dataTransfer?.files || []);
+      files.push(...dropped.filter((f) => ALLOWED_IMAGE_TYPES.includes(f.type)));
+    }
+    if (files.length > 0) await processMediaFiles(files);
   };
 
   const handleRemoveMediaItem = (index: number) => {
@@ -1104,7 +1134,20 @@ export default function CompanyInfo({
                       images
                     </span>
                   </div>
-                  <div className="border-2 border-dashed rounded-lg p-6 text-center">
+                  <div
+                    className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+                      isDragOver
+                        ? "border-primary bg-primary/5"
+                        : "border-gray-300"
+                    } ${
+                      (value.customerProfile?.mediaGallery?.length || 0) >= 10
+                        ? "opacity-60"
+                        : ""
+                    }`}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                  >
                     <input
                       type="file"
                       multiple
@@ -1119,7 +1162,7 @@ export default function CompanyInfo({
                     />
                     <label
                       htmlFor="media-upload"
-                      className={`cursor-pointer ${
+                      className={`cursor-pointer block ${
                         (value.customerProfile?.mediaGallery?.length || 0) >= 10
                           ? "opacity-50 cursor-not-allowed"
                           : ""
@@ -1139,7 +1182,7 @@ export default function CompanyInfo({
                             {(value.customerProfile?.mediaGallery?.length ||
                               0) >= 10
                               ? "Maximum 10 images reached"
-                              : "Click to upload images or drag and drop"}
+                              : "Click to upload or drag and drop images here"}
                           </p>
                           <p className="text-xs text-gray-500 mt-1">
                             JPEG, PNG, GIF, WebP (Max 10MB each, Max 10 images)
@@ -1203,9 +1246,7 @@ export default function CompanyInfo({
                               <div
                                 className="w-full h-40 bg-gray-50 relative overflow-hidden cursor-pointer"
                                 onClick={() =>
-                                  !isEditing &&
-                                  isImageUrl(url) &&
-                                  openLightbox(index)
+                                  isImageUrl(url) && openLightbox(index)
                                 }
                               >
                                 {isImageUrl(url) ? (
@@ -1213,10 +1254,7 @@ export default function CompanyInfo({
                                     <MediaImage
                                       src={url}
                                       alt={`Media ${index + 1}`}
-                                      className="w-full h-full"
-                                      onClick={() =>
-                                        !isEditing && openLightbox(index)
-                                      }
+                                      className="w-full h-full object-cover"
                                     />
                                     {isEditing && (
                                       <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-opacity flex items-center justify-center gap-2 pointer-events-none">

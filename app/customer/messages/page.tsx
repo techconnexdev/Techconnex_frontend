@@ -17,6 +17,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { getProfileImageUrl, getMessageAttachmentUrl, checkCanChatWithUser } from "@/lib/api";
 import { ReportConversationDialog } from "@/components/messages/ReportConversationDialog";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
+import { useToast } from "@/hooks/use-toast";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -61,6 +63,7 @@ type ServiceRequest = {
 
 export default function CustomerMessagesPage() {
   const searchParams = useSearchParams();
+  const { toast } = useToast();
   const userIdParam = searchParams.get("userId");
   const chatName = searchParams.get("name");
   const chatAvatar = searchParams.get("avatar");
@@ -99,7 +102,7 @@ export default function CustomerMessagesPage() {
         setToken(tokenFromStorage || "");
         setUser(userFromStorage);
       } catch (error) {
-        console.error("Error loading auth data:", error);
+        getUserFriendlyErrorMessage(error, "customer messages auth load");
       }
     }
   }, []);
@@ -125,12 +128,15 @@ export default function CustomerMessagesPage() {
       },
       transports: ["websocket", "polling"],
     });
-    // In your socket connection, add error handling:
     newSocket.on("message_error", (error: { error: string }) => {
-      console.error("❌ Message sending failed:", error.error);
-      alert(`Failed to send message: ${error.error}`);
-
-      // Remove the optimistic message
+      toast({
+        title: "Error",
+        description: getUserFriendlyErrorMessage(
+          error?.error != null ? new Error(error.error) : undefined,
+          "customer messages send",
+        ),
+        variant: "destructive",
+      });
       setMessages((prev) => prev.filter((msg) => msg.id.startsWith("temp-")));
     });
 
@@ -290,14 +296,15 @@ export default function CustomerMessagesPage() {
       console.log("📨 Response data:", data);
 
       if (data.success) {
-        console.log("✅ Conversations data:", data.data);
         setConversations(data.data);
       } else {
-        console.error("❌ Failed to fetch conversations:", data.message);
+        getUserFriendlyErrorMessage(
+          undefined,
+          "customer messages fetch conversations",
+        );
       }
     } catch (error) {
-      console.error("❌ Error fetching conversations:", error);
-      // Set empty array as fallback
+      getUserFriendlyErrorMessage(error, "customer messages fetch conversations");
       setConversations([]);
     } finally {
       setLoading(false);
@@ -334,10 +341,13 @@ export default function CustomerMessagesPage() {
             )
           );
         } else {
-          console.error("Failed to fetch messages:", data.message);
+          getUserFriendlyErrorMessage(
+            undefined,
+            "customer messages fetch messages",
+          );
         }
       } catch (error) {
-        console.error("Error fetching messages:", error);
+        getUserFriendlyErrorMessage(error, "customer messages fetch messages");
       } finally {
         if (!skipLoadingCheck) setLoading(false);
       }
@@ -380,7 +390,10 @@ export default function CustomerMessagesPage() {
           setProjectRequests(openProjects);
         }
       } catch (error) {
-        console.error("Error fetching project requests", error);
+        getUserFriendlyErrorMessage(
+          error,
+          "customer messages fetch project requests",
+        );
       }
     };
     fetchProjects();
@@ -475,7 +488,14 @@ export default function CustomerMessagesPage() {
 
     const data = await res.json();
     if (!data.success) {
-      alert("File upload failed");
+      toast({
+        title: "Error",
+        description: getUserFriendlyErrorMessage(
+          undefined,
+          "customer messages file upload",
+        ),
+        variant: "destructive",
+      });
       return;
     }
     // Show project list picker for attachment if available
@@ -509,7 +529,16 @@ export default function CustomerMessagesPage() {
       messageData,
       (response: { success?: boolean; error?: string }) => {
         if (!response?.success) {
-          alert("Failed to send file: " + response.error);
+          toast({
+            title: "Error",
+            description: getUserFriendlyErrorMessage(
+              response?.error != null
+                ? new Error(response.error)
+                : undefined,
+              "customer messages send file",
+            ),
+            variant: "destructive",
+          });
         }
       }
     );
@@ -576,21 +605,31 @@ export default function CustomerMessagesPage() {
             console.log("✅ Message sent successfully via socket");
             // The message_sent event will handle replacing the temp message
           } else {
-            console.error(
-              "❌ Failed to send message via socket:",
-              response?.error
-            );
-            // Remove the optimistic message on error
             setMessages((prev) =>
               prev.filter((msg) => msg.id !== optimisticMessage.id)
             );
-            // Optionally show error to user
-            alert("Failed to send message: " + response?.error);
+            toast({
+              title: "Error",
+              description: getUserFriendlyErrorMessage(
+                response?.error != null
+                  ? new Error(response.error)
+                  : undefined,
+                "customer messages send",
+              ),
+              variant: "destructive",
+            });
           }
         }
       );
     } catch (error) {
-      console.error("❌ Error in send message:", error);
+      toast({
+        title: "Error",
+        description: getUserFriendlyErrorMessage(
+          error,
+          "customer messages send",
+        ),
+        variant: "destructive",
+      });
     }
   };
 
@@ -634,7 +673,16 @@ export default function CustomerMessagesPage() {
           setMessages((prev) =>
             prev.filter((m) => m.id !== optimisticMessage.id)
           );
-          alert("Failed to send project request: " + response?.error);
+          toast({
+            title: "Error",
+            description: getUserFriendlyErrorMessage(
+              response?.error != null
+                ? new Error(response.error)
+                : undefined,
+              "customer messages send project request",
+            ),
+            variant: "destructive",
+          });
         }
       }
     );
@@ -657,7 +705,10 @@ export default function CustomerMessagesPage() {
           )
         );
       } catch (error) {
-        console.error("Error marking messages as read:", error);
+        getUserFriendlyErrorMessage(
+          error,
+          "customer messages mark read",
+        );
       }
     },
     [token]

@@ -66,6 +66,7 @@ import {
   sendProposal,
   getProfileImageUrl,
 } from "@/lib/api";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
 import { MediaImage } from "@/components/ui/media-image";
 import {
   formatTimeline,
@@ -73,7 +74,7 @@ import {
   timelineToDays,
 } from "@/lib/timeline-utils";
 import { formatBidAmountDisplay, parseBidAmountInput } from "@/lib/utils";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 type Milestone = {
   sequence: number;
@@ -309,8 +310,12 @@ export default function CompanyDetailClient({
           setOpportunities(transformed);
         }
       } catch (error) {
-        console.error("Error fetching opportunities:", error);
-        toast.error("Failed to load opportunities");
+        toast.error(
+          getUserFriendlyErrorMessage(
+            error,
+            "provider company detail opportunities",
+          ),
+        );
       } finally {
         setLoadingOpportunities(false);
       }
@@ -355,12 +360,17 @@ export default function CompanyDetailClient({
       if (response.ok) {
         setSaved(!saved);
       } else {
-        const data = await response.json();
-        alert(data.message || "Failed to update saved status");
+        toast.error(
+          getUserFriendlyErrorMessage(
+            undefined,
+            "provider company detail save",
+          ),
+        );
       }
     } catch (error) {
-      console.error("Error toggling save status:", error);
-      alert("Failed to update saved status");
+      toast.error(
+        getUserFriendlyErrorMessage(error, "provider company detail save"),
+      );
     }
   };
 
@@ -1556,16 +1566,19 @@ export default function CompanyDetailClient({
                     setProposalErrors({});
                   } else {
                     toast.error(
-                      response.message || "Failed to submit proposal",
+                      getUserFriendlyErrorMessage(
+                        undefined,
+                        "provider company detail submit proposal",
+                      ),
                     );
                   }
                 } catch (error: unknown) {
-                  console.error("Error submitting proposal:", error);
-                  const errorMessage =
-                    error instanceof Error
-                      ? error.message
-                      : "Failed to submit proposal";
-                  toast.error(errorMessage);
+                  toast.error(
+                    getUserFriendlyErrorMessage(
+                      error,
+                      "provider company detail submit proposal",
+                    ),
+                  );
                 } finally {
                   setSubmittingProposal(false);
                 }

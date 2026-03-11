@@ -32,6 +32,7 @@ import {
   getUserIdFromToken,
   API_BASE,
 } from "@/lib/api";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
 
 import ProfileOverview from "./sections/ProfileOverview";
 import CompanyInfo from "./sections/CompanyInfo";
@@ -175,14 +176,18 @@ export default function ProfileClient(props: Props = {}) {
           setCompletionSuggestions(completionResponse.data.suggestions || []);
         }
       } catch (error) {
-        console.error("Failed to fetch completion:", error);
+        getUserFriendlyErrorMessage(
+          error,
+          "customer profile completion after save",
+        );
       }
     } catch (error) {
-      console.error("Failed to save profile:", error);
       toast({
         title: "Error",
-        description:
-          error instanceof Error ? error.message : "Failed to update profile",
+        description: getUserFriendlyErrorMessage(
+          error,
+          "customer profile save",
+        ),
         variant: "destructive",
       });
     } finally {
@@ -300,13 +305,15 @@ export default function ProfileClient(props: Props = {}) {
           });
           setDocs(mapped);
         } catch (err) {
-          console.warn("Failed to fetch KYC documents", err);
+          getUserFriendlyErrorMessage(err, "customer profile kyc fetch");
         }
       } catch (error) {
-        console.error("Failed to fetch profile data:", error);
         toast({
           title: "Error",
-          description: "Failed to load profile. Please login and try again.",
+          description: getUserFriendlyErrorMessage(
+            error,
+            "customer profile load",
+          ),
           variant: "destructive",
         });
       } finally {

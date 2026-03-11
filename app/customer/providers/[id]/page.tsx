@@ -5,6 +5,7 @@ import ProviderDetailClient from "@/components/customer/providers/ProviderDetail
 import type { Provider, Review, PortfolioItem } from "@/components/customer/providers/types";
 import { notFound } from "next/navigation";
 import jwt from "jsonwebtoken";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
 
 export default async function ProviderDetailPage({
   params,
@@ -74,7 +75,7 @@ export default async function ProviderDetailPage({
       console.error("Response not ok:", response.status);
     }
   } catch (error) {
-    console.error("Failed to fetch provider details:", error);
+    getUserFriendlyErrorMessage(error, "customer providers detail fetch");
   }
 
   if (!provider) {

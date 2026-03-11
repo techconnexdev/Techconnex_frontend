@@ -76,6 +76,7 @@ import {
   deleteResume,
   getR2DownloadUrl,
 } from "@/lib/api";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
 import { uploadFile } from "@/lib/upload";
 import { useToast } from "@/hooks/use-toast";
 import { useRef } from "react";
@@ -352,10 +353,12 @@ export default function ProviderProfilePage(_props: Props) {
           setResume(resumeResponse.data);
         }
       } catch (error) {
-        console.error("Error loading profile data:", error);
         toast({
           title: "Error",
-          description: "Failed to load profile data",
+          description: getUserFriendlyErrorMessage(
+            error,
+            "provider profile load",
+          ),
           variant: "destructive",
         });
       } finally {
@@ -376,10 +379,12 @@ export default function ProviderProfilePage(_props: Props) {
           setPortfolioProjects(response.data);
         }
       } catch (error) {
-        console.error("Error loading portfolio:", error);
         toast({
           title: "Error",
-          description: "Failed to load portfolio projects",
+          description: getUserFriendlyErrorMessage(
+            error,
+            "provider profile portfolio",
+          ),
           variant: "destructive",
         });
       } finally {
@@ -400,10 +405,12 @@ export default function ProviderProfilePage(_props: Props) {
           setPortfolioItems(response.data);
         }
       } catch (error) {
-        console.error("Error loading portfolio items:", error);
         toast({
           title: "Error",
-          description: "Failed to load portfolio items",
+          description: getUserFriendlyErrorMessage(
+            error,
+            "provider profile portfolio items",
+          ),
           variant: "destructive",
         });
       } finally {
@@ -424,10 +431,12 @@ export default function ProviderProfilePage(_props: Props) {
           setCertifications(response.data);
         }
       } catch (error) {
-        console.error("Error loading certifications:", error);
         toast({
           title: "Error",
-          description: "Failed to load certifications",
+          description: getUserFriendlyErrorMessage(
+            error,
+            "provider profile certifications",
+          ),
           variant: "destructive",
         });
       } finally {
@@ -569,15 +578,20 @@ export default function ProviderProfilePage(_props: Props) {
       } else {
         toast({
           title: "Error",
-          description: response.error || "Failed to save profile",
+          description: getUserFriendlyErrorMessage(
+            undefined,
+            "provider profile save",
+          ),
           variant: "destructive",
         });
       }
     } catch (error) {
-      console.error("Error saving profile:", error);
       toast({
         title: "Error",
-        description: "Failed to save profile",
+        description: getUserFriendlyErrorMessage(
+          error,
+          "provider profile save",
+        ),
         variant: "destructive",
       });
     } finally {
@@ -907,13 +921,12 @@ export default function ProviderProfilePage(_props: Props) {
         refetchCompletion();
       }
     } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : "Failed to upload profile image";
       toast({
         title: "Upload failed",
-        description: errorMessage,
+        description: getUserFriendlyErrorMessage(
+          error,
+          "provider profile image upload",
+        ),
         variant: "destructive",
       });
     } finally {
@@ -1050,14 +1063,12 @@ export default function ProviderProfilePage(_props: Props) {
         throw new Error(response.error || "Failed to save resume");
       }
     } catch (error: unknown) {
-      console.error("Resume upload error:", error);
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : "Failed to upload resume. Please try again.";
       toast({
         title: "Upload failed",
-        description: errorMessage,
+        description: getUserFriendlyErrorMessage(
+          error,
+          "provider profile resume upload",
+        ),
         variant: "destructive",
       });
     } finally {
@@ -1086,11 +1097,12 @@ export default function ProviderProfilePage(_props: Props) {
         description: "Resume deleted successfully",
       });
     } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to delete resume";
       toast({
         title: "Delete failed",
-        description: errorMessage,
+        description: getUserFriendlyErrorMessage(
+          error,
+          "provider profile resume delete",
+        ),
         variant: "destructive",
       });
     } finally {
@@ -1105,11 +1117,12 @@ export default function ProviderProfilePage(_props: Props) {
       const downloadUrl = await getR2DownloadUrl(resume.fileUrl);
       window.open(downloadUrl.downloadUrl, "_blank");
     } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to download resume";
       toast({
         title: "Download failed",
-        description: errorMessage,
+        description: getUserFriendlyErrorMessage(
+          error,
+          "provider profile resume download",
+        ),
         variant: "destructive",
       });
     }
@@ -1241,11 +1254,12 @@ export default function ProviderProfilePage(_props: Props) {
       });
       setEditingCertIndex(null);
     } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : "Failed to save certification";
       toast({
         title: "Error",
-        description: errorMessage,
+        description: getUserFriendlyErrorMessage(
+          error,
+          "provider profile save certification",
+        ),
         variant: "destructive",
       });
     } finally {
@@ -1283,13 +1297,12 @@ export default function ProviderProfilePage(_props: Props) {
         await refetchCompletion();
       }
     } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : "Failed to delete certification";
       toast({
         title: "Error",
-        description: errorMessage,
+        description: getUserFriendlyErrorMessage(
+          error,
+          "provider profile delete certification",
+        ),
         variant: "destructive",
       });
     } finally {
@@ -1392,13 +1405,12 @@ export default function ProviderProfilePage(_props: Props) {
       setNewTechStack("");
       setEditingPortfolioIndex(null);
     } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : "Failed to save portfolio item";
       toast({
         title: "Error",
-        description: errorMessage,
+        description: getUserFriendlyErrorMessage(
+          error,
+          "provider profile save portfolio item",
+        ),
         variant: "destructive",
       });
     } finally {
@@ -2893,13 +2905,12 @@ export default function ProviderProfilePage(_props: Props) {
                                           );
                                         }
                                       } catch (error: unknown) {
-                                        const errorMessage =
-                                          error instanceof Error
-                                            ? error.message
-                                            : "Failed to delete portfolio item";
                                         toast({
                                           title: "Error",
-                                          description: errorMessage,
+                                          description: getUserFriendlyErrorMessage(
+                                            error,
+                                            "provider profile delete portfolio item",
+                                          ),
                                           variant: "destructive",
                                         });
                                       }
@@ -3718,13 +3729,12 @@ export default function ProviderProfilePage(_props: Props) {
                           });
                         }
                       } catch (error: unknown) {
-                        const errorMessage =
-                          error instanceof Error
-                            ? error.message
-                            : "Failed to upload file";
                         toast({
                           title: "Upload failed",
-                          description: errorMessage,
+                          description: getUserFriendlyErrorMessage(
+                            error,
+                            "provider profile portfolio image upload",
+                          ),
                           variant: "destructive",
                         });
                       } finally {

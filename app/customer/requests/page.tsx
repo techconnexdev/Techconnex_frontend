@@ -65,6 +65,8 @@ import {
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
+import { FriendlyErrorState } from "@/components/FriendlyErrorState";
 
 interface ProviderRequest {
   id: string;
@@ -248,129 +250,126 @@ export default function CustomerRequestsPage() {
   };
 
   // Fetch data from API
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
+  const fetchData = React.useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
 
-        const [proposalsResponse, statsResponse] = await Promise.all([
-          getCompanyProjectRequests({
-            page: 1,
-            limit: 100,
-            search: searchQuery,
-            proposalStatus:
-              statusFilter === "all" ? undefined : statusFilter.toUpperCase(),
-            serviceRequestId:
-              projectFilter === "all" ? undefined : projectFilter,
-            sort: sortBy,
-          }),
-          getProjectRequestStats(),
-        ]);
+      const [proposalsResponse, statsResponse] = await Promise.all([
+        getCompanyProjectRequests({
+          page: 1,
+          limit: 100,
+          search: searchQuery,
+          proposalStatus:
+            statusFilter === "all" ? undefined : statusFilter.toUpperCase(),
+          serviceRequestId:
+            projectFilter === "all" ? undefined : projectFilter,
+          sort: sortBy,
+        }),
+        getProjectRequestStats(),
+      ]);
 
-        // Ensure we have arrays from the API responses (backend may return proposals|data|items)
-        const proposals = Array.isArray(proposalsResponse?.proposals)
-          ? proposalsResponse.proposals
-          : Array.isArray(proposalsResponse?.data)
-          ? proposalsResponse.data
-          : Array.isArray(proposalsResponse?.items)
-          ? proposalsResponse.items
-          : [];
-        const mappedRequests: ProviderRequest[] = proposals.map(
-          (proposal: ApiProposal) => {
-            const provider = (proposal as ApiProposal & { provider?: Record<string, unknown> }).provider || {};
-            const profile = (provider as Record<string, unknown>).providerProfile as Record<string, unknown> || {};
-            return {
-              id: proposal.id,
-              providerId: provider.id,
-              providerName: provider.name,
-              providerAvatar: getProfileImageUrl(profile.profileImageUrl as string | null | undefined),
-              providerRating: profile.rating ?? provider.rating ?? 0,
-              providerLocation: profile.location ?? provider.location ?? "",
-              providerResponseTime:
-                profile.responseTime ?? provider.responseTime ?? "",
-              projectId: proposal.serviceRequest.id,
-              projectTitle: proposal.serviceRequest.title,
-              bidAmount: proposal.bidAmount,
-              proposedTimeline: `${proposal.deliveryTime} days`,
-              deliveryTime: typeof proposal.deliveryTime === "number" ? proposal.deliveryTime : undefined,
-              coverLetter: proposal.coverLetter,
-              status: proposal.status.toLowerCase() as
-                | "pending"
-                | "accepted"
-                | "rejected",
-              submittedAt: proposal.createdAt || proposal.submittedAt,
-              skills: Array.isArray(profile.skills)
-                ? profile.skills
-                : Array.isArray(provider.skills)
-                ? provider.skills
-                : [],
-              portfolio: Array.isArray(profile.portfolios)
-                ? profile.portfolios
-                : Array.isArray(provider.portfolio)
-                ? provider.portfolio
-                : [],
-              experience: profile.experience ?? provider.experience ?? "",
-              attachments: Array.isArray(proposal.attachmentUrls)
-                ? proposal.attachmentUrls
-                : [],
-              milestones: Array.isArray(proposal.milestones)
-                ? proposal.milestones
-                : [],
-              aiFitExplanation: (proposal as unknown as Record<string, unknown>).aiFitExplanation as string | undefined ?? null,
-              matchScore: (proposal as unknown as Record<string, unknown>).matchScore as number | undefined ?? null,
-              rank: (proposal as unknown as Record<string, unknown>).rank as number | undefined ?? null,
-              isTopFive: (proposal as unknown as Record<string, unknown>).isTopFive as boolean | undefined,
-            };
+      const proposals = Array.isArray(proposalsResponse?.proposals)
+        ? proposalsResponse.proposals
+        : Array.isArray(proposalsResponse?.data)
+        ? proposalsResponse.data
+        : Array.isArray(proposalsResponse?.items)
+        ? proposalsResponse.items
+        : [];
+      const mappedRequests: ProviderRequest[] = proposals.map(
+        (proposal: ApiProposal) => {
+          const provider = (proposal as ApiProposal & { provider?: Record<string, unknown> }).provider || {};
+          const profile = (provider as Record<string, unknown>).providerProfile as Record<string, unknown> || {};
+          return {
+            id: proposal.id,
+            providerId: provider.id,
+            providerName: provider.name,
+            providerAvatar: getProfileImageUrl(profile.profileImageUrl as string | null | undefined),
+            providerRating: profile.rating ?? provider.rating ?? 0,
+            providerLocation: profile.location ?? provider.location ?? "",
+            providerResponseTime:
+              profile.responseTime ?? provider.responseTime ?? "",
+            projectId: proposal.serviceRequest.id,
+            projectTitle: proposal.serviceRequest.title,
+            bidAmount: proposal.bidAmount,
+            proposedTimeline: `${proposal.deliveryTime} days`,
+            deliveryTime: typeof proposal.deliveryTime === "number" ? proposal.deliveryTime : undefined,
+            coverLetter: proposal.coverLetter,
+            status: proposal.status.toLowerCase() as
+              | "pending"
+              | "accepted"
+              | "rejected",
+            submittedAt: proposal.createdAt || proposal.submittedAt,
+            skills: Array.isArray(profile.skills)
+              ? profile.skills
+              : Array.isArray(provider.skills)
+              ? provider.skills
+              : [],
+            portfolio: Array.isArray(profile.portfolios)
+              ? profile.portfolios
+              : Array.isArray(provider.portfolio)
+              ? provider.portfolio
+              : [],
+            experience: profile.experience ?? provider.experience ?? "",
+            attachments: Array.isArray(proposal.attachmentUrls)
+              ? proposal.attachmentUrls
+              : [],
+            milestones: Array.isArray(proposal.milestones)
+              ? proposal.milestones
+              : [],
+            aiFitExplanation: (proposal as unknown as Record<string, unknown>).aiFitExplanation as string | undefined ?? null,
+            matchScore: (proposal as unknown as Record<string, unknown>).matchScore as number | undefined ?? null,
+            rank: (proposal as unknown as Record<string, unknown>).rank as number | undefined ?? null,
+            isTopFive: (proposal as unknown as Record<string, unknown>).isTopFive as boolean | undefined,
+          };
+        }
+      );
+      setRequests(mappedRequests);
+      setStats(
+        statsResponse?.stats ??
+          statsResponse?.data ?? {
+            totalProposals: 0,
+            openRequests: 0,
+            matchedRequests: 0,
+            averageProposalsPerRequest: 0,
           }
-        );
-        setRequests(mappedRequests);
-        setStats(
-          statsResponse?.stats ??
-            statsResponse?.data ?? {
-              totalProposals: 0,
-              openRequests: 0,
-              matchedRequests: 0,
-              averageProposalsPerRequest: 0,
-            }
-        );
+      );
 
-        // Build project options from this response and merge with existing so dropdown always shows all projects (even when filtered)
-        const uniqueProjects = proposals.reduce(
-          (
-            acc: Array<{ id: string; title: string }>,
-            proposal: ApiProposal
-          ) => {
-            const existing = acc.find(
-              (p) => p.id === proposal.serviceRequest.id
-            );
-            if (!existing) {
-              acc.push({
-                id: proposal.serviceRequest.id,
-                title: proposal.serviceRequest.title,
-              });
-            }
-            return acc;
-          },
-          []
-        );
-        setProjectOptions((prev) => {
-          const merged = [...prev];
-          for (const p of uniqueProjects) {
-            if (!merged.some((m) => m.id === p.id)) merged.push(p);
+      const uniqueProjects = proposals.reduce(
+        (
+          acc: Array<{ id: string; title: string }>,
+          proposal: ApiProposal
+        ) => {
+          const existing = acc.find(
+            (p) => p.id === proposal.serviceRequest.id
+          );
+          if (!existing) {
+            acc.push({
+              id: proposal.serviceRequest.id,
+              title: proposal.serviceRequest.title,
+            });
           }
-          return merged;
-        });
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to fetch data");
-        console.error("Error fetching data:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
+          return acc;
+        },
+        []
+      );
+      setProjectOptions((prev) => {
+        const merged = [...prev];
+        for (const p of uniqueProjects) {
+          if (!merged.some((m) => m.id === p.id)) merged.push(p);
+        }
+        return merged;
+      });
+    } catch (err) {
+      setError(getUserFriendlyErrorMessage(err, "customer requests fetch"));
+    } finally {
+      setLoading(false);
+    }
   }, [searchQuery, statusFilter, projectFilter, sortBy]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   // Align right panel with hovered card (desktop)
   useEffect(() => {
@@ -494,8 +493,10 @@ export default function CustomerRequestsPage() {
     } catch (err) {
       toastHook({
         title: "Error",
-        description:
-          err instanceof Error ? err.message : "Failed to accept request",
+        description: getUserFriendlyErrorMessage(
+          err,
+          "customer requests accept",
+        ),
         variant: "destructive",
       });
     } finally {
@@ -624,8 +625,10 @@ export default function CustomerRequestsPage() {
     } catch (e) {
       toastHook({
         title: "Save failed",
-        description:
-          e instanceof Error ? e.message : "Could not save milestones",
+        description: getUserFriendlyErrorMessage(
+          e,
+          "customer requests save milestones",
+        ),
         variant: "destructive",
       });
     } finally {
@@ -662,8 +665,10 @@ export default function CustomerRequestsPage() {
     } catch (e) {
       toastHook({
         title: "Approval failed",
-        description:
-          e instanceof Error ? e.message : "Could not approve milestones",
+        description: getUserFriendlyErrorMessage(
+          e,
+          "customer requests approve milestones",
+        ),
         variant: "destructive",
       });
     }
@@ -691,8 +696,10 @@ export default function CustomerRequestsPage() {
     } catch (err) {
       toastHook({
         title: "Error",
-        description:
-          err instanceof Error ? err.message : "Failed to reject request",
+        description: getUserFriendlyErrorMessage(
+          err,
+          "customer requests reject",
+        ),
         variant: "destructive",
       });
     } finally {
@@ -770,7 +777,10 @@ export default function CustomerRequestsPage() {
                 } catch (err) {
                   toastHook({
                     title: "Export failed",
-                    description: err instanceof Error ? err.message : "Failed to export requests",
+                    description: getUserFriendlyErrorMessage(
+                      err,
+                      "customer requests export",
+                    ),
                     variant: "destructive",
                   });
                 }
@@ -940,19 +950,11 @@ export default function CustomerRequestsPage() {
           ) : error ? (
             <Card>
               <CardContent className="p-8 sm:p-12 text-center">
-                <X className="w-10 h-10 sm:w-12 sm:h-12 text-red-400 mx-auto mb-3 sm:mb-4" />
-                <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-1.5 sm:mb-2">
-                  Error loading requests
-                </h3>
-                <p className="text-sm sm:text-base text-gray-600 mb-3 sm:mb-4">{error}</p>
-                <Button
-                  onClick={() => window.location.reload()}
-                  variant="outline"
-                  className="text-xs sm:text-sm"
-                >
-                  <RefreshCw className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                  Retry
-                </Button>
+                <FriendlyErrorState
+                  message={error}
+                  onRetry={fetchData}
+                  variant="block"
+                />
               </CardContent>
             </Card>
           ) : filteredRequests.length === 0 ? (
@@ -1560,10 +1562,12 @@ export default function CustomerRequestsPage() {
                                     const downloadUrl = await getR2DownloadUrl(rawUrl); // Use original URL/key
                                     window.open(downloadUrl.downloadUrl, "_blank");
                                   } catch (error) {
-                                    console.error("Failed to get download URL:", error);
                                     toastHook({
                                       title: "Error",
-                                      description: "Failed to download attachment",
+                                      description: getUserFriendlyErrorMessage(
+                                        error,
+                                        "customer requests attachment download",
+                                      ),
                                       variant: "destructive",
                                     });
                                   }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { ProviderCompaniesTour } from "@/components/provider/ProviderCompaniesTour";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,8 @@ import { Heart, Search } from "lucide-react";
 import CompanyCard from "./sections/CompanyCard";
 import type { Company, Option } from "./types";
 import { getCompanyAiDrafts, getProfileImageUrl } from "@/lib/api";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
+import { FriendlyErrorState } from "@/components/FriendlyErrorState";
 
 /** Props come from the server page */
 export default function FindCompaniesClient({
@@ -33,8 +35,11 @@ export default function FindCompaniesClient({
   const [sortBy, setSortBy] = useState("rating");
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const fetchData = useCallback(async () => {
+    setError(null);
+    setLoading(true);
     const userJson =
       typeof window !== "undefined" ? localStorage.getItem("user") : null;
     const userId = (() => {
@@ -55,68 +60,70 @@ export default function FindCompaniesClient({
     const token =
       typeof window !== "undefined" ? localStorage.getItem("token") : null;
 
-    const fetchData = async () => {
-      try {
-        const res = await fetch(
-          `${
-            process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"
-          }/companies?${params.toString()}`,
-          {
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
-          }
-        );
-        const data = await res.json();
-
-        if (data.success) {
-          // Transform avatar URLs
-          let transformedCompanies = (data.companies || []).map(
-            (company: Company) => ({
-              ...company,
-              avatar: getProfileImageUrl(company.avatar),
-            })
-          );
-
-          // If any customerProfileIds exist, fetch AiDraft summaries and merge into companies
-          const profileIds = transformedCompanies
-            .map((c: Company) => c.customerProfileId)
-            .filter(Boolean);
-          if (profileIds.length > 0 && token) {
-            try {
-              const draftRes = await getCompanyAiDrafts(profileIds);
-              if (draftRes?.success && Array.isArray(draftRes.drafts)) {
-                const draftMap = new Map(
-                  draftRes.drafts.map((d: { referenceId: string; summary: string }) => [d.referenceId, d.summary])
-                );
-                transformedCompanies = transformedCompanies.map(
-                  (c: Company) => ({
-                    ...c,
-                    aiExplanation:
-                      c.customerProfileId && draftMap.has(c.customerProfileId)
-                        ? draftMap.get(c.customerProfileId)
-                        : c.aiExplanation,
-                  })
-                );
-              }
-            } catch (err) {
-              console.warn("Failed to fetch AI drafts for companies", err);
-            }
-          }
-
-          setCompanies(transformedCompanies);
-        } else {
-          console.error("API error:", data.message);
-          setCompanies([]);
+    try {
+      const res = await fetch(
+        `${
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"
+        }/companies?${params.toString()}`,
+        {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
         }
-      } catch (err) {
-        console.error("Failed to fetch companies:", err);
-        setCompanies([]);
-      } finally {
-        setLoading(false);
-      }
-    };
+      );
+      const data = await res.json();
 
-    fetchData();
+      if (data.success) {
+        // Transform avatar URLs
+        let transformedCompanies = (data.companies || []).map(
+          (company: Company) => ({
+            ...company,
+            avatar: getProfileImageUrl(company.avatar),
+          })
+        );
+
+        // If any customerProfileIds exist, fetch AiDraft summaries and merge into companies
+        const profileIds = transformedCompanies
+          .map((c: Company) => c.customerProfileId)
+          .filter(Boolean);
+        if (profileIds.length > 0 && token) {
+          try {
+            const draftRes = await getCompanyAiDrafts(profileIds);
+            if (draftRes?.success && Array.isArray(draftRes.drafts)) {
+              const draftMap = new Map(
+                draftRes.drafts.map((d: { referenceId: string; summary: string }) => [d.referenceId, d.summary])
+              );
+              transformedCompanies = transformedCompanies.map(
+                (c: Company) => ({
+                  ...c,
+                  aiExplanation:
+                    c.customerProfileId && draftMap.has(c.customerProfileId)
+                      ? draftMap.get(c.customerProfileId)
+                      : c.aiExplanation,
+                })
+              );
+            }
+          } catch (err) {
+            console.warn("Failed to fetch AI drafts for companies", err);
+          }
+        }
+
+        setCompanies(transformedCompanies);
+      } else {
+        setError(
+          getUserFriendlyErrorMessage(undefined, "provider find companies"),
+        );
+        setCompanies([]);
+      }
+    } catch (err) {
+      setError(getUserFriendlyErrorMessage(err, "provider find companies"));
+      setCompanies([]);
+    } finally {
+      setLoading(false);
+    }
   }, [searchQuery, ratingFilter, verifiedFilter]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   // Sort companies based on selected option
   const sortedCompanies = [...companies].sort((a, b) => {
@@ -226,6 +233,15 @@ export default function FindCompaniesClient({
         <div className="text-center py-8 sm:py-12">
           <p className="text-sm sm:text-base text-gray-600">Loading companies...</p>
         </div>
+      ) : error ? (
+        <FriendlyErrorState
+          variant="block"
+          message={error}
+          onRetry={() => {
+            setError(null);
+            fetchData();
+          }}
+        />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 items-stretch">
           {filteredCompanies.map((c) => (

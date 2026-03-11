@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -45,6 +45,8 @@ import {
   exportProviderProjects,
   getProfileImageUrl,
 } from "@/lib/api";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
+import { FriendlyErrorState } from "@/components/FriendlyErrorState";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -115,46 +117,38 @@ export default function ProviderProjectsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch projects and stats
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
+  const fetchData = useCallback(async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const [projectsResponse, statsResponse] = await Promise.all([
+        getProviderProjects({
+          page: 1,
+          limit: 100,
+          search: searchQuery,
+          status:
+            statusFilter === "all" ? undefined : statusFilter.toUpperCase(),
+        }),
+        getProviderProjectStats(),
+      ]);
 
-        const [projectsResponse, statsResponse] = await Promise.all([
-          getProviderProjects({
-            page: 1,
-            limit: 100,
-            search: searchQuery,
-            status:
-              statusFilter === "all" ? undefined : statusFilter.toUpperCase(),
-          }),
-          getProviderProjectStats(),
-        ]);
-
-        if (projectsResponse.success) {
-          setProjects((projectsResponse.projects || []) as ProviderProject[]);
-        }
-
-        if (statsResponse.success) {
-          setStats(statsResponse.stats);
-        }
-      } catch (err) {
-        console.error("Error fetching data:", err);
-        setError(err instanceof Error ? err.message : "Failed to fetch data");
-        toast({
-          title: "Error",
-          description: "Failed to load projects",
-          variant: "destructive",
-        });
-      } finally {
-        setLoading(false);
+      if (projectsResponse.success) {
+        setProjects((projectsResponse.projects || []) as ProviderProject[]);
       }
-    };
 
+      if (statsResponse.success) {
+        setStats(statsResponse.stats);
+      }
+    } catch (err) {
+      setError(getUserFriendlyErrorMessage(err, "provider projects"));
+    } finally {
+      setLoading(false);
+    }
+  }, [searchQuery, statusFilter]);
+
+  useEffect(() => {
     fetchData();
-  }, [searchQuery, statusFilter, toast]);
+  }, [fetchData]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -262,10 +256,10 @@ export default function ProviderProjectsPage() {
                 } catch (err) {
                   toast({
                     title: "Export failed",
-                    description:
-                      err instanceof Error
-                        ? err.message
-                        : "Failed to export projects",
+                    description: getUserFriendlyErrorMessage(
+                      err,
+                      "provider projects export"
+                    ),
                     variant: "destructive",
                   });
                 }
@@ -418,21 +412,15 @@ export default function ProviderProjectsPage() {
           </Card>
         ) : error ? (
           <Card>
-            <CardContent className="p-8 sm:p-12 text-center">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
-                <span className="text-red-600 text-lg sm:text-xl">⚠️</span>
-              </div>
-              <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
-                Error loading projects
-              </h3>
-              <p className="text-sm sm:text-base text-gray-600 mb-4">{error}</p>
-              <Button
-                onClick={() => window.location.reload()}
-                variant="outline"
-                className="text-xs sm:text-sm"
-              >
-                Try Again
-              </Button>
+            <CardContent className="p-4 sm:p-6">
+              <FriendlyErrorState
+                variant="block"
+                message={error}
+                onRetry={() => {
+                  setError(null);
+                  fetchData();
+                }}
+              />
             </CardContent>
           </Card>
         ) : (

@@ -38,6 +38,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
+import { FriendlyErrorState } from "@/components/FriendlyErrorState";
 
 // Define Project type outside the component so it can be used in useState
 export type Project = {
@@ -117,89 +119,85 @@ export default function CustomerDashboard() {
   /** Project currently hovered (for showing recommended providers in right panel). */
   const [hoveredProject, setHoveredProject] = useState<Project | null>(null);
 
-  useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        setError(null);
+  const fetchDashboardData = async () => {
+    try {
+      setError(null);
+      setProjectsLoading(true);
 
-        // Fetch project stats (inspired by provider dashboard)
-        const statsResponse = await getCompanyProjectStats();
-        if (statsResponse.success && statsResponse.stats) {
-          setStats({
-            activeProjects: statsResponse.stats.activeProjects || 0,
-            completedProjects: statsResponse.stats.completedProjects || 0,
-            totalSpent: statsResponse.stats.totalSpent || 0,
-            rating: statsResponse.stats.averageRating ?? null,
-            reviewCount: statsResponse.stats.reviewCount || 0,
-          });
-        } else {
-          // Set default stats if API call fails or returns no data
-          setStats({
-            activeProjects: 0,
-            completedProjects: 0,
-            totalSpent: 0,
-            rating: null,
-            reviewCount: 0,
-          });
-        }
-
-        // Fetch recent projects
-        const projectsResponse = await getCompanyProjects({
-          page: 1,
-          limit: 3,
+      // Fetch project stats (inspired by provider dashboard)
+      const statsResponse = await getCompanyProjectStats();
+      if (statsResponse.success && statsResponse.stats) {
+        setStats({
+          activeProjects: statsResponse.stats.activeProjects || 0,
+          completedProjects: statsResponse.stats.completedProjects || 0,
+          totalSpent: statsResponse.stats.totalSpent || 0,
+          rating: statsResponse.stats.averageRating ?? null,
+          reviewCount: statsResponse.stats.reviewCount || 0,
         });
-        if (projectsResponse.success && projectsResponse.items) {
-          // Map projects to expected structure
-          const mappedProjects = projectsResponse.items.map(
-            (project: Record<string, unknown>) => {
-              const provider = project.provider as
-                | Record<string, unknown>
-                | undefined;
-              return {
-                id: project.id,
-                title: project.title,
-                provider: provider?.name as string | undefined,
-                providerName: provider?.name as string | undefined,
-                status: (project.status as string)?.toLowerCase() || "pending",
-                progress: project.progress || 0,
-                budget: project.budgetMax,
-                deadline: project.timeline,
-                avatar: getProfileImageUrl(
-                  (
-                    provider?.providerProfile as
-                      | Record<string, unknown>
-                      | undefined
-                  )?.profileImageUrl as string | undefined,
-                ),
-                createdAt: project.createdAt,
-                category: project.category,
-                description: project.description,
-                type: project.type, // ServiceRequest or Project
-              };
-            },
-          );
-          setRecentProjects(mappedProjects);
-        } else {
-          // Set empty projects if API call fails or returns no data
-          setRecentProjects([]);
-        }
-      } catch (error) {
-        console.error("Error fetching dashboard data:", error);
-        setError(
-          error instanceof Error
-            ? error.message
-            : "Failed to load dashboard data",
-        );
-        toast({
-          title: "Error",
-          description: "Failed to load dashboard data",
-          variant: "destructive",
+      } else {
+        setStats({
+          activeProjects: 0,
+          completedProjects: 0,
+          totalSpent: 0,
+          rating: null,
+          reviewCount: 0,
         });
-      } finally {
-        setProjectsLoading(false);
       }
-    };
 
+      const projectsResponse = await getCompanyProjects({
+        page: 1,
+        limit: 3,
+      });
+      if (projectsResponse.success && projectsResponse.items) {
+        const mappedProjects = projectsResponse.items.map(
+          (project: Record<string, unknown>) => {
+            const provider = project.provider as
+              | Record<string, unknown>
+              | undefined;
+            return {
+              id: project.id,
+              title: project.title,
+              provider: provider?.name as string | undefined,
+              providerName: provider?.name as string | undefined,
+              status: (project.status as string)?.toLowerCase() || "pending",
+              progress: project.progress || 0,
+              budget: project.budgetMax,
+              deadline: project.timeline,
+              avatar: getProfileImageUrl(
+                (
+                  provider?.providerProfile as
+                    | Record<string, unknown>
+                    | undefined
+                )?.profileImageUrl as string | undefined,
+              ),
+              createdAt: project.createdAt,
+              category: project.category,
+              description: project.description,
+              type: project.type,
+            };
+          },
+        );
+        setRecentProjects(mappedProjects);
+      } else {
+        setRecentProjects([]);
+      }
+    } catch (error) {
+      const message = getUserFriendlyErrorMessage(
+        error,
+        "customer dashboard",
+      );
+      setError(message);
+      toast({
+        title: "Error",
+        description: message,
+        variant: "destructive",
+      });
+    } finally {
+      setProjectsLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchDashboardData();
   }, [toast]);
 
@@ -314,7 +312,11 @@ export default function CustomerDashboard() {
                 } else {
                   setGateModalOpen(true);
                 }
-              } catch {
+              } catch (err) {
+                getUserFriendlyErrorMessage(
+                  err,
+                  "customer dashboard profile completion",
+                );
                 setGateModalOpen(true);
               } finally {
                 setNewProjectChecking(false);
@@ -444,9 +446,11 @@ export default function CustomerDashboard() {
                       Loading projects...
                     </div>
                   ) : error ? (
-                    <div className="text-center text-red-500 py-6 sm:py-8 text-sm sm:text-base">
-                      {error}
-                    </div>
+                    <FriendlyErrorState
+                      message={error}
+                      onRetry={fetchDashboardData}
+                      variant="block"
+                    />
                   ) : recentProjects.length === 0 ? (
                     <div className="text-center text-gray-500 py-6 sm:py-8 text-sm sm:text-base">
                       No recent projects found.

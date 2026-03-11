@@ -10,10 +10,14 @@ import Link from "next/link";
 import { Eye, MapPin, Star, Trash2, Building2, AlertTriangle } from "lucide-react";
 import type { Company } from "@/components/provider/companies/types";
 import { getProfileImageUrl } from "@/lib/api";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
+import { FriendlyErrorState } from "@/components/FriendlyErrorState";
+import { toast } from "@/lib/toast";
 
 export default function SavedCompaniesPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [token, setToken] = useState<string>("");
 
   useEffect(() => {
@@ -33,6 +37,7 @@ export default function SavedCompaniesPage() {
   };
 
   const fetchSaved = useCallback(async () => {
+    setError(null);
     try {
       const userId = getUserId();
       if (!userId || !token) {
@@ -53,11 +58,19 @@ export default function SavedCompaniesPage() {
       );
       const data = await res.json();
       if (data.success) {
-        // Avatar URLs are handled by getProfileImageUrl in the component
         setCompanies(data.companies || []);
+      } else {
+        setError(
+          getUserFriendlyErrorMessage(
+            undefined,
+            "provider saved companies",
+          ),
+        );
       }
     } catch (e) {
-      console.error("Failed to fetch saved companies", e);
+      setError(
+        getUserFriendlyErrorMessage(e, "provider saved companies"),
+      );
     } finally {
       setLoading(false);
     }
@@ -86,8 +99,9 @@ export default function SavedCompaniesPage() {
       if (!res.ok) throw new Error("Failed to unsave");
       setCompanies((prev) => prev.filter((c) => c.id !== companyId));
     } catch (e) {
-      console.error(e);
-      alert("Failed to remove saved company");
+      toast.error(
+        getUserFriendlyErrorMessage(e, "provider saved companies unsave"),
+      );
     }
   };
 
@@ -105,6 +119,15 @@ export default function SavedCompaniesPage() {
 
         {loading ? (
           <p>Loading saved companies...</p>
+        ) : error ? (
+          <FriendlyErrorState
+            variant="block"
+            message={error}
+            onRetry={() => {
+              setError(null);
+              fetchSaved();
+            }}
+          />
         ) : companies.length === 0 ? (
           <p className="text-gray-600">You have no saved companies yet.</p>
         ) : (

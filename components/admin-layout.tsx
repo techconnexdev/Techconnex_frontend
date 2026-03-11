@@ -53,6 +53,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge as BadgeComponent } from "@/components/ui/badge";
 import { getUnreadMessageCount } from "@/lib/api";
+import BetaBanner from "@/components/BetaBanner";
 import Image from "next/image";
 
 interface AdminLayoutProps {
@@ -439,6 +440,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
 
       {/* Main content */}
       <div className="lg:pl-64">
+        <BetaBanner />
         {/* Top header */}
         <header className="bg-white border-b border-gray-200 px-4 py-4">
           <div className="flex items-center justify-between">

@@ -141,6 +141,34 @@ export function CustomerProfileCard({
             )}
           </div>
           <div className="space-y-2">
+            <Label htmlFor="profileImageUrl" className="text-xs sm:text-sm">Profile Image URL</Label>
+            {isEditing ? (
+              <Input
+                id="profileImageUrl"
+                type="url"
+                value={getStringValue(formData.profileImageUrl)}
+                onChange={(e) => onFieldChange("profileImageUrl", e.target.value)}
+                placeholder="https://..."
+                className="text-sm sm:text-base"
+              />
+            ) : (
+              <p className="text-sm sm:text-base break-words">
+                {getStringValue(profile.profileImageUrl) ? (
+                  <a
+                    href={getStringValue(profile.profileImageUrl)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:underline"
+                  >
+                    {getStringValue(profile.profileImageUrl)}
+                  </a>
+                ) : (
+                  "—"
+                )}
+              </p>
+            )}
+          </div>
+          <div className="space-y-2">
             <Label htmlFor="annualRevenue" className="text-xs sm:text-sm">Annual Revenue</Label>
             {isEditing ? (
               <Input
@@ -495,6 +523,55 @@ export function CustomerProfileCard({
                 ))
               ) : (
                 <span className="text-xs sm:text-sm text-gray-400">No categories</span>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="space-y-2">
+          <Label className="text-xs sm:text-sm">Media Gallery URLs</Label>
+          {isEditing ? (
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Add image URL"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault()
+                      const value = (e.target as HTMLInputElement).value
+                      if (value.trim()) {
+                        onArrayFieldChange("mediaGallery", value, "add")
+                        ;(e.target as HTMLInputElement).value = ""
+                      }
+                    }
+                  }}
+                  className="text-sm sm:text-base"
+                />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {getArrayValue(formData.mediaGallery).map((url, index) => (
+                  <Badge
+                    key={index}
+                    variant="secondary"
+                    className="cursor-pointer text-xs max-w-full"
+                    onClick={() => onArrayFieldChange("mediaGallery", url, "remove")}
+                  >
+                    <span className="truncate block max-w-[200px]">{url}</span> ×
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {getArrayValue(profile.mediaGallery).length > 0 ? (
+                getArrayValue(profile.mediaGallery).map((url, index) => (
+                  <Badge key={index} variant="secondary" className="text-xs">
+                    <a href={url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline truncate max-w-[200px] block">
+                      {url}
+                    </a>
+                  </Badge>
+                ))
+              ) : (
+                <span className="text-xs sm:text-sm text-gray-400">No media gallery</span>
               )}
             </div>
           )}

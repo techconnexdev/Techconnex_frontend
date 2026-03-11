@@ -32,13 +32,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   ArrowLeft,
   MapPin,
   Globe,
   CheckCircle,
-  AlertCircle,
   Loader2,
   Send,
   Paperclip,
@@ -49,6 +48,8 @@ import { ProviderLayout } from "@/components/provider-layout";
 import { PROPOSAL_REQUIRED } from "@/contexts/ProviderCompletionContext";
 import { ProfileCompletionGateModal } from "@/components/provider/ProfileCompletionGateModal";
 import { getProviderOpportunityById, getProviderProfileCompletion, sendProposal } from "@/lib/api";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
+import { FriendlyErrorState } from "@/components/FriendlyErrorState";
 import {
   formatTimeline,
   buildTimelineData,
@@ -176,13 +177,14 @@ export default function OpportunityDetailsPage() {
       if (response.success) {
         setOpportunity(response.opportunity);
       } else {
-        setError("Failed to load opportunity");
+        setError(
+          getUserFriendlyErrorMessage(undefined, "provider opportunity detail"),
+        );
       }
     } catch (err: unknown) {
-      console.error("Error loading opportunity:", err);
-      const errorMessage =
-        err instanceof Error ? err.message : "Failed to load opportunity";
-      setError(errorMessage);
+      setError(
+        getUserFriendlyErrorMessage(err, "provider opportunity detail"),
+      );
     } finally {
       setLoading(false);
     }
@@ -547,10 +549,12 @@ export default function OpportunityDetailsPage() {
         toast.error(response.message || "Failed to submit proposal");
       }
     } catch (err: unknown) {
-      console.error("Error submitting proposal:", err);
-      const errorMessage =
-        err instanceof Error ? err.message : "Failed to submit proposal";
-      toast.error(errorMessage);
+      toast.error(
+        getUserFriendlyErrorMessage(
+          err,
+          "provider opportunity detail submit proposal",
+        ),
+      );
     } finally {
       setSubmittingProposal(false);
     }
@@ -628,23 +632,30 @@ export default function OpportunityDetailsPage() {
     return (
       <ProviderLayout>
         <div className="flex items-center justify-center min-h-[400px] px-4">
-          <div className="text-center">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
-              <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 text-red-600" />
+          <div className="w-full max-w-md">
+            <FriendlyErrorState
+              variant="block"
+              message={
+                error ||
+                getUserFriendlyErrorMessage(
+                  undefined,
+                  "provider opportunity detail",
+                )
+              }
+              onRetry={() => {
+                setError(null);
+                loadOpportunity();
+              }}
+            />
+            <div className="mt-4 text-center">
+              <Button
+                variant="ghost"
+                onClick={() => router.back()}
+                className="text-xs sm:text-sm"
+              >
+                Go Back
+              </Button>
             </div>
-            <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
-              Error loading opportunity
-            </h3>
-            <p className="text-sm sm:text-base text-gray-600 mb-4">
-              {error || "Opportunity not found"}
-            </p>
-            <Button
-              onClick={() => router.back()}
-              variant="outline"
-              className="text-xs sm:text-sm"
-            >
-              Go Back
-            </Button>
           </div>
         </div>
       </ProviderLayout>

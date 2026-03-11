@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Eye, MapPin, Star, Trash2, AlertTriangle } from "lucide-react";
 import { getProfileImageUrl } from "@/lib/api";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
+import { useToast } from "@/hooks/use-toast";
 
 type SavedProvider = {
   id: string;
@@ -30,8 +32,10 @@ type SavedProvider = {
 };
 
 export default function SavedProvidersPage() {
+  const { toast } = useToast();
   const [providers, setProviders] = useState<SavedProvider[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [token, setToken] = useState<string>("");
 
   useEffect(() => {
@@ -52,6 +56,7 @@ export default function SavedProvidersPage() {
 
   const fetchSaved = useCallback(async () => {
     try {
+      setError(null);
       const userId = getUserId();
       if (!userId || !token) {
         setProviders([]);
@@ -72,7 +77,10 @@ export default function SavedProvidersPage() {
       const data = await res.json();
       setProviders(data.providers || []);
     } catch (e) {
-      console.error("Failed to fetch saved providers", e);
+      setError(
+        getUserFriendlyErrorMessage(e, "customer providers saved fetch"),
+      );
+      setProviders([]);
     } finally {
       setLoading(false);
     }
@@ -101,8 +109,14 @@ export default function SavedProvidersPage() {
       if (!res.ok) throw new Error("Failed to unsave");
       setProviders((prev) => prev.filter((p) => p.id !== providerId));
     } catch (e) {
-      console.error(e);
-      alert("Failed to remove saved provider");
+      toast({
+        title: "Error",
+        description: getUserFriendlyErrorMessage(
+          e,
+          "customer providers saved unsave",
+        ),
+        variant: "destructive",
+      });
     }
   };
 
@@ -124,6 +138,13 @@ export default function SavedProvidersPage() {
           <p className="text-sm sm:text-base text-gray-600 text-center py-8">
             Loading saved providers...
           </p>
+        ) : error ? (
+          <div className="text-center py-8">
+            <p className="text-sm sm:text-base text-red-600 mb-4">{error}</p>
+            <Button onClick={() => fetchSaved()} variant="outline" size="sm">
+              Try again
+            </Button>
+          </div>
         ) : providers.length === 0 ? (
           <p className="text-sm sm:text-base text-gray-600 text-center py-8">
             You have no saved providers yet.

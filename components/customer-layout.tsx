@@ -49,6 +49,7 @@ import {
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { getProfileImageUrl, getUnreadMessageCount } from "@/lib/api";
+import BetaBanner from "@/components/BetaBanner";
 import { SupportChatWidget } from "@/components/support/SupportChatWidget";
 import { CustomerCompletionProvider } from "@/contexts/CustomerCompletionContext";
 import { CompanyProfileCompletionWidget } from "@/components/customer/CompanyProfileCompletionWidget";
@@ -436,6 +437,7 @@ export function CustomerLayout({ children }: CustomerLayoutProps) {
 
       {/* Main content */}
       <div className="lg:pl-64">
+        <BetaBanner />
         {/* Top header */}
         <header className="bg-white border-b border-gray-200 px-4 py-4">
           <div className="flex items-center justify-between">

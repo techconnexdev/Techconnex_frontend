@@ -1,6 +1,7 @@
 // app/customer/providers/page.tsx
 import { CustomerLayout } from "@/components/customer-layout";
 import FindProvidersClient from "@/components/customer/providers/FindProvidersClient";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
 
 export const dynamic = 'force-dynamic';
 
@@ -33,8 +34,7 @@ export default async function ProvidersPage() {
       }
     }
   } catch (error) {
-    console.error('Failed to fetch filter options:', error);
-    // Use default options if API fails
+    getUserFriendlyErrorMessage(error, "customer providers filters");
   }
 
   return (

@@ -31,7 +31,9 @@ import {
   type SupportSessionItem,
 } from "@/lib/api";
 import { getMessageAttachmentUrl } from "@/lib/api";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
 import { uploadFile } from "@/lib/upload";
+import { toast } from "@/lib/toast";
 
 type ViewMode = "chat" | "history" | "history-detail";
 
@@ -90,7 +92,9 @@ export function SupportChatClient({
       const res = await getSupportConversation();
       setConversation(res.data);
     } catch (e) {
-      console.error(e);
+      toast.error(
+        getUserFriendlyErrorMessage(e, "support chat load conversation"),
+      );
       setConversation(null);
     } finally {
       setLoading(false);
@@ -103,7 +107,9 @@ export function SupportChatClient({
       const res = await getSupportSessions();
       setSessions(res.data || []);
     } catch (e) {
-      console.error(e);
+      toast.error(
+        getUserFriendlyErrorMessage(e, "support chat load sessions"),
+      );
       setSessions([]);
     } finally {
       setSessionsLoading(false);
@@ -257,7 +263,9 @@ export function SupportChatClient({
         await load();
       }
     } catch (e) {
-      console.error(e);
+      toast.error(
+        getUserFriendlyErrorMessage(e, "support chat send message"),
+      );
       setInput(text);
       setAttachmentUrls(urls);
     } finally {
@@ -269,7 +277,7 @@ export function SupportChatClient({
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) {
-      alert("Please select an image file.");
+      toast.error("Please select an image file.");
       return;
     }
     setUploading(true);
@@ -284,11 +292,14 @@ export function SupportChatClient({
         const url = result.url || getMessageAttachmentUrl(result.key);
         setAttachmentUrls((prev) => [...prev, url]);
       } else {
-        alert(result.error || "Upload failed");
+        toast.error(
+          getUserFriendlyErrorMessage(undefined, "support chat upload"),
+        );
       }
     } catch (err) {
-      console.error(err);
-      alert("Upload failed");
+      toast.error(
+        getUserFriendlyErrorMessage(err, "support chat upload"),
+      );
     } finally {
       setUploading(false);
       e.target.value = "";
@@ -302,7 +313,9 @@ export function SupportChatClient({
       const res = await getSupportConversationById(sessionId);
       setHistoryConversation(res.data);
     } catch (e) {
-      console.error(e);
+      toast.error(
+        getUserFriendlyErrorMessage(e, "support chat load history"),
+      );
       setHistoryConversation(null);
     } finally {
       setHistoryDetailLoading(false);
@@ -560,7 +573,9 @@ export function SupportChatClient({
                 const res = await startNewSupportConversation();
                 setConversation(res.data);
               } catch (e) {
-                console.error(e);
+                toast.error(
+                  getUserFriendlyErrorMessage(e, "support chat start new"),
+                );
               } finally {
                 setStartingNew(false);
               }
@@ -849,7 +864,9 @@ export function SupportChatClient({
                     setViewMode("chat");
                     setHistoryConversation(null);
                   } catch (e) {
-                    console.error(e);
+                    toast.error(
+                      getUserFriendlyErrorMessage(e, "support chat start new"),
+                    );
                   } finally {
                     setStartingNew(false);
                   }}

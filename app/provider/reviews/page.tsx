@@ -49,6 +49,7 @@ import {
   type CompletedProject,
 } from "../../../lib/hooks/useReviews";
 import { getProfileImageUrl } from "@/lib/api";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
 
 const PROVIDER_CATEGORY_KEYS = [
   "communicationRating",
@@ -251,8 +252,10 @@ export default function ProviderReviewsPage() {
     } catch (error: unknown) {
       toast({
         title: "Unable to delete review",
-        description:
-          error instanceof Error ? error.message : "Please try again later.",
+        description: getUserFriendlyErrorMessage(
+          error,
+          "provider reviews delete",
+        ),
         variant: "destructive",
       });
     }
@@ -339,15 +342,12 @@ export default function ProviderReviewsPage() {
       refetchGivenReviews();
       refetchProjects();
     } catch (error: unknown) {
-      const message =
-        error instanceof Error ? error.message : "Unable to save your review.";
       toast({
-        title: message.includes("already exists")
-          ? "Review already submitted"
-          : "Something went wrong",
-        description: message.includes("already exists")
-          ? "This project already has a review. Please edit the existing review instead."
-          : message,
+        title: "Something went wrong",
+        description: getUserFriendlyErrorMessage(
+          error,
+          "provider reviews save",
+        ),
         variant: "destructive",
       });
     }
@@ -382,8 +382,10 @@ export default function ProviderReviewsPage() {
     } catch (error: unknown) {
       toast({
         title: "Unable to post reply",
-        description:
-          error instanceof Error ? error.message : "Please try again.",
+        description: getUserFriendlyErrorMessage(
+          error,
+          "provider reviews reply",
+        ),
         variant: "destructive",
       });
     }

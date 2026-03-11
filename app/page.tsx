@@ -1,4 +1,5 @@
 import { Metadata } from "next";
+import BetaBanner from "@/components/BetaBanner";
 import Header from "@/components/Homepage/Header";
 import Hero from "@/components/Homepage/Hero";
 import Brand from "@/components/Homepage/Brand";
@@ -58,6 +59,7 @@ export default async function LandingPage() {
 
   return (
     <div className="relative isolate">
+      <BetaBanner />
       <Header />
       <main className="overflow-x-hidden">
         <Hero />

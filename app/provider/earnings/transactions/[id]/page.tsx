@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiFetch, API_BASE } from "@/lib/api";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
 import { ProviderLayout } from "@/components/provider-layout";
 
 type Transaction = {
@@ -80,13 +81,14 @@ export default function TransactionDetailPage() {
         const json = await apiFetch(`/provider/earnings/${id}`);
         setTransaction(json.data);
       } catch (e: unknown) {
-        console.error(e);
-        const errorMessage =
-          e instanceof Error ? e.message : "Failed to load transaction";
-        setError(errorMessage);
+        const friendlyMessage = getUserFriendlyErrorMessage(
+          e,
+          "provider earnings transaction",
+        );
+        setError(friendlyMessage);
         toast({
           title: "Error",
-          description: errorMessage,
+          description: friendlyMessage,
           variant: "destructive",
         });
       } finally {
@@ -187,12 +189,12 @@ export default function TransactionDetailPage() {
         throw new Error("Invalid response from server");
       }
     } catch (e: unknown) {
-      console.error(e);
-      const errorMessage =
-        e instanceof Error ? e.message : "Failed to download receipt";
       toast({
         title: "Error downloading receipt",
-        description: errorMessage,
+        description: getUserFriendlyErrorMessage(
+          e,
+          "provider earnings receipt",
+        ),
         variant: "destructive",
       });
     }

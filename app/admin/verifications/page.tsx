@@ -219,30 +219,8 @@ export default function AdminVerificationsPage() {
           `Failed to ${approve ? "approve" : "reject"} (${res.status})`,
         );
 
-      const raw = await res.json();
-      // Normalize PUT response to match list shape (role can be array from API; list uses string)
-      const updated: KycUser = {
-        id: raw.id,
-        name: raw.name ?? "Unnamed",
-        email: raw.email ?? "",
-        role: (Array.isArray(raw.role) ? raw.role[0] : raw.role) as Role,
-        kycStatus: raw.kycStatus,
-        createdAt: raw.createdAt ?? "",
-        profile: raw.profile,
-        documents: (raw.kycDocuments ?? raw.documents ?? []).map((d: Record<string, unknown>) => ({
-          id: d.id as string,
-          type: d.type as KycUser["documents"][0]["type"],
-          fileUrl: d.fileUrl as string,
-          filename: d.filename as string,
-          mimeType: d.mimeType as string | undefined,
-          status: d.status as KycDocStatus,
-          uploadedAt: d.uploadedAt as string | undefined,
-          reviewNotes: d.reviewNotes as string | undefined,
-          reviewedBy: d.reviewedBy as string | undefined,
-          reviewedAt: d.reviewedAt as string | undefined,
-        })),
-      };
-      setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
+      // Refetch the full KYC list so the table shows correct server state (e.g. role stays provider/customer, not admin)
+      await fetchKyc();
       setSelectedUser(null);
       setReviewNotes("");
     } catch (e: unknown) {

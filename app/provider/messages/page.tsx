@@ -27,7 +27,9 @@ import {
   getMessageAttachmentUrl,
   checkCanChatWithUser,
 } from "@/lib/api";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
 import { ReportConversationDialog } from "@/components/messages/ReportConversationDialog";
+import { toast } from "@/lib/toast";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -134,7 +136,12 @@ export default function CustomerMessagesPage() {
           setProjects(availableProjects);
         }
       } catch (error) {
-        console.error("Error fetching project requests", error);
+        toast.error(
+          getUserFriendlyErrorMessage(
+            error,
+            "provider messages project requests",
+          ),
+        );
       }
     };
     fetchProjects();
@@ -332,8 +339,12 @@ export default function CustomerMessagesPage() {
         console.error("❌ Failed to fetch conversations:", data.message);
       }
     } catch (error) {
-      console.error("❌ Error fetching conversations:", error);
-      // Set empty array as fallback
+      toast.error(
+        getUserFriendlyErrorMessage(
+          error,
+          "provider messages conversations",
+        ),
+      );
       setConversations([]);
     } finally {
       setLoading(false);
@@ -373,7 +384,12 @@ export default function CustomerMessagesPage() {
           console.error("Failed to fetch messages:", data.message);
         }
       } catch (error) {
-        console.error("Error fetching messages:", error);
+        toast.error(
+          getUserFriendlyErrorMessage(
+            error,
+            "provider messages fetch messages",
+          ),
+        );
       } finally {
         if (!skipLoadingCheck) setLoading(false);
       }
@@ -581,13 +597,19 @@ export default function CustomerMessagesPage() {
             setMessages((prev) =>
               prev.filter((msg) => msg.id !== optimisticMessage.id),
             );
-            // Optionally show error to user
-            alert("Failed to send message: " + response?.error);
+            toast.error(
+              getUserFriendlyErrorMessage(
+                undefined,
+                "provider messages send",
+              ),
+            );
           }
         },
       );
     } catch (error) {
-      console.error("❌ Error in send message:", error);
+      toast.error(
+        getUserFriendlyErrorMessage(error, "provider messages send"),
+      );
     }
   };
 
@@ -608,7 +630,12 @@ export default function CustomerMessagesPage() {
           ),
         );
       } catch (error) {
-        console.error("Error marking messages as read:", error);
+        toast.error(
+          getUserFriendlyErrorMessage(
+            error,
+            "provider messages mark read",
+          ),
+        );
       }
     },
     [token],

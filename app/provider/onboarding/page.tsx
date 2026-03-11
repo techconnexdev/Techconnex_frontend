@@ -50,6 +50,7 @@ import {
   getMyCertifications,
   uploadResume as apiUploadResume,
 } from "@/lib/api";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
 import { useToast } from "@/hooks/use-toast";
 import { setOnboardingCompleted } from "@/components/provider/ProviderOnboardingPromptDialog";
 import { useProviderCompletion } from "@/contexts/ProviderCompletionContext";
@@ -203,7 +204,14 @@ export default function ProviderOnboardingPage() {
           // No resume yet
         }
       } catch {
-        toast({ title: "Error", description: "Failed to load profile", variant: "destructive" });
+        toast({
+          title: "Error",
+          description: getUserFriendlyErrorMessage(
+            undefined,
+            "provider onboarding load profile",
+          ),
+          variant: "destructive",
+        });
       } finally {
         setLoading(false);
       }
@@ -285,8 +293,7 @@ export default function ProviderOnboardingPage() {
       });
       setStep(2);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to save";
-      setError(msg);
+      setError(getUserFriendlyErrorMessage(e, "provider onboarding save step1"));
     } finally {
       setSaving(false);
     }
@@ -319,8 +326,7 @@ export default function ProviderOnboardingPage() {
       });
       setStep(3);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to save";
-      setError(msg);
+      setError(getUserFriendlyErrorMessage(e, "provider onboarding save step2"));
     } finally {
       setSaving(false);
     }
@@ -334,8 +340,7 @@ export default function ProviderOnboardingPage() {
       await upsertProviderProfile({ portfolioLinks });
       setStep(4);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to save";
-      setError(msg);
+      setError(getUserFriendlyErrorMessage(e, "provider onboarding save step3"));
     } finally {
       setSaving(false);
     }
@@ -421,8 +426,9 @@ export default function ProviderOnboardingPage() {
       }
       setStep(5);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to save certifications";
-      setError(msg);
+      setError(
+        getUserFriendlyErrorMessage(e, "provider onboarding save step4 certifications"),
+      );
     } finally {
       setSaving(false);
     }
@@ -593,8 +599,14 @@ export default function ProviderOnboardingPage() {
       }
       await apiUploadResume(key, uploadResult.url);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Upload failed";
-      toast({ title: "Error", description: msg, variant: "destructive" });
+      toast({
+        title: "Error",
+        description: getUserFriendlyErrorMessage(
+          err,
+          "provider onboarding resume upload",
+        ),
+        variant: "destructive",
+      });
       setResumeFile(null);
       setResumeUploadedKey(null);
       e.target.value = "";

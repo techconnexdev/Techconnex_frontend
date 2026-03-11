@@ -21,12 +21,15 @@ export interface UserFormData {
 
 export interface ProviderProfile {
   bio?: string
+  major?: string
   location?: string
   hourlyRate?: string | number
   availability?: string
   website?: string
+  profileImageUrl?: string
   skills?: string[]
   languages?: string[]
+  portfolioLinks?: string[]
   yearsExperience?: string | number
   minimumProjectBudget?: string | number
   maximumProjectBudget?: string | number
@@ -40,6 +43,7 @@ export interface CustomerProfile {
   industry?: string
   location?: string
   website?: string
+  profileImageUrl?: string
   socialLinks?: string[]
   languages?: string[]
   companySize?: string

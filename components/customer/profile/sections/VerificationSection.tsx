@@ -33,6 +33,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { API_BASE } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
 import type { UploadedDocument } from "../types";
 
 type Props = {
@@ -303,10 +304,12 @@ export default function VerificationSection({
         description: "Pending verification.",
       });
     } catch (err: unknown) {
-      console.error("KYC upload failed:", err);
       toast({
         title: "Upload failed",
-        description: err instanceof Error ? err.message : String(err),
+        description: getUserFriendlyErrorMessage(
+          err,
+          "customer profile verification upload",
+        ),
         variant: "destructive",
       });
     }
@@ -341,10 +344,12 @@ export default function VerificationSection({
         document.body.removeChild(link);
       }
     } catch (error: unknown) {
-      console.error("Failed to download document:", error);
       toast({
         title: "Download failed",
-        description: error instanceof Error ? error.message : "Failed to download document",
+        description: getUserFriendlyErrorMessage(
+          error,
+          "customer profile verification download",
+        ),
         variant: "destructive",
       });
     }

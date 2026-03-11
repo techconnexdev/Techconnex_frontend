@@ -16,6 +16,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Mail, ArrowLeft } from "lucide-react";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
@@ -46,7 +47,7 @@ export default function ForgotPasswordPage() {
 
       setSuccess(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Request failed");
+      setError(getUserFriendlyErrorMessage(err, "auth forgot-password"));
     } finally {
       setIsLoading(false);
     }

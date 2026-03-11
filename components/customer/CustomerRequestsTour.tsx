@@ -7,7 +7,7 @@ const REQUESTS_TOUR_STEPS: TourStep[] = [
     target: '[data-tour-step="0"]',
     title: "Provider Requests",
     content:
-      "When providers respond to your service requests, their proposals appear here. For new users, this list may be empty until you create a project and receive bids.",
+      "When providers send proposals to your projects, their proposals appear here. For new users, this list may be empty until you create a project and receive bids.",
   },
   {
     target: '[data-tour-step="1"]',

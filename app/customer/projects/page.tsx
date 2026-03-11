@@ -29,6 +29,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/use-toast";
@@ -55,6 +61,8 @@ import {
 } from "@/lib/api";
 import { Download } from "lucide-react";
 import { POST_PROJECT_REQUIRED } from "@/contexts/CustomerCompletionContext";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
+import { FriendlyErrorState } from "@/components/FriendlyErrorState";
 
 type ProjectProvider = {
   id?: string;
@@ -136,39 +144,43 @@ export default function CustomerProjectsPage() {
       } else {
         setGateModalOpen(true);
       }
-    } catch {
+    } catch (err) {
+      getUserFriendlyErrorMessage(
+        err,
+        "customer projects profile completion",
+      );
       setGateModalOpen(true);
     } finally {
       setNewProjectChecking(false);
     }
   };
 
-  // Fetch projects on component mount
-  useEffect(() => {
-    const fetchProjects = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const response = await getCompanyProjects({
-          page: 1,
-          limit: 100, // Get all projects for now
-        });
+  const fetchProjects = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await getCompanyProjects({
+        page: 1,
+        limit: 100,
+      });
 
-        if (response.success) {
-          setProjects((response.items || []) as CustomerProject[]);
-        } else {
-          setError("Failed to fetch projects");
-        }
-      } catch (err) {
-        console.error("Error fetching projects:", err);
+      if (response.success) {
+        setProjects((response.items || []) as CustomerProject[]);
+      } else {
         setError(
-          err instanceof Error ? err.message : "Failed to fetch projects",
+          getUserFriendlyErrorMessage(undefined, "customer projects fetch"),
         );
-      } finally {
-        setLoading(false);
       }
-    };
+    } catch (err) {
+      setError(
+        getUserFriendlyErrorMessage(err, "customer projects fetch"),
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchProjects();
   }, []);
   const handleContact = (
@@ -359,11 +371,12 @@ export default function CustomerProjectsPage() {
       setIsEditDialogOpen(false);
       setEditingProject(null);
     } catch (err) {
-      console.error(err);
       toast({
         title: "Update failed",
-        description:
-          err instanceof Error ? err.message : "Could not update project",
+        description: getUserFriendlyErrorMessage(
+          err,
+          "customer projects update",
+        ),
         variant: "destructive",
       });
     }
@@ -397,19 +410,11 @@ export default function CustomerProjectsPage() {
       <CustomerLayout>
         <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
           <div className="flex items-center justify-center py-8 sm:py-12">
-            <div className="text-center px-4">
-              <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
-                Error loading projects
-              </h3>
-              <p className="text-sm sm:text-base text-gray-600 mb-4">{error}</p>
-              <Button
-                onClick={() => window.location.reload()}
-                size="sm"
-                className="sm:size-default"
-              >
-                Try Again
-              </Button>
-            </div>
+            <FriendlyErrorState
+              message={error}
+              onRetry={fetchProjects}
+              variant="block"
+            />
           </div>
         </div>
       </CustomerLayout>
@@ -457,10 +462,10 @@ export default function CustomerProjectsPage() {
                 } catch (err) {
                   toast({
                     title: "Export failed",
-                    description:
-                      err instanceof Error
-                        ? err.message
-                        : "Failed to export projects",
+                    description: getUserFriendlyErrorMessage(
+                      err,
+                      "customer projects export",
+                    ),
                     variant: "destructive",
                   });
                 }
@@ -817,21 +822,35 @@ export default function CustomerProjectsPage() {
                           <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                           View
                         </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="text-xs sm:text-sm"
-                          onClick={() =>
-                            handleContact(
-                              project.provider?.id,
-                              project.provider?.name,
-                              project.provider?.providerProfile
-                                ?.profileImageUrl,
-                            )
-                          }
-                        >
-                          <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                        </Button>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-xs sm:text-sm disabled:cursor-not-allowed"
+                                  disabled={!project.provider?.id || !project.provider?.name}
+                                  onClick={() =>
+                                    handleContact(
+                                      project.provider?.id,
+                                      project.provider?.name,
+                                      project.provider?.providerProfile
+                                        ?.profileImageUrl,
+                                    )
+                                  }
+                                >
+                                  <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                                </Button>
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              {project.provider?.id && project.provider?.name
+                                ? "Contact provider"
+                                : "There is no provider yet for this project"}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       </div>
                     </CardContent>
                   </Card>
@@ -992,22 +1011,36 @@ export default function CustomerProjectsPage() {
                                 <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                                 View
                               </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="text-xs sm:text-sm"
-                                onClick={(e) => {
-                                  e.preventDefault(); // prevents Link from triggering navigation
-                                  handleContact(
-                                    project.provider?.id,
-                                    project.provider?.name,
-                                    project.provider?.providerProfile
-                                      ?.profileImageUrl,
-                                  );
-                                }}
-                              >
-                                <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                              </Button>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="text-xs sm:text-sm disabled:cursor-not-allowed"
+                                        disabled={!project.provider?.id || !project.provider?.name}
+                                        onClick={(e) => {
+                                          e.preventDefault(); // prevents Link from triggering navigation
+                                          handleContact(
+                                            project.provider?.id,
+                                            project.provider?.name,
+                                            project.provider?.providerProfile
+                                              ?.profileImageUrl,
+                                          );
+                                        }}
+                                      >
+                                        <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                                      </Button>
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    {project.provider?.id && project.provider?.name
+                                      ? "Contact provider"
+                                      : "There is no provider yet for this project"}
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
                             </div>
                           </div>
                         </div>

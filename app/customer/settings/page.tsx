@@ -14,14 +14,16 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import { Bell, Shield, CreditCard, Trash2 } from "lucide-react";
+import { Bell, Shield, CreditCard, Trash2, Mail } from "lucide-react";
 import { CustomerLayout } from "@/components/customer-layout";
 import { CustomerSettingsTour } from "@/components/customer/CustomerSettingsTour";
 import { Loader2 } from "lucide-react";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
 
 type NotificationSettings = {
   emailNotifications: boolean;
   smsNotifications: boolean;
+  pushNotifications: boolean;
   projectUpdates: boolean;
   marketingEmails: boolean;
   weeklyReports: boolean;
@@ -97,20 +99,27 @@ export default function CustomerSettingsPage() {
         }, 2000);
       } else {
         const data = await response.json();
-        setDeleteMessage(data.message || "❌ Failed to delete account.");
+        setDeleteMessage(
+          getUserFriendlyErrorMessage(
+            data?.message != null ? new Error(data.message) : undefined,
+            "customer settings delete",
+          ),
+        );
       }
     } catch (error) {
-      console.error("Error deleting account:", error);
-      setDeleteMessage("❌ Something went wrong while deleting account.");
+      setDeleteMessage(
+        getUserFriendlyErrorMessage(error, "customer settings delete"),
+      );
     } finally {
       setDeleting(false);
     }
   };
 
-  const handleSaveNotifications = async () => {
+  const handleSaveNotifications = async (overrides?: Partial<NotificationSettings>) => {
     try {
       setSaving(true);
       setMessage("");
+      const payload = { ...notifications, ...overrides };
       const response = await fetch(
         `${API_URL}/settings/${userId}/notifications`,
         {
@@ -119,7 +128,7 @@ export default function CustomerSettingsPage() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify(notifications),
+          body: JSON.stringify(payload),
         },
       );
 
@@ -129,12 +138,19 @@ export default function CustomerSettingsPage() {
         setMessage("✅ Notification preferences updated successfully!");
       } else {
         setMessage(
-          `❌ Failed to update notifications: ${data.message || "Error"}`,
+          getUserFriendlyErrorMessage(
+            data?.message != null ? new Error(data.message) : undefined,
+            "customer settings notifications",
+          ),
         );
       }
     } catch (error) {
-      console.error("Error updating notifications:", error);
-      setMessage("❌ Something went wrong.");
+      setMessage(
+        getUserFriendlyErrorMessage(
+          error,
+          "customer settings notifications",
+        ),
+      );
     } finally {
       setSaving(false);
     }
@@ -158,11 +174,17 @@ export default function CustomerSettingsPage() {
       if (response.ok) {
         setMessage("✅ Privacy settings updated successfully!");
       } else {
-        setMessage(`❌ Failed to update privacy: ${data.message || "Error"}`);
+        setMessage(
+          getUserFriendlyErrorMessage(
+            data?.message != null ? new Error(data.message) : undefined,
+            "customer settings privacy",
+          ),
+        );
       }
     } catch (error) {
-      console.error("Error updating privacy:", error);
-      setMessage("❌ Something went wrong.");
+      setMessage(
+        getUserFriendlyErrorMessage(error, "customer settings privacy"),
+      );
     } finally {
       setSaving(false);
     }
@@ -262,12 +284,18 @@ export default function CustomerSettingsPage() {
         setConfirmPassword("");
       } else {
         setPasswordSuccess(false);
-        setPasswordMessage(data.message || "Failed to update password.");
+        setPasswordMessage(
+          getUserFriendlyErrorMessage(
+            data?.message != null ? new Error(data.message) : undefined,
+            "customer settings password",
+          ),
+        );
       }
     } catch (error) {
-      console.error("Error updating password:", error);
       setPasswordSuccess(false);
-      setPasswordMessage("Something went wrong.");
+      setPasswordMessage(
+        getUserFriendlyErrorMessage(error, "customer settings password"),
+      );
     } finally {
       setLoadingPassword(false);
     }
@@ -318,6 +346,7 @@ export default function CustomerSettingsPage() {
         setNotifications({
           emailNotifications: settingsData.emailNotifications ?? false,
           smsNotifications: settingsData.smsNotifications ?? false,
+          pushNotifications: settingsData.pushNotifications ?? true,
           projectUpdates: settingsData.projectUpdates ?? false,
           marketingEmails: settingsData.marketingEmails ?? false,
           weeklyReports: settingsData.weeklyReports ?? false,
@@ -332,11 +361,11 @@ export default function CustomerSettingsPage() {
 
         setPayments(Array.isArray(paymentsData) ? paymentsData : []);
       } catch (error) {
-        console.error("Error fetching settings:", error);
-        // Set default values on error
+        getUserFriendlyErrorMessage(error, "customer settings fetch");
         setNotifications({
           emailNotifications: false,
           smsNotifications: false,
+          pushNotifications: true,
           projectUpdates: false,
           marketingEmails: false,
           weeklyReports: false,
@@ -380,10 +409,12 @@ export default function CustomerSettingsPage() {
           </p>
         </div>
 
-        <Tabs defaultValue="privacy" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2">
-            {/* <TabsTrigger value="notifications">Notifications</TabsTrigger> */}
-            <TabsTrigger value="privacy" data-tour-step="1">
+        <Tabs defaultValue="notifications" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="notifications" data-tour-step="1">
+              Notifications
+            </TabsTrigger>
+            <TabsTrigger value="privacy">
               Privacy
             </TabsTrigger>
             {/* <TabsTrigger value="billing">Billing</TabsTrigger> */}
@@ -401,30 +432,42 @@ export default function CustomerSettingsPage() {
                   Notification Preferences
                 </CardTitle>
                 <CardDescription>
-                  Choose how you want to be notified about updates
+                  In-app notifications always appear inside the app. Choose additional channels below.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3 rounded-lg border p-3 bg-muted/30">
+                    <Bell className="w-5 h-5 text-muted-foreground shrink-0" />
                     <div>
-                      <Label htmlFor="email-notifications">
-                        Email Notifications
-                      </Label>
-                      <p className="text-sm text-gray-500">
-                        Receive notifications via email
+                      <Label className="font-medium">In-app notifications</Label>
+                      <p className="text-sm text-muted-foreground">
+                        Always on — you&apos;ll see notifications in the bell icon when logged in
                       </p>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Mail className="w-4 h-4 text-muted-foreground" />
+                      <div>
+                        <Label htmlFor="email-notifications">
+                          Email Notifications
+                        </Label>
+                        <p className="text-sm text-gray-500">
+                          Receive notifications via email
+                        </p>
+                      </div>
                     </div>
                     <Switch
                       id="email-notifications"
                       checked={notifications?.emailNotifications ?? false}
                       onCheckedChange={(checked) =>
                         setNotifications((prev) => ({
+                          ...prev!,
                           emailNotifications: checked,
-                          smsNotifications: prev?.smsNotifications ?? false,
-                          projectUpdates: prev?.projectUpdates ?? false,
-                          marketingEmails: prev?.marketingEmails ?? false,
-                          weeklyReports: prev?.weeklyReports ?? false,
                         }))
                       }
                     />
@@ -432,99 +475,25 @@ export default function CustomerSettingsPage() {
 
                   <div className="flex items-center justify-between">
                     <div>
-                      <Label htmlFor="sms-notifications">
-                        SMS Notifications
+                      <Label htmlFor="whatsapp-notifications">
+                        WhatsApp Notifications
                       </Label>
                       <p className="text-sm text-gray-500">
-                        Receive urgent notifications via SMS
+                        Receive urgent notifications via WhatsApp
                       </p>
                     </div>
                     <Switch
-                      id="sms-notifications"
+                      id="whatsapp-notifications"
                       checked={notifications?.smsNotifications ?? false}
                       onCheckedChange={(checked) =>
-                        setNotifications((prev) => ({
-                          emailNotifications: prev?.emailNotifications ?? false,
-                          smsNotifications: checked,
-                          projectUpdates: prev?.projectUpdates ?? false,
-                          marketingEmails: prev?.marketingEmails ?? false,
-                          weeklyReports: prev?.weeklyReports ?? false,
-                        }))
-                      }
-                    />
-                  </div>
-
-                  <Separator />
-
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label htmlFor="project-updates">Project Updates</Label>
-                      <p className="text-sm text-gray-500">
-                        Get notified about project milestones and updates
-                      </p>
-                    </div>
-                    <Switch
-                      id="project-updates"
-                      checked={notifications?.projectUpdates ?? false}
-                      onCheckedChange={(checked) =>
-                        setNotifications((prev) => ({
-                          emailNotifications: prev?.emailNotifications ?? false,
-                          smsNotifications: prev?.smsNotifications ?? false,
-                          projectUpdates: checked,
-                          marketingEmails: prev?.marketingEmails ?? false,
-                          weeklyReports: prev?.weeklyReports ?? false,
-                        }))
-                      }
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label htmlFor="marketing-emails">Marketing Emails</Label>
-                      <p className="text-sm text-gray-500">
-                        Receive updates about new features and promotions
-                      </p>
-                    </div>
-                    <Switch
-                      id="marketing-emails"
-                      checked={notifications?.marketingEmails ?? false}
-                      onCheckedChange={(checked) =>
-                        setNotifications((prev) => ({
-                          emailNotifications: prev?.emailNotifications ?? false,
-                          smsNotifications: prev?.smsNotifications ?? false,
-                          projectUpdates: prev?.projectUpdates ?? false,
-                          marketingEmails: checked,
-                          weeklyReports: prev?.weeklyReports ?? false,
-                        }))
-                      }
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label htmlFor="weekly-reports">Weekly Reports</Label>
-                      <p className="text-sm text-gray-500">
-                        Get weekly summaries of your projects
-                      </p>
-                    </div>
-                    <Switch
-                      id="weekly-reports"
-                      checked={notifications?.weeklyReports ?? false}
-                      onCheckedChange={(checked) =>
-                        setNotifications((prev) => ({
-                          emailNotifications: prev?.emailNotifications ?? false,
-                          smsNotifications: prev?.smsNotifications ?? false,
-                          projectUpdates: prev?.projectUpdates ?? false,
-                          marketingEmails: prev?.marketingEmails ?? false,
-                          weeklyReports: checked,
-                        }))
+                        setNotifications((prev) => ({ ...prev!, smsNotifications: checked }))
                       }
                     />
                   </div>
                 </div>
 
                 <div className="flex justify-end">
-                  <Button onClick={handleSaveNotifications} disabled={saving}>
+                  <Button onClick={() => handleSaveNotifications()} disabled={saving}>
                     {saving ? "Saving..." : "Save Preferences"}
                   </Button>
                 </div>

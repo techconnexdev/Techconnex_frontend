@@ -31,13 +31,13 @@ const DEFAULT_STEPS: TourStep[] = [
     target: '[data-tour-step="0"]',
     title: "Welcome to your Dashboard",
     content:
-      "This is your home base.Most areas will be empty at first. As you create projects and work with providers, your stats and lists will fill in here.",
+      "This is your home base. Most areas will be empty at first. As you create projects and work with providers, your stats and lists will fill in here.",
   },
   {
     target: '[data-tour-step="1"]',
     title: "Start by creating a project",
     content:
-      "To get started, click here. You can create either a full project or a service request. Providers will then be able to find your request and send you proposals.",
+      "To get started, click here to create a project. Providers will then be able to find your project and send you proposals.",
   },
   {
     target: '[data-tour-step="2"]',
@@ -49,13 +49,13 @@ const DEFAULT_STEPS: TourStep[] = [
     target: '[data-tour-step="3"]',
     title: "Recent projects list",
     content:
-      "Your projects and service requests will appear here. For now it may be empty. Once you create projects, you can click any row to view details or hover over a service request to see suggested providers on the right.",
+      "Your projects will appear here. For now it may be empty. Once you create projects, you can click any row to view details or hover over a project to see suggested providers on the right.",
   },
   {
     target: '[data-tour-step="4"]',
     title: "Recommended providers",
     content:
-      "This area shows provider suggestions when you hover over a service request in the list. Until you create and hover over a service request, it will stay empty.",
+      "This area shows provider suggestions when you hover over a project in the list. Until you create and hover over a project, it will stay empty.",
   },
   {
     target: '[data-tour-step="5"]',

@@ -7,13 +7,13 @@ const PROJECTS_TOUR_STEPS: TourStep[] = [
     target: '[data-tour-step="0"]',
     title: "My Projects",
     content:
-      "This is where you manage all your ICT projects and service requests. For new users, the list may be empty until you create your first project.",
+      "This is where you manage all your ICT projects. For new users, the list may be empty until you create your first project.",
   },
   {
     target: '[data-tour-step="1"]',
     title: "Create a new project",
     content:
-      "Click here to start a new project or service request. You can add details, set a budget, and providers will be able to find and respond to your request.",
+      "Click here to start a new project. You can add details, set a budget, and providers will be able to find and send proposals to your project.",
   },
   {
     target: '[data-tour-step="2"]',
@@ -31,7 +31,7 @@ const PROJECTS_TOUR_STEPS: TourStep[] = [
     target: '[data-tour-step="4"]',
     title: "Projects list",
     content:
-      "Your projects and service requests appear here. Click any card to view details, message your provider, or track progress. Use the tabs to switch between Projects and Service Requests.",
+      "Your projects appear here. Click any card to view details, message your provider, or track progress.",
   },
   {
     target: '[data-tour-step="5"]',

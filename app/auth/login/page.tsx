@@ -17,9 +17,28 @@ import {
 } from "@/components/ui/card";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Mail, Lock, Eye, EyeOff, Building, User } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, Building, User, HelpCircle, Mail as MailIcon, Phone } from "lucide-react";
 import Cookies from "js-cookie";
 import Image from "next/image";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
+
+/** User-facing auth messages we show as-is (e.g. suspended, invalid credentials, wrong password). */
+function isUserFacingAuthError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes("suspended") ||
+    m.includes("contact support") ||
+    m.includes("invalid credentials") ||
+    m.includes("account was deleted") ||
+    m.includes("email or password") ||
+    m.includes("password is incorrect") ||
+    m.includes("incorrect. try again")
+  );
+}
+
+function isSuspendedError(message: string): boolean {
+  return message.toLowerCase().includes("suspended") || message.toLowerCase().includes("contact support");
+}
 
 type GoogleAccountsId = {
   initialize: (config: { client_id: string; callback: (response: { credential?: string }) => void }) => void;
@@ -38,6 +57,22 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const router = useRouter();
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const suspended = url.searchParams.get("suspended");
+
+    if (suspended === "1") {
+      setError(
+        "Your account has been suspended. Please contact TechConnect support—we're here to help."
+      );
+
+      // Clean up the URL so the message is only shown once
+      url.searchParams.delete("suspended");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, []);
 
   const handleGoogleCredential = (idToken: string) => {
     setError("");
@@ -63,7 +98,10 @@ export default function LoginPage() {
         else if (roles.includes("ADMIN")) router.push("/admin/dashboard");
         else router.push("/dashboard");
       })
-      .catch((err) => setError(err instanceof Error ? err.message : "Google sign-in failed"))
+      .catch((err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        setError(isUserFacingAuthError(msg) ? msg : getUserFriendlyErrorMessage(err, "auth login google"));
+      })
       .finally(() => setIsLoading(false));
   };
 
@@ -162,7 +200,8 @@ export default function LoginPage() {
         setError("Invalid user role");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(isUserFacingAuthError(msg) ? msg : getUserFriendlyErrorMessage(err, "auth login"));
     } finally {
       setIsLoading(false);
     }
@@ -192,7 +231,11 @@ export default function LoginPage() {
             <QuickBadges />
           </CardHeader>
           <CardContent>
-            {error && <ErrorMessage message={error} />}
+            {error && (isSuspendedError(error) ? (
+              <SuspendedMessage />
+            ) : (
+              <ErrorMessage message={error} />
+            ))}
             <div id="google-login-button-container" className="flex justify-center min-h-[44px] mb-4" />
             <div className="relative my-4">
               <div className="absolute inset-0 flex items-center">
@@ -362,6 +405,35 @@ const InputField = ({
 const ErrorMessage = ({ message }: { message: string }) => (
   <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
     <p className="text-red-600 text-sm">{message}</p>
+  </div>
+);
+
+const SUPPORT_EMAIL = "support@techconnect.my";
+const SUPPORT_PHONE = "+60312345678";
+
+const SuspendedMessage = () => (
+  <div className="mb-4 rounded-xl border border-sky-200 bg-sky-50/80 p-4 shadow-sm">
+    <div className="flex gap-3">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sky-100">
+        <HelpCircle className="h-5 w-5 text-sky-600" />
+      </div>
+      <div className="min-w-0 flex-1 space-y-2">
+        <p className="text-sm font-medium text-sky-900">We're here to help</p>
+        <p className="text-sm leading-relaxed text-sky-800">
+          Your account access is currently Suspended. We'd be happy to help—please reach out and we'll get things sorted.
+        </p>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg bg-white/70 px-3 py-2 text-xs text-sky-700">
+          <span className="flex items-center gap-1.5">
+            <MailIcon className="h-3.5 w-3.5" />
+            <a href={`mailto:${SUPPORT_EMAIL}`} className="underline hover:text-sky-900">{SUPPORT_EMAIL}</a>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Phone className="h-3.5 w-3.5" />
+            <a href={`tel:${SUPPORT_PHONE.replace(/\s/g, "")}`} className="underline hover:text-sky-900">{SUPPORT_PHONE}</a>
+          </span>
+        </div>
+      </div>
+    </div>
   </div>
 );
 

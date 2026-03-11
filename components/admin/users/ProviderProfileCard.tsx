@@ -68,6 +68,20 @@ export function ProviderProfileCard({
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
           <div className="space-y-2">
+            <Label htmlFor="major" className="text-xs sm:text-sm">Major / Title</Label>
+            {isEditing ? (
+              <Input
+                id="major"
+                value={getStringValue(formData.major)}
+                onChange={(e) => onFieldChange("major", e.target.value)}
+                placeholder="e.g. Software Engineer"
+                className="text-sm sm:text-base"
+              />
+            ) : (
+              <p className="text-sm sm:text-base break-words">{getStringValue(profile.major) || "—"}</p>
+            )}
+          </div>
+          <div className="space-y-2">
             <Label htmlFor="location" className="text-xs sm:text-sm">Location</Label>
             {isEditing ? (
               <Input
@@ -109,6 +123,21 @@ export function ProviderProfileCard({
               />
             ) : (
               <p className="text-sm sm:text-base break-words">{getStringValue(profile.website) || "—"}</p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="profileImageUrl" className="text-xs sm:text-sm">Profile Image URL</Label>
+            {isEditing ? (
+              <Input
+                id="profileImageUrl"
+                type="url"
+                value={getStringValue(formData.profileImageUrl)}
+                onChange={(e) => onFieldChange("profileImageUrl", e.target.value)}
+                placeholder="https://..."
+                className="text-sm sm:text-base"
+              />
+            ) : (
+              <p className="text-sm sm:text-base break-words">{getStringValue(profile.profileImageUrl) || "—"}</p>
             )}
           </div>
           <div className="space-y-2">
@@ -318,6 +347,55 @@ export function ProviderProfileCard({
                 ))
               ) : (
                 <span className="text-xs sm:text-sm text-gray-400">No languages</span>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="space-y-2">
+          <Label className="text-xs sm:text-sm">Portfolio Links</Label>
+          {isEditing ? (
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Add portfolio URL (e.g. GitHub, LinkedIn)"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault()
+                      const value = (e.target as HTMLInputElement).value
+                      if (value.trim()) {
+                        onArrayFieldChange("portfolioLinks", value, "add")
+                        ;(e.target as HTMLInputElement).value = ""
+                      }
+                    }
+                  }}
+                  className="text-sm sm:text-base"
+                />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {getArrayValue(formData.portfolioLinks).map((link, index) => (
+                  <Badge
+                    key={index}
+                    variant="secondary"
+                    className="cursor-pointer text-xs"
+                    onClick={() => onArrayFieldChange("portfolioLinks", link, "remove")}
+                  >
+                    {link} ×
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {getArrayValue(profile.portfolioLinks).length > 0 ? (
+                getArrayValue(profile.portfolioLinks).map((link, index) => (
+                  <Badge key={index} variant="secondary" className="text-xs">
+                    <a href={link} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline truncate max-w-[200px] block">
+                      {link}
+                    </a>
+                  </Badge>
+                ))
+              ) : (
+                <span className="text-xs sm:text-sm text-gray-400">No portfolio links</span>
               )}
             </div>
           )}

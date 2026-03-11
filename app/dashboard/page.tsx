@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
 
 /**
  * Redirects to role-based dashboard if logged in, otherwise to login.
@@ -37,7 +38,8 @@ export default function DashboardRedirectPage() {
       } else {
         router.replace("/auth/login");
       }
-    } catch {
+    } catch (err) {
+      getUserFriendlyErrorMessage(err, "dashboard redirect parse user");
       router.replace("/auth/login");
     }
   }, [router]);

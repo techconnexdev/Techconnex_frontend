@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import {
   ProviderOnboardingPromptDialog,
@@ -39,7 +39,8 @@ import {
   getProfileImageUrl,
   getProviderProfileCompletion,
 } from "@/lib/api";
-import { useToast } from "@/hooks/use-toast";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
+import { FriendlyErrorState } from "@/components/FriendlyErrorState";
 
 type ProjectCustomer = {
   id?: string;
@@ -109,8 +110,6 @@ type RecommendedOpportunity = {
 };
 
 export default function ProviderDashboard() {
-  const { toast } = useToast();
-
   // Stats state
   const [stats, setStats] = useState({
     activeProjects: 0,
@@ -154,6 +153,7 @@ export default function ProviderDashboard() {
   const [onboardingCompletionLoading, setOnboardingCompletionLoading] = useState(true);
   const [onboardingDialogOpen, setOnboardingDialogOpen] = useState(false);
   const [tourAllowed, setTourAllowed] = useState(false);
+  const [dashboardLoadError, setDashboardLoadError] = useState<string | null>(null);
 
   const ONBOARDING_MAX_COMPLETION = 50; // Don't show dialog if profile is already > 50% complete
 
@@ -202,86 +202,106 @@ export default function ProviderDashboard() {
     return () => clearTimeout(t);
   }, []);
 
-  useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        // Fetch provider project stats
-        const statsResponse = await getProviderProjectStats();
-        if (statsResponse.success) {
-          setStats({
-            activeProjects: statsResponse.stats.activeProjects || 0,
-            completedProjects: statsResponse.stats.completedProjects || 0,
-            totalEarnings: statsResponse.stats.totalEarnings || 0,
-            rating: statsResponse.stats.averageRating?.toString() || "0",
-            responseRate: 85, // Default value since not available in API
-          });
-        }
-
-        // Fetch active projects
-        const projectsResponse = await getProviderProjects({
-          page: 1,
-          limit: 5,
-          status: "IN_PROGRESS",
+  const fetchDashboardData = useCallback(async () => {
+    setDashboardLoadError(null);
+    try {
+      // Fetch provider project stats
+      const statsResponse = await getProviderProjectStats();
+      if (statsResponse.success) {
+        setStats({
+          activeProjects: statsResponse.stats.activeProjects || 0,
+          completedProjects: statsResponse.stats.completedProjects || 0,
+          totalEarnings: statsResponse.stats.totalEarnings || 0,
+          rating: statsResponse.stats.averageRating?.toString() || "0",
+          responseRate: 85, // Default value since not available in API
         });
-        if (projectsResponse.success) {
-          setActiveProjects(projectsResponse.projects || []);
-        }
+      }
 
-        // Fetch recommended opportunities
-        try {
-          const recommendationsResponse =
-            await getProviderRecommendedOpportunities();
-          if (recommendationsResponse.success) {
-            setRecommendedOpportunities(
-              recommendationsResponse.recommendations || [],
-            );
-            setRecommendationsCacheInfo({
-              cachedAt: recommendationsResponse.cachedAt,
-              nextRefreshAt: recommendationsResponse.nextRefreshAt,
-            });
-          }
-        } catch (error) {
-          console.error("Error fetching recommended opportunities:", error);
-          setErrorOpportunities("Failed to load recommended opportunities");
-        }
+      // Fetch active projects
+      const projectsResponse = await getProviderProjects({
+        page: 1,
+        limit: 5,
+        status: "IN_PROGRESS",
+      });
+      if (projectsResponse.success) {
+        setActiveProjects(projectsResponse.projects || []);
+      }
 
-        // Fetch performance metrics
-        const performanceResponse = await getProviderPerformanceMetrics();
-        if (performanceResponse.success) {
-          setPerformance({
-            totalProjects: statsResponse.stats?.totalProjects || 0,
-            completionRate: performanceResponse.metrics?.completionRate || 0,
-            onTimeDelivery: performanceResponse.metrics?.onTimeDelivery || 0,
-            repeatClients: performanceResponse.metrics?.repeatClients || 0,
-            responseRate: "85%", // Default value (not calculated yet)
-          });
-        } else {
-          // Fallback to defaults if API fails
-          setPerformance({
-            totalProjects: statsResponse.stats?.totalProjects || 0,
-            completionRate: 0,
-            onTimeDelivery: 0,
-            repeatClients: 0,
-            responseRate: "85%",
+      // Fetch recommended opportunities
+      try {
+        const recommendationsResponse =
+          await getProviderRecommendedOpportunities();
+        if (recommendationsResponse.success) {
+          setRecommendedOpportunities(
+            recommendationsResponse.recommendations || [],
+          );
+          setRecommendationsCacheInfo({
+            cachedAt: recommendationsResponse.cachedAt,
+            nextRefreshAt: recommendationsResponse.nextRefreshAt,
           });
         }
       } catch (error) {
-        console.error("Error fetching dashboard data:", error);
-        toast({
-          title: "Error",
-          description: "Failed to load dashboard data",
-          variant: "destructive",
-        });
-      } finally {
-        setStatsLoading(false);
-        setPerformanceLoading(false);
-        setActiveProjectsLoading(false);
-        setLoadingOpportunities(false);
+        setErrorOpportunities(
+          getUserFriendlyErrorMessage(error, "provider dashboard recommendations")
+        );
       }
-    };
 
+      // Fetch performance metrics
+      const performanceResponse = await getProviderPerformanceMetrics();
+      if (performanceResponse.success) {
+        setPerformance({
+          totalProjects: statsResponse.stats?.totalProjects || 0,
+          completionRate: performanceResponse.metrics?.completionRate || 0,
+          onTimeDelivery: performanceResponse.metrics?.onTimeDelivery || 0,
+          repeatClients: performanceResponse.metrics?.repeatClients || 0,
+          responseRate: "85%", // Default value (not calculated yet)
+        });
+      } else {
+        // Fallback to defaults if API fails
+        setPerformance({
+          totalProjects: statsResponse.stats?.totalProjects || 0,
+          completionRate: 0,
+          onTimeDelivery: 0,
+          repeatClients: 0,
+          responseRate: "85%",
+        });
+      }
+    } catch (error) {
+      setDashboardLoadError(
+        getUserFriendlyErrorMessage(error, "provider dashboard")
+      );
+    } finally {
+      setStatsLoading(false);
+      setPerformanceLoading(false);
+      setActiveProjectsLoading(false);
+      setLoadingOpportunities(false);
+    }
+  }, []);
+
+  useEffect(() => {
     fetchDashboardData();
-  }, [toast]);
+  }, [fetchDashboardData]);
+
+  const retryRecommendations = async () => {
+    setErrorOpportunities(null);
+    setLoadingOpportunities(true);
+    try {
+      const res = await getProviderRecommendedOpportunities();
+      if (res.success) {
+        setRecommendedOpportunities(res.recommendations || []);
+        setRecommendationsCacheInfo({
+          cachedAt: res.cachedAt,
+          nextRefreshAt: res.nextRefreshAt,
+        });
+      }
+    } catch (error) {
+      setErrorOpportunities(
+        getUserFriendlyErrorMessage(error, "provider dashboard recommendations")
+      );
+    } finally {
+      setLoadingOpportunities(false);
+    }
+  };
 
   return (
     <ProviderLayout>
@@ -328,6 +348,17 @@ export default function ProviderDashboard() {
           </div>
         </div>
 
+        {dashboardLoadError ? (
+          <FriendlyErrorState
+            variant="block"
+            message={dashboardLoadError}
+            onRetry={() => {
+              setDashboardLoadError(null);
+              fetchDashboardData();
+            }}
+          />
+        ) : (
+          <>
         {/* Stats Cards */}
         <div
           className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6"
@@ -631,9 +662,11 @@ export default function ProviderDashboard() {
                       Loading opportunities...
                     </div>
                   ) : errorOpportunities ? (
-                    <div className="text-center py-6 text-red-500 text-sm sm:text-base">
-                      {errorOpportunities}
-                    </div>
+                    <FriendlyErrorState
+                      variant="inline"
+                      message={errorOpportunities}
+                      onRetry={retryRecommendations}
+                    />
                   ) : recommendedOpportunities.length === 0 ? (
                     <div className="text-center py-6 text-gray-500 text-sm sm:text-base">
                       No recommended opportunities found. Check back later!
@@ -1004,6 +1037,8 @@ export default function ProviderDashboard() {
             </Card> */}
           </div>
         </div>
+          </>
+        )}
       </div>
     </ProviderLayout>
   );

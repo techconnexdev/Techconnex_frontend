@@ -18,7 +18,7 @@ import {
   DollarSign,
 } from "lucide-react";
 import { AdminLayout } from "@/components/admin-layout";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 
 export default function AdminSettingsPage() {
   const [settings, setSettings] = useState<Record<string, unknown> | null>(

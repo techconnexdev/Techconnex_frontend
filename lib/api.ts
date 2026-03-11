@@ -2777,6 +2777,55 @@ export async function adminBroadcastNotification({
   return data;
 }
 
+/** Get VAPID public key for web push (no auth required). */
+export async function getPushVapidPublicKey(): Promise<string | null> {
+  const res = await fetch(`${API_BASE}/notifications/push/vapid-public`);
+  const data = await res.json();
+  if (!res.ok || !data.publicKey) return null;
+  return data.publicKey;
+}
+
+/** Subscribe to push notifications. Requires auth. */
+export async function subscribePushNotifications(subscription: PushSubscription) {
+  const token = getToken();
+  if (!token) throw new Error("Not authenticated");
+  const sub = subscription.toJSON();
+  if (!sub.endpoint || !sub.keys?.p256dh || !sub.keys?.auth) {
+    throw new Error("Invalid subscription");
+  }
+  const res = await fetch(`${API_BASE}/notifications/push/subscribe`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      endpoint: sub.endpoint,
+      keys: sub.keys,
+    }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.message || "Failed to subscribe");
+  return data;
+}
+
+/** Unsubscribe from push notifications. */
+export async function unsubscribePushNotifications(endpoint: string) {
+  const token = getToken();
+  if (!token) throw new Error("Not authenticated");
+  const res = await fetch(`${API_BASE}/notifications/push/unsubscribe`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ endpoint }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.message || "Failed to unsubscribe");
+  return data;
+}
+
 export async function getAdminDisputeById(disputeId: string) {
   const token = getToken();
   if (!token) throw new Error("Not authenticated");

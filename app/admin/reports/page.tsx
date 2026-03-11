@@ -80,6 +80,7 @@ export default function AdminReportsPage() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [categoryDetails, setCategoryDetails] = useState<Record<string, unknown> | null>(null);
   const [loadingCategoryDetails, setLoadingCategoryDetails] = useState(false);
+  const [exportingReport, setExportingReport] = useState(false);
 
   const loadReports = useCallback(async () => {
     try {
@@ -192,6 +193,7 @@ export default function AdminReportsPage() {
 
   const handleExportReport = async () => {
     try {
+      setExportingReport(true);
       const params: {
         reportType?: string;
         dateRange?: string;
@@ -223,8 +225,8 @@ export default function AdminReportsPage() {
       URL.revokeObjectURL(url);
 
       toast({
-        title: "Success",
-        description: "PDF report exported successfully",
+        title: "Download started",
+        description: "Your PDF report has been downloaded. Check your downloads folder.",
       });
     } catch (error: unknown) {
       toast({
@@ -232,6 +234,8 @@ export default function AdminReportsPage() {
         description: error instanceof Error ? error.message : "Failed to export report",
         variant: "destructive",
       });
+    } finally {
+      setExportingReport(false);
     }
   };
 
@@ -301,8 +305,8 @@ export default function AdminReportsPage() {
       URL.revokeObjectURL(url);
 
       toast({
-        title: "Success",
-        description: `${type} report exported successfully as PDF`,
+        title: "Download started",
+        description: `${type} report downloaded. Check your downloads folder.`,
       });
     } catch (error: unknown) {
       toast({
@@ -360,10 +364,23 @@ export default function AdminReportsPage() {
               />
               Refresh
             </Button>
-            <Button variant="outline" onClick={handleExportReport} className="w-full sm:w-auto">
-              <Download className="w-4 h-4 mr-2" />
-              <span className="hidden sm:inline">Export Report</span>
-              <span className="sm:hidden">Export</span>
+            <Button
+              variant="outline"
+              onClick={handleExportReport}
+              disabled={exportingReport}
+              className="w-full sm:w-auto"
+            >
+              {exportingReport ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4 mr-2" />
+              )}
+              <span className="hidden sm:inline">
+                {exportingReport ? "Exporting…" : "Export Report"}
+              </span>
+              <span className="sm:hidden">
+                {exportingReport ? "Exporting…" : "Export"}
+              </span>
             </Button>
             {/* <Button className="w-full sm:w-auto">
               <BarChart3 className="w-4 h-4 mr-2" />

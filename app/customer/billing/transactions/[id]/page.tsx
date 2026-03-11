@@ -27,6 +27,8 @@ import {
 import { CustomerLayout } from "@/components/customer-layout";
 import { useToast } from "@/hooks/use-toast";
 import { apiFetch, API_BASE } from "@/lib/api";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
+import { FriendlyErrorState } from "@/components/FriendlyErrorState";
 
 type Transaction = {
   id: string;
@@ -184,12 +186,12 @@ export default function TransactionDetailPage() {
         throw new Error("Invalid response from server");
       }
     } catch (e: unknown) {
-      console.error(e);
-      const errorMessage =
-        e instanceof Error ? e.message : "Failed to download receipt";
       toast({
         title: "Error downloading receipt",
-        description: errorMessage,
+        description: getUserFriendlyErrorMessage(
+          e,
+          "customer billing transaction receipt download",
+        ),
         variant: "destructive",
       });
     }

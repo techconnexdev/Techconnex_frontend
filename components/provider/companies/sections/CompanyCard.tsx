@@ -10,6 +10,8 @@ import { Eye, MapPin, MessageSquare, Star, Heart, Building2, Sparkles, ChevronRi
 import type { Company } from "../types";
 import { useRouter } from "next/navigation";
 import { getProfileImageUrl } from "@/lib/api";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
+import { toast } from "@/lib/toast";
 import { useProviderCompletion, CONTACT_REQUIRED } from "@/contexts/ProviderCompletionContext";
 import { ProfileCompletionGateModal } from "@/components/provider/ProfileCompletionGateModal";
 
@@ -74,12 +76,17 @@ export default function CompanyCard({ company }: { company: Company }) {
       if (response.ok) {
         setSaved(!saved);
       } else {
-        const data = await response.json();
-        alert(data.message || "Failed to update saved status");
+        toast.error(
+          getUserFriendlyErrorMessage(
+            undefined,
+            "provider company card save",
+          ),
+        );
       }
     } catch (error) {
-      console.error("Error toggling save status:", error);
-      alert("Failed to update saved status");
+      toast.error(
+        getUserFriendlyErrorMessage(error, "provider company card save"),
+      );
     }
   };
 

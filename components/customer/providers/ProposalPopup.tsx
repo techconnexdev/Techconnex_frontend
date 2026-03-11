@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, X, FileText } from "lucide-react";
 import io from "socket.io-client";
+import { useToast } from "@/hooks/use-toast";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -38,6 +40,7 @@ export default function ProposalPopup({
   );
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
+  const { toast } = useToast();
 
   const getUserAndToken = () => {
     if (typeof window === "undefined") return { userId: "", token: "" };
@@ -158,10 +161,16 @@ export default function ProposalPopup({
 
       // Send via socket with callback and timeout
       const emitTimeout = setTimeout(() => {
-        console.error("❌ Socket emit timeout");
         socket.close();
         setSending(false);
-        alert("Failed to send proposal: Timeout");
+        toast({
+          title: "Error",
+          description: getUserFriendlyErrorMessage(
+            new Error("Timeout"),
+            "customer provider proposal send",
+          ),
+          variant: "destructive",
+        });
       }, 10000);
 
       socket.emit("send_message", messageData, (response: { success?: boolean; error?: string }) => {
@@ -179,18 +188,19 @@ export default function ProposalPopup({
           setSelectedProject(null);
           setMessage("");
         } else {
-          console.error("❌ Failed to send proposal:", response?.error);
-          alert(
-            "Failed to send proposal: " + (response?.error || "Unknown error")
-          );
+          toast({
+            title: "Error",
+            description: getUserFriendlyErrorMessage(
+              undefined,
+              "customer provider proposal send",
+            ),
+            variant: "destructive",
+          });
         }
         setSending(false);
       });
     } catch (error) {
-      console.error("❌ Error sending proposal via socket:", error);
-
       // Fallback: Try using HTTP API
-      console.log("🔄 Trying fallback HTTP method...");
       try {
         const response = await fetch(`${API_URL}/messages/send`, {
           method: "POST",
@@ -209,23 +219,29 @@ export default function ProposalPopup({
 
         const data = await response.json();
         if (data.success) {
-          console.log("✅ Proposal sent successfully via HTTP fallback");
           onSuccess();
           onClose();
           setSelectedProject(null);
           setMessage("");
         } else {
-          console.error("❌ Failed to send proposal via HTTP:", data.message);
-          alert(
-            "Failed to send proposal: " + (data.message || "Unknown error")
-          );
+          toast({
+            title: "Error",
+            description: getUserFriendlyErrorMessage(
+              undefined,
+              "customer provider proposal send",
+            ),
+            variant: "destructive",
+          });
         }
       } catch (httpError) {
-        console.error(
-          "❌ Error sending proposal via HTTP fallback:",
-          httpError
-        );
-        alert("Failed to send proposal. Please try again.");
+        toast({
+          title: "Error",
+          description: getUserFriendlyErrorMessage(
+            httpError,
+            "customer provider proposal send",
+          ),
+          variant: "destructive",
+        });
       }
       setSending(false);
     }

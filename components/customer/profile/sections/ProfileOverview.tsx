@@ -13,6 +13,7 @@ import { useState, useRef } from "react";
 import type { ProfileData } from "../types";
 import { uploadCompanyProfileImage, getCompanyProfileCompletion, getProfileImageUrl } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
 
 type Props = {
   value: ProfileData;
@@ -162,13 +163,19 @@ export default function ProfileOverview({ value, onChange, isEditing, onCompleti
             );
           }
         } catch (error) {
-          console.error("Failed to fetch completion:", error);
+          getUserFriendlyErrorMessage(
+            error,
+            "customer profile overview completion after image",
+          );
         }
       }
     } catch (error: unknown) {
       toast({
         title: "Upload failed",
-        description: error instanceof Error ? error.message : "Failed to upload profile image",
+        description: getUserFriendlyErrorMessage(
+          error,
+          "customer profile image upload",
+        ),
         variant: "destructive",
       });
     } finally {

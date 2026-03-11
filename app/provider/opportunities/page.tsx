@@ -2,7 +2,7 @@
 
 import type React from "react";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -62,7 +62,7 @@ import { ProviderLayout } from "@/components/provider-layout";
 import { PROPOSAL_REQUIRED } from "@/contexts/ProviderCompletionContext";
 import { ProfileCompletionGateModal } from "@/components/provider/ProfileCompletionGateModal";
 import { ProviderOpportunitiesTour } from "@/components/provider/ProviderOpportunitiesTour";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import {
   getProviderOpportunities,
   getProviderRecommendedOpportunities,
@@ -72,6 +72,8 @@ import {
   getServiceRequestAiDrafts,
   getProfileImageUrl,
 } from "@/lib/api";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
+import { FriendlyErrorState } from "@/components/FriendlyErrorState";
 import { validateFileBeforeUpload } from "@/lib/upload";
 import {
   formatTimeline,
@@ -438,73 +440,70 @@ export default function ProviderOpportunitiesPage() {
   }, []);
 
   // Fetch all opportunities from API
-  useEffect(() => {
-    const fetchOpportunities = async () => {
-      try {
-        setLoading(true);
-        setError(null);
+  const fetchOpportunities = useCallback(async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const response = await getProviderOpportunities({
+        page: 1,
+        limit: 100,
+        search: searchQuery || undefined,
+        sort: sortBy,
+      });
 
-        const response = await getProviderOpportunities({
-          page: 1,
-          limit: 100,
-          search: searchQuery || undefined,
-          sort: sortBy,
-        });
-
-        if (response.success) {
-          // For "All" tab: Don't use recommendation insights, only use drafts
-          let mappedOpportunities = (response.opportunities || []).map(
-            (opp: Record<string, unknown>) => mapOpportunityData(opp, false), // false = don't use recommendation insights
-          );
-
-          // Fetch AiDraft summaries and merge into opportunities (this is the only source of AI insights for "All" tab)
-          const serviceRequestIds = mappedOpportunities
-            .map((opp: OpportunityData) => opp.serviceRequestId)
-            .filter(Boolean);
-          if (serviceRequestIds.length > 0) {
-            try {
-              const draftRes =
-                await getServiceRequestAiDrafts(serviceRequestIds);
-              if (draftRes?.success && Array.isArray(draftRes.drafts)) {
-                const draftMap = new Map<string, string>(
-                  (draftRes.drafts as AiDraft[]).map((d: AiDraft) => [
-                    d.referenceId,
-                    d.summary || "",
-                  ]),
-                );
-                mappedOpportunities = mappedOpportunities.map(
-                  (opp: OpportunityData) => ({
-                    ...opp,
-                    // Only use draft summary for "All" tab
-                    aiExplanation:
-                      opp.serviceRequestId && draftMap.has(opp.serviceRequestId)
-                        ? draftMap.get(opp.serviceRequestId) || null
-                        : null,
-                  }),
-                );
-              }
-            } catch (err) {
-              console.warn("Failed to fetch AI drafts for opportunities", err);
-            }
-          }
-
-          setOpportunities(mappedOpportunities);
-        } else {
-          setError("Failed to fetch opportunities");
-        }
-      } catch (err) {
-        console.error("Error fetching opportunities:", err);
-        setError(
-          err instanceof Error ? err.message : "Failed to fetch opportunities",
+      if (response.success) {
+        // For "All" tab: Don't use recommendation insights, only use drafts
+        let mappedOpportunities = (response.opportunities || []).map(
+          (opp: Record<string, unknown>) => mapOpportunityData(opp, false), // false = don't use recommendation insights
         );
-        toast.error("Failed to load opportunities");
-      } finally {
-        setLoading(false);
-      }
-    };
 
+        // Fetch AiDraft summaries and merge into opportunities (this is the only source of AI insights for "All" tab)
+        const serviceRequestIds = mappedOpportunities
+          .map((opp: OpportunityData) => opp.serviceRequestId)
+          .filter(Boolean);
+        if (serviceRequestIds.length > 0) {
+          try {
+            const draftRes =
+              await getServiceRequestAiDrafts(serviceRequestIds);
+            if (draftRes?.success && Array.isArray(draftRes.drafts)) {
+              const draftMap = new Map<string, string>(
+                (draftRes.drafts as AiDraft[]).map((d: AiDraft) => [
+                  d.referenceId,
+                  d.summary || "",
+                ]),
+              );
+              mappedOpportunities = mappedOpportunities.map(
+                (opp: OpportunityData) => ({
+                  ...opp,
+                  // Only use draft summary for "All" tab
+                  aiExplanation:
+                    opp.serviceRequestId && draftMap.has(opp.serviceRequestId)
+                      ? draftMap.get(opp.serviceRequestId) || null
+                      : null,
+                }),
+              );
+            }
+          } catch (err) {
+            console.warn("Failed to fetch AI drafts for opportunities", err);
+          }
+        }
+
+        setOpportunities(mappedOpportunities);
+      } else {
+        setError(
+          getUserFriendlyErrorMessage(undefined, "provider opportunities"),
+        );
+      }
+    } catch (err) {
+      setError(getUserFriendlyErrorMessage(err, "provider opportunities"));
+    } finally {
+      setLoading(false);
+    }
+  }, [searchQuery, sortBy]);
+
+  useEffect(() => {
     fetchOpportunities();
-  }, [searchQuery, sortBy]); // submissionFilter and selectedTags are client-side
+  }, [fetchOpportunities]); // submissionFilter and selectedTags are client-side
 
   // Fetch recommended opportunities (cached 2h on backend; auto-refresh when expired)
   const fetchRecommendedOpportunitiesRef = useRef<() => Promise<void>>(
@@ -537,11 +536,11 @@ export default function ProviderOpportunitiesPage() {
           });
         }
       } catch (err) {
-        console.error("Error fetching recommended opportunities:", err);
         setErrorRecommended(
-          err instanceof Error
-            ? err.message
-            : "Failed to fetch recommended opportunities",
+          getUserFriendlyErrorMessage(
+            err,
+            "provider opportunities recommended",
+          ),
         );
       } finally {
         setLoadingRecommended(false);
@@ -1085,12 +1084,19 @@ export default function ProviderOpportunitiesPage() {
           setOpportunities(updatedOpportunities);
         }
       } else {
-        toast.error(response.message || "Failed to submit proposal");
+        toast.error(
+          getUserFriendlyErrorMessage(
+            undefined,
+            "provider opportunities submit proposal",
+          ),
+        );
       }
     } catch (err) {
-      console.error("Error submitting proposal:", err);
       toast.error(
-        err instanceof Error ? err.message : "Failed to submit proposal",
+        getUserFriendlyErrorMessage(
+          err,
+          "provider opportunities submit proposal",
+        ),
       );
     } finally {
       setSubmittingProposal(false);
@@ -1341,21 +1347,15 @@ export default function ProviderOpportunitiesPage() {
           </Card>
         ) : error ? (
           <Card>
-            <CardContent className="p-8 sm:p-12 text-center">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
-                <span className="text-red-600 text-lg sm:text-xl">⚠️</span>
-              </div>
-              <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
-                Error loading opportunities
-              </h3>
-              <p className="text-sm sm:text-base text-gray-600 mb-4">{error}</p>
-              <Button
-                onClick={() => window.location.reload()}
-                variant="outline"
-                className="text-xs sm:text-sm"
-              >
-                Try Again
-              </Button>
+            <CardContent className="p-4 sm:p-6">
+              <FriendlyErrorState
+                variant="block"
+                message={error}
+                onRetry={() => {
+                  setError(null);
+                  fetchOpportunities();
+                }}
+              />
             </CardContent>
           </Card>
         ) : (
@@ -1718,25 +1718,15 @@ export default function ProviderOpportunitiesPage() {
                 </Card>
               ) : errorRecommended ? (
                 <Card>
-                  <CardContent className="p-8 sm:p-12 text-center">
-                    <div className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
-                      <span className="text-red-600 text-lg sm:text-xl">
-                        ⚠️
-                      </span>
-                    </div>
-                    <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
-                      Error loading recommendations
-                    </h3>
-                    <p className="text-sm sm:text-base text-gray-600 mb-4">
-                      {errorRecommended}
-                    </p>
-                    <Button
-                      onClick={() => window.location.reload()}
-                      variant="outline"
-                      className="text-xs sm:text-sm"
-                    >
-                      Try Again
-                    </Button>
+                  <CardContent className="p-4 sm:p-6">
+                    <FriendlyErrorState
+                      variant="block"
+                      message={errorRecommended}
+                      onRetry={() => {
+                        setErrorRecommended(null);
+                        fetchRecommendedOpportunitiesRef.current?.();
+                      }}
+                    />
                   </CardContent>
                 </Card>
               ) : recommendedOpportunities.length === 0 ? (

@@ -13,7 +13,7 @@ const REVIEWS_TOUR_STEPS: TourStep[] = [
     target: '[data-tour-step="1"]',
     title: "Write a review",
     content:
-      "After a project is completed, click here to leave a review for the provider. Rate communication, quality, timeliness, and professionalism. You can edit reviews you've already written.",
+      "After a project is completed, click here to leave a review for the provider. Rate communication, quality, timeliness, and professionalism.",
   },
   {
     target: '[data-tour-step="2"]',

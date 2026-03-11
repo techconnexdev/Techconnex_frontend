@@ -1,6 +1,10 @@
 // app/layout.tsx
 import StripeProvider from "./customer/components/stripeProvider";
 import CookieConsentBanner from "@/components/legal/CookieConsentBanner";
+import { Toaster } from "@/components/ui/toaster";
+import { OfflineProvider } from "@/contexts/OfflineContext";
+import { OfflineBanner } from "@/components/OfflineBanner";
+import { AuthSessionGuard } from "@/components/AuthSessionGuard";
 import type { Metadata } from "next";
 import { GeistSans, GeistMono } from "geist/font";
 import "./globals.css";
@@ -65,10 +69,15 @@ export default function RootLayout({
     <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
       <Analytics />
       <body className="antialiased">
-        <StripeProvider>
-          {children}
-          <CookieConsentBanner />
-        </StripeProvider>
+        <AuthSessionGuard />
+        <OfflineProvider>
+          <OfflineBanner />
+          <StripeProvider>
+            {children}
+            <CookieConsentBanner />
+            <Toaster />
+          </StripeProvider>
+        </OfflineProvider>
       </body>
     </html>
   );

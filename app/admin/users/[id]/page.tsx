@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AdminLayout } from "@/components/admin-layout"
 import { getAdminUserById, suspendUser, activateUser, updateAdminUser, getResumeByUserId, getR2DownloadUrl, adminSendNotification } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
-import { Loader2 } from "lucide-react"
+import { Loader2, CheckCircle } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -129,12 +129,15 @@ export default function AdminUserDetailPage() {
         ? {
             providerProfile: {
               bio: (profile.bio as string) || "",
+              major: (profile.major as string) || "",
               location: (profile.location as string) || "",
               hourlyRate: (profile.hourlyRate as string) || "",
               availability: (profile.availability as string) || "",
               website: (profile.website as string) || "",
+              profileImageUrl: (profile.profileImageUrl as string) || "",
               skills: (Array.isArray(profile.skills) ? profile.skills : []) as string[],
               languages: (Array.isArray(profile.languages) ? profile.languages : []) as string[],
+              portfolioLinks: (Array.isArray(profile.portfolioLinks) ? profile.portfolioLinks : []) as string[],
               yearsExperience: (profile.yearsExperience as string) || "",
               minimumProjectBudget: (profile.minimumProjectBudget as string) || "",
               maximumProjectBudget: (profile.maximumProjectBudget as string) || "",
@@ -149,6 +152,7 @@ export default function AdminUserDetailPage() {
               industry: (profile?.industry as string) || "",
               location: (profile?.location as string) || "",
               website: (profile?.website as string) || "",
+              profileImageUrl: (profile?.profileImageUrl as string) || "",
               socialLinks: (Array.isArray(profile?.socialLinks) ? profile.socialLinks : []) as string[],
               languages: (Array.isArray(profile?.languages) ? profile.languages : []) as string[],
               companySize: (profile?.companySize as string) || "",
@@ -393,8 +397,10 @@ export default function AdminUserDetailPage() {
         hourlyRate: formData.providerProfile.hourlyRate,
         availability: formData.providerProfile.availability,
         website: formData.providerProfile.website,
+        profileImageUrl: formData.providerProfile.profileImageUrl,
         skills: formData.providerProfile.skills,
         languages: formData.providerProfile.languages,
+        portfolioLinks: formData.providerProfile.portfolioLinks,
         yearsExperience: formData.providerProfile.yearsExperience,
         minimumProjectBudget: formData.providerProfile.minimumProjectBudget,
         maximumProjectBudget: formData.providerProfile.maximumProjectBudget,
@@ -410,6 +416,7 @@ export default function AdminUserDetailPage() {
         industry: formData.customerProfile.industry,
         location: formData.customerProfile.location,
         website: formData.customerProfile.website,
+        profileImageUrl: formData.customerProfile.profileImageUrl,
         socialLinks: formData.customerProfile.socialLinks,
         languages: formData.customerProfile.languages,
         companySize: formData.customerProfile.companySize,
@@ -553,6 +560,49 @@ export default function AdminUserDetailPage() {
           roles={userRole as string[]}
           isVerified={userIsVerified}
         />
+
+        {/* Edit-mode banner: same pattern as company/provider profile */}
+        {isEditing && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 py-3 px-4 -mx-4 sm:mx-0 sm:rounded-lg bg-amber-50 border border-amber-200 shadow-sm"
+          >
+            <p className="text-sm text-amber-900">
+              <strong>Editing this user.</strong> Update Basic Information, Profile, or any section below and click{" "}
+              <strong>Save changes</strong> when done.
+            </p>
+            <div className="flex gap-2 flex-shrink-0">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCancel}
+                disabled={saving}
+                className="border-amber-300 text-amber-900 hover:bg-amber-100"
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleSave}
+                disabled={saving}
+                className="bg-amber-600 hover:bg-amber-700"
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-4 h-4 mr-2" />
+                    Save changes
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
 
         <Tabs defaultValue="overview" className="space-y-4 sm:space-y-6">
           <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto">

@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/input-otp";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@radix-ui/react-checkbox";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
 
 const fadeInUp = {
   initial: { opacity: 0, y: 30 },
@@ -291,7 +292,7 @@ export default function SignupPage() {
       setEmailOtpSent(true);
       setResendCooldown(60);
     } catch (e) {
-      setOtpError(e instanceof Error ? e.message : "Failed to send code.");
+      setOtpError(getUserFriendlyErrorMessage(e, "auth register otp send"));
     } finally {
       setIsSendingOtp(false);
     }
@@ -315,7 +316,7 @@ export default function SignupPage() {
       if (!res.ok) throw new Error(data?.error || "Verification failed");
       setEmailOtpVerified(true);
     } catch (e) {
-      setOtpError(e instanceof Error ? e.message : "Verification failed.");
+      setOtpError(getUserFriendlyErrorMessage(e, "auth register otp verify"));
     } finally {
       setIsVerifyingOtp(false);
     }
@@ -387,9 +388,7 @@ export default function SignupPage() {
           else router.push("/dashboard");
         })
         .catch((err) => {
-          setError(
-            err instanceof Error ? err.message : "Google sign-in failed",
-          );
+          setError(getUserFriendlyErrorMessage(err, "auth register google"));
         })
         .finally(() => setIsLoading(false));
     };
@@ -734,11 +733,12 @@ export default function SignupPage() {
 
       return { ok: true, data: payload.data };
     } catch (e: unknown) {
-      console.error("KYC upload error:", e);
-      const errorMessage =
-        e instanceof Error ? e.message : "KYC upload failed. Please try again.";
-      setError(errorMessage);
-      return { ok: false, error: errorMessage };
+      const friendlyMessage = getUserFriendlyErrorMessage(
+        e,
+        "auth register kyc",
+      );
+      setError(friendlyMessage);
+      return { ok: false, error: friendlyMessage };
     }
   };
 
@@ -1106,7 +1106,7 @@ export default function SignupPage() {
 
       throw new Error("Registration succeeded but no token received");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      setError(getUserFriendlyErrorMessage(err, "auth register"));
     } finally {
       setIsLoading(false);
     }

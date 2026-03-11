@@ -41,6 +41,7 @@ import { useRouter } from "next/navigation";
 import { buildTimelineData } from "@/lib/timeline-utils";
 import { RichEditor } from "@/components/markdown/RichTextEditor";
 import { useCustomerCompletion, POST_PROJECT_REQUIRED } from "@/contexts/CustomerCompletionContext";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
 
 export default function NewProjectPage() {
   const router = useRouter();
@@ -313,10 +314,12 @@ export default function NewProjectPage() {
         throw new Error(response.error || response.message || "Document analysis failed");
       }
     } catch (error: unknown) {
-      console.error("Document analysis error:", error);
-      const errorMessage = error instanceof Error ? error.message : "Failed to analyze document. Please try again.";
+      const errorMessage = getUserFriendlyErrorMessage(
+        error,
+        "customer projects new document analysis",
+      );
       setAnalysisError(errorMessage);
-      setUploadedFile(null); // Reset file on error
+      setUploadedFile(null);
       toast({
         title: "Analysis failed",
         description: errorMessage,
@@ -437,13 +440,12 @@ export default function NewProjectPage() {
         throw new Error(response.message || "Failed to create service request");
       }
     } catch (error) {
-      console.error("Error creating project:", error);
       toast({
         title: "Error",
-        description:
-          error instanceof Error
-            ? error.message
-            : "Failed to create service request",
+        description: getUserFriendlyErrorMessage(
+          error,
+          "customer projects new create",
+        ),
         variant: "destructive",
       });
     } finally {

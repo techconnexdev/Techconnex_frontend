@@ -19,6 +19,8 @@ import {
 import type { Provider } from "../types";
 import { useRouter } from "next/navigation";
 import { getProfileImageUrl } from "@/lib/api";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
+import { useToast } from "@/hooks/use-toast";
 
 export default function ProviderCard({
   provider,
@@ -26,6 +28,7 @@ export default function ProviderCard({
   provider: Provider & { aiExplanation?: string };
 }) {
   const router = useRouter();
+  const { toast } = useToast();
   const [saved, setSaved] = useState<boolean>(!!provider.saved);
   const [expanded, setExpanded] = useState<boolean>(false);
 
@@ -80,12 +83,24 @@ export default function ProviderCard({
       if (response.ok) {
         setSaved(!saved);
       } else {
-        const data = await response.json();
-        alert(data.message || "Failed to update saved status");
+        toast({
+          title: "Error",
+          description: getUserFriendlyErrorMessage(
+            undefined,
+            "customer provider card save",
+          ),
+          variant: "destructive",
+        });
       }
     } catch (error) {
-      console.error("Error toggling save status:", error);
-      alert("Failed to update saved status");
+      toast({
+        title: "Error",
+        description: getUserFriendlyErrorMessage(
+          error,
+          "customer provider card save",
+        ),
+        variant: "destructive",
+      });
     }
   };
   return (

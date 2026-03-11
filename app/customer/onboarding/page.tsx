@@ -49,6 +49,7 @@ import {
   uploadKyc,
 } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
 
 const ONBOARDING_MAX_COMPLETION = 60;
 
@@ -387,8 +388,7 @@ export default function CustomerOnboardingPage() {
       });
       setStep(2);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to save";
-      setError(msg);
+      setError(getUserFriendlyErrorMessage(e, "customer onboarding save step1"));
     } finally {
       setSaving(false);
     }
@@ -422,8 +422,7 @@ export default function CustomerOnboardingPage() {
       });
       setStep(3);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to save";
-      setError(msg);
+      setError(getUserFriendlyErrorMessage(e, "customer onboarding save step2"));
     } finally {
       setSaving(false);
     }
@@ -529,10 +528,14 @@ export default function CustomerOnboardingPage() {
       toast({ title: "Success", description: "Company profile saved." });
       router.push("/customer/dashboard");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save profile");
+      const message = getUserFriendlyErrorMessage(
+        err,
+        "customer onboarding submit",
+      );
+      setError(message);
       toast({
         title: "Error",
-        description: "Could not save profile",
+        description: message,
         variant: "destructive",
       });
     } finally {

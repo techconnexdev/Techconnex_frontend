@@ -39,6 +39,8 @@ import {
 import { RegistrationFormData, Certification } from "../page";
 import { Checkbox, CheckboxIndicator } from "@radix-ui/react-checkbox";
 import { PhoneInputField } from "./PhoneInputField";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
+import { toast } from "@/lib/toast";
 
 const fadeInUp = {
   initial: { opacity: 0, y: 30 },
@@ -227,7 +229,7 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
 
     // Validate file type
     if (file.type !== "application/pdf") {
-      alert("Invalid file type: Only PDF files are allowed for resumes.");
+      toast.error("Invalid file type: Only PDF files are allowed for resumes.");
       if (e.target) {
         e.target.value = ""; // Reset input
       }
@@ -237,7 +239,7 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
     // Validate file size (50MB max for documents)
     const maxSize = 50 * 1024 * 1024; // 50 MB
     if (file.size > maxSize) {
-      alert(`File size exceeds limit. Maximum size is ${(maxSize / (1024 * 1024)).toFixed(0)} MB`);
+      toast.error(`File size exceeds limit. Maximum size is ${(maxSize / (1024 * 1024)).toFixed(0)} MB`);
       if (e.target) {
         e.target.value = ""; // Reset input
       }
@@ -334,10 +336,9 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
       setShowAIResults(true);
       setAiProcessingComplete(true);
     } catch (err: unknown) {
-      console.error("Resume upload failed:", err);
-      const errorMessage = err instanceof Error ? err.message : "Resume analysis failed. Please try again.";
-      alert(errorMessage);
-      // Reset file on error
+      toast.error(
+        getUserFriendlyErrorMessage(err, "auth register provider resume"),
+      );
       setResumeFile(null);
       if (e.target) {
         e.target.value = ""; // Reset input

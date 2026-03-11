@@ -50,6 +50,7 @@ import {
   type CompletedProject,
 } from "@/lib/hooks/useReviews";
 import { getProfileImageUrl } from "@/lib/api";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
 
 type ReviewFormState = {
   projectId: string;
@@ -271,7 +272,10 @@ export default function CustomerReviewsPage() {
     } catch (error: unknown) {
       toast({
         title: "Unable to delete review",
-        description: error instanceof Error ? error.message : "Please try again later.",
+        description: getUserFriendlyErrorMessage(
+          error,
+          "customer reviews delete",
+        ),
         variant: "destructive",
       });
     }
@@ -351,14 +355,18 @@ export default function CustomerReviewsPage() {
       refetchGivenReviews();
       refetchProjects();
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Unable to save your review.";
+      const rawMessage =
+        error instanceof Error ? error.message : "Unable to save your review.";
+      const isAlreadyExists = rawMessage
+        .toLowerCase()
+        .includes("already exists");
       toast({
-        title: message.includes("already exists")
+        title: isAlreadyExists
           ? "Review already submitted"
           : "Something went wrong",
-        description: message.includes("already exists")
+        description: isAlreadyExists
           ? "This project already has a review. Please edit the existing review instead."
-          : message,
+          : getUserFriendlyErrorMessage(error, "customer reviews submit"),
         variant: "destructive",
       });
     }
@@ -392,7 +400,10 @@ export default function CustomerReviewsPage() {
     } catch (error: unknown) {
       toast({
         title: "Unable to post reply",
-        description: error instanceof Error ? error.message : "Please try again.",
+        description: getUserFriendlyErrorMessage(
+          error,
+          "customer reviews reply",
+        ),
         variant: "destructive",
       });
     }

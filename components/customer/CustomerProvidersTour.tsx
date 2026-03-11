@@ -7,7 +7,7 @@ const PROVIDERS_TOUR_STEPS: TourStep[] = [
     target: '[data-tour-step="0"]',
     title: "Find ICT Professionals",
     content:
-      "Discover and hire top-rated ICT experts for your projects. Browse all providers or get AI-recommended matches based on your service requests.",
+      "Discover and hire top-rated ICT experts for your projects. Browse all providers or get AI-recommended matches based on your projects.",
   },
   {
     target: '[data-tour-step="1"]',
@@ -25,7 +25,7 @@ const PROVIDERS_TOUR_STEPS: TourStep[] = [
     target: '[data-tour-step="3"]',
     title: "All vs AI Recommended",
     content:
-      "Switch between all providers and AI Recommended. The AI tab suggests providers that match your open service requests. Create a project first to get recommendations.",
+      "Switch between all providers and AI Recommended. The AI tab suggests providers that match your open projects. Create a project first to get recommendations.",
   },
   {
     target: '[data-tour-step="4"]',

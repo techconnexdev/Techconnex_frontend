@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
   compiler: {
     removeConsole:
       process.env.NODE_ENV === "production"
-        ? { exclude: ["error", "warn"] }
+        ? { exclude: ["error"] }
         : false,
   },
   // Reduce JS bundle size: tree-shake these packages instead of loading full libs

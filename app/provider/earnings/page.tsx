@@ -40,6 +40,7 @@ import { toast } from "@/components/ui/use-toast";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getKycDocuments } from "@/lib/api";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
 import {
   Dialog,
   DialogContent,
@@ -178,7 +179,14 @@ export default function ProviderEarningsPage() {
         //   setBankAccount([]);
         // }
       } catch (err) {
-        console.error("❌ Failed to fetch earnings:", err);
+        toast({
+          title: "Error",
+          description: getUserFriendlyErrorMessage(
+            err,
+            "provider earnings fetch",
+          ),
+          variant: "destructive",
+        });
       } finally {
         setLoading(false);
       }
@@ -206,7 +214,14 @@ export default function ProviderEarningsPage() {
       const result = await res.json();
       setPayoutMethods(result.payoutMethods || []);
     } catch (err) {
-      console.error("❌ Failed to fetch payout methods:", err);
+      toast({
+        title: "Error",
+        description: getUserFriendlyErrorMessage(
+          err,
+          "provider earnings payout methods",
+        ),
+        variant: "destructive",
+      });
     }
   };
 
@@ -285,12 +300,12 @@ export default function ProviderEarningsPage() {
       resetForm();
       await fetchPayoutMethods();
     } catch (err: unknown) {
-      console.error(err);
-      const errorMessage =
-        err instanceof Error ? err.message : "Failed to save payout method";
       toast({
         title: "Error",
-        description: errorMessage,
+        description: getUserFriendlyErrorMessage(
+          err,
+          "provider earnings save payout method",
+        ),
         variant: "destructive",
       });
     }
@@ -315,12 +330,12 @@ export default function ProviderEarningsPage() {
       });
       await fetchPayoutMethods();
     } catch (err: unknown) {
-      console.error(err);
-      const errorMessage =
-        err instanceof Error ? err.message : "Failed to delete payout method";
       toast({
         title: "Error",
-        description: errorMessage,
+        description: getUserFriendlyErrorMessage(
+          err,
+          "provider earnings delete payout method",
+        ),
         variant: "destructive",
       });
     }
@@ -396,12 +411,12 @@ export default function ProviderEarningsPage() {
         throw new Error(data.message || "Failed to get download URL");
       }
     } catch (err: unknown) {
-      console.error("Export report error:", err);
-      const errorMessage =
-        err instanceof Error ? err.message : "Failed to export report";
       toast({
         title: "Error exporting report",
-        description: errorMessage,
+        description: getUserFriendlyErrorMessage(
+          err,
+          "provider earnings export report",
+        ),
         variant: "destructive",
       });
     }

@@ -30,6 +30,7 @@ import ProviderCard from "./sections/ProviderCard";
 import type { Provider, Option } from "./types";
 import { getProviderAiDrafts, getProfileImageUrl } from "@/lib/api";
 import { CustomerProvidersTour } from "../CustomerProvidersTour";
+import { getUserFriendlyErrorMessage } from "@/lib/errors";
 
 // Extended provider type for recommended providers with AI-specific fields
 type RecommendedProvider = Provider & {
@@ -256,11 +257,11 @@ export default function FindProvidersClient({
         setRecommendedProviders([]);
       }
     } catch (err) {
-      console.error("Error fetching recommended providers:", err);
       setErrorRecommended(
-        err instanceof Error
-          ? err.message
-          : "Failed to fetch recommended providers",
+        getUserFriendlyErrorMessage(
+          err,
+          "customer providers recommended",
+        ),
       );
       setRecommendedProviders([]);
     } finally {
