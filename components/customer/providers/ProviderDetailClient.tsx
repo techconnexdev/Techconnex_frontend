@@ -109,6 +109,7 @@ export default function ProviderDetailClient({
   const [reviewsExpanded, setReviewsExpanded] = useState(false);
   const [certificationsExpanded, setCertificationsExpanded] = useState(false);
   const router = useRouter();
+  const { toast } = useToast();
 
   // Update saved state when provider prop changes (e.g., after refresh)
   useEffect(() => {

@@ -11,7 +11,7 @@ function shouldSuppressError(): boolean {
 }
 
 const wrappedError: typeof originalToast.error = (message, options) => {
-  if (shouldSuppressError()) return undefined as ReturnType<typeof originalToast.error>;
+  if (shouldSuppressError()) return undefined as unknown as ReturnType<typeof originalToast.error>;
   return originalToast.error(message, options);
 };
 
