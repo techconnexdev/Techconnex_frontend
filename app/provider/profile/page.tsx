@@ -193,6 +193,8 @@ export default function ProviderProfilePage(_props: Props) {
   const [completionSuggestions, setCompletionSuggestions] = useState<string[]>(
     [],
   );
+  /** Phone as saved on server; used to disable field only after save (not while typing). */
+  const [savedPhone, setSavedPhone] = useState("");
   const [profileFormErrors, setProfileFormErrors] = useState<{
     name?: string;
     email?: string;
@@ -308,10 +310,12 @@ export default function ProviderProfilePage(_props: Props) {
 
         if (profileResponse.success) {
           const profile = profileResponse.data;
+          const initialPhone = profile.user?.phone || "";
+          setSavedPhone(initialPhone);
           setProfileData({
             name: profile.user?.name || "",
             email: profile.user?.email || "",
-            phone: profile.user?.phone || "",
+            phone: initialPhone,
             bio: profile.bio || "",
             major: profile.major || "",
             location: profile.location || "",
@@ -562,6 +566,9 @@ export default function ProviderProfilePage(_props: Props) {
       });
 
       if (response.success) {
+        if (profileData.phone != null && profileData.phone.trim() !== "") {
+          setSavedPhone(profileData.phone.trim());
+        }
         toast({
           title: "Success",
           description: "Profile updated successfully",
@@ -576,22 +583,21 @@ export default function ProviderProfilePage(_props: Props) {
         }
         await refetchCompletion();
       } else {
+        const msg =
+          (response as { message?: string }).message ||
+          (response as { error?: string }).error;
         toast({
           title: "Error",
-          description: getUserFriendlyErrorMessage(
-            undefined,
-            "provider profile save",
-          ),
+          description: msg || getUserFriendlyErrorMessage(undefined, "provider profile save"),
           variant: "destructive",
         });
       }
     } catch (error) {
+      const message =
+        error instanceof Error ? error.message : String(error);
       toast({
         title: "Error",
-        description: getUserFriendlyErrorMessage(
-          error,
-          "provider profile save",
-        ),
+        description: message || getUserFriendlyErrorMessage(error, "provider profile save"),
         variant: "destructive",
       });
     } finally {
@@ -1762,19 +1768,19 @@ export default function ProviderProfilePage(_props: Props) {
                                 <Input
                                   id="phone"
                                   value={profileData.phone}
-                                  disabled={!!(profileData.phone && profileData.phone.trim())}
+                                  disabled={!!(savedPhone && savedPhone.trim())}
                                   onChange={(e) =>
                                     handleInputChange("phone", e.target.value)
                                   }
                                   placeholder={
-                                    profileData.phone?.trim()
+                                    savedPhone?.trim()
                                       ? undefined
                                       : "Add your phone number"
                                   }
-                                  className={`text-sm sm:text-base ${profileData.phone?.trim() ? "bg-gray-50" : ""} ${profileFormErrors.phone ? "border-red-500" : ""}`}
+                                  className={`text-sm sm:text-base ${savedPhone?.trim() ? "bg-gray-50" : ""} ${profileFormErrors.phone ? "border-red-500" : ""}`}
                                 />
                                 <p className="text-xs text-gray-500 mt-1">
-                                  {profileData.phone?.trim()
+                                  {savedPhone?.trim()
                                     ? "Contact support to change phone"
                                     : "You can add your phone number once"}
                                 </p>
@@ -2278,19 +2284,19 @@ export default function ProviderProfilePage(_props: Props) {
                           <Input
                             id="sidebar-phone"
                             value={profileData.phone}
-                            disabled={!!(profileData.phone && profileData.phone.trim())}
+                            disabled={!!(savedPhone && savedPhone.trim())}
                             onChange={(e) =>
                               handleInputChange("phone", e.target.value)
                             }
                             placeholder={
-                              profileData.phone?.trim()
+                              savedPhone?.trim()
                                 ? undefined
                                 : "Add your phone number"
                             }
-                            className={`text-sm sm:text-base ${profileData.phone?.trim() ? "bg-gray-50" : ""} ${profileFormErrors.phone ? "border-red-500" : ""}`}
+                            className={`text-sm sm:text-base ${savedPhone?.trim() ? "bg-gray-50" : ""} ${profileFormErrors.phone ? "border-red-500" : ""}`}
                           />
                           <p className="text-xs text-gray-500 mt-1">
-                            {profileData.phone?.trim()
+                            {savedPhone?.trim()
                               ? "Contact support to change phone"
                               : "You can add your phone number once"}
                           </p>

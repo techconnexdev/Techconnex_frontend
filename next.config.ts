@@ -2,6 +2,15 @@ import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "pub-1b42bf42946146b099454ebfefcf05bb.r2.dev",
+        pathname: "/**",
+      },
+    ],
+  },
   // Strip console.* in production (keeps error/warn if you need them)
   compiler: {
     removeConsole:

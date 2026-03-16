@@ -5,11 +5,15 @@ import { Toaster } from "@/components/ui/toaster";
 import { OfflineProvider } from "@/contexts/OfflineContext";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { AuthSessionGuard } from "@/components/AuthSessionGuard";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { GeistSans, GeistMono } from "geist/font";
 import "./globals.css";
 import { Analytics } from "@vercel/analytics/next"
 const siteUrl = "https://techconnex.vip";
+
+export const viewport: Viewport = {
+  themeColor: "#1E40AF",
+};
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -19,13 +23,12 @@ export const metadata: Metadata = {
   authors: [{ name: 'Techconnex', url: siteUrl }],
   creator: 'Techconnex',
   publisher: 'Techconnex',
-  themeColor: '#1E40AF', // your brand color
   icons: {
     icon: [
       { url: `${siteUrl}/favicon.ico`, sizes: "any" },
       { url: `${siteUrl}/favicon.ico`, type: "image/x-icon" },
     ],
-    apple: `${siteUrl}/assets/favicon.svg`,
+    apple: `${siteUrl}/favicon.ico`,
   },
   openGraph: {
     title: 'Techconnex - Freelancing Platform',
