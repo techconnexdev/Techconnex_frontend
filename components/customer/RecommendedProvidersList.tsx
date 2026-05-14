@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useI18n } from "@/contexts/I18nProvider";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +15,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { RecommendedProvider } from "@/hooks/useRecommendedProviders";
+import { formatProviderMoney } from "@/lib/provider-currency-format";
+import { CustomerRecommendedProvidersCompactSkeleton } from "@/components/customer/CustomerPageSkeletons";
 
 type RecommendedProvidersListProps = {
   providers: RecommendedProvider[];
@@ -34,16 +37,57 @@ export function RecommendedProvidersList({
   onContact,
   showCacheInfo = false,
   compact = false,
-  emptyMessage = "No recommended providers found. Create a project request to get recommendations!",
+  emptyMessage,
 }: RecommendedProvidersListProps) {
+  const { t, locale } = useI18n();
+  const resolvedEmptyMessage =
+    emptyMessage ??
+    `${t("customer.providers.recommended.emptyTitle")}. ${t("customer.providers.recommended.emptyBody")}`;
   const [expandedProviderId, setExpandedProviderId] = useState<string | null>(
     null,
   );
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearHideTimer = () => {
+    if (hideTimerRef.current) {
+      clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
+  };
+
+  const handleCardMouseEnter = (providerId: string) => {
+    clearHideTimer();
+    setExpandedProviderId(providerId);
+  };
+
+  const handleCardMouseLeave = (providerId: string) => {
+    clearHideTimer();
+    hideTimerRef.current = setTimeout(() => {
+      setExpandedProviderId((current) =>
+        current === providerId ? null : current,
+      );
+      hideTimerRef.current = null;
+    }, 180);
+  };
+
+  useEffect(() => {
+    return () => {
+      clearHideTimer();
+    };
+  }, []);
 
   if (loading) {
     return (
-      <div className="text-center text-gray-500 py-6 sm:py-8 text-sm sm:text-base">
-        Loading providers...
+      <div
+        role="status"
+        aria-busy="true"
+        aria-live="polite"
+        className="py-1"
+      >
+        <span className="sr-only">{t("customer.providers.loading.list")}</span>
+        <CustomerRecommendedProvidersCompactSkeleton
+          count={compact ? 2 : 3}
+        />
       </div>
     );
   }
@@ -59,7 +103,7 @@ export function RecommendedProvidersList({
   if (providers.length === 0) {
     return (
       <div className="text-center text-gray-500 py-6 sm:py-8 text-sm sm:text-base">
-        {emptyMessage}
+        {resolvedEmptyMessage}
       </div>
     );
   }
@@ -78,17 +122,32 @@ export function RecommendedProvidersList({
               const remainingMinutes = Math.floor(remainingMs / 60000);
               const remainingHours = Math.floor(remainingMinutes / 60);
               const remainingMins = remainingMinutes % 60;
+              const updatedLabel =
+                ageMinutes <= 0
+                  ? t("customer.providers.cache.justNow")
+                  : ageMinutes === 1
+                    ? t("customer.providers.cache.updatedOneMinute")
+                    : t("customer.providers.cache.updatedMinutes", {
+                        n: ageMinutes,
+                      });
+              const nextLabel =
+                remainingMs > 0
+                  ? remainingHours > 0
+                    ? t("customer.providers.cache.nextHoursMinutes", {
+                        h: remainingHours,
+                        m: remainingMins,
+                      })
+                    : t("customer.providers.cache.nextMinutes", {
+                        m: Math.max(1, remainingMins),
+                      })
+                  : null;
               return (
                 <>
-                  <span>Updated: {ageMinutes} min ago</span>
-                  {remainingMs > 0 && (
+                  <span>{updatedLabel}</span>
+                  {nextLabel && (
                     <>
                       {" • "}
-                      <span>
-                        Next refresh: in{" "}
-                        {remainingHours > 0 ? `${remainingHours}h ` : ""}
-                        {remainingMins} min
-                      </span>
+                      <span>{nextLabel}</span>
                     </>
                   )}
                 </>
@@ -102,12 +161,14 @@ export function RecommendedProvidersList({
           className={`group relative border-2 border-gray-200 rounded-xl hover:border-blue-400 hover:shadow-lg transition-all duration-300 bg-white ${
             compact ? "p-3" : "p-4 sm:p-5"
           }`}
+          onMouseEnter={() => handleCardMouseEnter(provider.id)}
+          onMouseLeave={() => handleCardMouseLeave(provider.id)}
         >
           {Boolean(provider.aiExplanation) && (
             <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
               <div className="flex items-center gap-1.5 px-2.5 py-1 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-full text-xs font-medium shadow-md">
                 <Sparkles className="w-3 h-3" />
-                <span>AI Insights</span>
+                <span>{t("customer.providers.badge.aiInsights")}</span>
               </div>
             </div>
           )}
@@ -140,13 +201,15 @@ export function RecommendedProvidersList({
                           : "bg-yellow-100 text-yellow-700 border-yellow-300"
                     }`}
                   >
-                    {provider.matchScore}% match
+                    {t("customer.providers.matchPercent", {
+                      score: provider.matchScore,
+                    })}
                   </Badge>
                 )}
                 {!provider.verified && (
                   <Badge className="text-xs bg-red-100 text-red-700 border-red-300">
                     <AlertTriangle className="w-3 h-3 mr-1" />
-                    Not Verified
+                    {t("customer.providers.badge.notVerified")}
                   </Badge>
                 )}
               </div>
@@ -155,7 +218,9 @@ export function RecommendedProvidersList({
               </p>
               {Boolean(provider.recommendedFor?.title) && (
                 <p className="text-xs text-blue-600 mt-1 font-medium">
-                  Recommended for: {provider.recommendedFor?.title}
+                  {t("customer.providers.recommendedFor", {
+                    title: provider.recommendedFor?.title ?? "",
+                  })}
                 </p>
               )}
               {compact &&
@@ -190,20 +255,26 @@ export function RecommendedProvidersList({
                       provider.reviewCount > 0 && (
                         <span className="text-xs sm:text-sm text-gray-500">
                           ({provider.reviewCount}{" "}
-                          {provider.reviewCount === 1 ? "review" : "reviews"})
+                          {provider.reviewCount === 1
+                            ? t("customer.dashboard.stats.review")
+                            : t("customer.dashboard.stats.reviews")})
                         </span>
                       )}
                     <span className="text-xs sm:text-sm text-gray-500">
                       •{" "}
-                      {typeof provider.completedJobs === "number"
-                        ? provider.completedJobs
-                        : 0}{" "}
-                      jobs
+                      {t("customer.providers.jobsCount", {
+                        n:
+                          typeof provider.completedJobs === "number"
+                            ? provider.completedJobs
+                            : 0,
+                      })}
                     </span>
                     {typeof provider.yearsExperience === "number" &&
                       provider.yearsExperience > 0 && (
                         <span className="text-xs text-gray-500">
-                          • {provider.yearsExperience} years exp.
+                          {t("customer.providers.yearsExpShort", {
+                            years: provider.yearsExperience,
+                          })}
                         </span>
                       )}
                   </div>
@@ -250,11 +321,15 @@ export function RecommendedProvidersList({
                     )}
                   </div>
                   <p className="text-xs sm:text-sm font-medium text-blue-600 mt-1.5 sm:mt-2">
-                    RM
-                    {typeof provider.hourlyRate === "number"
-                      ? provider.hourlyRate
-                      : 0}
-                    /hour
+                    {t("customer.providers.detail.hourlyRateLine", {
+                      rate: formatProviderMoney(
+                        typeof provider.hourlyRate === "number"
+                          ? provider.hourlyRate
+                          : 0,
+                        provider.preferredCurrency,
+                        locale,
+                      ),
+                    })}
                   </p>
                 </>
               )}
@@ -265,7 +340,7 @@ export function RecommendedProvidersList({
             typeof provider.aiExplanation === "string" && (
               <div className="mt-3 sm:mt-4 overflow-hidden">
                 <div
-                  className={`lg:group-hover:hidden ${
+                  className={`${
                     expandedProviderId === provider.id ? "hidden" : "block"
                   } transition-all duration-300`}
                 >
@@ -280,9 +355,11 @@ export function RecommendedProvidersList({
                   >
                     <Sparkles className="w-3.5 h-3.5 shrink-0" />
                     <span className="hidden sm:inline">
-                      Hover to see AI insights
+                      {t("customer.providers.hoverAiInsights")}
                     </span>
-                    <span className="sm:hidden">Tap to see AI insights</span>
+                    <span className="sm:hidden">
+                      {t("customer.providers.tapAiInsights")}
+                    </span>
                     <ChevronRight
                       className={`w-3 h-3 shrink-0 transition-transform ${
                         expandedProviderId === provider.id ? "rotate-90" : ""
@@ -291,7 +368,7 @@ export function RecommendedProvidersList({
                   </button>
                 </div>
                 <div
-                  className={`lg:group-hover:block ${
+                  className={`${
                     expandedProviderId === provider.id ? "block" : "hidden"
                   } animate-in fade-in slide-in-from-top-2 duration-300`}
                 >
@@ -301,13 +378,13 @@ export function RecommendedProvidersList({
                         <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600" />
                       </div>
                       <p className="text-xs sm:text-sm font-semibold text-blue-900">
-                        Why this provider is recommended:
+                        {t("customer.providers.whyRecommended")}
                       </p>
                       <button
                         type="button"
                         onClick={() => setExpandedProviderId(null)}
                         className="ml-auto lg:hidden text-blue-600 hover:text-blue-800 p-1"
-                        aria-label="Close insights"
+                        aria-label={t("customer.providers.closeInsightsAria")}
                       >
                         <span className="text-lg">×</span>
                       </button>
@@ -365,7 +442,7 @@ export function RecommendedProvidersList({
                 variant="outline"
                 className="w-full text-xs sm:text-sm group-hover:border-blue-600 group-hover:text-blue-600 transition-colors"
               >
-                View Profile
+                {t("customer.providers.viewProfile")}
                 <ChevronRight className="w-3.5 h-3.5 ml-1.5 group-hover:translate-x-1 transition-transform" />
               </Button>
             </Link>
@@ -376,7 +453,7 @@ export function RecommendedProvidersList({
                 onClick={() => onContact(provider)}
               >
                 <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                Contact
+                {t("customer.providers.contact")}
               </Button>
             )}
           </div>

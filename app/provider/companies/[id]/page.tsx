@@ -1,6 +1,5 @@
 // app/provider/companies/[id]/page.tsx
 import { cookies } from "next/headers";
-import { ProviderLayout } from "@/components/provider-layout";
 import CompanyDetailClient from "@/components/provider/companies/CompanyDetailClient";
 import type { Company, Review } from "@/components/provider/companies/types";
 import { notFound } from "next/navigation";
@@ -82,9 +81,9 @@ export default async function CompanyDetailPage({
   }
 
   return (
-    <ProviderLayout>
+    
       <CompanyDetailClient company={company} reviews={reviews} />
-    </ProviderLayout>
+    
   );
 }
 

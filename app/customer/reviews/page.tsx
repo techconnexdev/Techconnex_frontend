@@ -38,7 +38,6 @@ import {
   Reply,
   Clock,
 } from "lucide-react";
-import { CustomerLayout } from "@/components/customer-layout";
 import { CustomerReviewsTour } from "@/components/customer/CustomerReviewsTour";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -51,6 +50,7 @@ import {
 } from "@/lib/hooks/useReviews";
 import { getProfileImageUrl } from "@/lib/api";
 import { getUserFriendlyErrorMessage } from "@/lib/errors";
+import { useI18n } from "@/contexts/I18nProvider";
 
 type ReviewFormState = {
   projectId: string;
@@ -101,6 +101,7 @@ const initialReviewForm: ReviewFormState = {
 };
 
 export default function CustomerReviewsPage() {
+  const { t } = useI18n();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<"given" | "received" | "pending">(
     "given"
@@ -214,8 +215,8 @@ export default function CustomerReviewsPage() {
 
     if (!targetProjectId) {
       toast({
-        title: "No projects available",
-        description: "All completed and disputed projects already have reviews.",
+        title: t("customer.reviews.toast.noProjectsTitle"),
+        description: t("customer.reviews.toast.noProjectsDesc"),
       });
       return;
     }
@@ -256,22 +257,20 @@ export default function CustomerReviewsPage() {
   };
 
   const handleDeleteReview = async (reviewId: string) => {
-    const confirmed = window.confirm(
-      "Delete this review? This action cannot be undone."
-    );
+    const confirmed = window.confirm(t("customer.reviews.confirm.delete"));
     if (!confirmed) return;
 
     try {
       await deleteReview(reviewId);
       toast({
-        title: "Review deleted",
-        description: "The review has been removed successfully.",
+        title: t("customer.reviews.toast.deletedTitle"),
+        description: t("customer.reviews.toast.deletedDesc"),
       });
       refetchGivenReviews();
       refetchProjects();
     } catch (error: unknown) {
       toast({
-        title: "Unable to delete review",
+        title: t("customer.reviews.toast.deleteFailedTitle"),
         description: getUserFriendlyErrorMessage(
           error,
           "customer reviews delete",
@@ -291,8 +290,8 @@ export default function CustomerReviewsPage() {
       !reviewForm.content.trim()
     ) {
       toast({
-        title: "Missing details",
-        description: "Please rate every category and share your feedback.",
+        title: t("customer.reviews.toast.missingDetailsTitle"),
+        description: t("customer.reviews.toast.missingDetailsDesc"),
         variant: "destructive",
       });
       return;
@@ -301,8 +300,8 @@ export default function CustomerReviewsPage() {
     const overallRating = computeCustomerOverallRating(reviewForm);
     if (overallRating === 0) {
       toast({
-        title: "Incomplete categories",
-        description: "Please rate all categories to calculate your rating.",
+        title: t("customer.reviews.toast.incompleteCategoriesTitle"),
+        description: t("customer.reviews.toast.incompleteCategoriesDesc"),
         variant: "destructive",
       });
       return;
@@ -320,8 +319,8 @@ export default function CustomerReviewsPage() {
         });
 
         toast({
-          title: "Review updated",
-          description: "Your review has been updated successfully.",
+          title: t("customer.reviews.toast.updatedTitle"),
+          description: t("customer.reviews.toast.updatedDesc"),
         });
       } else {
         const selectedProject = companyProjects.find(
@@ -329,9 +328,7 @@ export default function CustomerReviewsPage() {
         );
 
         if (!selectedProject || !selectedProject.provider?.id) {
-          throw new Error(
-            "We could not match the selected project with a provider."
-          );
+          throw new Error(t("customer.reviews.error.projectProviderMismatch"));
         }
 
         await createReview({
@@ -346,8 +343,8 @@ export default function CustomerReviewsPage() {
         });
 
         toast({
-          title: "Review submitted",
-          description: "Thank you for sharing feedback with this provider.",
+          title: t("customer.reviews.toast.submittedTitle"),
+          description: t("customer.reviews.toast.submittedDesc"),
         });
       }
 
@@ -356,16 +353,18 @@ export default function CustomerReviewsPage() {
       refetchProjects();
     } catch (error: unknown) {
       const rawMessage =
-        error instanceof Error ? error.message : "Unable to save your review.";
+        error instanceof Error
+          ? error.message
+          : t("customer.reviews.error.saveFailed");
       const isAlreadyExists = rawMessage
         .toLowerCase()
         .includes("already exists");
       toast({
         title: isAlreadyExists
-          ? "Review already submitted"
-          : "Something went wrong",
+          ? t("customer.reviews.toast.alreadyExistsTitle")
+          : t("customer.reviews.toast.genericErrorTitle"),
         description: isAlreadyExists
-          ? "This project already has a review. Please edit the existing review instead."
+          ? t("customer.reviews.toast.alreadyExistsDesc")
           : getUserFriendlyErrorMessage(error, "customer reviews submit"),
         variant: "destructive",
       });
@@ -382,8 +381,8 @@ export default function CustomerReviewsPage() {
   const handleSubmitReply = async () => {
     if (!replyingReview || !replyContent.trim()) {
       toast({
-        title: "Reply required",
-        description: "Enter your response before submitting.",
+        title: t("customer.reviews.toast.replyRequiredTitle"),
+        description: t("customer.reviews.toast.replyRequiredDesc"),
         variant: "destructive",
       });
       return;
@@ -392,14 +391,14 @@ export default function CustomerReviewsPage() {
     try {
       await createReply(replyingReview.id, replyContent.trim());
       toast({
-        title: "Reply posted",
-        description: "Your response has been shared with the provider.",
+        title: t("customer.reviews.toast.replyPostedTitle"),
+        description: t("customer.reviews.toast.replyPostedDesc"),
       });
       handleReplyDialogOpenChange(false);
       refetchReceivedReviews();
     } catch (error: unknown) {
       toast({
-        title: "Unable to post reply",
+        title: t("customer.reviews.toast.replyFailedTitle"),
         description: getUserFriendlyErrorMessage(
           error,
           "customer reviews reply",
@@ -410,7 +409,7 @@ export default function CustomerReviewsPage() {
   };
 
   return (
-    <CustomerLayout>
+    <>
       <CustomerReviewsTour />
       <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
         <div
@@ -419,11 +418,10 @@ export default function CustomerReviewsPage() {
         >
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-              Company Reviews
+              {t("customer.reviews.title")}
             </h1>
             <p className="text-sm sm:text-base text-gray-600 mt-1">
-              Track the reviews you have written, feedback from providers, and
-              any outstanding reviews for completed or disputed projects.
+              {t("customer.reviews.subtitle")}
             </p>
           </div>
           <Button
@@ -435,7 +433,7 @@ export default function CustomerReviewsPage() {
             data-tour-step="1"
           >
             <Plus className="mr-2 h-4 w-4" />
-            Write Review
+            {t("customer.reviews.writeReview")}
           </Button>
         </div>
 
@@ -444,30 +442,30 @@ export default function CustomerReviewsPage() {
           data-tour-step="2"
         >
           <StatsCard
-            title="Total Reviews"
+            title={t("customer.reviews.stats.totalTitle")}
             value={
               statsLoading
                 ? "…"
                 : stats.totalReviews.toString().padStart(1, "0")
             }
             icon={<MessageSquare className="h-8 w-8 text-blue-600" />}
-            helper="Combined reviews given and received"
+            helper={t("customer.reviews.stats.totalHelper")}
           />
           <StatsCard
-            title="Average Rating"
+            title={t("customer.reviews.stats.avgTitle")}
             value={statsLoading ? "…" : stats.averageRating.toFixed(1) ?? "0.0"}
             icon={<Star className="h-8 w-8 text-yellow-500" />}
-            helper="From reviews received by providers"
+            helper={t("customer.reviews.stats.avgHelper")}
           />
           <StatsCard
-            title="Pending Reviews"
+            title={t("customer.reviews.stats.pendingTitle")}
             value={
               statsLoading
                 ? "…"
                 : stats.pendingReviews.toString().padStart(1, "0")
             }
             icon={<Calendar className="h-8 w-8 text-orange-500" />}
-            helper="Providers awaiting feedback"
+            helper={t("customer.reviews.stats.pendingHelper")}
           />
         </div>
 
@@ -477,7 +475,7 @@ export default function CustomerReviewsPage() {
               <div className="flex flex-1 items-center gap-2">
                 <Search className="h-4 w-4 text-gray-400 flex-shrink-0" />
                 <Input
-                  placeholder="Search by provider or project"
+                  placeholder={t("customer.reviews.searchPlaceholder")}
                   value={searchTerm}
                   onChange={(event) => setSearchTerm(event.target.value)}
                   className="text-sm sm:text-base"
@@ -487,26 +485,26 @@ export default function CustomerReviewsPage() {
                 <Select value={selectedRating} onValueChange={setSelectedRating}>
                   <SelectTrigger className="w-full sm:w-48 text-sm sm:text-base">
                     <Filter className="mr-2 h-4 w-4" />
-                    <SelectValue placeholder="Filter rating" />
+                    <SelectValue placeholder={t("customer.reviews.filterPlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All ratings</SelectItem>
+                    <SelectItem value="all">{t("customer.reviews.filter.allRatings")}</SelectItem>
                     {[5, 4, 3, 2, 1].map((rating) => (
                       <SelectItem key={rating} value={rating.toString()}>
-                        {rating} stars
+                        {t("customer.reviews.filter.stars", { n: String(rating) })}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
                 <Select value={sortBy} onValueChange={setSortBy}>
                   <SelectTrigger className="w-full sm:w-48 text-sm sm:text-base">
-                    <SelectValue placeholder="Sort by" />
+                    <SelectValue placeholder={t("customer.reviews.sortPlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="newest">Newest first</SelectItem>
-                    <SelectItem value="oldest">Oldest first</SelectItem>
-                    <SelectItem value="highest">Highest rating</SelectItem>
-                    <SelectItem value="lowest">Lowest rating</SelectItem>
+                    <SelectItem value="newest">{t("customer.reviews.sort.newest")}</SelectItem>
+                    <SelectItem value="oldest">{t("customer.reviews.sort.oldest")}</SelectItem>
+                    <SelectItem value="highest">{t("customer.reviews.sort.highest")}</SelectItem>
+                    <SelectItem value="lowest">{t("customer.reviews.sort.lowest")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -523,13 +521,13 @@ export default function CustomerReviewsPage() {
         >
           <TabsList className="w-full sm:w-auto flex flex-col sm:flex-row h-auto sm:h-10 bg-gray-100 p-2 sm:p-3 rounded-lg">
             <TabsTrigger value="given" className="text-xs sm:text-sm w-full sm:w-auto data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-md">
-              Reviews Given
+              {t("customer.reviews.tabs.given")}
             </TabsTrigger>
             <TabsTrigger value="received" className="text-xs sm:text-sm w-full sm:w-auto data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-md">
-              Reviews Received
+              {t("customer.reviews.tabs.received")}
             </TabsTrigger>
             <TabsTrigger value="pending" className="text-xs sm:text-sm w-full sm:w-auto data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-md">
-              Pending
+              {t("customer.reviews.tabs.pending")}
             </TabsTrigger>
           </TabsList>
 
@@ -539,7 +537,7 @@ export default function CustomerReviewsPage() {
               loading={givenLoading}
               error={givenError}
               type="given"
-              emptyMessage="You haven't reviewed any providers yet."
+              emptyMessage={t("customer.reviews.empty.given")}
               onEdit={handleOpenEditReview}
               onDelete={(review) => handleDeleteReview(review.id)}
             />
@@ -551,7 +549,7 @@ export default function CustomerReviewsPage() {
               loading={receivedLoading}
               error={receivedError}
               type="received"
-              emptyMessage="No providers have reviewed your company yet."
+              emptyMessage={t("customer.reviews.empty.received")}
               onReply={handleOpenReply}
             />
           </TabsContent>
@@ -589,7 +587,7 @@ export default function CustomerReviewsPage() {
           isSubmitting={actionLoading}
         />
       </div>
-    </CustomerLayout>
+    </>
   );
 }
 
@@ -639,11 +637,12 @@ function ReviewList({
   onDelete,
   onReply,
 }: ReviewListProps) {
+  const { t } = useI18n();
   if (loading) {
     return (
       <Card>
         <CardContent className="p-6 text-muted-foreground">
-          Loading reviews...
+          {t("customer.reviews.loading.list")}
         </CardContent>
       </Card>
     );
@@ -653,7 +652,7 @@ function ReviewList({
     return (
       <Card>
         <CardContent className="p-6 text-destructive">
-          {error || "Unable to load reviews."}
+          {error || t("customer.reviews.error.loadFailed")}
         </CardContent>
       </Card>
     );
@@ -663,7 +662,7 @@ function ReviewList({
     return (
       <EmptyState
         icon={<MessageSquare className="h-10 w-10 text-muted-foreground" />}
-        title="No reviews"
+        title={t("customer.reviews.empty.listTitle")}
         description={emptyMessage}
       />
     );
@@ -696,8 +695,11 @@ function ReviewCard({
   onDelete?: (review: Review) => void;
   onReply?: (review: Review) => void;
 }) {
+  const { t, locale } = useI18n();
+  const dateLocale =
+    locale === "id" ? "id-ID" : locale === "ar" ? "ar" : "en-US";
   const counterparty = type === "given" ? review.recipient : review.reviewer;
-  const projectTitle = review.project?.title ?? "Project";
+  const projectTitle = review.project?.title ?? t("customer.reviews.card.projectFallback");
   const reply = review.ReviewReply?.[0];
 
   // Get profile image URL from customerProfile or providerProfile
@@ -721,11 +723,11 @@ function ReviewCard({
             </Avatar>
             <div className="flex-1 min-w-0">
               <h3 className="font-bold text-gray-900 text-base sm:text-lg mb-1">
-                {counterparty?.name ?? "Unknown"}
+                {counterparty?.name ?? t("customer.reviews.card.unknownUser")}
               </h3>
               <p className="text-sm text-gray-600 mb-1 truncate">{projectTitle}</p>
               <p className="text-xs text-gray-500">
-                {new Date(review.createdAt).toLocaleDateString("en-US", {
+                {new Date(review.createdAt).toLocaleDateString(dateLocale, {
                   month: "2-digit",
                   day: "2-digit",
                   year: "numeric",
@@ -747,8 +749,8 @@ function ReviewCard({
               className="text-xs bg-gray-50 border-gray-200 text-gray-700"
             >
               {type === "given"
-                ? "You reviewed this provider"
-                : "Provider review"}
+                ? t("customer.reviews.badge.youReviewedProvider")
+                : t("customer.reviews.badge.providerReview")}
             </Badge>
           </div>
         </div>
@@ -764,19 +766,25 @@ function ReviewCard({
         <div className="grid grid-cols-2 gap-2 sm:gap-3 mt-4">
           {review.communicationRating ? (
             <CategoryScore
-              label="Communication"
+              label={t("customer.reviews.category.communication")}
               value={review.communicationRating}
             />
           ) : null}
           {review.qualityRating ? (
-            <CategoryScore label="Quality" value={review.qualityRating} />
+            <CategoryScore
+              label={t("customer.reviews.category.quality")}
+              value={review.qualityRating}
+            />
           ) : null}
           {review.timelinessRating ? (
-            <CategoryScore label="Timeliness" value={review.timelinessRating} />
+            <CategoryScore
+              label={t("customer.reviews.category.timeliness")}
+              value={review.timelinessRating}
+            />
           ) : null}
           {review.professionalismRating ? (
             <CategoryScore
-              label="Professionalism"
+              label={t("customer.reviews.category.professionalism")}
               value={review.professionalismRating}
             />
           ) : null}
@@ -785,9 +793,11 @@ function ReviewCard({
         {/* Reply section */}
         {reply && (
           <div className="rounded-lg bg-gray-50 border border-gray-200 p-3 sm:p-4 mt-4">
-            <p className="text-sm font-semibold text-gray-900 mb-1">Your reply</p>
+            <p className="text-sm font-semibold text-gray-900 mb-1">
+              {t("customer.reviews.reply.yourReply")}
+            </p>
             <p className="text-xs text-gray-500 mb-2">
-              {new Date(reply.createdAt).toLocaleDateString("en-US", {
+              {new Date(reply.createdAt).toLocaleDateString(dateLocale, {
                 month: "2-digit",
                 day: "2-digit",
                 year: "numeric",
@@ -803,7 +813,9 @@ function ReviewCard({
             variant="secondary" 
             className="text-xs bg-gray-100 text-gray-700"
           >
-            {type === "given" ? "Published" : "Received"}
+            {type === "given"
+              ? t("customer.reviews.badge.published")
+              : t("customer.reviews.badge.receivedBadge")}
           </Badge>
           <div className="flex gap-2">
             {type === "received" && (
@@ -815,7 +827,9 @@ function ReviewCard({
                 className="text-xs sm:text-sm border-gray-300 text-gray-700 hover:bg-gray-50"
               >
                 <Reply className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                {reply ? "Replied" : "Reply"}
+                {reply
+                  ? t("customer.reviews.actions.replied")
+                  : t("customer.reviews.actions.reply")}
               </Button>
             )}
           </div>
@@ -834,11 +848,14 @@ function PendingProjectsList({
   loading: boolean;
   onWriteReview: (projectId: string) => void;
 }) {
+  const { t, locale } = useI18n();
+  const dateLocale =
+    locale === "id" ? "id-ID" : locale === "ar" ? "ar" : "en-US";
   if (loading) {
     return (
       <Card>
         <CardContent className="p-6 text-muted-foreground">
-          Loading pending projects...
+          {t("customer.reviews.pending.loading")}
         </CardContent>
       </Card>
     );
@@ -848,8 +865,8 @@ function PendingProjectsList({
     return (
       <EmptyState
         icon={<Clock className="h-10 w-10 text-muted-foreground" />}
-        title="You're all caught up"
-        description="Every completed and disputed project has been reviewed."
+        title={t("customer.reviews.pending.caughtUpTitle")}
+        description={t("customer.reviews.pending.caughtUpDesc")}
       />
     );
   }
@@ -864,21 +881,21 @@ function PendingProjectsList({
                 <h3 className="font-semibold text-gray-900 text-sm sm:text-base">{project.title}</h3>
                 {project.status === "DISPUTED" && (
                   <Badge variant="destructive" className="text-xs">
-                    Disputed
+                    {t("customer.reviews.pending.disputed")}
                   </Badge>
                 )}
               </div>
               <p className="text-sm text-gray-600 mb-1">
-                {project.provider?.name ?? "Provider"}
+                {project.provider?.name ?? t("customer.reviews.pending.providerFallback")}
               </p>
               <p className="text-xs text-gray-500">
                 {project.completedDate
-                  ? new Date(project.completedDate).toLocaleDateString("en-US", {
+                  ? new Date(project.completedDate).toLocaleDateString(dateLocale, {
                       month: "2-digit",
                       day: "2-digit",
                       year: "numeric",
                     })
-                  : "Completion date unavailable"}
+                  : t("customer.reviews.pending.dateUnavailable")}
               </p>
             </div>
             <Button 
@@ -886,7 +903,7 @@ function PendingProjectsList({
               className="w-full sm:w-auto text-xs sm:text-sm"
             >
               <Plus className="mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              Write Review
+              {t("customer.reviews.writeReview")}
             </Button>
           </CardContent>
         </Card>
@@ -914,6 +931,7 @@ function ReviewDialog({
   isSubmitting: boolean;
   mode: "create" | "edit";
 }) {
+  const { t } = useI18n();
   const hasAllRatings = hasAllCustomerCategoryRatings(formState);
   const hasProjects = projects.length > 0;
   const disableSubmit =
@@ -927,88 +945,93 @@ function ReviewDialog({
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>
-            {mode === "edit" ? "Edit review" : "Write a review"}
+            {mode === "edit"
+              ? t("customer.reviews.dialog.editTitle")
+              : t("customer.reviews.dialog.writeTitle")}
           </DialogTitle>
           <DialogDescription>
-            Share transparent feedback with service providers.
+            {t("customer.reviews.dialog.description")}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-6">
           <div>
-            <Label>Project</Label>
+            <Label>{t("customer.reviews.dialog.project")}</Label>
             <Select
               value={formState.projectId}
               onValueChange={(value) => onChange({ projectId: value })}
               disabled={mode === "edit" || !hasProjects}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Select completed or disputed project" />
+                <SelectValue placeholder={t("customer.reviews.dialog.projectPlaceholder")} />
               </SelectTrigger>
               <SelectContent>
                 {hasProjects ? (
                   projects.map((project) => (
                     <SelectItem key={project.id} value={project.id}>
-                      {project.title} — {project.provider?.name ?? "Provider"}
+                      {project.title} —{" "}
+                      {project.provider?.name ??
+                        t("customer.reviews.dialog.providerFallback")}
                     </SelectItem>
                   ))
                 ) : (
                   <SelectItem value="none" disabled>
-                    No projects available
+                    {t("customer.reviews.dialog.noProjectsOption")}
                   </SelectItem>
                 )}
               </SelectContent>
             </Select>
             {!hasProjects && mode === "create" && (
               <p className="mt-2 text-xs text-muted-foreground">
-                All completed and disputed projects already have reviews.
+                {t("customer.reviews.dialog.noProjectsHint")}
               </p>
             )}
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
             <RatingInput
-              label="Communication"
+              label={t("customer.reviews.category.communication")}
               value={formState.communicationRating}
               onChange={(value) => onChange({ communicationRating: value })}
             />
             <RatingInput
-              label="Quality"
+              label={t("customer.reviews.category.quality")}
               value={formState.qualityRating}
               onChange={(value) => onChange({ qualityRating: value })}
             />
             <RatingInput
-              label="Timeliness"
+              label={t("customer.reviews.category.timeliness")}
               value={formState.timelinessRating}
               onChange={(value) => onChange({ timelinessRating: value })}
             />
             <RatingInput
-              label="Professionalism"
+              label={t("customer.reviews.category.professionalism")}
               value={formState.professionalismRating}
               onChange={(value) => onChange({ professionalismRating: value })}
             />
           </div>
 
           <div>
-            <Label>Overall rating (computed)</Label>
+            <Label>{t("customer.reviews.dialog.overallLabel")}</Label>
             <div className="mt-2 flex items-center gap-2">
               <RatingStars rating={formState.rating} />
               <span className="text-xs text-muted-foreground">
                 {formState.rating
-                  ? `${formState.rating.toFixed(1)}/5`
-                  : "Rate every category to calculate"}
+                  ? t("customer.reviews.dialog.overallScore", {
+                      score: formState.rating.toFixed(1),
+                    })
+                  : t("customer.reviews.dialog.rateAllCategories")}
               </span>
             </div>
             <p className="text-xs text-muted-foreground">
-              Automatically averaged from Communication, Quality, Timeliness,
-              and Professionalism ratings.
+              {t("customer.reviews.dialog.overallComputedHint")}
             </p>
           </div>
 
           <div>
-            <Label>Feedback</Label>
+            <Label>{t("customer.reviews.dialog.feedback")}</Label>
             <Textarea
               rows={4}
-              placeholder="Describe your experience working with this provider."
+              placeholder={t("customer.reviews.dialog.feedbackPlaceholder")}
               value={formState.content}
               onChange={(event) => onChange({ content: event.target.value })}
             />
@@ -1020,10 +1043,14 @@ function ReviewDialog({
               type="button"
               onClick={() => onOpenChange(false)}
             >
-              Cancel
+              {t("customer.reviews.dialog.cancel")}
             </Button>
             <Button type="submit" disabled={disableSubmit}>
-              {isSubmitting ? "Saving..." : mode === "edit" ? "Save" : "Submit"}
+              {isSubmitting
+                ? t("customer.reviews.dialog.saving")
+                : mode === "edit"
+                  ? t("customer.reviews.dialog.save")
+                  : t("customer.reviews.dialog.submit")}
             </Button>
           </DialogFooter>
         </form>
@@ -1049,13 +1076,14 @@ function ReplyDialog({
   onSubmit: () => void;
   isSubmitting: boolean;
 }) {
+  const { t } = useI18n();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Reply to review</DialogTitle>
+          <DialogTitle>{t("customer.reviews.replyDialog.title")}</DialogTitle>
           <DialogDescription>
-            Respond publicly to the provider&apos;s feedback.
+            {t("customer.reviews.replyDialog.description")}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
@@ -1064,17 +1092,19 @@ function ReplyDialog({
           </div>
           <Textarea
             rows={4}
-            placeholder="Write your reply..."
+            placeholder={t("customer.reviews.replyDialog.placeholder")}
             value={replyContent}
             onChange={(event) => onReplyContentChange(event.target.value)}
           />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("customer.reviews.replyDialog.cancel")}
           </Button>
           <Button onClick={onSubmit} disabled={isSubmitting || !replyContent}>
-            {isSubmitting ? "Posting..." : "Post reply"}
+            {isSubmitting
+              ? t("customer.reviews.replyDialog.posting")
+              : t("customer.reviews.replyDialog.post")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1093,18 +1123,23 @@ function RatingInput({
   onChange: (value: number) => void;
   optional?: boolean;
 }) {
+  const { t } = useI18n();
   return (
     <div>
       <Label className="flex items-center justify-between">
         {label}
         {optional && (
-          <span className="text-xs text-muted-foreground">Optional</span>
+          <span className="text-xs text-muted-foreground">
+            {t("customer.reviews.rating.optional")}
+          </span>
         )}
       </Label>
       <div className="mt-2 flex items-center gap-2">
         <RatingStars rating={value} interactive onSelect={onChange} />
         <span className="text-xs text-muted-foreground">
-          {value ? `${value}/5` : "Not rated"}
+          {value
+            ? t("customer.reviews.rating.valueOutOfFive", { n: String(value) })
+            : t("customer.reviews.rating.notRated")}
         </span>
       </div>
     </div>

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { ProviderLayout } from "@/components/provider-layout";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -13,8 +12,10 @@ import { getProfileImageUrl } from "@/lib/api";
 import { getUserFriendlyErrorMessage } from "@/lib/errors";
 import { FriendlyErrorState } from "@/components/FriendlyErrorState";
 import { toast } from "@/lib/toast";
+import { useI18n } from "@/contexts/I18nProvider";
 
 export default function SavedCompaniesPage() {
+  const { t } = useI18n();
   const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -106,14 +107,16 @@ export default function SavedCompaniesPage() {
   };
 
   return (
-    <ProviderLayout>
+    
       <div className="space-y-8">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">
-              Saved Companies
+              {t("provider.companies.saved.title")}
             </h1>
-            <p className="text-gray-600">Companies you have bookmarked</p>
+            <p className="text-gray-600">
+              {t("provider.companies.saved.subtitle")}
+            </p>
           </div>
         </div>
 
@@ -129,7 +132,7 @@ export default function SavedCompaniesPage() {
             }}
           />
         ) : companies.length === 0 ? (
-          <p className="text-gray-600">You have no saved companies yet.</p>
+          <p className="text-gray-600">{t("provider.companies.saved.empty")}</p>
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {companies.map((company) => (
@@ -153,7 +156,7 @@ export default function SavedCompaniesPage() {
                         {!company.verified && (
                           <Badge className="bg-gray-100 text-gray-700 border-gray-300 text-xs">
                             <AlertTriangle className="w-3 h-3 mr-1" />
-                            Not Verified
+                            {t("provider.companies.badge.notVerified")}
                           </Badge>
                         )}
                       </div>
@@ -176,7 +179,9 @@ export default function SavedCompaniesPage() {
                       </span>
                     </div>
                     <div className="text-sm text-gray-500">
-                      {company.projectsPosted} projects
+                      {t("provider.companies.card.projectsCount", {
+                        n: company.projectsPosted,
+                      })}
                     </div>
                   </div>
 
@@ -187,7 +192,8 @@ export default function SavedCompaniesPage() {
                   <div className="flex gap-2 pt-2">
                     <Link href={`/provider/companies/${company.id}`}>
                       <Button size="sm" variant="outline" className="w-full">
-                        <Eye className="w-4 h-4 mr-2" /> View Profile
+                        <Eye className="w-4 h-4 mr-2" />{" "}
+                        {t("provider.companies.card.viewProfile")}
                       </Button>
                     </Link>
                     <Button
@@ -195,7 +201,8 @@ export default function SavedCompaniesPage() {
                       variant="destructive"
                       onClick={() => unsave(company.id)}
                     >
-                      <Trash2 className="w-4 h-4 mr-2" /> Remove
+                      <Trash2 className="w-4 h-4 mr-2" />{" "}
+                      {t("provider.opportunities.proposal.remove")}
                     </Button>
                   </div>
                 </CardContent>
@@ -204,6 +211,6 @@ export default function SavedCompaniesPage() {
           </div>
         )}
       </div>
-    </ProviderLayout>
+    
   );
 }

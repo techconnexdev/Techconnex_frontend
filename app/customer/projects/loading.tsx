@@ -1,3 +1,5 @@
+import { CustomerProjectsPageSkeleton } from "@/components/customer/CustomerPageSkeletons";
+
 export default function Loading() {
-  return null
+  return <CustomerProjectsPageSkeleton loadingLabel="Loading projects" />;
 }

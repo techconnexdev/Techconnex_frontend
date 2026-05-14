@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,6 +16,12 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -26,6 +32,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
   SelectContent,
@@ -50,25 +57,31 @@ import {
   Eye,
   X,
 } from "lucide-react";
-import { ProviderLayout } from "@/components/provider-layout";
 import {
   getProviderProjectById,
   updateProviderMilestoneStatus,
   getProviderProjectMilestones,
-  updateProviderProjectMilestones,
   approveProviderMilestones,
   createDispute,
-  getDisputeByProject,
+  getDisputesByProject,
   updateDispute,
   getProfileImageUrl,
   getAttachmentUrl,
   getR2DownloadUrl,
   type Milestone,
 } from "@/lib/api";
-import { formatTimeline, formatDurationDays, timelineToDays } from "@/lib/timeline-utils";
+import {
+  formatTimeline,
+  formatDurationDays,
+} from "@/lib/timeline-utils";
 import { MarkdownViewer } from "@/components/markdown/MarkdownViewer";
 import { Separator } from "@/components/separator";
+import { Checkbox } from "@/components/ui/checkbox";
 import Image from "next/image";
+import { useI18n } from "@/contexts/I18nProvider";
+import type { MessageKey } from "@/lib/i18n/messages";
+import { convertWithSnapshot, type FxRatesMap } from "@/lib/fx-snapshot";
+import { ProviderProjectReviewInline } from "@/components/provider/projects/ProviderProjectReviewInline";
 
 type ProjectCustomer = {
   id: string;
@@ -98,6 +111,15 @@ type ProjectData = {
   category: string;
   budgetMin: number;
   budgetMax: number;
+  displayBudgetMin?: number;
+  displayBudgetMax?: number;
+  /** Customer / project request budget in project currency */
+  originalBudgetMin?: number;
+  originalBudgetMax?: number;
+  originalCurrencyCode?: string;
+  currencyCode?: string;
+  displayCurrencyCode?: string;
+  fxSnapshotRatesJson?: FxRatesMap;
   approvedPrice?: number;
   progress?: number;
   completedMilestones?: number;
@@ -158,6 +180,15 @@ type MessageData = {
   attachments?: string[];
 };
 
+/** Milestone statuses that cannot be linked to a dispute (picker + submit validation). */
+const DISPUTE_MILESTONE_EXCLUDED_STATUSES = new Set([
+  "LOCKED",
+  "DRAFT",
+  "PAID",
+  "DISBUTED",
+  "APPROVED",
+]);
+
 export default function ProviderProjectDetailsPage() {
   const params = useParams();
   const router = useRouter();
@@ -167,58 +198,42 @@ export default function ProviderProjectDetailsPage() {
   const [error, setError] = useState<string | null>(null);
   const [isMilestoneDialogOpen, setIsMilestoneDialogOpen] = useState(false);
   const [selectedMilestone, setSelectedMilestone] = useState<Milestone | null>(
-    null
+    null,
   );
   const [milestoneDeliverables, setMilestoneDeliverables] = useState("");
   const [submitDeliverables, setSubmitDeliverables] = useState("");
   const [submissionNote, setSubmissionNote] = useState("");
   const [submissionAttachment, setSubmissionAttachment] = useState<File | null>(
-    null
+    null,
   );
   const [updating, setUpdating] = useState(false);
 
   // Project milestone management
-  const [milestoneEditorOpen, setMilestoneEditorOpen] = useState(false);
   const [projectMilestones, setProjectMilestones] = useState<Milestone[]>([]);
-  const [savingMilestones, setSavingMilestones] = useState(false);
+  const [approvingMilestones, setApprovingMilestones] = useState(false);
   const [milestoneApprovalState, setMilestoneApprovalState] = useState({
     milestonesLocked: false,
     companyApproved: false,
     providerApproved: false,
     milestonesApprovedAt: null as string | null,
   });
-  const [milestoneErrors, setMilestoneErrors] = useState<
-    Record<
-      number,
-      {
-        title?: string;
-        description?: string;
-        dueDate?: string;
-        daysFromStart?: string;
-        durationAmount?: string;
-        durationUnit?: string;
-      }
-    >
-  >({});
-  const [originalProjectMilestones, setOriginalProjectMilestones] = useState<
-    Milestone[]
-  >([]);
   const [milestoneFinalizeOpen, setMilestoneFinalizeOpen] = useState(false);
 
   // Dispute creation state
   const [disputeDialogOpen, setDisputeDialogOpen] = useState(false);
   const [viewDisputeDialogOpen, setViewDisputeDialogOpen] = useState(false);
   const [currentDispute, setCurrentDispute] = useState<DisputeData | null>(
-    null
+    null,
   );
+  const [projectDisputes, setProjectDisputes] = useState<DisputeData[]>([]);
   const [disputeReason, setDisputeReason] = useState("");
   const [disputeDescription, setDisputeDescription] = useState("");
-  const [disputeContestedAmount, setDisputeContestedAmount] = useState("");
   const [disputeSuggestedResolution, setDisputeSuggestedResolution] =
     useState("");
   const [disputeAttachments, setDisputeAttachments] = useState<File[]>([]);
   const [selectedMilestoneForDispute, setSelectedMilestoneForDispute] =
     useState<string | null>(null);
+  const [projectLevelDisputeAck, setProjectLevelDisputeAck] = useState(false);
   const [creatingDispute, setCreatingDispute] = useState(false);
   const [updatingDispute, setUpdatingDispute] = useState(false);
   const [disputeAdditionalNotes, setDisputeAdditionalNotes] = useState("");
@@ -229,6 +244,67 @@ export default function ProviderProjectDetailsPage() {
   const [token, setToken] = useState<string>("");
   const [currentUser, setCurrentUser] = useState<UserData | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
+  const searchParams = useSearchParams();
+  const { t } = useI18n();
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (
+      tab === "overview" ||
+      tab === "milestones" ||
+      tab === "files" ||
+      tab === "messages"
+    ) {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
+
+  const activeDispute = useMemo(
+    () =>
+      projectDisputes.find(
+        (d) => d.status !== "CLOSED" && d.status !== "RESOLVED",
+      ) ?? null,
+    [projectDisputes],
+  );
+
+  /** Hide when project completed (e.g. admin refund-to-company) or an open dispute exists. */
+  const canReportNewDispute = useMemo(() => {
+    if (!project) return false;
+    if (String(project.status ?? "").toUpperCase() === "COMPLETED")
+      return false;
+    if (activeDispute) return false;
+    return true;
+  }, [project, activeDispute]);
+
+  useEffect(() => {
+    if (!canReportNewDispute && disputeDialogOpen) setDisputeDialogOpen(false);
+  }, [canReportNewDispute, disputeDialogOpen]);
+
+  /** Matches selected milestone amount, or 0 for project-level / no milestone. */
+  const reportDisputeContestedAmount = useMemo(() => {
+    if (!selectedMilestoneForDispute) return 0;
+    const m = projectMilestones.find(
+      (x) => x.id === selectedMilestoneForDispute,
+    );
+    if (!m) return 0;
+    const n = Number(m.amount);
+    return Number.isFinite(n) ? n : 0;
+  }, [selectedMilestoneForDispute, projectMilestones]);
+
+  const loadProjectDisputes = useCallback(async (projectId: string) => {
+    try {
+      const res = await getDisputesByProject(projectId);
+      const list =
+        res.success && Array.isArray(res.data)
+          ? (res.data as DisputeData[])
+          : [];
+      setProjectDisputes(list);
+      return list;
+    } catch {
+      setProjectDisputes([]);
+      return [];
+    }
+  }, []);
 
   // Load auth from localStorage on mount
   useEffect(() => {
@@ -253,23 +329,16 @@ export default function ProviderProjectDetailsPage() {
         if (response.success) {
           setProject(response.project);
 
-          // Fetch dispute for this project
-          try {
-            const disputeRes = await getDisputeByProject(response.project.id);
-            if (disputeRes.success && disputeRes.data) {
-              setCurrentDispute(disputeRes.data);
-            }
-          } catch {
-            // No dispute exists yet, which is fine
-            console.log("No dispute found for project");
-          }
+          await loadProjectDisputes(response.project.id);
         } else {
-          setError("Failed to fetch project details");
+          setError(t("provider.projects.detail.fetchFailed"));
         }
       } catch (err) {
         console.error("Error fetching project:", err);
         setError(
-          err instanceof Error ? err.message : "Failed to fetch project"
+          err instanceof Error
+            ? err.message
+            : t("provider.projects.detail.fetchFailedGeneric"),
         );
       } finally {
         setLoading(false);
@@ -279,7 +348,7 @@ export default function ProviderProjectDetailsPage() {
     if (params.id) {
       fetchProject();
     }
-  }, [params.id]);
+  }, [params.id, t]);
 
   // Load project milestones
   useEffect(() => {
@@ -296,14 +365,15 @@ export default function ProviderProjectDetailsPage() {
                     (m as Milestone & { order?: number }).order ??
                     (m as Milestone).sequence ??
                     0,
-                  submissionAttachmentUrl: (m as Milestone).submissionAttachmentUrl,
+                  submissionAttachmentUrl: (m as Milestone)
+                    .submissionAttachmentUrl,
                   submissionNote: (m as Milestone).submissionNote,
                   submittedAt: (m as Milestone).submittedAt,
                   startDeliverables: (m as Milestone).startDeliverables,
                   submitDeliverables: (m as Milestone).submitDeliverables,
                   revisionNumber: (m as Milestone).revisionNumber,
                   submissionHistory: (m as Milestone).submissionHistory,
-                } as Milestone)
+                }) as Milestone,
             )
           : [];
         const sorted = [...raw].sort(
@@ -311,13 +381,18 @@ export default function ProviderProjectDetailsPage() {
         );
         const withDuration = sorted.map((m, i) => {
           const prev = sorted[i - 1] as { daysFromStart?: number } | undefined;
-          const currDays = (m as Milestone & { daysFromStart?: number }).daysFromStart ?? 0;
+          const currDays =
+            (m as Milestone & { daysFromStart?: number }).daysFromStart ?? 0;
           const prevDays = prev?.daysFromStart ?? 0;
           const durationDays = currDays - prevDays;
           return {
             ...m,
             durationAmount: durationDays > 0 ? String(durationDays) : "",
-            durationUnit: (durationDays > 0 ? "day" : "") as "day" | "week" | "month" | "",
+            durationUnit: (durationDays > 0 ? "day" : "") as
+              | "day"
+              | "week"
+              | "month"
+              | "",
           } as Milestone & { durationAmount?: string; durationUnit?: string };
         });
         setProjectMilestones(withDuration);
@@ -332,28 +407,6 @@ export default function ProviderProjectDetailsPage() {
       }
     })();
   }, [project?.id]);
-
-  // Helpers for project milestone editor
-  const normalizeMilestoneSequences = (items: Milestone[]) =>
-    items
-      .map((m, i) => ({ ...m, sequence: i + 1 }))
-      .sort((a, b) => a.sequence - b.sequence);
-
-  const addProjectMilestone = () => {
-    setProjectMilestones((prev) =>
-      normalizeMilestoneSequences([
-        ...prev,
-        {
-          sequence: prev.length + 1,
-          title: "",
-          description: "",
-          amount: 0,
-          durationAmount: "",
-          durationUnit: "" as "day" | "week" | "month" | "",
-        } as Milestone & { durationAmount?: string; durationUnit?: string },
-      ])
-    );
-  };
 
   // Fetch messages between the two project participants when Messages tab is opened
   const fetchProjectMessages = async () => {
@@ -392,168 +445,12 @@ export default function ProviderProjectDetailsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, token, project]);
 
-  const updateProjectMilestone = (i: number, patch: Partial<Milestone>) => {
-    setProjectMilestones((prev) =>
-      normalizeMilestoneSequences(
-        prev.map((m, idx) => (idx === i ? { ...m, ...patch } : m))
-      )
-    );
-  };
-
-  const removeProjectMilestone = (i: number) => {
-    setProjectMilestones((prev) =>
-      normalizeMilestoneSequences(prev.filter((_, idx) => idx !== i))
-    );
-  };
-
-  // Save project milestones
-  const handleSaveProjectMilestones = async () => {
-    if (!project?.id) return;
-
-    type Err = { title?: string; description?: string; dueDate?: string; daysFromStart?: string; durationAmount?: string; durationUnit?: string };
-    const errors: Record<number, Err> = {};
-    let hasErrors = false;
-    projectMilestones.forEach((m, idx) => {
-      const milestoneErrors: Err = {};
-      const mm = m as Milestone & { durationAmount?: string; durationUnit?: string };
-      if (!m.title || !m.title.trim()) {
-        milestoneErrors.title = "Title is required.";
-        hasErrors = true;
-      }
-      if (!m.description || !m.description.trim()) {
-        milestoneErrors.description = "Description is required.";
-        hasErrors = true;
-      }
-      const durAmount = mm.durationAmount != null ? String(mm.durationAmount).trim() : "";
-      const durUnit = mm.durationUnit || "";
-      if (!durAmount || Number(durAmount) <= 0) {
-        milestoneErrors.durationAmount = "Duration amount is required and must be > 0.";
-        hasErrors = true;
-      }
-      if (!durUnit) {
-        milestoneErrors.durationUnit = "Unit is required.";
-        hasErrors = true;
-      }
-      if (Object.keys(milestoneErrors).length > 0) errors[idx] = milestoneErrors;
-    });
-
-    // Validate milestone sum equals bid amount
-    const bidAmount = project?.approvedPrice || 0;
-    if (bidAmount > 0) {
-      const sumMilestones = projectMilestones.reduce(
-        (sum: number, m: Milestone) => {
-          const val = Number(m.amount);
-          if (!isNaN(val)) return sum + val;
-          return sum;
-        },
-        0
-      );
-
-      if (sumMilestones !== bidAmount) {
-        const msg = `Total of milestones (RM ${sumMilestones.toLocaleString()}) must equal the bid amount (RM ${bidAmount.toLocaleString()}).`;
-        errors[-1] = { ...errors[-1], title: errors[-1]?.title ?? msg };
-        hasErrors = true;
-      }
-    }
-
-    if (hasErrors) {
-      setMilestoneErrors(errors);
-      toast({
-        title: "Validation Error",
-        description:
-          "Please fill required fields. Milestone durations must total the delivery timeline and amounts must equal the bid.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setMilestoneErrors({});
-
-    try {
-      setSavingMilestones(true);
-      const sorted = normalizeMilestoneSequences(projectMilestones);
-      let cum = 0;
-      const payload = sorted.map((m) => {
-        const mm = m as Milestone & { durationAmount?: string; durationUnit?: string };
-        const d = timelineToDays(Number(mm.durationAmount || 0), mm.durationUnit || "");
-        cum += d;
-        return {
-          sequence: m.sequence ?? m.order,
-          title: m.title,
-          description: m.description ?? "",
-          amount: Number(m.amount),
-          daysFromStart: cum,
-        };
-      });
-      const res = await updateProviderProjectMilestones(project.id, payload);
-      setMilestoneApprovalState({
-        milestonesLocked: res.milestonesLocked,
-        companyApproved: res.companyApproved,
-        providerApproved: res.providerApproved,
-        milestonesApprovedAt: res.milestonesApprovedAt,
-      });
-
-      const milestoneData = await getProviderProjectMilestones(project.id);
-      const rawRefreshed = Array.isArray(milestoneData.milestones)
-        ? milestoneData.milestones.map(
-            (m) =>
-              ({
-                ...m,
-                sequence:
-                  (m as Milestone & { order?: number }).order ??
-                  (m as Milestone).sequence ??
-                  0,
-                submissionAttachmentUrl: (m as Milestone).submissionAttachmentUrl,
-                submissionNote: (m as Milestone).submissionNote,
-                submittedAt: (m as Milestone).submittedAt,
-                startDeliverables: (m as Milestone).startDeliverables,
-                submitDeliverables: (m as Milestone).submitDeliverables,
-                revisionNumber: (m as Milestone).revisionNumber,
-                submissionHistory: (m as Milestone).submissionHistory,
-              } as Milestone)
-          )
-        : [];
-      const sortedRef = [...rawRefreshed].sort(
-        (a, b) => ((a.order as number) ?? 0) - ((b.order as number) ?? 0),
-      );
-      const withDurationRef = sortedRef.map((m, i) => {
-        const prev = sortedRef[i - 1] as { daysFromStart?: number } | undefined;
-        const currDays = (m as Milestone & { daysFromStart?: number }).daysFromStart ?? 0;
-        const prevDays = prev?.daysFromStart ?? 0;
-        const durationDays = currDays - prevDays;
-        return {
-          ...m,
-          durationAmount: durationDays > 0 ? String(durationDays) : "",
-          durationUnit: (durationDays > 0 ? "day" : "") as "day" | "week" | "month" | "",
-        } as Milestone & { durationAmount?: string; durationUnit?: string };
-      });
-
-      setProjectMilestones(withDurationRef);
-      setOriginalProjectMilestones(JSON.parse(JSON.stringify(withDurationRef)));
-
-      // Refresh project data to get updated milestones
-      await refreshProjectData();
-
-      toast({
-        title: "Milestones updated",
-        description: "Milestone changes have been saved.",
-      });
-    } catch (e) {
-      toast({
-        title: "Save failed",
-        description:
-          e instanceof Error ? e.message : "Could not save milestones",
-        variant: "destructive",
-      });
-    } finally {
-      setSavingMilestones(false);
-    }
-  };
-
   // Approve project milestones
   const handleApproveProjectMilestones = async () => {
     if (!project?.id) return;
+    if (approvingMilestones) return;
     try {
+      setApprovingMilestones(true);
       const res = await approveProviderMilestones(project.id);
       setMilestoneApprovalState({
         milestonesLocked: res.milestonesLocked,
@@ -565,26 +462,27 @@ export default function ProviderProjectDetailsPage() {
       // Refresh project data to get updated milestones
       await refreshProjectData();
 
-      // Always close the milestone editor dialog
-      setMilestoneEditorOpen(false);
-
       // Toast feedback
       toast({
-        title: "Milestones approved",
+        title: t("provider.projects.toast.milestonesApprovedTitle"),
         description: res.milestonesLocked
-          ? "Milestones are now locked. Work can start."
-          : "Waiting for company to approve.",
+          ? t("provider.projects.toast.milestonesLockedWork")
+          : t("provider.projects.toast.waitingCompanyApprove"),
       });
 
       // Open the finalize/summary dialog
       setMilestoneFinalizeOpen(true);
     } catch (e) {
       toast({
-        title: "Approval failed",
+        title: t("provider.projects.toast.approvalFailed"),
         description:
-          e instanceof Error ? e.message : "Could not approve milestones",
+          e instanceof Error
+            ? e.message
+            : t("provider.projects.toast.couldNotApprove"),
         variant: "destructive",
       });
+    } finally {
+      setApprovingMilestones(false);
     }
   };
 
@@ -600,7 +498,7 @@ export default function ProviderProjectDetailsPage() {
 
       // Refresh milestones
       const milestoneData = await getProviderProjectMilestones(
-        params.id as string
+        params.id as string,
       );
       if (milestoneData.milestones) {
         const loadedMilestones = Array.isArray(milestoneData.milestones)
@@ -620,13 +518,29 @@ export default function ProviderProjectDetailsPage() {
                   submitDeliverables: (m as Milestone).submitDeliverables,
                   revisionNumber: (m as Milestone).revisionNumber,
                   submissionHistory: (m as Milestone).submissionHistory,
-                } as Milestone)
+                }) as Milestone,
             )
           : [];
-        setProjectMilestones(loadedMilestones);
-        setOriginalProjectMilestones(
-          JSON.parse(JSON.stringify(loadedMilestones))
-        ); // Deep copy
+        const sorted = [...loadedMilestones].sort(
+          (a, b) => ((a.order as number) ?? 0) - ((b.order as number) ?? 0),
+        );
+        const withDuration = sorted.map((m, i) => {
+          const prev = sorted[i - 1] as { daysFromStart?: number } | undefined;
+          const currDays =
+            (m as Milestone & { daysFromStart?: number }).daysFromStart ?? 0;
+          const prevDays = prev?.daysFromStart ?? 0;
+          const durationDays = currDays - prevDays;
+          return {
+            ...m,
+            durationAmount: durationDays > 0 ? String(durationDays) : "",
+            durationUnit: (durationDays > 0 ? "day" : "") as
+              | "day"
+              | "week"
+              | "month"
+              | "",
+          } as Milestone & { durationAmount?: string; durationUnit?: string };
+        });
+        setProjectMilestones(withDuration);
         setMilestoneApprovalState({
           milestonesLocked: milestoneData.milestonesLocked,
           companyApproved: milestoneData.companyApproved,
@@ -635,15 +549,7 @@ export default function ProviderProjectDetailsPage() {
         });
       }
 
-      // Refresh dispute if exists
-      try {
-        const disputeRes = await getDisputeByProject(params.id as string);
-        if (disputeRes.success && disputeRes.data) {
-          setCurrentDispute(disputeRes.data);
-        }
-      } catch {
-        // No dispute exists, which is fine
-      }
+      await loadProjectDisputes(params.id as string);
     } catch (err) {
       console.error("Error refreshing project data:", err);
     }
@@ -691,8 +597,8 @@ export default function ProviderProjectDetailsPage() {
 
       if (!selectedMilestone?.id) {
         toast({
-          title: "Error",
-          description: "Selected milestone is missing",
+          title: t("provider.projects.toast.error"),
+          description: t("provider.projects.toast.milestoneMissing"),
           variant: "destructive",
         });
         return;
@@ -703,7 +609,7 @@ export default function ProviderProjectDetailsPage() {
         status,
         deliverables,
         submissionNote || undefined,
-        submissionAttachment || undefined
+        submissionAttachment || undefined,
       );
 
       if (response.success) {
@@ -711,8 +617,8 @@ export default function ProviderProjectDetailsPage() {
         await refreshProjectData();
 
         toast({
-          title: "Success",
-          description: "Milestone updated successfully",
+          title: t("provider.projects.toast.success"),
+          description: t("provider.projects.toast.milestoneUpdated"),
         });
         setIsMilestoneDialogOpen(false);
         setSelectedMilestone(null);
@@ -723,9 +629,11 @@ export default function ProviderProjectDetailsPage() {
       }
     } catch (err) {
       toast({
-        title: "Error",
+        title: t("provider.projects.toast.error"),
         description:
-          err instanceof Error ? err.message : "Failed to update milestone",
+          err instanceof Error
+            ? err.message
+            : t("provider.projects.toast.milestoneUpdateFailed"),
         variant: "destructive",
       });
     } finally {
@@ -737,8 +645,8 @@ export default function ProviderProjectDetailsPage() {
   const handleCreateDispute = async () => {
     if (!disputeReason.trim() || !disputeDescription.trim()) {
       toast({
-        title: "Validation Error",
-        description: "Reason and description are required fields",
+        title: t("provider.projects.toast.validationError"),
+        description: t("provider.projects.toast.disputeReasonRequired"),
         variant: "destructive",
       });
       return;
@@ -746,52 +654,82 @@ export default function ProviderProjectDetailsPage() {
 
     if (!project?.id) {
       toast({
-        title: "Error",
-        description: "Project ID is missing",
+        title: t("provider.projects.toast.error"),
+        description: t("provider.projects.toast.projectIdMissing"),
         variant: "destructive",
       });
       return;
     }
 
-    // Validate that selected milestone is not approved or paid
-    if (selectedMilestoneForDispute) {
-      const selectedMilestone = projectMilestones.find(
-        (m: Milestone) => m.id === selectedMilestoneForDispute
-      );
-      if (
-        selectedMilestone &&
-        (selectedMilestone.status === "APPROVED" ||
-          selectedMilestone.status === "PAID")
-      ) {
-        toast({
-          title: "Validation Error",
-          description: `Cannot create a dispute for milestone "${selectedMilestone.title}" as it has already been approved or paid.`,
-          variant: "destructive",
-        });
-        return;
+    const milestoneCount = projectMilestones?.length ?? 0;
+    let milestoneIdPayload: string | undefined;
+    if (milestoneCount > 0) {
+      if (paidMilestonesForDispute.length > 0) {
+        if (!selectedMilestoneForDispute) {
+          toast({
+            title: t("provider.projects.toast.validationError"),
+            description: t(
+              "provider.projects.toast.disputeSelectPaidMilestone",
+            ),
+            variant: "destructive",
+          });
+          return;
+        }
+        const selectedMilestone = projectMilestones.find(
+          (m: Milestone) => m.id === selectedMilestoneForDispute,
+        );
+        if (
+          !selectedMilestone ||
+          !selectedMilestone.status ||
+          DISPUTE_MILESTONE_EXCLUDED_STATUSES.has(selectedMilestone.status)
+        ) {
+          toast({
+            title: t("provider.projects.toast.validationError"),
+            description: t(
+              "provider.projects.toast.disputeInvalidPaidMilestone",
+            ),
+            variant: "destructive",
+          });
+          return;
+        }
+        milestoneIdPayload = selectedMilestoneForDispute;
+      } else {
+        if (!projectLevelDisputeAck) {
+          toast({
+            title: t("provider.projects.toast.validationError"),
+            description: t(
+              "provider.projects.toast.disputeProjectLevelAckRequired",
+            ),
+            variant: "destructive",
+          });
+          return;
+        }
+        milestoneIdPayload = undefined;
       }
     }
+
+    const wasUpdatingExisting = Boolean(activeDispute);
 
     try {
       setCreatingDispute(true);
       await createDispute({
         projectId: project.id,
-        milestoneId: selectedMilestoneForDispute || undefined,
+        milestoneId: milestoneIdPayload,
         reason: disputeReason.trim(),
         description: disputeDescription.trim(),
-        contestedAmount: disputeContestedAmount
-          ? parseFloat(disputeContestedAmount)
-          : undefined,
+        contestedAmount: reportDisputeContestedAmount,
         suggestedResolution: disputeSuggestedResolution.trim() || undefined,
         attachments:
           disputeAttachments.length > 0 ? disputeAttachments : undefined,
       });
 
       toast({
-        title: currentDispute ? "Dispute Updated" : "Dispute Created",
-        description: currentDispute
-          ? "Your dispute has been updated successfully."
-          : "Your dispute has been submitted successfully. The milestone has been frozen.",
+        title: wasUpdatingExisting
+          ? t("provider.projects.toast.disputeUpdatedTitle")
+          : t("provider.projects.toast.disputeCreatedTitle"),
+        description: wasUpdatingExisting
+          ? t("provider.projects.toast.disputeUpdatedDesc")
+          : t("provider.projects.toast.disputeCreatedDesc"),
       });
 
       // Refresh all project data including dispute and milestones
@@ -801,17 +739,17 @@ export default function ProviderProjectDetailsPage() {
       setDisputeDialogOpen(false);
       setDisputeReason("");
       setDisputeDescription("");
-      setDisputeContestedAmount("");
       setDisputeSuggestedResolution("");
       setDisputeAttachments([]);
       setSelectedMilestoneForDispute(null);
+      setProjectLevelDisputeAck(false);
     } catch (error: unknown) {
       const errorMessage =
         error instanceof Error
           ? error.message
-          : "Failed to create/update dispute";
+          : t("provider.projects.toast.disputeCreateFailed");
       toast({
-        title: "Error",
+        title: t("provider.projects.toast.error"),
         description: errorMessage,
         variant: "destructive",
       });
@@ -823,16 +761,20 @@ export default function ProviderProjectDetailsPage() {
   const handleViewDispute = async () => {
     if (!project?.id) return;
     try {
-      const disputeRes = await getDisputeByProject(project.id);
-      if (disputeRes.success && disputeRes.data) {
-        setCurrentDispute(disputeRes.data);
-        setViewDisputeDialogOpen(true);
-      }
+      const list = await loadProjectDisputes(project.id);
+      const pick =
+        list.find((d) => d.status !== "CLOSED" && d.status !== "RESOLVED") ||
+        list[0] ||
+        null;
+      setCurrentDispute(pick);
+      setViewDisputeDialogOpen(true);
     } catch (error: unknown) {
       const errorMessage =
-        error instanceof Error ? error.message : "Failed to load dispute";
+        error instanceof Error
+          ? error.message
+          : t("provider.projects.toast.disputeLoadFailed");
       toast({
-        title: "Error",
+        title: t("provider.projects.toast.error"),
         description: errorMessage,
         variant: "destructive",
       });
@@ -840,14 +782,14 @@ export default function ProviderProjectDetailsPage() {
   };
 
   const handleUpdateDispute = async () => {
-    if (!currentDispute?.id) return;
+    if (!activeDispute?.id) return;
     if (
       !disputeAdditionalNotes.trim() &&
       disputeUpdateAttachments.length === 0
     ) {
       toast({
-        title: "Validation Error",
-        description: "Please add notes or attachments to update the dispute",
+        title: t("provider.projects.toast.validationError"),
+        description: t("provider.projects.toast.disputeUpdateNeedsContent"),
         variant: "destructive",
       });
       return;
@@ -855,7 +797,7 @@ export default function ProviderProjectDetailsPage() {
 
     try {
       setUpdatingDispute(true);
-      await updateDispute(currentDispute.id, {
+      await updateDispute(activeDispute.id, {
         additionalNotes: disputeAdditionalNotes.trim() || undefined,
         attachments:
           disputeUpdateAttachments.length > 0
@@ -865,8 +807,8 @@ export default function ProviderProjectDetailsPage() {
       });
 
       toast({
-        title: "Dispute Updated",
-        description: "Your update has been added to the dispute.",
+        title: t("provider.projects.toast.disputeUpdatedTitle"),
+        description: t("provider.projects.toast.disputeNoteAdded"),
       });
 
       // Refresh all project data including dispute
@@ -877,9 +819,11 @@ export default function ProviderProjectDetailsPage() {
       setDisputeUpdateAttachments([]);
     } catch (error: unknown) {
       const errorMessage =
-        error instanceof Error ? error.message : "Failed to update dispute";
+        error instanceof Error
+          ? error.message
+          : t("provider.projects.toast.disputeUpdateFailed");
       toast({
-        title: "Error",
+        title: t("provider.projects.toast.error"),
         description: errorMessage,
         variant: "destructive",
       });
@@ -889,7 +833,7 @@ export default function ProviderProjectDetailsPage() {
   };
 
   const handleDisputeAttachmentChange = (
-    e: React.ChangeEvent<HTMLInputElement>
+    e: React.ChangeEvent<HTMLInputElement>,
   ) => {
     const files = e.target.files;
     if (files) {
@@ -899,7 +843,7 @@ export default function ProviderProjectDetailsPage() {
   };
 
   const handleDisputeUpdateAttachmentChange = (
-    e: React.ChangeEvent<HTMLInputElement>
+    e: React.ChangeEvent<HTMLInputElement>,
   ) => {
     const files = e.target.files;
     if (files) {
@@ -949,11 +893,11 @@ export default function ProviderProjectDetailsPage() {
   const getStatusText = (status: string) => {
     switch (status) {
       case "COMPLETED":
-        return "Completed";
+        return t("customer.dashboard.status.completed");
       case "IN_PROGRESS":
-        return "In Progress";
+        return t("customer.dashboard.status.inProgress");
       case "DISPUTED":
-        return "Disputed";
+        return t("customer.dashboard.status.disputed");
       default:
         return status;
     }
@@ -984,44 +928,151 @@ export default function ProviderProjectDetailsPage() {
   const getMilestoneStatusText = (status: string) => {
     switch (status) {
       case "PAID":
-        return "Paid";
+        return t("provider.projects.milestone.paid");
       case "APPROVED":
-        return "Approved";
+        return t("provider.projects.milestone.approved");
       case "SUBMITTED":
-        return "Submitted";
+        return t("provider.projects.milestone.submitted");
       case "IN_PROGRESS":
-        return "In Progress";
+        return t("provider.projects.milestone.inProgress");
       case "LOCKED":
-        return "Locked";
+        return t("provider.projects.milestone.locked");
       case "PENDING":
-        return "Pending";
+        return t("provider.projects.milestone.pending");
       case "DRAFT":
-        return "Draft";
+        return t("provider.projects.milestone.draft");
       case "REJECTED":
-        return "Rejected";
+        return t("provider.projects.milestone.rejected");
       default:
         return status;
     }
   };
 
-  // Check if any milestone is not locked (to show dispute button)
-  const hasUnlockedMilestone = () => {
-    if (!projectMilestones || projectMilestones.length === 0) {
-      return true; // Show button if no milestones (edge case)
+  const getDisputeStatusLabel = (status: string) => {
+    const s = (status || "").toUpperCase();
+    switch (s) {
+      case "OPEN":
+        return t("provider.projects.dispute.open");
+      case "UNDER_REVIEW":
+        return t("provider.projects.dispute.underReview");
+      case "RESOLVED":
+        return t("provider.projects.dispute.resolved");
+      case "CLOSED":
+        return t("provider.projects.dispute.closed");
+      case "REJECTED":
+        return t("provider.projects.dispute.rejected");
+      default:
+        return status?.replace(/_/g, " ") || "";
     }
-    return projectMilestones.some(
-      (milestone: Milestone) => milestone.status !== "LOCKED"
-    );
   };
 
-  const formatCurrency = (amount: number) => {
+  const translateDisputeReason = (reason: string) => {
+    const map: Record<string, MessageKey> = {
+      "Missed deadline": "customer.projects.detail.disputeReason.missedDeadline",
+      "Low quality": "customer.projects.detail.disputeReason.lowQuality",
+      "Payment not released":
+        "customer.projects.detail.disputeReason.paymentNotReleased",
+      "Work not completed":
+        "customer.projects.detail.disputeReason.workNotCompleted",
+      "Communication issues":
+        "customer.projects.detail.disputeReason.communicationIssues",
+      "Scope change": "customer.projects.detail.disputeReason.scopeChange",
+      "Other": "customer.projects.detail.disputeReason.other",
+    };
+    const key = map[reason];
+    return key ? t(key) : reason;
+  };
+
+  const paidMilestonesForDispute = (projectMilestones ?? []).filter(
+    (m: Milestone) =>
+      Boolean(m.status) &&
+      !DISPUTE_MILESTONE_EXCLUDED_STATUSES.has(m.status as string),
+  );
+  const disputeMilestoneSubmitBlocked =
+    (projectMilestones?.length ?? 0) > 0 &&
+    (paidMilestonesForDispute.length > 0
+      ? !selectedMilestoneForDispute
+      : !projectLevelDisputeAck);
+
+  const formatCurrency = (amount: number, currencyCode: string = "MYR") => {
     return new Intl.NumberFormat("en-MY", {
       style: "currency",
-      currency: "MYR",
+      currency: currencyCode,
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(amount);
   };
+
+  /** Contract / milestone amounts are always in the project's currency */
+  const projectCurrencyCode =
+    project?.currencyCode || project?.originalCurrencyCode || "MYR";
+
+  const approvedPriceDualCurrency = useMemo(() => {
+    if (!project?.approvedPrice || !(project.approvedPrice > 0)) return null;
+    const amount = project.approvedPrice;
+    const projCode = projectCurrencyCode;
+    const dispCode =
+      project.displayCurrencyCode || project.currencyCode || "MYR";
+    if (projCode.toUpperCase() === dispCode.toUpperCase()) {
+      return { showDual: false as const, amount, projCode, dispCode };
+    }
+    const converted = convertWithSnapshot({
+      amount,
+      fromCurrencyCode: projCode,
+      toCurrencyCode: dispCode,
+      ratesMap: project.fxSnapshotRatesJson ?? null,
+    });
+    if (converted == null) {
+      return { showDual: false as const, amount, projCode, dispCode };
+    }
+    return {
+      showDual: true as const,
+      amount,
+      converted,
+      projCode,
+      dispCode,
+    };
+  }, [project, projectCurrencyCode]);
+
+  /** Milestone amounts are stored in project currency; show provider (display) equivalent when different. */
+  const renderMilestoneAmountProviderEquiv = useCallback(
+    (amount: number) => {
+      const amt = Number(amount || 0);
+      const projCode = projectCurrencyCode;
+      const dispCode = String(
+        project?.displayCurrencyCode ||
+          project?.currencyCode ||
+          projCode ||
+          "MYR",
+      );
+      if (projCode.toUpperCase() === dispCode.toUpperCase()) {
+        return (
+          <span className="text-xs sm:text-sm font-medium tabular-nums">
+            {formatCurrency(amt, projCode)}
+          </span>
+        );
+      }
+      const converted = convertWithSnapshot({
+        amount: amt,
+        fromCurrencyCode: projCode,
+        toCurrencyCode: dispCode,
+        ratesMap: project?.fxSnapshotRatesJson ?? null,
+      });
+      return (
+        <span className="text-xs sm:text-sm font-medium text-right tabular-nums inline-flex flex-col items-end gap-0.5">
+          <span>{formatCurrency(amt, projCode)}</span>
+          {converted != null && (
+            <span className="text-xs text-gray-500 font-normal">
+              {t("provider.projects.milestones.amountEquivPreferred", {
+                amount: formatCurrency(converted, dispCode),
+              })}
+            </span>
+          )}
+        </span>
+      );
+    },
+    [project, projectCurrencyCode, t],
+  );
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-MY", {
@@ -1033,46 +1084,77 @@ export default function ProviderProjectDetailsPage() {
 
   if (loading) {
     return (
-      <ProviderLayout>
-        <div className="flex items-center justify-center min-h-[400px] px-4">
-          <div className="text-center">
-            <Loader2 className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-4 animate-spin" />
-            <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
-              Loading project...
-            </h3>
-            <p className="text-sm sm:text-base text-gray-600">
-              Please wait while we fetch the project details.
-            </p>
+      <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0 py-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
+          <div className="flex-1 min-w-0 space-y-2">
+            <Skeleton className="h-8 w-64 sm:w-96 max-w-full" />
+            <Skeleton className="h-4 w-56 sm:w-80" />
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
+            <Skeleton className="h-9 w-full sm:w-36 rounded-md" />
+            <Skeleton className="h-9 w-full sm:w-36 rounded-md" />
           </div>
         </div>
-      </ProviderLayout>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
+          <Skeleton className="h-24 rounded-lg" />
+          <Skeleton className="h-24 rounded-lg" />
+          <Skeleton className="h-24 rounded-lg" />
+          <Skeleton className="h-24 rounded-lg" />
+        </div>
+        <Card>
+          <CardHeader className="space-y-2">
+            <Skeleton className="h-6 w-40" />
+            <Skeleton className="h-4 w-72 max-w-full" />
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-5/6" />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-44" />
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Skeleton className="h-16 w-full rounded-lg" />
+            <Skeleton className="h-16 w-full rounded-lg" />
+            <Skeleton className="h-16 w-full rounded-lg" />
+          </CardContent>
+        </Card>
+        <div className="text-center">
+          <p className="text-sm sm:text-base text-muted-foreground">
+            {t("provider.projects.detail.loadingDesc")}
+          </p>
+        </div>
+      </div>
     );
   }
 
   if (error || !project) {
     return (
-      <ProviderLayout>
+      
         <div className="flex items-center justify-center min-h-[400px] px-4">
           <div className="text-center">
             <div className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
               <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 text-red-600" />
             </div>
             <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
-              Error loading project
+              {t("provider.projects.detail.errorTitle")}
             </h3>
             <p className="text-sm sm:text-base text-gray-600 mb-4">
-              {error || "Project not found"}
+              {error || t("provider.projects.detail.notFound")}
             </p>
             <Button
               onClick={() => router.back()}
               variant="outline"
               className="text-xs sm:text-sm"
             >
-              Go Back
+              {t("provider.projects.detail.goBack")}
             </Button>
           </div>
         </div>
-      </ProviderLayout>
+      
     );
   }
 
@@ -1086,18 +1168,18 @@ export default function ProviderProjectDetailsPage() {
   const handleContact = (
     customerId?: string,
     customerName?: string,
-    customerAvatar?: string
+    customerAvatar?: string,
   ) => {
     if (!customerId || !customerName) return;
     router.push(
       `/provider/messages?userId=${customerId}&name=${encodeURIComponent(
-        customerName
-      )}&avatar=${encodeURIComponent(customerAvatar || "")}`
+        customerName,
+      )}&avatar=${encodeURIComponent(customerAvatar || "")}`,
     );
   };
 
   return (
-    <ProviderLayout>
+    
       <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
@@ -1119,45 +1201,38 @@ export default function ProviderProjectDetailsPage() {
                   project.customer?.name,
                   (project.customer as { profileImageUrl?: string } | undefined)
                     ?.profileImageUrl ||
-                    project.customer?.customerProfile?.profileImageUrl
+                    project.customer?.customerProfile?.profileImageUrl,
                 )
               }
             >
               <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-              Message Client
+              {t("provider.projects.detail.messageClient")}
             </Button>
-            {currentDispute ? (
+            {projectDisputes.length > 0 && (
               <Button
                 variant="outline"
                 className="bg-orange-50 active:bg-orange-100 sm:hover:bg-orange-100 text-orange-700 border-orange-300 w-full sm:w-auto text-xs sm:text-sm"
                 onClick={handleViewDispute}
               >
                 <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                View Dispute
+                {projectDisputes.length > 1
+                  ? t("provider.projects.detail.viewDisputes")
+                  : t("provider.projects.detail.viewDispute")}
               </Button>
-            ) : (
-              project.status !== "COMPLETED" &&
-              hasUnlockedMilestone() && (
-                <Button
-                  onClick={() => setDisputeDialogOpen(true)}
-                  disabled={
-                    creatingDispute ||
-                    Boolean(
-                      project?.status === "DISPUTED" &&
-                        currentDispute &&
-                        (currentDispute as DisputeData).status === "CLOSED"
-                    )
-                  }
-                  className="bg-red-600 active:bg-red-700 sm:hover:bg-red-700 text-white w-full sm:w-auto text-xs sm:text-sm"
-                >
-                  {creatingDispute ? (
-                    <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 animate-spin" />
-                  ) : (
-                    <AlertCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                  )}
-                  Report Dispute
-                </Button>
-              )
+            )}
+            {canReportNewDispute && (
+              <Button
+                onClick={() => setDisputeDialogOpen(true)}
+                disabled={creatingDispute}
+                className="bg-red-600 active:bg-red-700 sm:hover:bg-red-700 text-white w-full sm:w-auto text-xs sm:text-sm"
+              >
+                {creatingDispute ? (
+                  <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 animate-spin" />
+                ) : (
+                  <AlertCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+                )}
+                {t("provider.projects.detail.reportDispute")}
+              </Button>
             )}
           </div>
         </div>
@@ -1170,18 +1245,18 @@ export default function ProviderProjectDetailsPage() {
               <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-amber-900">
-                  Approve milestones to proceed
+                  {t("provider.projects.detail.approveBanner.title")}
                 </p>
                 <p className="text-xs sm:text-sm text-amber-800 mt-0.5">
-                  Please review and approve the milestone plan in the{" "}
+                  {t("provider.projects.detail.approveBanner.bodyPrefix")}{" "}
                   <Button
                     variant="link"
                     className="h-auto p-0 text-amber-800 underline font-semibold"
                     onClick={() => setActiveTab("milestones")}
                   >
-                    Milestones
+                    {t("provider.projects.detail.tab.milestones")}
                   </Button>{" "}
-                  tab so the project can move forward.
+                  {t("provider.projects.detail.approveBanner.bodySuffix")}
                 </p>
               </div>
             </div>
@@ -1201,25 +1276,25 @@ export default function ProviderProjectDetailsPage() {
                   value="overview"
                   className="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md bg-gray-100 text-gray-600 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-md transition-all duration-200 font-medium"
                 >
-                  Overview
+                  {t("provider.projects.detail.tab.overview")}
                 </TabsTrigger>
                 <TabsTrigger
                   value="milestones"
                   className="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md bg-gray-100 text-gray-600 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-md transition-all duration-200 font-medium"
                 >
-                  Milestones
+                  {t("provider.projects.detail.tab.milestones")}
                 </TabsTrigger>
                 <TabsTrigger
                   value="files"
                   className="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md bg-gray-100 text-gray-600 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-md transition-all duration-200 font-medium"
                 >
-                  Files
+                  {t("provider.projects.detail.tab.files")}
                 </TabsTrigger>
                 <TabsTrigger
                   value="messages"
                   className="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md bg-gray-100 text-gray-600 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-md transition-all duration-200 font-medium"
                 >
-                  Messages
+                  {t("provider.projects.detail.tab.messages")}
                 </TabsTrigger>
               </TabsList>
 
@@ -1228,14 +1303,14 @@ export default function ProviderProjectDetailsPage() {
                 <Card>
                   <CardHeader className="p-4 sm:p-6">
                     <CardTitle className="text-lg sm:text-xl">
-                      Project Details
+                      {t("provider.projects.detail.overview.title")}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="p-4 sm:p-6 space-y-3 sm:space-y-4">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                       <div>
                         <Label className="text-xs sm:text-sm font-medium text-gray-500">
-                          Category
+                          {t("provider.projects.detail.label.category")}
                         </Label>
                         <p className="text-base sm:text-lg mt-1">
                           {project.category}
@@ -1243,12 +1318,12 @@ export default function ProviderProjectDetailsPage() {
                       </div>
                       <div>
                         <Label className="text-xs sm:text-sm font-medium text-gray-500">
-                          Status
+                          {t("provider.projects.detail.label.status")}
                         </Label>
                         <div className="mt-1">
                           <Badge
                             className={`${getStatusColor(
-                              project.status
+                              project.status,
                             )} text-xs`}
                           >
                             {getStatusText(project.status)}
@@ -1257,32 +1332,123 @@ export default function ProviderProjectDetailsPage() {
                       </div>
                       <div>
                         <Label className="text-xs sm:text-sm font-medium text-gray-500">
-                          Budget Range
+                          {t("provider.projects.detail.label.budgetRange")}
                         </Label>
-                        <p className="text-base sm:text-lg mt-1 break-words">
-                          {formatCurrency(project.budgetMin)} -{" "}
-                          {formatCurrency(project.budgetMax)}
-                        </p>
+                        {(() => {
+                          const origCode =
+                            project.originalCurrencyCode ||
+                            project.currencyCode ||
+                            "MYR";
+                          const dispCode =
+                            project.displayCurrencyCode ||
+                            project.currencyCode ||
+                            "MYR";
+                          const origMin =
+                            project.originalBudgetMin ?? project.budgetMin;
+                          const origMax =
+                            project.originalBudgetMax ?? project.budgetMax;
+                          const dispMin =
+                            project.displayBudgetMin ?? project.budgetMin;
+                          const dispMax =
+                            project.displayBudgetMax ?? project.budgetMax;
+                          const showDualBudget =
+                            origCode.toUpperCase() !== dispCode.toUpperCase();
+                          return showDualBudget ? (
+                            <div className="mt-1 space-y-2 break-words">
+                              <div>
+                                <p className="text-xs text-gray-500 mb-0.5">
+                                  {t(
+                                    "provider.projects.detail.budgetRangeInYourCurrency",
+                                    { currency: dispCode },
+                                  )}
+                                </p>
+                                <p className="text-base sm:text-lg font-medium">
+                                  {formatCurrency(dispMin, dispCode)} -{" "}
+                                  {formatCurrency(dispMax, dispCode)}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-gray-500 mb-0.5">
+                                  {t(
+                                    "provider.projects.detail.budgetRangeCustomerOriginal",
+                                    { currency: origCode },
+                                  )}
+                                </p>
+                                <p className="text-base sm:text-lg">
+                                  {formatCurrency(origMin, origCode)} -{" "}
+                                  {formatCurrency(origMax, origCode)}
+                                </p>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-base sm:text-lg mt-1 break-words">
+                              {formatCurrency(origMin, origCode)} -{" "}
+                              {formatCurrency(origMax, origCode)}
+                            </p>
+                          );
+                        })()}
                       </div>
-                      {project.approvedPrice && (
+                      {project.approvedPrice && approvedPriceDualCurrency && (
                         <div>
                           <Label className="text-xs sm:text-sm font-medium text-gray-500">
-                            Approved Price
+                            {t("provider.projects.detail.label.approvedPrice")}
                           </Label>
-                          <p className="text-base sm:text-lg font-semibold text-green-600 mt-1">
-                            {formatCurrency(project.approvedPrice)}
-                          </p>
+                          {approvedPriceDualCurrency.showDual ? (
+                            <div className="mt-1 space-y-2">
+                              <div>
+                                <p className="text-xs text-gray-500 mb-0.5">
+                                  {t(
+                                    "provider.projects.detail.budgetRangeInYourCurrency",
+                                    {
+                                      currency: approvedPriceDualCurrency.dispCode,
+                                    },
+                                  )}
+                                </p>
+                                <p className="text-base sm:text-lg font-semibold text-green-600">
+                                  {formatCurrency(
+                                    approvedPriceDualCurrency.converted,
+                                    approvedPriceDualCurrency.dispCode,
+                                  )}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-gray-500 mb-0.5">
+                                  {t(
+                                    "provider.projects.detail.approvedPriceInProjectCurrency",
+                                    {
+                                      currency: approvedPriceDualCurrency.projCode,
+                                    },
+                                  )}
+                                </p>
+                                <p className="text-base sm:text-lg font-medium text-gray-900">
+                                  {formatCurrency(
+                                    approvedPriceDualCurrency.amount,
+                                    approvedPriceDualCurrency.projCode,
+                                  )}
+                                </p>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-base sm:text-lg font-semibold text-green-600 mt-1">
+                              {formatCurrency(
+                                approvedPriceDualCurrency.amount,
+                                approvedPriceDualCurrency.projCode,
+                              )}
+                            </p>
+                          )}
                         </div>
                       )}
                       <div className="sm:col-span-2">
                         <Label className="text-xs sm:text-sm font-medium text-gray-500">
-                          Timeline
+                          {t("provider.projects.detail.label.timeline")}
                         </Label>
                         <div className="space-y-2 mt-1">
                           {project.originalTimeline && (
                             <div>
                               <p className="text-xs text-gray-500 mb-1">
-                                Original Timeline (Company):
+                                {t(
+                                  "provider.projects.detail.timeline.originalCompany",
+                                )}
                               </p>
                               <p className="text-sm text-gray-900 font-medium break-words">
                                 {formatTimeline(project.originalTimeline)}
@@ -1292,23 +1458,30 @@ export default function ProviderProjectDetailsPage() {
                           {project.providerProposedTimeline && (
                             <div>
                               <p className="text-xs text-gray-500 mb-1">
-                                Your Proposed Timeline:
+                                {t(
+                                  "provider.projects.detail.timeline.approved",
+                                )}
                               </p>
                               <p className="text-sm text-gray-900 font-medium break-words">
                                 {formatTimeline(
                                   project.providerProposedTimeline,
-                                  "day"
+                                  "day",
                                 )}
                               </p>
                             </div>
                           )}
                           {milestoneApprovalState.milestonesLocked &&
                             projectMilestones &&
-                            projectMilestones.length > 0 && (() => {
+                            projectMilestones.length > 0 &&
+                            (() => {
                               const sorted = [...projectMilestones].sort(
-                                (a, b) => (a.order ?? a.sequence ?? 0) - (b.order ?? b.sequence ?? 0),
+                                (a, b) =>
+                                  (a.order ?? a.sequence ?? 0) -
+                                  (b.order ?? b.sequence ?? 0),
                               );
-                              const last = sorted[sorted.length - 1] as Milestone & { daysFromStart?: number };
+                              const last = sorted[
+                                sorted.length - 1
+                              ] as Milestone & { daysFromStart?: number };
                               const totalDays = last?.daysFromStart ?? 0;
                               const lastDueDate = last?.dueDate;
                               return (
@@ -1316,7 +1489,9 @@ export default function ProviderProjectDetailsPage() {
                                   {totalDays > 0 && (
                                     <div>
                                       <p className="text-xs text-gray-500 mb-1">
-                                        Approved Timeline:
+                                        {t(
+                                          "provider.projects.detail.timeline.approved",
+                                        )}
                                       </p>
                                       <p className="text-sm font-semibold text-green-600 break-words">
                                         {formatDurationDays(totalDays)}
@@ -1326,7 +1501,9 @@ export default function ProviderProjectDetailsPage() {
                                   {lastDueDate && (
                                     <div>
                                       <p className="text-xs text-gray-500 mb-1">
-                                        Due date (project):
+                                        {t(
+                                          "provider.projects.detail.timeline.dueDateProject",
+                                        )}
                                       </p>
                                       <p className="text-sm font-semibold text-green-600 break-words">
                                         {formatDate(lastDueDate)}
@@ -1338,9 +1515,14 @@ export default function ProviderProjectDetailsPage() {
                             })()}
                           {!project.originalTimeline &&
                             !project.providerProposedTimeline &&
-                            !(milestoneApprovalState.milestonesLocked && projectMilestones?.length) && (
+                            !(
+                              milestoneApprovalState.milestonesLocked &&
+                              projectMilestones?.length
+                            ) && (
                               <p className="text-sm text-gray-600">
-                                Not specified
+                                {t(
+                                  "provider.projects.detail.timeline.notSpecified",
+                                )}
                               </p>
                             )}
                         </div>
@@ -1350,7 +1532,7 @@ export default function ProviderProjectDetailsPage() {
                     {project.skills && project.skills.length > 0 && (
                       <div>
                         <Label className="text-xs sm:text-sm font-medium text-gray-500">
-                          Required Skills
+                          {t("provider.projects.detail.requiredSkills")}
                         </Label>
                         <div className="flex flex-wrap gap-2 mt-2">
                           {project.skills.map(
@@ -1362,7 +1544,7 @@ export default function ProviderProjectDetailsPage() {
                               >
                                 {skill}
                               </Badge>
-                            )
+                            ),
                           )}
                         </div>
                       </div>
@@ -1371,7 +1553,7 @@ export default function ProviderProjectDetailsPage() {
                     {project.requirements && (
                       <div>
                         <Label className="text-xs sm:text-sm font-medium text-gray-500">
-                          Requirements
+                          {t("provider.projects.detail.requirements")}
                         </Label>
                         <div className="mt-2 space-y-3">
                           {Array.isArray(project.requirements) ? (
@@ -1388,7 +1570,7 @@ export default function ProviderProjectDetailsPage() {
                                     emptyMessage={""}
                                   />
                                 </div>
-                              )
+                              ),
                             )
                           ) : (
                             <div className="text-gray-700">
@@ -1406,7 +1588,7 @@ export default function ProviderProjectDetailsPage() {
                     {project.deliverables && (
                       <div>
                         <Label className="text-xs sm:text-sm font-medium text-gray-500">
-                          Deliverables
+                          {t("provider.projects.detail.deliverables")}
                         </Label>
                         <div className="mt-2 space-y-3">
                           {Array.isArray(project.deliverables) ? (
@@ -1423,7 +1605,7 @@ export default function ProviderProjectDetailsPage() {
                                     emptyMessage={""}
                                   />
                                 </div>
-                              )
+                              ),
                             )
                           ) : (
                             <div className="text-gray-700">
@@ -1440,18 +1622,35 @@ export default function ProviderProjectDetailsPage() {
                   </CardContent>
                 </Card>
 
+                {project.status === "COMPLETED" &&
+                  (() => {
+                    const reviewCustomerId =
+                      project.customer?.id ?? project.customerId;
+                    if (!reviewCustomerId) return null;
+                    return (
+                      <ProviderProjectReviewInline
+                        projectId={project.id}
+                        customerId={String(reviewCustomerId)}
+                        customerName={project.customer?.name}
+                        projectCompleted
+                      />
+                    );
+                  })()}
+
                 {/* Progress */}
                 {project.status === "IN_PROGRESS" && (
                   <Card>
                     <CardHeader className="p-4 sm:p-6">
                       <CardTitle className="text-lg sm:text-xl">
-                        Project Progress
+                        {t("provider.projects.detail.progressCard.title")}
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="p-4 sm:p-6">
                       <div className="space-y-3 sm:space-y-4">
                         <div className="flex justify-between text-xs sm:text-sm">
-                          <span>Overall Progress</span>
+                          <span>
+                            {t("provider.projects.detail.progressCard.overall")}
+                          </span>
                           <span>{project.progress || 0}%</span>
                         </div>
                         <Progress
@@ -1460,8 +1659,13 @@ export default function ProviderProjectDetailsPage() {
                         />
                         <div className="flex justify-between text-xs sm:text-sm text-gray-600">
                           <span>
-                            {project.completedMilestones || 0} of{" "}
-                            {project.totalMilestones || 0} milestones completed
+                            {t(
+                              "provider.projects.detail.progressCard.milestonesOf",
+                              {
+                                completed: project.completedMilestones || 0,
+                                total: project.totalMilestones || 0,
+                              },
+                            )}
                           </span>
                         </div>
                       </div>
@@ -1477,30 +1681,41 @@ export default function ProviderProjectDetailsPage() {
                 <Card>
                   <CardHeader className="p-4 sm:p-6">
                     <CardTitle className="text-lg sm:text-xl">
-                      Project Milestones
+                      {t("provider.projects.detail.milestones.title")}
                     </CardTitle>
                     <CardDescription className="text-xs sm:text-sm">
-                      Track and manage project milestones
+                      {t("provider.projects.detail.milestones.desc")}
                     </CardDescription>
                     <div className="flex flex-wrap items-center gap-2 mt-3 sm:mt-4">
                       <Badge variant="outline" className="text-xs">
-                        Company{" "}
-                        {milestoneApprovalState.companyApproved ? "✓" : "✗"} ·
-                        Provider{" "}
+                        {t("provider.projects.detail.milestones.badge.company")}{" "}
+                        {milestoneApprovalState.companyApproved ? "✓" : "✗"} ·{" "}
+                        {t(
+                          "provider.projects.detail.milestones.badge.provider",
+                        )}{" "}
                         {milestoneApprovalState.providerApproved ? "✓" : "✗"}
-                        {milestoneApprovalState.milestonesLocked && " · LOCKED"}
+                        {milestoneApprovalState.milestonesLocked &&
+                          ` · ${t("provider.projects.detail.milestones.badge.locked")}`}
                       </Badge>
                       {milestoneApprovalState.milestonesLocked &&
                         projectMilestones &&
-                        projectMilestones.length > 0 && (() => {
+                        projectMilestones.length > 0 &&
+                        (() => {
                           const sorted = [...projectMilestones].sort(
-                            (a, b) => (a.order ?? a.sequence ?? 0) - (b.order ?? b.sequence ?? 0),
+                            (a, b) =>
+                              (a.order ?? a.sequence ?? 0) -
+                              (b.order ?? b.sequence ?? 0),
                           );
-                          const last = sorted[sorted.length - 1] as { daysFromStart?: number } | undefined;
+                          const last = sorted[sorted.length - 1] as
+                            | { daysFromStart?: number }
+                            | undefined;
                           const totalDays = last?.daysFromStart ?? 0;
                           return totalDays > 0 ? (
                             <span className="text-xs sm:text-sm text-green-600 font-medium">
-                              Approved timeline: {formatDurationDays(totalDays)}
+                              {t(
+                                "provider.projects.detail.milestones.approvedTimelinePrefix",
+                              )}{" "}
+                              {formatDurationDays(totalDays)}
                             </span>
                           ) : null;
                         })()}
@@ -1510,23 +1725,33 @@ export default function ProviderProjectDetailsPage() {
                             variant="outline"
                             size="sm"
                             className="text-xs sm:text-sm"
-                            onClick={() => {
-                              // Store original milestones when opening editor
-                              setOriginalProjectMilestones(
-                                JSON.parse(JSON.stringify(projectMilestones))
-                              );
-                              setMilestoneEditorOpen(true);
-                            }}
+                            asChild
                           >
-                            Edit Milestones
+                            <Link
+                              href={`/provider/projects/${params.id}/milestones`}
+                            >
+                              {t("provider.projects.detail.milestones.edit")}
+                            </Link>
                           </Button>
-                          <Button
-                            size="sm"
-                            className="text-xs sm:text-sm"
-                            onClick={handleApproveProjectMilestones}
-                          >
-                            Approve
-                          </Button>
+                          {!milestoneApprovalState.providerApproved && (
+                            <Button
+                              size="sm"
+                              className="inline-flex items-center gap-1.5 text-xs sm:text-sm"
+                              onClick={handleApproveProjectMilestones}
+                              disabled={approvingMilestones}
+                            >
+                              {approvingMilestones ? (
+                                <>
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                                  {t(
+                                    "provider.projects.detail.milestones.approving",
+                                  )}
+                                </>
+                              ) : (
+                                t("provider.projects.detail.milestones.approve")
+                              )}
+                            </Button>
+                          )}
                         </>
                       )}
                     </div>
@@ -1558,36 +1783,88 @@ export default function ProviderProjectDetailsPage() {
                                   <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
                                     <Badge
                                       className={`${getMilestoneStatusColor(
-                                        milestone.status || ""
+                                        milestone.status || "",
                                       )} text-xs shrink-0`}
                                     >
                                       {getMilestoneStatusText(
-                                        milestone.status || ""
+                                        milestone.status || "",
                                       )}
                                     </Badge>
-                                    <span className="text-xs sm:text-sm font-medium">
-                                      {formatCurrency(milestone.amount)}
-                                    </span>
+                                    {renderMilestoneAmountProviderEquiv(
+                                      milestone.amount,
+                                    )}
                                   </div>
                                 </div>
                                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 text-xs sm:text-sm text-gray-600">
                                   <span>
                                     {(() => {
-                                      const sorted = [...(projectMilestones || [])].sort(
-                                        (a, b) => (a.order ?? a.sequence ?? 0) - (b.order ?? b.sequence ?? 0),
+                                      const sorted = [
+                                        ...(projectMilestones || []),
+                                      ].sort(
+                                        (a, b) =>
+                                          (a.order ?? a.sequence ?? 0) -
+                                          (b.order ?? b.sequence ?? 0),
                                       );
-                                      const idx = sorted.findIndex((x) => x.id === milestone.id);
-                                      if (idx < 0) return milestone.dueDate ? `Due: ${formatDate(milestone.dueDate)}` : "—";
-                                      const prev = sorted[idx - 1] as { daysFromStart?: number } | undefined;
-                                      const currDays = (milestone as Milestone & { daysFromStart?: number }).daysFromStart ?? 0;
+                                      const idx = sorted.findIndex(
+                                        (x) => x.id === milestone.id,
+                                      );
+                                      if (idx < 0)
+                                        return milestone.dueDate
+                                          ? t(
+                                              "provider.projects.detail.milestone.due",
+                                              {
+                                                date: formatDate(
+                                                  milestone.dueDate,
+                                                ),
+                                              },
+                                            )
+                                          : t("provider.projects.list.dueDash");
+                                      const prev = sorted[idx - 1] as
+                                        | { daysFromStart?: number }
+                                        | undefined;
+                                      const currDays =
+                                        (
+                                          milestone as Milestone & {
+                                            daysFromStart?: number;
+                                          }
+                                        ).daysFromStart ?? 0;
                                       const prevDays = prev?.daysFromStart ?? 0;
                                       const durationDays = currDays - prevDays;
-                                      const durationStr = durationDays > 0 ? `Duration: ${formatDurationDays(durationDays)}` : "";
-                                      const dueStr = milestone.dueDate ? `Due: ${formatDate(milestone.dueDate)}` : "";
-                                      if (milestoneApprovalState.milestonesLocked && dueStr) {
-                                        return [durationStr, dueStr].filter(Boolean).join(" · ");
+                                      const durationStr =
+                                        durationDays > 0
+                                          ? t(
+                                              "provider.projects.detail.milestone.duration",
+                                              {
+                                                value:
+                                                  formatDurationDays(
+                                                    durationDays,
+                                                  ),
+                                              },
+                                            )
+                                          : "";
+                                      const dueStr = milestone.dueDate
+                                        ? t(
+                                            "provider.projects.detail.milestone.due",
+                                            {
+                                              date: formatDate(
+                                                milestone.dueDate,
+                                              ),
+                                            },
+                                          )
+                                        : "";
+                                      if (
+                                        milestoneApprovalState.milestonesLocked &&
+                                        dueStr
+                                      ) {
+                                        return [durationStr, dueStr]
+                                          .filter(Boolean)
+                                          .join(" · ");
                                       }
-                                      return durationStr || dueStr || "—";
+                                      return (
+                                        durationStr ||
+                                        dueStr ||
+                                        t("provider.projects.list.dueDash")
+                                      );
                                     })()}
                                   </span>
                                   <div className="flex items-center gap-2">
@@ -1595,7 +1872,9 @@ export default function ProviderProjectDetailsPage() {
                                       <div className="flex items-center gap-1 text-green-600">
                                         <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                                         <span className="text-xs sm:text-sm font-medium">
-                                          Paid
+                                          {t(
+                                            "provider.projects.detail.milestone.paidLabel",
+                                          )}
                                         </span>
                                       </div>
                                     )}
@@ -1607,7 +1886,9 @@ export default function ProviderProjectDetailsPage() {
                                             disabled={true}
                                             className="text-xs sm:text-sm"
                                           >
-                                            Start Work
+                                            {t(
+                                              "provider.projects.detail.milestone.startWork",
+                                            )}
                                           </Button>
                                         </div>
                                       )}
@@ -1616,7 +1897,7 @@ export default function ProviderProjectDetailsPage() {
                                       projectMilestones.findIndex(
                                         (m: Milestone) =>
                                           m.status === "LOCKED" &&
-                                          project?.status === "IN_PROGRESS"
+                                          project?.status === "IN_PROGRESS",
                                       ) === index && (
                                         <AlertCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-600" />
                                       )}
@@ -1630,7 +1911,9 @@ export default function ProviderProjectDetailsPage() {
                                             setIsMilestoneDialogOpen(true);
                                           }}
                                         >
-                                          Start Work
+                                          {t(
+                                            "provider.projects.detail.milestone.startWork",
+                                          )}
                                         </Button>
                                       )}
                                     {milestone.status === "IN_PROGRESS" && (
@@ -1642,7 +1925,9 @@ export default function ProviderProjectDetailsPage() {
                                           setIsMilestoneDialogOpen(true);
                                         }}
                                       >
-                                        Submit
+                                        {t(
+                                          "provider.projects.detail.milestone.submit",
+                                        )}
                                       </Button>
                                     )}
                                   </div>
@@ -1654,7 +1939,7 @@ export default function ProviderProjectDetailsPage() {
                                 projectMilestones.findIndex(
                                   (m: Milestone) =>
                                     m.status === "LOCKED" &&
-                                    project?.status === "IN_PROGRESS"
+                                    project?.status === "IN_PROGRESS",
                                 ) === index ? (
                                   <div className="mt-3 p-2 sm:p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
                                     <AlertCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-600 mt-0.5 flex-shrink-0" />
@@ -1662,8 +1947,12 @@ export default function ProviderProjectDetailsPage() {
                                       {index > 0 &&
                                       projectMilestones[index - 1].status !==
                                         "APPROVED"
-                                        ? "You can't start this milestone until the previous milestone is approved by the client."
-                                        : "You can't start work until the client has paid."}
+                                        ? t(
+                                            "provider.projects.detail.milestone.waitPrevApproved",
+                                          )
+                                        : t(
+                                            "provider.projects.detail.milestone.waitClientPaid",
+                                          )}
                                     </p>
                                   </div>
                                 ) : null}
@@ -1697,8 +1986,9 @@ export default function ProviderProjectDetailsPage() {
                                   return (
                                     <div className="mt-3 p-2 sm:p-3 bg-green-50 border border-green-200 rounded-lg">
                                       <p className="text-xs sm:text-sm font-medium text-green-900 mb-1">
-                                        📋 Plan / Deliverables (When Starting
-                                        Work):
+                                        {t(
+                                          "provider.projects.detail.milestoneUi.planTitle",
+                                        )}
                                       </p>
                                       <p className="text-xs sm:text-sm text-green-800 whitespace-pre-wrap break-words">
                                         {displayText}
@@ -1712,8 +2002,9 @@ export default function ProviderProjectDetailsPage() {
                                 {!!milestone.submitDeliverables && (
                                   <div className="mt-3 p-2 sm:p-3 bg-purple-50 border border-purple-200 rounded-lg">
                                     <p className="text-xs sm:text-sm font-medium text-purple-900 mb-1">
-                                      ✅ Deliverables / Completion Notes (When
-                                      Submitting):
+                                      {t(
+                                        "provider.projects.detail.milestoneUi.submitDeliverablesTitle",
+                                      )}
                                     </p>
                                     <p className="text-xs sm:text-sm text-purple-800 whitespace-pre-wrap break-words">
                                       {((): React.ReactNode => {
@@ -1747,7 +2038,9 @@ export default function ProviderProjectDetailsPage() {
                                 {!!milestone.submissionNote && (
                                   <div className="mt-3 p-2 sm:p-3 bg-blue-50 border border-blue-200 rounded-lg">
                                     <p className="text-xs sm:text-sm font-medium text-blue-900 mb-1">
-                                      📝 Submission Note:
+                                      {t(
+                                        "provider.projects.detail.milestoneUi.submissionNoteTitle",
+                                      )}
                                     </p>
                                     <p className="text-xs sm:text-sm text-blue-800 whitespace-pre-wrap break-words">
                                       {milestone.submissionNote}
@@ -1775,14 +2068,17 @@ export default function ProviderProjectDetailsPage() {
                                       return (
                                         <div className="mt-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
                                           <p className="text-sm font-medium text-orange-900 mb-1">
-                                            🔄 Latest Request for Changes
-                                            (Revision #
-                                            {typeof latestRequest.revisionNumber ===
-                                            "number"
-                                              ? latestRequest.revisionNumber
-                                              : milestone.submissionHistory
-                                                  .length}
-                                            ):
+                                            {t(
+                                              "provider.projects.detail.milestoneUi.latestChangesTitle",
+                                              {
+                                                n:
+                                                  typeof latestRequest.revisionNumber ===
+                                                  "number"
+                                                    ? latestRequest.revisionNumber
+                                                    : milestone.submissionHistory
+                                                        .length,
+                                              },
+                                            )}
                                           </p>
                                           <p className="text-sm text-orange-800 whitespace-pre-wrap">
                                             {typeof latestRequest.requestedChangesReason ===
@@ -1794,9 +2090,11 @@ export default function ProviderProjectDetailsPage() {
                                           typeof latestRequest.requestedChangesAt ===
                                             "string" ? (
                                             <p className="text-xs text-orange-600 mt-2">
-                                              Requested on:{" "}
+                                              {t(
+                                                "provider.projects.detail.milestoneUi.requestedOn",
+                                              )}{" "}
                                               {new Date(
-                                                latestRequest.requestedChangesAt as string
+                                                latestRequest.requestedChangesAt as string,
                                               ).toLocaleString()}
                                             </p>
                                           ) : null}
@@ -1813,30 +2111,34 @@ export default function ProviderProjectDetailsPage() {
                                     <div className="flex items-center gap-2 mb-2">
                                       <Paperclip className="w-4 h-4 text-gray-600" />
                                       <span className="text-sm font-medium text-gray-900">
-                                        📎 Submission Attachment
+                                        {t(
+                                          "provider.projects.detail.milestoneUi.submissionAttachment",
+                                        )}
                                       </span>
                                     </div>
                                     {((): React.ReactNode => {
                                       const normalized =
                                         milestone.submissionAttachmentUrl!.replace(
                                           /\\/g,
-                                          "/"
+                                          "/",
                                         );
                                       const fileName =
                                         normalized.split("/").pop() ||
-                                        "attachment";
+                                        t(
+                                          "provider.projects.detail.milestoneUi.attachmentFallback",
+                                        );
                                       const attachmentUrl = getAttachmentUrl(
-                                        milestone.submissionAttachmentUrl
+                                        milestone.submissionAttachmentUrl,
                                       );
                                       const isR2Key =
                                         attachmentUrl === "#" ||
                                         (!attachmentUrl.startsWith("http") &&
                                           !attachmentUrl.startsWith(
-                                            "/uploads/"
+                                            "/uploads/",
                                           ) &&
                                           !attachmentUrl.includes(
                                             process.env.NEXT_PUBLIC_API_URL ||
-                                              "localhost"
+                                              "localhost",
                                           ));
 
                                       return (
@@ -1853,21 +2155,24 @@ export default function ProviderProjectDetailsPage() {
                                                   try {
                                                     const downloadUrl =
                                                       await getR2DownloadUrl(
-                                                        milestone.submissionAttachmentUrl as string
+                                                        milestone.submissionAttachmentUrl as string,
                                                       );
                                                     window.open(
                                                       downloadUrl.downloadUrl,
-                                                      "_blank"
+                                                      "_blank",
                                                     );
                                                   } catch (error) {
                                                     console.error(
                                                       "Failed to get download URL:",
-                                                      error
+                                                      error,
                                                     );
                                                     toastHook({
-                                                      title: "Error",
-                                                      description:
-                                                        "Failed to download attachment",
+                                                      title: t(
+                                                        "provider.projects.toast.error",
+                                                      ),
+                                                      description: t(
+                                                        "provider.projects.toast.downloadFailed",
+                                                      ),
                                                       variant: "destructive",
                                                     });
                                                   }
@@ -1877,14 +2182,18 @@ export default function ProviderProjectDetailsPage() {
                                           className="flex items-start gap-3 rounded-lg border border-gray-200 bg-white px-3 py-2 hover:bg-gray-50 hover:shadow-sm transition"
                                         >
                                           <div className="flex h-9 w-9 flex-none items-center justify-center rounded-md border border-gray-300 bg-gray-100 text-gray-700 text-xs font-medium">
-                                            PDF
+                                            {t(
+                                              "provider.projects.detail.milestoneUi.pdfBadge",
+                                            )}
                                           </div>
                                           <div className="flex flex-col min-w-0">
                                             <span className="text-sm font-medium text-gray-900 break-all leading-snug">
                                               {fileName}
                                             </span>
                                             <span className="text-xs text-gray-500 leading-snug">
-                                              Click to preview / download
+                                              {t(
+                                                "provider.projects.detail.milestoneUi.clickPreviewDownload",
+                                              )}
                                             </span>
                                           </div>
                                           <div className="ml-auto flex items-center text-gray-500 hover:text-gray-700">
@@ -1902,9 +2211,15 @@ export default function ProviderProjectDetailsPage() {
                                   milestone.submissionHistory.length > 0 && (
                                     <div className="mt-4 border-t pt-4">
                                       <p className="text-sm font-semibold text-gray-900 mb-3">
-                                        📚 Previous Submission History:
+                                        {t(
+                                          "provider.projects.detail.milestoneUi.historyTitle",
+                                        )}
                                       </p>
-                                      <div className="space-y-3">
+                                      <Accordion
+                                        type="single"
+                                        collapsible
+                                        className="w-full space-y-2"
+                                      >
                                         {(
                                           milestone.submissionHistory as Array<
                                             Record<string, unknown>
@@ -1912,7 +2227,7 @@ export default function ProviderProjectDetailsPage() {
                                         ).map(
                                           (
                                             history: Record<string, unknown>,
-                                            idx: number
+                                            idx: number,
                                           ) => {
                                             const revisionNumberValue =
                                               history.revisionNumber;
@@ -1938,94 +2253,110 @@ export default function ProviderProjectDetailsPage() {
                                               history.submittedAt;
 
                                             return (
-                                              <div
+                                              <AccordionItem
                                                 key={idx}
-                                                className="p-3 bg-gray-50 border border-gray-200 rounded-lg"
+                                                value={`revision-${milestone.id}-${idx}`}
+                                                className="bg-gray-50 border border-gray-200 rounded-lg px-3"
                                               >
-                                                <div className="flex items-center justify-between mb-2">
-                                                  <p className="text-sm font-medium text-gray-900">
-                                                    Revision #{revisionNumber}
-                                                  </p>
-                                                  {requestedChangesAt &&
-                                                  typeof requestedChangesAt ===
+                                                <AccordionTrigger className="py-3 hover:no-underline">
+                                                  <div className="flex w-full items-center justify-between gap-3 pr-2 text-left">
+                                                    <p className="text-sm font-medium text-gray-900">
+                                                      {t(
+                                                        "provider.projects.detail.milestoneUi.revisionN",
+                                                        {
+                                                          n: revisionNumber,
+                                                        },
+                                                      )}
+                                                    </p>
+                                                    {requestedChangesAt &&
+                                                    typeof requestedChangesAt ===
+                                                      "string" ? (
+                                                      <span className="text-xs text-gray-500">
+                                                        {t(
+                                                          "provider.projects.detail.milestoneUi.changesRequestedAt",
+                                                        )}{" "}
+                                                        {new Date(
+                                                          requestedChangesAt,
+                                                        ).toLocaleDateString()}
+                                                      </span>
+                                                    ) : null}
+                                                  </div>
+                                                </AccordionTrigger>
+                                                <AccordionContent className="pb-3">
+                                                  {requestedChangesReason &&
+                                                  typeof requestedChangesReason ===
                                                     "string" ? (
-                                                    <span className="text-xs text-gray-500">
-                                                      Changes requested:{" "}
-                                                      {new Date(
-                                                        requestedChangesAt
-                                                      ).toLocaleDateString()}
-                                                    </span>
+                                                    <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded">
+                                                      <p className="text-xs font-medium text-red-900 mb-1">
+                                                        {t(
+                                                          "provider.projects.detail.milestoneUi.reasonForChanges",
+                                                        )}
+                                                      </p>
+                                                      <p className="text-xs text-red-800">
+                                                        {requestedChangesReason}
+                                                      </p>
+                                                    </div>
                                                   ) : null}
-                                                </div>
 
-                                                {requestedChangesReason &&
-                                                typeof requestedChangesReason ===
-                                                  "string" ? (
-                                                  <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded">
-                                                    <p className="text-xs font-medium text-red-900 mb-1">
-                                                      Reason for Changes:
-                                                    </p>
-                                                    <p className="text-xs text-red-800">
-                                                      {requestedChangesReason}
-                                                    </p>
-                                                  </div>
-                                                ) : null}
-
-                                                {/* FIX 3: History Submit Deliverables */}
-                                                {/* Added boolean cast check */}
-                                                {!!submitDeliverables ? (
-                                                  <div className="mb-2">
-                                                    <p className="text-xs font-medium text-gray-700 mb-1">
-                                                      Deliverables:
-                                                    </p>
-                                                    <p className="text-xs text-gray-600 whitespace-pre-wrap">
-                                                      {((): React.ReactNode => {
-                                                        let text: string = "";
-                                                        if (
-                                                          typeof submitDeliverables ===
-                                                          "string"
-                                                        ) {
-                                                          text =
-                                                            submitDeliverables;
-                                                        } else if (
-                                                          typeof submitDeliverables ===
-                                                            "object" &&
-                                                          submitDeliverables !==
-                                                            null &&
-                                                          "description" in
-                                                            submitDeliverables
-                                                        ) {
-                                                          const desc = (
-                                                            submitDeliverables as Record<
-                                                              string,
-                                                              unknown
-                                                            >
-                                                          ).description;
-                                                          text =
-                                                            typeof desc ===
+                                                  {/* FIX 3: History Submit Deliverables */}
+                                                  {/* Added boolean cast check */}
+                                                  {!!submitDeliverables ? (
+                                                    <div className="mb-2">
+                                                      <p className="text-xs font-medium text-gray-700 mb-1">
+                                                        {t(
+                                                          "provider.projects.detail.milestoneUi.deliverables",
+                                                        )}
+                                                      </p>
+                                                      <p className="text-xs text-gray-600 whitespace-pre-wrap">
+                                                        {((): React.ReactNode => {
+                                                          let text: string = "";
+                                                          if (
+                                                            typeof submitDeliverables ===
                                                             "string"
-                                                              ? desc
-                                                              : String(
-                                                                  desc || ""
-                                                                );
-                                                        } else {
-                                                          text = String(
-                                                            submitDeliverables ||
-                                                              ""
-                                                          );
-                                                        }
-                                                        return text;
-                                                      })()}
-                                                    </p>
-                                                  </div>
-                                                ) : null}
+                                                          ) {
+                                                            text =
+                                                              submitDeliverables;
+                                                          } else if (
+                                                            typeof submitDeliverables ===
+                                                              "object" &&
+                                                            submitDeliverables !==
+                                                              null &&
+                                                            "description" in
+                                                              submitDeliverables
+                                                          ) {
+                                                            const desc = (
+                                                              submitDeliverables as Record<
+                                                                string,
+                                                                unknown
+                                                              >
+                                                            ).description;
+                                                            text =
+                                                              typeof desc ===
+                                                              "string"
+                                                                ? desc
+                                                                : String(
+                                                                    desc || "",
+                                                                  );
+                                                          } else {
+                                                            text = String(
+                                                              submitDeliverables ||
+                                                                "",
+                                                            );
+                                                          }
+                                                          return text;
+                                                        })()}
+                                                      </p>
+                                                    </div>
+                                                  ) : null}
 
                                                 {submissionNote &&
                                                 typeof submissionNote ===
                                                   "string" ? (
                                                   <div className="mb-2">
                                                     <p className="text-xs font-medium text-gray-700 mb-1">
-                                                      Note:
+                                                      {t(
+                                                        "provider.projects.detail.milestoneUi.note",
+                                                      )}
                                                     </p>
                                                     <p className="text-xs text-gray-600 whitespace-pre-wrap">
                                                       {submissionNote}
@@ -2038,32 +2369,36 @@ export default function ProviderProjectDetailsPage() {
                                                   "string" ? (
                                                   <div>
                                                     <p className="text-xs font-medium text-gray-700 mb-1">
-                                                      Attachment:
+                                                      {t(
+                                                        "provider.projects.detail.milestoneUi.attachment",
+                                                      )}
                                                     </p>
                                                     {((): React.ReactNode => {
                                                       const attachmentUrl =
                                                         getAttachmentUrl(
-                                                          submissionAttachmentUrl
+                                                          submissionAttachmentUrl,
                                                         );
                                                       const isR2Key =
                                                         attachmentUrl === "#" ||
                                                         (!attachmentUrl.startsWith(
-                                                          "http"
+                                                          "http",
                                                         ) &&
                                                           !attachmentUrl.startsWith(
-                                                            "/uploads/"
+                                                            "/uploads/",
                                                           ) &&
                                                           !attachmentUrl.includes(
                                                             process.env
                                                               .NEXT_PUBLIC_API_URL ||
-                                                              "localhost"
+                                                              "localhost",
                                                           ));
                                                       const fileName =
                                                         submissionAttachmentUrl
                                                           .replace(/\\/g, "/")
                                                           .split("/")
                                                           .pop() ||
-                                                        "attachment";
+                                                        t(
+                                                          "provider.projects.detail.milestoneUi.attachmentFallback",
+                                                        );
 
                                                       return (
                                                         <a
@@ -2078,22 +2413,25 @@ export default function ProviderProjectDetailsPage() {
                                                                   try {
                                                                     const downloadUrl =
                                                                       await getR2DownloadUrl(
-                                                                        submissionAttachmentUrl
+                                                                        submissionAttachmentUrl,
                                                                       );
                                                                     window.open(
                                                                       downloadUrl.downloadUrl,
-                                                                      "_blank"
+                                                                      "_blank",
                                                                     );
                                                                   } catch (error) {
                                                                     console.error(
                                                                       "Failed to get download URL:",
-                                                                      error
+                                                                      error,
                                                                     );
                                                                     toastHook({
-                                                                      title:
-                                                                        "Error",
+                                                                      title: t(
+                                                                        "provider.projects.toast.error",
+                                                                      ),
                                                                       description:
-                                                                        "Failed to download attachment",
+                                                                        t(
+                                                                          "provider.projects.toast.downloadFailed",
+                                                                        ),
                                                                       variant:
                                                                         "destructive",
                                                                     });
@@ -2110,30 +2448,33 @@ export default function ProviderProjectDetailsPage() {
                                                   </div>
                                                 ) : null}
 
-                                                {submittedAt &&
-                                                typeof submittedAt ===
-                                                  "string" ? (
-                                                  <p className="text-xs text-gray-500 mt-2">
-                                                    Submitted:{" "}
-                                                    {new Date(
-                                                      submittedAt
-                                                    ).toLocaleString()}
-                                                  </p>
-                                                ) : null}
-                                              </div>
+                                                  {submittedAt &&
+                                                  typeof submittedAt ===
+                                                    "string" ? (
+                                                    <p className="text-xs text-gray-500 mt-2">
+                                                      {t(
+                                                        "provider.projects.detail.milestoneUi.submittedAt",
+                                                      )}{" "}
+                                                      {new Date(
+                                                        submittedAt,
+                                                      ).toLocaleString()}
+                                                    </p>
+                                                  ) : null}
+                                                </AccordionContent>
+                                              </AccordionItem>
                                             );
-                                          }
+                                          },
                                         )}
-                                      </div>
+                                      </Accordion>
                                     </div>
                                   )}
                               </div>
                             );
-                          }
+                          },
                         )
                       ) : (
                         <p className="text-gray-600 text-center py-8">
-                          No milestones found
+                          {t("provider.projects.detail.milestonesEmpty")}
                         </p>
                       )}
                     </div>
@@ -2146,10 +2487,10 @@ export default function ProviderProjectDetailsPage() {
                 <Card>
                   <CardHeader className="p-4 sm:p-6">
                     <CardTitle className="text-lg sm:text-xl">
-                      Proposal Attachments
+                      {t("provider.projects.detail.files.proposalTitle")}
                     </CardTitle>
                     <CardDescription className="text-xs sm:text-sm">
-                      Files attached to your accepted proposal
+                      {t("provider.projects.detail.files.proposalDesc")}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="p-4 sm:p-6">
@@ -2163,21 +2504,21 @@ export default function ProviderProjectDetailsPage() {
                         Array.isArray(project.proposal.attachmentUrls)
                       ) {
                         proposalAttachments.push(
-                          ...project.proposal.attachmentUrls
+                          ...project.proposal.attachmentUrls,
                         );
                       } else if (
                         project?.Proposal?.attachmentUrls &&
                         Array.isArray(project.Proposal.attachmentUrls)
                       ) {
                         proposalAttachments.push(
-                          ...project.Proposal.attachmentUrls
+                          ...project.Proposal.attachmentUrls,
                         );
                       }
 
                       if (proposalAttachments.length === 0) {
                         return (
                           <p className="text-xs sm:text-sm text-gray-500 text-center py-6 sm:py-8">
-                            No proposal attachments found
+                            {t("provider.projects.detail.files.proposalEmpty")}
                           </p>
                         );
                       }
@@ -2194,7 +2535,8 @@ export default function ProviderProjectDetailsPage() {
                               (!attachmentUrl.startsWith("http") &&
                                 !attachmentUrl.startsWith("/uploads/") &&
                                 !attachmentUrl.includes(
-                                  process.env.NEXT_PUBLIC_API_URL || "localhost"
+                                  process.env.NEXT_PUBLIC_API_URL ||
+                                    "localhost",
                                 ));
 
                             return (
@@ -2217,17 +2559,20 @@ export default function ProviderProjectDetailsPage() {
                                             await getR2DownloadUrl(url); // Use original URL/key
                                           window.open(
                                             downloadUrl.downloadUrl,
-                                            "_blank"
+                                            "_blank",
                                           );
                                         } catch (error) {
                                           console.error(
                                             "Failed to get download URL:",
-                                            error
+                                            error,
                                           );
                                           toastHook({
-                                            title: "Error",
-                                            description:
-                                              "Failed to download attachment",
+                                            title: t(
+                                              "provider.projects.toast.error",
+                                            ),
+                                            description: t(
+                                              "provider.projects.toast.downloadFailed",
+                                            ),
                                             variant: "destructive",
                                           });
                                         }
@@ -2237,24 +2582,30 @@ export default function ProviderProjectDetailsPage() {
                                 className="flex items-start gap-2 sm:gap-3 rounded-lg border border-gray-200 bg-white px-2 sm:px-3 py-2 active:bg-gray-50 sm:hover:bg-gray-50 sm:hover:shadow-sm transition"
                               >
                                 <div className="flex h-8 w-8 sm:h-9 sm:w-9 flex-none items-center justify-center rounded-md border border-gray-300 bg-gray-100 text-gray-700 text-xs font-medium">
-                                  PDF
+                                  {t(
+                                    "provider.projects.detail.milestoneUi.pdfBadge",
+                                  )}
                                 </div>
                                 <div className="flex flex-col min-w-0 flex-1">
                                   <span className="text-xs sm:text-sm font-medium text-gray-900 break-all leading-snug">
                                     {fileName}
                                   </span>
                                   <span className="text-xs text-gray-500 leading-snug">
-                                    From your proposal
+                                    {t(
+                                      "provider.projects.detail.files.fromProposal",
+                                    )}
                                     {project?.proposal?.createdAt &&
-                                      ` • Submitted: ${new Date(
-                                        project.proposal.createdAt
+                                      ` • ${t("provider.projects.detail.files.submittedOn")} ${new Date(
+                                        project.proposal.createdAt,
                                       ).toLocaleDateString()}`}
                                     {project?.proposal?.submittedAt &&
-                                      ` • Submitted: ${new Date(
-                                        project.proposal.submittedAt
+                                      ` • ${t("provider.projects.detail.files.submittedOn")} ${new Date(
+                                        project.proposal.submittedAt,
                                       ).toLocaleDateString()}`}
                                     <span className="block mt-0.5">
-                                      Click to preview / download
+                                      {t(
+                                        "provider.projects.detail.milestoneUi.clickPreviewDownload",
+                                      )}
                                     </span>
                                   </span>
                                 </div>
@@ -2274,10 +2625,10 @@ export default function ProviderProjectDetailsPage() {
                 <Card>
                   <CardHeader className="p-4 sm:p-6">
                     <CardTitle className="text-lg sm:text-xl">
-                      Milestone Attachments
+                      {t("provider.projects.detail.files.milestoneTitle")}
                     </CardTitle>
                     <CardDescription className="text-xs sm:text-sm">
-                      Files attached to milestone submissions
+                      {t("provider.projects.detail.files.milestoneDesc")}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="p-4 sm:p-6">
@@ -2321,16 +2672,24 @@ export default function ProviderProjectDetailsPage() {
                             ) {
                               const revisionNumber = history.revisionNumber;
                               const submittedAt = history.submittedAt;
-                              milestoneAttachments.push({
-                                url: submissionAttachmentUrl,
-                                milestoneTitle: `${milestone.title} (Revision ${
-                                  typeof revisionNumber === "number"
-                                    ? revisionNumber
-                                    : revisionNumber !== undefined &&
+                              const revDisplay =
+                                typeof revisionNumber === "number"
+                                  ? revisionNumber
+                                  : revisionNumber !== undefined &&
                                       revisionNumber !== null
                                     ? String(revisionNumber)
-                                    : "N/A"
-                                })`,
+                                    : t(
+                                        "provider.projects.detail.files.revisionNA",
+                                      );
+                              milestoneAttachments.push({
+                                url: submissionAttachmentUrl,
+                                milestoneTitle: t(
+                                  "provider.projects.detail.files.milestoneRevisionTitle",
+                                  {
+                                    title: milestone.title || "",
+                                    revision: revDisplay,
+                                  },
+                                ),
                                 milestoneId: milestoneId,
                                 submittedAt:
                                   typeof submittedAt === "string"
@@ -2345,7 +2704,7 @@ export default function ProviderProjectDetailsPage() {
                       if (milestoneAttachments.length === 0) {
                         return (
                           <p className="text-xs sm:text-sm text-gray-500 text-center py-6 sm:py-8">
-                            No milestone attachments found
+                            {t("provider.projects.detail.files.milestoneEmpty")}
                           </p>
                         );
                       }
@@ -2355,19 +2714,20 @@ export default function ProviderProjectDetailsPage() {
                           {milestoneAttachments.map((attachment, idx) => {
                             const normalized = attachment.url.replace(
                               /\\/g,
-                              "/"
+                              "/",
                             );
                             const fileName =
                               normalized.split("/").pop() || `file-${idx + 1}`;
                             const attachmentUrl = getAttachmentUrl(
-                              attachment.url
+                              attachment.url,
                             );
                             const isR2Key =
                               attachmentUrl === "#" ||
                               (!attachmentUrl.startsWith("http") &&
                                 !attachmentUrl.startsWith("/uploads/") &&
                                 !attachmentUrl.includes(
-                                  process.env.NEXT_PUBLIC_API_URL || "localhost"
+                                  process.env.NEXT_PUBLIC_API_URL ||
+                                    "localhost",
                                 ));
 
                             return (
@@ -2388,21 +2748,24 @@ export default function ProviderProjectDetailsPage() {
                                         try {
                                           const downloadUrl =
                                             await getR2DownloadUrl(
-                                              attachment.url
+                                              attachment.url,
                                             ); // Use original URL/key
                                           window.open(
                                             downloadUrl.downloadUrl,
-                                            "_blank"
+                                            "_blank",
                                           );
                                         } catch (error) {
                                           console.error(
                                             "Failed to get download URL:",
-                                            error
+                                            error,
                                           );
                                           toastHook({
-                                            title: "Error",
-                                            description:
-                                              "Failed to download attachment",
+                                            title: t(
+                                              "provider.projects.toast.error",
+                                            ),
+                                            description: t(
+                                              "provider.projects.toast.downloadFailed",
+                                            ),
                                             variant: "destructive",
                                           });
                                         }
@@ -2412,20 +2775,27 @@ export default function ProviderProjectDetailsPage() {
                                 className="flex items-start gap-2 sm:gap-3 rounded-lg border border-gray-200 bg-white px-2 sm:px-3 py-2 active:bg-gray-50 sm:hover:bg-gray-50 sm:hover:shadow-sm transition"
                               >
                                 <div className="flex h-8 w-8 sm:h-9 sm:w-9 flex-none items-center justify-center rounded-md border border-gray-300 bg-gray-100 text-gray-700 text-xs font-medium">
-                                  PDF
+                                  {t(
+                                    "provider.projects.detail.milestoneUi.pdfBadge",
+                                  )}
                                 </div>
                                 <div className="flex flex-col min-w-0 flex-1">
                                   <span className="text-xs sm:text-sm font-medium text-gray-900 break-all leading-snug">
                                     {fileName}
                                   </span>
                                   <span className="text-xs text-gray-500 leading-snug">
-                                    From: {attachment.milestoneTitle}
+                                    {t(
+                                      "provider.projects.detail.files.fromMilestone",
+                                    )}{" "}
+                                    {attachment.milestoneTitle}
                                     {attachment.submittedAt &&
-                                      ` • Submitted: ${new Date(
-                                        attachment.submittedAt
+                                      ` • ${t("provider.projects.detail.files.submittedOn")} ${new Date(
+                                        attachment.submittedAt,
                                       ).toLocaleDateString()}`}
                                     <span className="block mt-0.5">
-                                      Click to preview / download
+                                      {t(
+                                        "provider.projects.detail.milestoneUi.clickPreviewDownload",
+                                      )}
                                     </span>
                                   </span>
                                 </div>
@@ -2445,10 +2815,10 @@ export default function ProviderProjectDetailsPage() {
                 <Card>
                   <CardHeader className="p-4 sm:p-6">
                     <CardTitle className="text-lg sm:text-xl">
-                      Message Attachments
+                      {t("provider.projects.detail.files.messageTitle")}
                     </CardTitle>
                     <CardDescription className="text-xs sm:text-sm">
-                      Files attached to project messages
+                      {t("provider.projects.detail.files.messageDesc")}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="p-4 sm:p-6">
@@ -2461,18 +2831,20 @@ export default function ProviderProjectDetailsPage() {
                                 senderName:
                                   (message.sender?.name as string) ||
                                   (message.senderName as string) ||
-                                  "User",
+                                  t(
+                                    "provider.projects.detail.messages.senderUser",
+                                  ),
                                 messageId: message.id as string,
                                 timestamp:
                                   (message.createdAt as string) ||
                                   (message.timestamp as string),
                               }))
-                            : []
+                            : [],
                       );
                       if (messageAttachments.length === 0) {
                         return (
                           <p className="text-xs sm:text-sm text-gray-500 text-center py-6 sm:py-8">
-                            No message attachments found
+                            {t("provider.projects.detail.files.messageEmpty")}
                           </p>
                         );
                       }
@@ -2481,21 +2853,22 @@ export default function ProviderProjectDetailsPage() {
                           {messageAttachments.map((attachment, idx) => {
                             const normalized = attachment.url.replace(
                               /\\/g,
-                              "/"
+                              "/",
                             );
                             const fileName =
                               normalized.split("/").pop() || `file-${idx + 1}`;
 
                             // Use getAttachmentUrl helper for consistent URL handling
                             const attachmentUrl = getAttachmentUrl(
-                              attachment.url
+                              attachment.url,
                             );
                             const isR2Key =
                               attachmentUrl === "#" ||
                               (!attachmentUrl.startsWith("http") &&
                                 !attachmentUrl.startsWith("/uploads/") &&
                                 !attachmentUrl.includes(
-                                  process.env.NEXT_PUBLIC_API_URL || "localhost"
+                                  process.env.NEXT_PUBLIC_API_URL ||
+                                    "localhost",
                                 ));
 
                             return (
@@ -2516,21 +2889,24 @@ export default function ProviderProjectDetailsPage() {
                                         try {
                                           const downloadUrl =
                                             await getR2DownloadUrl(
-                                              attachment.url
+                                              attachment.url,
                                             ); // Use original URL/key
                                           window.open(
                                             downloadUrl.downloadUrl,
-                                            "_blank"
+                                            "_blank",
                                           );
                                         } catch (error) {
                                           console.error(
                                             "Failed to get download URL:",
-                                            error
+                                            error,
                                           );
                                           toastHook({
-                                            title: "Error",
-                                            description:
-                                              "Failed to download attachment",
+                                            title: t(
+                                              "provider.projects.toast.error",
+                                            ),
+                                            description: t(
+                                              "provider.projects.toast.downloadFailed",
+                                            ),
                                             variant: "destructive",
                                           });
                                         }
@@ -2540,15 +2916,19 @@ export default function ProviderProjectDetailsPage() {
                                 className="flex items-start gap-2 sm:gap-3 rounded-lg border border-gray-200 bg-white px-2 sm:px-3 py-2 active:bg-gray-50 sm:hover:bg-gray-50 sm:hover:shadow-sm transition"
                               >
                                 <div className="flex h-8 w-8 sm:h-9 sm:w-9 flex-none items-center justify-center rounded-md border border-gray-300 bg-gray-100 text-gray-700 text-xs font-medium">
-                                  PDF
+                                  {t(
+                                    "provider.projects.detail.milestoneUi.pdfBadge",
+                                  )}
                                 </div>
                                 <div className="flex flex-col min-w-0 flex-1">
                                   <span className="text-xs sm:text-sm font-medium text-gray-900 break-all leading-snug">
                                     {fileName}
                                   </span>
                                   <span className="text-xs text-gray-500 leading-snug">
-                                    From: {attachment.senderName} • Click to
-                                    preview / download
+                                    {t(
+                                      "provider.projects.detail.files.fromSenderHint",
+                                      { name: attachment.senderName },
+                                    )}
                                   </span>
                                 </div>
                               </a>
@@ -2566,10 +2946,14 @@ export default function ProviderProjectDetailsPage() {
                 <Card>
                   <CardHeader className="p-4 sm:p-6">
                     <CardTitle className="text-lg sm:text-xl">
-                      Project Messages
+                      {t(
+                        "provider.projects.detail.messages.sectionTitle",
+                      )}
                     </CardTitle>
                     <CardDescription className="text-xs sm:text-sm">
-                      Communication with your assigned provider
+                      {t(
+                        "provider.projects.detail.messages.sectionDesc",
+                      )}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="p-4 sm:p-6">
@@ -2584,8 +2968,17 @@ export default function ProviderProjectDetailsPage() {
                           (
                             message.sender?.name ||
                             message.senderName ||
-                            (isCurrentUser ? "You" : "User")
-                          )?.charAt?.(0) || "U";
+                            (isCurrentUser
+                              ? t(
+                                  "provider.projects.detail.messages.senderYou",
+                                )
+                              : t(
+                                  "provider.projects.detail.messages.senderUser",
+                                ))
+                          )?.charAt?.(0) ||
+                          t(
+                            "provider.projects.detail.viewDispute.unknownUser",
+                          ).charAt(0);
 
                         return (
                           <div
@@ -2621,7 +3014,7 @@ export default function ProviderProjectDetailsPage() {
                                       {(message.attachments as unknown[]).map(
                                         (
                                           attachment: unknown,
-                                          index: number
+                                          index: number,
                                         ) => {
                                           const attachmentStr =
                                             typeof attachment === "string"
@@ -2636,15 +3029,15 @@ export default function ProviderProjectDetailsPage() {
                                           const isR2Key =
                                             attachmentUrl === "#" ||
                                             (!attachmentUrl.startsWith(
-                                              "http"
+                                              "http",
                                             ) &&
                                               !attachmentUrl.startsWith(
-                                                "/uploads/"
+                                                "/uploads/",
                                               ) &&
                                               !attachmentUrl.includes(
                                                 process.env
                                                   .NEXT_PUBLIC_API_URL ||
-                                                  "localhost"
+                                                  "localhost",
                                               ));
 
                                           return (
@@ -2669,14 +3062,14 @@ export default function ProviderProjectDetailsPage() {
                                                         try {
                                                           const downloadUrl =
                                                             await getR2DownloadUrl(
-                                                              attachmentStr
+                                                              attachmentStr,
                                                             );
                                                           target.src =
                                                             downloadUrl.downloadUrl;
                                                         } catch (error) {
                                                           console.error(
                                                             "Failed to get download URL:",
-                                                            error
+                                                            error,
                                                           );
                                                           target.style.display =
                                                             "none";
@@ -2704,21 +3097,24 @@ export default function ProviderProjectDetailsPage() {
                                                           try {
                                                             const downloadUrl =
                                                               await getR2DownloadUrl(
-                                                                attachmentStr
+                                                                attachmentStr,
                                                               );
                                                             window.open(
                                                               downloadUrl.downloadUrl,
-                                                              "_blank"
+                                                              "_blank",
                                                             );
                                                           } catch (error) {
                                                             console.error(
                                                               "Failed to get download URL:",
-                                                              error
+                                                              error,
                                                             );
                                                             toastHook({
-                                                              title: "Error",
-                                                              description:
-                                                                "Failed to download attachment",
+                                                              title: t(
+                                                                "provider.projects.toast.error",
+                                                              ),
+                                                              description: t(
+                                                                "provider.projects.toast.downloadFailed",
+                                                              ),
                                                               variant:
                                                                 "destructive",
                                                             });
@@ -2732,7 +3128,10 @@ export default function ProviderProjectDetailsPage() {
                                                       : "text-blue-500 underline"
                                                   }`}
                                                 >
-                                                  📄 {name}
+                                                  {t(
+                                                    "provider.projects.detail.messages.attachmentPdfLabel",
+                                                    { name },
+                                                  )}
                                                 </a>
                                               ) : (
                                                 <a
@@ -2750,21 +3149,24 @@ export default function ProviderProjectDetailsPage() {
                                                           try {
                                                             const downloadUrl =
                                                               await getR2DownloadUrl(
-                                                                attachmentStr
+                                                                attachmentStr,
                                                               );
                                                             window.open(
                                                               downloadUrl.downloadUrl,
-                                                              "_blank"
+                                                              "_blank",
                                                             );
                                                           } catch (error) {
                                                             console.error(
                                                               "Failed to get download URL:",
-                                                              error
+                                                              error,
                                                             );
                                                             toastHook({
-                                                              title: "Error",
-                                                              description:
-                                                                "Failed to download attachment",
+                                                              title: t(
+                                                                "provider.projects.toast.error",
+                                                              ),
+                                                              description: t(
+                                                                "provider.projects.toast.downloadFailed",
+                                                              ),
                                                               variant:
                                                                 "destructive",
                                                             });
@@ -2778,12 +3180,15 @@ export default function ProviderProjectDetailsPage() {
                                                       : "text-blue-500 underline"
                                                   }`}
                                                 >
-                                                  📎 {name}
+                                                  {t(
+                                                    "provider.projects.detail.messages.attachmentOtherLabel",
+                                                    { name },
+                                                  )}
                                                 </a>
                                               )}
                                             </div>
                                           );
-                                        }
+                                        },
                                       )}
                                     </div>
                                   )}
@@ -2807,11 +3212,12 @@ export default function ProviderProjectDetailsPage() {
                                 | { profileImageUrl?: string }
                                 | undefined
                             )?.profileImageUrl ||
-                              project.customer?.customerProfile?.profileImageUrl
+                              project.customer?.customerProfile
+                                ?.profileImageUrl,
                           )
                         }
                       >
-                        Contact
+                        {t("provider.projects.detail.messages.contact")}
                       </Button>
                     </div>
                   </CardContent>
@@ -2826,7 +3232,7 @@ export default function ProviderProjectDetailsPage() {
             <Card>
               <CardHeader className="p-4 sm:p-6">
                 <CardTitle className="text-base sm:text-lg">
-                  Client Information
+                  {t("provider.projects.detail.sidebar.clientTitle")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-4 sm:p-6 space-y-3 sm:space-y-4">
@@ -2834,11 +3240,12 @@ export default function ProviderProjectDetailsPage() {
                   <Avatar className="w-10 h-10 sm:w-12 sm:h-12 flex-shrink-0">
                     <AvatarImage
                       src={getProfileImageUrl(
-                        project.customer?.customerProfile?.profileImageUrl
+                        project.customer?.customerProfile?.profileImageUrl,
                       )}
                     />
                     <AvatarFallback>
-                      {project.customer?.name?.charAt(0) || "C"}
+                      {project.customer?.name?.charAt(0) ||
+                        t("provider.dashboard.avatarFallbackClient")}
                     </AvatarFallback>
                   </Avatar>
                   <div className="min-w-0 flex-1">
@@ -2887,7 +3294,7 @@ export default function ProviderProjectDetailsPage() {
                           rel="noopener noreferrer"
                           className="text-blue-600 active:text-blue-800 sm:hover:underline break-all"
                         >
-                          Website
+                          {t("provider.projects.detail.sidebar.website")}
                         </a>
                       </div>
                     )}
@@ -2900,13 +3307,13 @@ export default function ProviderProjectDetailsPage() {
             <Card>
               <CardHeader className="p-4 sm:p-6">
                 <CardTitle className="text-base sm:text-lg">
-                  Project Statistics
+                  {t("provider.projects.detail.sidebar.statsTitle")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-4 sm:p-6 space-y-3 sm:space-y-4">
                 <div className="flex justify-between">
                   <span className="text-xs sm:text-sm text-gray-600">
-                    Total Milestones
+                    {t("provider.projects.detail.sidebar.totalMilestones")}
                   </span>
                   <span className="font-medium text-sm sm:text-base">
                     {project.totalMilestones || 0}
@@ -2914,7 +3321,7 @@ export default function ProviderProjectDetailsPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-xs sm:text-sm text-gray-600">
-                    Completed
+                    {t("provider.projects.detail.sidebar.completed")}
                   </span>
                   <span className="font-medium text-sm sm:text-base text-green-600">
                     {project.completedMilestones || 0}
@@ -2922,7 +3329,7 @@ export default function ProviderProjectDetailsPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-xs sm:text-sm text-gray-600">
-                    Progress
+                    {t("provider.projects.detail.sidebar.progress")}
                   </span>
                   <span className="font-medium text-sm sm:text-base">
                     {project.progress || 0}%
@@ -2930,7 +3337,7 @@ export default function ProviderProjectDetailsPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-xs sm:text-sm text-gray-600">
-                    Created
+                    {t("provider.projects.detail.sidebar.created")}
                   </span>
                   <span className="font-medium text-sm sm:text-base">
                     {formatDate(project.createdAt)}
@@ -2950,24 +3357,28 @@ export default function ProviderProjectDetailsPage() {
             <DialogHeader>
               <DialogTitle>
                 {selectedMilestone?.status === "LOCKED"
-                  ? "Start Milestone Work"
-                  : "Submit Milestone"}
+                  ? t("provider.projects.detail.dialog.startTitle")
+                  : t("provider.projects.detail.dialog.submitTitle")}
               </DialogTitle>
               <DialogDescription>
                 {selectedMilestone?.status === "LOCKED"
-                  ? "Start working on this milestone"
-                  : "Submit your work for this milestone"}
+                  ? t("provider.projects.detail.dialog.startDesc")
+                  : t("provider.projects.detail.dialog.submitDesc")}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               {selectedMilestone?.status === "LOCKED" && (
                 <div>
                   <Label htmlFor="startDeliverables">
-                    Deliverables / Plan (When Starting Work)
+                    {t(
+                      "provider.projects.detail.dialog.labelStartDeliverables",
+                    )}
                   </Label>
                   <Textarea
                     id="startDeliverables"
-                    placeholder="Describe your plan and deliverables when starting this milestone..."
+                    placeholder={t(
+                      "provider.projects.detail.dialog.phStartDeliverables",
+                    )}
                     value={milestoneDeliverables}
                     onChange={(e) => setMilestoneDeliverables(e.target.value)}
                     rows={4}
@@ -2979,11 +3390,15 @@ export default function ProviderProjectDetailsPage() {
                 <>
                   <div>
                     <Label htmlFor="submitDeliverables">
-                      Deliverables / Notes (When Submitting)
+                      {t(
+                        "provider.projects.detail.dialog.labelSubmitDeliverables",
+                      )}
                     </Label>
                     <Textarea
                       id="submitDeliverables"
-                      placeholder="Describe what you've completed and your deliverables when submitting..."
+                      placeholder={t(
+                        "provider.projects.detail.dialog.phSubmitDeliverables",
+                      )}
                       value={submitDeliverables}
                       onChange={(e) => setSubmitDeliverables(e.target.value)}
                       rows={4}
@@ -2992,11 +3407,15 @@ export default function ProviderProjectDetailsPage() {
 
                   <div>
                     <Label htmlFor="submissionNote">
-                      Submission Note (Optional)
+                      {t(
+                        "provider.projects.detail.dialog.labelSubmissionNote",
+                      )}
                     </Label>
                     <Textarea
                       id="submissionNote"
-                      placeholder="Add any additional notes about your submission..."
+                      placeholder={t(
+                        "provider.projects.detail.dialog.phSubmissionNote",
+                      )}
                       value={submissionNote}
                       onChange={(e) => setSubmissionNote(e.target.value)}
                       rows={3}
@@ -3004,7 +3423,9 @@ export default function ProviderProjectDetailsPage() {
                   </div>
 
                   <div>
-                    <Label htmlFor="attachment">Attachment (Optional)</Label>
+                    <Label htmlFor="attachment">
+                      {t("provider.projects.detail.dialog.labelAttachment")}
+                    </Label>
                     <Input
                       id="attachment"
                       type="file"
@@ -3018,12 +3439,15 @@ export default function ProviderProjectDetailsPage() {
                       className="mt-1"
                     />
                     <p className="text-xs text-gray-500 mt-1">
-                      Supported: PDF, DOC, DOCX, XLS, XLSX, ZIP, TXT, JPG, PNG
-                      (Max 10MB)
+                      {t(
+                        "provider.projects.detail.dialog.attachmentTypesHint",
+                      )}
                     </p>
                     {submissionAttachment && (
                       <div className="mt-2 text-sm text-gray-600">
-                        Selected: {submissionAttachment.name}
+                        {t("provider.projects.detail.dialog.selectedFile", {
+                          name: submissionAttachment.name,
+                        })}
                       </div>
                     )}
                   </div>
@@ -3035,14 +3459,14 @@ export default function ProviderProjectDetailsPage() {
                 variant="outline"
                 onClick={() => setIsMilestoneDialogOpen(false)}
               >
-                Cancel
+                {t("provider.projects.detail.common.cancel")}
               </Button>
               <Button
                 onClick={() =>
                   handleMilestoneUpdate(
                     selectedMilestone?.status === "LOCKED"
                       ? "IN_PROGRESS"
-                      : "SUBMITTED"
+                      : "SUBMITTED",
                   )
                 }
                 disabled={updating}
@@ -3053,229 +3477,10 @@ export default function ProviderProjectDetailsPage() {
                   <Send className="w-4 h-4 mr-2" />
                 )}
                 {selectedMilestone?.status === "LOCKED"
-                  ? "Start Work"
-                  : "Submit"}
+                  ? t("provider.projects.detail.milestone.startWork")
+                  : t("provider.projects.detail.dialog.actionSubmit")}
               </Button>
             </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Milestone Editor Dialog */}
-        <Dialog
-          open={milestoneEditorOpen}
-          onOpenChange={setMilestoneEditorOpen}
-        >
-          <DialogContent className="max-w-3xl">
-            <DialogHeader>
-              <DialogTitle>Edit Milestones</DialogTitle>
-              <DialogDescription>
-                Company {milestoneApprovalState.companyApproved ? "✓" : "✗"} ·
-                Provider {milestoneApprovalState.providerApproved ? "✓" : "✗"}
-                {milestoneApprovalState.milestonesLocked && " · LOCKED"}
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-4">
-              {milestoneErrors[-1]?.title && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-md">
-                  <p className="text-sm text-red-600 font-medium">
-                    {milestoneErrors[-1].title}
-                  </p>
-                </div>
-              )}
-              {projectMilestones.map((m, i) => (
-                <Card key={i}>
-                  <CardContent className="p-4 space-y-3">
-                    <div className="grid md:grid-cols-12 gap-3">
-                      <div className="md:col-span-1">
-                        <Label className="text-sm font-medium">Seq</Label>
-                        <Input type="number" value={i + 1} disabled />
-                      </div>
-                      <div className="md:col-span-4">
-                        <Label className="text-sm font-medium">
-                          Title <span className="text-red-500">*</span>
-                        </Label>
-                        <Input
-                          value={m.title}
-                          onChange={(e) => {
-                            updateProjectMilestone(i, {
-                              title: e.target.value,
-                            });
-                            if (milestoneErrors[i]?.title) {
-                              setMilestoneErrors((prev) => ({
-                                ...prev,
-                                [i]: { ...prev[i], title: undefined },
-                              }));
-                            }
-                          }}
-                          className={
-                            milestoneErrors[i]?.title
-                              ? "border-red-500 focus-visible:ring-red-500"
-                              : ""
-                          }
-                        />
-                        {milestoneErrors[i]?.title && (
-                          <p className="text-xs text-red-600 mt-1">
-                            {milestoneErrors[i].title}
-                          </p>
-                        )}
-                      </div>
-                      <div className="md:col-span-3">
-                        <Label className="text-sm font-medium">Amount</Label>
-                        <Input
-                          type="number"
-                          value={String(m.amount ?? 0)}
-                          onChange={(e) => {
-                            updateProjectMilestone(i, {
-                              amount: Number(e.target.value),
-                            });
-                            // Clear sum error when amount changes
-                            if (milestoneErrors[-1]) {
-                              setMilestoneErrors((prev) => {
-                                const newErrors = { ...prev };
-                                delete newErrors[-1];
-                                return newErrors;
-                              });
-                            }
-                          }}
-                        />
-                      </div>
-                      <div className="md:col-span-4">
-                        <Label className="text-sm font-medium">
-                          Duration <span className="text-red-500">*</span>
-                        </Label>
-                        <div className="flex gap-2 mt-1">
-                          <Input
-                            type="number"
-                            min={1}
-                            placeholder="e.g. 1"
-                            value={(m as Milestone & { durationAmount?: string }).durationAmount ?? ""}
-                            onChange={(e) => {
-                              updateProjectMilestone(i, {
-                                durationAmount: e.target.value,
-                                durationUnit: (m as Milestone & { durationUnit?: string }).durationUnit || "",
-                              } as Partial<Milestone>);
-                              if (milestoneErrors[i]?.durationAmount || milestoneErrors[i]?.durationUnit) {
-                                setMilestoneErrors((prev) => ({
-                                  ...prev,
-                                  [i]: { ...prev[i], durationAmount: undefined, durationUnit: undefined },
-                                }));
-                              }
-                              if (milestoneErrors[-1]) {
-                                setMilestoneErrors((prev) => { const next = { ...prev }; delete next[-1]; return next; });
-                              }
-                            }}
-                            className={`flex-1 ${milestoneErrors[i]?.durationAmount ? "border-red-500 focus-visible:ring-red-500" : ""}`}
-                          />
-                          <Select
-                            value={(m as Milestone & { durationUnit?: string }).durationUnit || ""}
-                            onValueChange={(value: "day" | "week" | "month") => {
-                              updateProjectMilestone(i, {
-                                durationAmount: (m as Milestone & { durationAmount?: string }).durationAmount ?? "",
-                                durationUnit: value,
-                              } as Partial<Milestone>);
-                              if (milestoneErrors[i]?.durationUnit) {
-                                setMilestoneErrors((prev) => ({ ...prev, [i]: { ...prev[i], durationUnit: undefined } }));
-                              }
-                              if (milestoneErrors[-1]) {
-                                setMilestoneErrors((prev) => { const next = { ...prev }; delete next[-1]; return next; });
-                              }
-                            }}
-                          >
-                            <SelectTrigger className={`w-[100px] ${milestoneErrors[i]?.durationUnit ? "border-red-500 focus:ring-red-500" : ""}`}>
-                              <SelectValue placeholder="Unit" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="day">Day(s)</SelectItem>
-                              <SelectItem value="week">Week(s)</SelectItem>
-                              <SelectItem value="month">Month(s)</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        {(milestoneErrors[i]?.durationAmount || milestoneErrors[i]?.durationUnit) && (
-                          <p className="text-xs text-red-600 mt-1">
-                            {milestoneErrors[i].durationAmount || milestoneErrors[i].durationUnit}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div>
-                      <Label className="text-sm font-medium">
-                        Description <span className="text-red-500">*</span>
-                      </Label>
-                      <Textarea
-                        rows={2}
-                        value={m.description || ""}
-                        onChange={(e) => {
-                          updateProjectMilestone(i, {
-                            description: e.target.value,
-                          });
-                          if (milestoneErrors[i]?.description) {
-                            setMilestoneErrors((prev) => ({
-                              ...prev,
-                              [i]: { ...prev[i], description: undefined },
-                            }));
-                          }
-                        }}
-                        className={
-                          milestoneErrors[i]?.description
-                            ? "border-red-500 focus-visible:ring-red-500"
-                            : ""
-                        }
-                      />
-                      {milestoneErrors[i]?.description && (
-                        <p className="text-xs text-red-600 mt-1">
-                          {milestoneErrors[i].description}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="flex justify-end">
-                      <Button
-                        variant="outline"
-                        onClick={() => removeProjectMilestone(i)}
-                      >
-                        Remove
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-
-              <p className="text-xs text-gray-600 pt-2 border-t border-gray-200 mt-2">
-                If you made any updates or changes to the milestones, save changes first before approving.
-              </p>
-              <div className="flex justify-between pt-2">
-                <Button variant="outline" onClick={addProjectMilestone}>
-                  + Add Milestone
-                </Button>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={handleSaveProjectMilestones}
-                    disabled={savingMilestones}
-                  >
-                    {savingMilestones ? "Saving..." : "Save Changes"}
-                  </Button>
-                  <Button
-                    onClick={handleApproveProjectMilestones}
-                    disabled={
-                      JSON.stringify(
-                        normalizeMilestoneSequences(projectMilestones)
-                      ) !==
-                      JSON.stringify(
-                        normalizeMilestoneSequences(originalProjectMilestones)
-                      )
-                    }
-                  >
-                    Approve
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            <DialogFooter />
           </DialogContent>
         </Dialog>
 
@@ -3287,11 +3492,10 @@ export default function ProviderProjectDetailsPage() {
           <DialogContent className="max-w-lg">
             <DialogHeader>
               <DialogTitle className="text-xl">
-                Milestones Submitted
+                {t("provider.projects.detail.finalize.title")}
               </DialogTitle>
               <DialogDescription>
-                These milestones are now awaiting final confirmation, or have
-                been locked if both sides approved.
+                {t("provider.projects.detail.finalize.desc")}
               </DialogDescription>
             </DialogHeader>
 
@@ -3306,12 +3510,12 @@ export default function ProviderProjectDetailsPage() {
                 />
                 <div>
                   <div className="font-semibold text-gray-900">
-                    Company Approved
+                    {t("provider.projects.detail.finalize.companyTitle")}
                   </div>
                   <div>
                     {milestoneApprovalState.companyApproved
-                      ? "The company approved the milestone plan."
-                      : "Waiting for company approval."}
+                      ? t("provider.projects.detail.finalize.companyYes")
+                      : t("provider.projects.detail.finalize.companyNo")}
                   </div>
                 </div>
               </div>
@@ -3320,12 +3524,12 @@ export default function ProviderProjectDetailsPage() {
                 <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
                 <div>
                   <div className="font-semibold text-gray-900">
-                    Provider Approved
+                    {t("provider.projects.detail.finalize.providerTitle")}
                   </div>
                   <div>
                     {milestoneApprovalState.providerApproved
-                      ? "You have approved the milestone plan."
-                      : "You haven't approved yet."}
+                      ? t("provider.projects.detail.finalize.providerYes")
+                      : t("provider.projects.detail.finalize.providerNo")}
                   </div>
                 </div>
               </div>
@@ -3340,18 +3544,18 @@ export default function ProviderProjectDetailsPage() {
                 />
                 <div>
                   <div className="font-semibold text-gray-900">
-                    Locked & Ready
+                    {t("provider.projects.detail.finalize.lockedTitle")}
                   </div>
                   <div>
                     {milestoneApprovalState.milestonesLocked
-                      ? "Milestones are locked. Work can start and payments will follow these milestones."
-                      : "Milestones are not locked yet."}
+                      ? t("provider.projects.detail.finalize.lockedYes")
+                      : t("provider.projects.detail.finalize.lockedNo")}
                   </div>
                   {milestoneApprovalState.milestonesApprovedAt && (
                     <div className="text-xs text-gray-500 mt-1">
-                      Locked at{" "}
+                      {t("provider.projects.detail.finalize.lockedAt")}{" "}
                       {new Date(
-                        milestoneApprovalState.milestonesApprovedAt
+                        milestoneApprovalState.milestonesApprovedAt,
                       ).toLocaleString()}
                     </div>
                   )}
@@ -3361,93 +3565,167 @@ export default function ProviderProjectDetailsPage() {
 
             <DialogFooter>
               <Button onClick={() => setMilestoneFinalizeOpen(false)}>
-                Done
+                {t("provider.projects.detail.finalize.done")}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
 
         {/* Dispute Creation Dialog */}
-        <Dialog open={disputeDialogOpen} onOpenChange={setDisputeDialogOpen}>
+        <Dialog
+          open={disputeDialogOpen}
+          onOpenChange={(open) => {
+            setDisputeDialogOpen(open);
+            if (open) {
+              setProjectLevelDisputeAck(false);
+              setSelectedMilestoneForDispute(null);
+            }
+          }}
+        >
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Report Dispute</DialogTitle>
+              <DialogTitle>
+                {t("provider.projects.dispute.form.title")}
+              </DialogTitle>
               <DialogDescription>
-                Report a dispute related to this project. The associated
-                milestone will be frozen until the dispute is resolved.
+                {t("provider.projects.dispute.form.desc")}
               </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-4">
               {/* Milestone Selection (if applicable) */}
               {projectMilestones && projectMilestones.length > 0 && (
-                <div>
-                  <Label htmlFor="disputeMilestone">
-                    Related Milestone (Optional)
-                  </Label>
-                  <Select
-                    value={selectedMilestoneForDispute || undefined}
-                    onValueChange={(value) =>
-                      setSelectedMilestoneForDispute(value || null)
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a milestone (optional)" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {projectMilestones
-                        .filter(
-                          (m: Milestone) =>
-                            m.status !== "APPROVED" && m.status !== "PAID"
-                        )
-                        .map((m: Milestone) => (
-                          <SelectItem key={m.id || ""} value={m.id || ""}>
-                            {m.title} - RM{m.amount?.toLocaleString() || 0} (
-                            {m.status})
-                          </SelectItem>
-                        ))}
-                      {projectMilestones.filter(
-                        (m: Milestone) =>
-                          m.status !== "APPROVED" && m.status !== "PAID"
-                      ).length === 0 && (
-                        <SelectItem value="" disabled>
-                          No milestones available for dispute
-                        </SelectItem>
-                      )}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    If selected, this milestone will be frozen until the dispute
-                    is resolved. Approved or paid milestones cannot be disputed.
-                  </p>
+                <div className="space-y-3">
+                  {paidMilestonesForDispute.length > 0 ? (
+                    <>
+                      <div>
+                        <Label htmlFor="disputeMilestone">
+                          {t("provider.projects.dispute.relatedMilestoneLabel")}{" "}
+                          <span className="text-red-500">*</span>
+                        </Label>
+                        <Select
+                          value={selectedMilestoneForDispute || undefined}
+                          onValueChange={(value) => {
+                            setSelectedMilestoneForDispute(value || null);
+                            setProjectLevelDisputeAck(false);
+                          }}
+                        >
+                          <SelectTrigger id="disputeMilestone">
+                            <SelectValue
+                              placeholder={t(
+                                "provider.projects.dispute.placeholderSelectPaid",
+                              )}
+                            />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {paidMilestonesForDispute.map((m: Milestone) => (
+                              <SelectItem
+                                key={m.id || ""}
+                                value={m.id || ""}
+                                className="items-start"
+                              >
+                                <div className="flex flex-col gap-0.5 text-left">
+                                  <span>
+                                    {m.title}{" "}
+                                    <span className="text-muted-foreground">
+                                      (
+                                      {getMilestoneStatusText(m.status || "")}
+                                      )
+                                    </span>
+                                  </span>
+                                  {renderMilestoneAmountProviderEquiv(
+                                    Number(m.amount || 0),
+                                  )}
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {t("provider.projects.dispute.relatedMilestoneHint")}
+                        </p>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                        {t("provider.projects.dispute.noPaidMilestonesMessage")}
+                      </div>
+                      <div className="flex items-start gap-3 rounded-md border border-gray-200 bg-gray-50/80 p-3">
+                        <Checkbox
+                          id="projectLevelDisputeAck"
+                          checked={projectLevelDisputeAck}
+                          onCheckedChange={(c) => {
+                            const on = c === true;
+                            setProjectLevelDisputeAck(on);
+                            if (on) setSelectedMilestoneForDispute(null);
+                          }}
+                          className="mt-0.5"
+                        />
+                        <div className="space-y-1">
+                          <Label
+                            htmlFor="projectLevelDisputeAck"
+                            className="text-sm font-medium leading-snug cursor-pointer"
+                          >
+                            {t("provider.projects.dispute.projectLevelLabel")}{" "}
+                            <span className="text-red-500">*</span>
+                          </Label>
+                          <p className="text-xs text-gray-600">
+                            {t("provider.projects.dispute.projectLevelHint")}
+                          </p>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 
               {/* Reason */}
               <div>
                 <Label htmlFor="disputeReason">
-                  Reason for Dispute <span className="text-red-500">*</span>
+                  {t("provider.projects.dispute.form.reasonLabel")}{" "}
+                  <span className="text-red-500">*</span>
                 </Label>
                 <Select value={disputeReason} onValueChange={setDisputeReason}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select a reason" />
+                    <SelectValue
+                      placeholder={t(
+                        "provider.projects.dispute.form.reasonPlaceholder",
+                      )}
+                    />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Missed deadline">
-                      Missed deadline
+                      {t(
+                        "customer.projects.detail.disputeReason.missedDeadline",
+                      )}
                     </SelectItem>
-                    <SelectItem value="Low quality">Low quality</SelectItem>
+                    <SelectItem value="Low quality">
+                      {t("customer.projects.detail.disputeReason.lowQuality")}
+                    </SelectItem>
                     <SelectItem value="Payment not released">
-                      Payment not released
+                      {t(
+                        "customer.projects.detail.disputeReason.paymentNotReleased",
+                      )}
                     </SelectItem>
                     <SelectItem value="Work not completed">
-                      Work not completed
+                      {t(
+                        "customer.projects.detail.disputeReason.workNotCompleted",
+                      )}
                     </SelectItem>
                     <SelectItem value="Communication issues">
-                      Communication issues
+                      {t(
+                        "customer.projects.detail.disputeReason.communicationIssues",
+                      )}
                     </SelectItem>
-                    <SelectItem value="Scope change">Scope change</SelectItem>
-                    <SelectItem value="Other">Other</SelectItem>
+                    <SelectItem value="Scope change">
+                      {t(
+                        "customer.projects.detail.disputeReason.scopeChange",
+                      )}
+                    </SelectItem>
+                    <SelectItem value="Other">
+                      {t("customer.projects.detail.disputeReason.other")}
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -3455,11 +3733,14 @@ export default function ProviderProjectDetailsPage() {
               {/* Description */}
               <div>
                 <Label htmlFor="disputeDescription">
-                  Detailed Description <span className="text-red-500">*</span>
+                  {t("provider.projects.dispute.form.descriptionLabel")}{" "}
+                  <span className="text-red-500">*</span>
                 </Label>
                 <Textarea
                   id="disputeDescription"
-                  placeholder="Please provide a detailed description of the dispute..."
+                  placeholder={t(
+                    "provider.projects.dispute.form.descriptionPlaceholder",
+                  )}
                   value={disputeDescription}
                   onChange={(e) => setDisputeDescription(e.target.value)}
                   rows={6}
@@ -3467,31 +3748,32 @@ export default function ProviderProjectDetailsPage() {
                 />
               </div>
 
-              {/* Contested Amount */}
-              <div>
-                <Label htmlFor="disputeContestedAmount">
-                  Contested Amount (RM)
-                </Label>
-                <Input
-                  id="disputeContestedAmount"
-                  type="number"
-                  placeholder="0.00"
-                  value={disputeContestedAmount}
-                  onChange={(e) => setDisputeContestedAmount(e.target.value)}
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Optional: Specify the amount in dispute if applicable.
+              <div className="rounded-md border border-gray-200 bg-gray-50/80 px-3 py-2.5 text-sm">
+                <span className="text-gray-600">
+                  {t("provider.projects.dispute.form.contestedAmount", {
+                    currency: projectCurrencyCode,
+                  })}
+                </span>
+                <span className="font-semibold text-gray-900">
+                  {reportDisputeContestedAmount.toLocaleString()}
+                </span>
+                <p className="text-xs text-gray-500 mt-1.5">
+                  {t("provider.projects.dispute.form.contestedHint", {
+                    currency: projectCurrencyCode,
+                  })}
                 </p>
               </div>
 
               {/* Suggested Resolution */}
               <div>
                 <Label htmlFor="disputeSuggestedResolution">
-                  Suggested Resolution
+                  {t("provider.projects.dispute.form.suggestedResolution")}
                 </Label>
                 <Textarea
                   id="disputeSuggestedResolution"
-                  placeholder="What resolution would you like to see? (Optional)"
+                  placeholder={t(
+                    "provider.projects.dispute.form.suggestedPlaceholder",
+                  )}
                   value={disputeSuggestedResolution}
                   onChange={(e) =>
                     setDisputeSuggestedResolution(e.target.value)
@@ -3503,7 +3785,7 @@ export default function ProviderProjectDetailsPage() {
               {/* Attachments */}
               <div>
                 <Label htmlFor="disputeAttachments">
-                  Attachments (Optional)
+                  {t("provider.projects.dispute.form.attachmentsOptional")}
                 </Label>
                 <Input
                   id="disputeAttachments"
@@ -3514,8 +3796,7 @@ export default function ProviderProjectDetailsPage() {
                   className="mt-1"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Supported: PDF, DOC, DOCX, XLS, XLSX, ZIP, TXT, JPG, PNG (Max
-                  10MB per file)
+                  {t("provider.projects.dispute.form.supportedTypes")}
                 </p>
                 {disputeAttachments.length > 0 && (
                   <div className="mt-2 space-y-2">
@@ -3550,33 +3831,34 @@ export default function ProviderProjectDetailsPage() {
                   setDisputeDialogOpen(false);
                   setDisputeReason("");
                   setDisputeDescription("");
-                  setDisputeContestedAmount("");
                   setDisputeSuggestedResolution("");
                   setDisputeAttachments([]);
                   setSelectedMilestoneForDispute(null);
+                  setProjectLevelDisputeAck(false);
                 }}
                 disabled={creatingDispute}
               >
-                Cancel
+                {t("provider.projects.dispute.form.cancel")}
               </Button>
               <Button
                 onClick={handleCreateDispute}
                 disabled={
                   creatingDispute ||
                   !disputeReason.trim() ||
-                  !disputeDescription.trim()
+                  !disputeDescription.trim() ||
+                  disputeMilestoneSubmitBlocked
                 }
                 className="bg-red-600 hover:bg-red-700"
               >
                 {creatingDispute ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Submitting...
+                    {t("provider.projects.dispute.form.submitting")}
                   </>
                 ) : (
                   <>
                     <AlertCircle className="w-4 h-4 mr-2" />
-                    Submit Dispute
+                    {t("provider.projects.dispute.form.submit")}
                   </>
                 )}
               </Button>
@@ -3591,11 +3873,47 @@ export default function ProviderProjectDetailsPage() {
         >
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Dispute Details</DialogTitle>
+              <DialogTitle>
+                {t("provider.projects.detail.viewDispute.title")}
+              </DialogTitle>
               <DialogDescription>
-                View dispute information and status
+                {projectDisputes.length > 1
+                  ? t("provider.projects.detail.viewDisputesHint")
+                  : t("provider.projects.detail.viewDisputeDesc")}
               </DialogDescription>
             </DialogHeader>
+
+            {projectDisputes.length > 1 && (
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  {t("provider.projects.detail.disputeRecordSelect")}
+                </Label>
+                <Select
+                  value={currentDispute?.id || ""}
+                  onValueChange={(id) => {
+                    const d = projectDisputes.find((x) => x.id === id);
+                    if (d) setCurrentDispute(d);
+                  }}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue
+                      placeholder={t(
+                        "provider.projects.detail.disputeRecordSelect",
+                      )}
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {projectDisputes.map((d, idx) => (
+                      <SelectItem key={d.id} value={d.id}>
+                        #{projectDisputes.length - idx} ·{" "}
+                        {getDisputeStatusLabel(d.status)} ·{" "}
+                        {new Date(d.createdAt).toLocaleDateString()}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             {currentDispute && (
               <div className="space-y-6">
@@ -3604,17 +3922,17 @@ export default function ProviderProjectDetailsPage() {
                   <Badge
                     className={getDisputeStatusColor(currentDispute.status)}
                   >
-                    {currentDispute.status?.replace("_", " ")}
+                    {getDisputeStatusLabel(currentDispute.status)}
                   </Badge>
                   <div className="text-sm text-gray-500">
-                    Created:{" "}
+                    {t("provider.projects.detail.viewDispute.created")}{" "}
                     {new Date(currentDispute.createdAt).toLocaleDateString()}
                     {currentDispute.updatedAt !== currentDispute.createdAt && (
                       <>
                         {" "}
-                        • Updated:{" "}
+                        • {t("provider.projects.detail.viewDispute.updated")}{" "}
                         {new Date(
-                          currentDispute.updatedAt
+                          currentDispute.updatedAt,
                         ).toLocaleDateString()}
                       </>
                     )}
@@ -3624,18 +3942,28 @@ export default function ProviderProjectDetailsPage() {
                 {/* Dispute Information */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Dispute Information</CardTitle>
+                    <CardTitle>
+                      {t("provider.projects.detail.viewDispute.infoTitle")}
+                    </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div>
                       <Label className="text-sm font-medium text-gray-500">
-                        Reason
+                        {t("provider.projects.detail.viewDispute.reason")}
                       </Label>
-                      <p className="mt-1">{currentDispute.reason}</p>
+                      <p className="mt-1">
+                        {currentDispute.reason
+                          ? translateDisputeReason(currentDispute.reason)
+                          : t(
+                              "provider.projects.detail.viewDispute.notApplicable",
+                            )}
+                      </p>
                     </div>
                     <div>
                       <Label className="text-sm font-medium text-gray-500">
-                        Description & Updates
+                        {t(
+                          "provider.projects.detail.viewDispute.descriptionUpdates",
+                        )}
                       </Label>
                       <div className="mt-2 space-y-3">
                         {(() => {
@@ -3653,19 +3981,26 @@ export default function ProviderProjectDetailsPage() {
                                   <Avatar className="w-6 h-6">
                                     <AvatarFallback>
                                       {currentDispute.raisedBy?.name?.charAt(
-                                        0
-                                      ) || "U"}
+                                        0,
+                                      ) ||
+                                        t(
+                                          "provider.projects.detail.viewDispute.unknownUser",
+                                        ).charAt(0)}
                                     </AvatarFallback>
                                   </Avatar>
                                   <div>
                                     <p className="text-xs font-semibold text-gray-900">
                                       {currentDispute.raisedBy?.name ||
-                                        "Unknown User"}
+                                        t(
+                                          "provider.projects.detail.viewDispute.unknownUser",
+                                        )}
                                     </p>
                                     <p className="text-xs text-gray-500">
-                                      Original dispute •{" "}
+                                      {t(
+                                        "provider.projects.detail.viewDispute.originalDisputeMeta",
+                                      )}{" "}
                                       {new Date(
-                                        currentDispute.createdAt
+                                        currentDispute.createdAt,
                                       ).toLocaleString()}
                                     </p>
                                   </div>
@@ -3680,7 +4015,7 @@ export default function ProviderProjectDetailsPage() {
                                 // Parse update format: [Update by Name on Date]: content
                                 // Also handle old format: [Update by userId]: content
                                 const match = update.match(
-                                  /^\[Update by (.+?) on (.+?)\]:\s*([\s\S]+)$/
+                                  /^\[Update by (.+?) on (.+?)\]:\s*([\s\S]+)$/,
                                 );
                                 let userName = "";
                                 let updateDate = "";
@@ -3692,7 +4027,7 @@ export default function ProviderProjectDetailsPage() {
                                 } else {
                                   // Try old format: [Update by userId]: content
                                   const oldMatch = update.match(
-                                    /^\[Update by (.+?)\]:\s*([\s\S]+)$/
+                                    /^\[Update by (.+?)\]:\s*([\s\S]+)$/,
                                   );
                                   if (oldMatch) {
                                     const [, userIdOrName, content] = oldMatch;
@@ -3705,34 +4040,52 @@ export default function ProviderProjectDetailsPage() {
                                         project?.customer?.id === userIdOrName
                                       ) {
                                         userName =
-                                          project?.customer?.name || "Customer";
+                                          project?.customer?.name ||
+                                          t(
+                                            "provider.projects.detail.viewDispute.roleCustomer",
+                                          );
                                       } else if (
                                         project?.provider?.id === userIdOrName
                                       ) {
                                         userName =
-                                          project?.provider?.name || "Provider";
+                                          project?.provider?.name ||
+                                          t(
+                                            "provider.projects.detail.viewDispute.roleProvider",
+                                          );
                                       } else if (
                                         currentDispute?.raisedBy?.id ===
                                         userIdOrName
                                       ) {
                                         userName =
                                           currentDispute?.raisedBy?.name ||
-                                          "Unknown User";
+                                          t(
+                                            "provider.projects.detail.viewDispute.unknownUser",
+                                          );
                                       } else {
-                                        userName = "Unknown User";
+                                        userName = t(
+                                          "provider.projects.detail.viewDispute.unknownUser",
+                                        );
                                       }
-                                      updateDate = "Unknown Date";
+                                      updateDate = t(
+                                        "provider.projects.detail.viewDispute.unknownDate",
+                                      );
                                       updateContent = content;
                                     } else {
                                       userName = userIdOrName;
-                                      updateDate = "Unknown Date";
+                                      updateDate = t(
+                                        "provider.projects.detail.viewDispute.unknownDate",
+                                      );
                                       updateContent = content;
                                     }
                                   } else {
                                     // Fallback: treat entire update as content
                                     updateContent = update;
-                                    userName = "Unknown User";
-                                    updateDate = "Unknown Date";
+                                    userName = t(
+                                      "provider.projects.detail.viewDispute.unknownUser",
+                                    );
+                                    updateDate = t(
+                                      "provider.projects.detail.viewDispute.unknownDate",
+                                    );
                                   }
                                 }
 
@@ -3748,8 +4101,8 @@ export default function ProviderProjectDetailsPage() {
                                       isCustomer
                                         ? "bg-blue-50 border-blue-400"
                                         : isProvider
-                                        ? "bg-green-50 border-green-400"
-                                        : "bg-yellow-50 border-yellow-400"
+                                          ? "bg-green-50 border-green-400"
+                                          : "bg-yellow-50 border-yellow-400"
                                     }`}
                                   >
                                     <div className="flex items-center gap-2 mb-2">
@@ -3768,14 +4121,26 @@ export default function ProviderProjectDetailsPage() {
                                             className="text-[10px] px-1.5 py-0"
                                           >
                                             {isCustomer
-                                              ? "Customer"
+                                              ? t(
+                                                  "provider.projects.detail.viewDispute.roleCustomer",
+                                                )
                                               : isProvider
-                                              ? "Provider"
-                                              : "User"}
+                                                ? t(
+                                                    "provider.projects.detail.viewDispute.roleProvider",
+                                                  )
+                                                : t(
+                                                    "provider.projects.detail.viewDispute.roleUser",
+                                                  )}
                                           </Badge>
                                         </div>
                                         <p className="text-xs text-gray-500">
-                                          Update #{idx + 1} • {updateDate}
+                                          {t(
+                                            "provider.projects.detail.viewDispute.updateMetaLine",
+                                            {
+                                              n: idx + 1,
+                                              date: updateDate,
+                                            },
+                                          )}
                                         </p>
                                       </div>
                                     </div>
@@ -3793,17 +4158,24 @@ export default function ProviderProjectDetailsPage() {
                     {currentDispute.contestedAmount && (
                       <div>
                         <Label className="text-sm font-medium text-gray-500">
-                          Contested Amount
+                          {t(
+                            "provider.projects.detail.viewDispute.contestedAmount",
+                          )}
                         </Label>
                         <p className="mt-1 font-medium">
-                          RM{currentDispute.contestedAmount.toLocaleString()}
+                          {formatCurrency(
+                            Number(currentDispute.contestedAmount || 0),
+                            projectCurrencyCode,
+                          )}
                         </p>
                       </div>
                     )}
                     {currentDispute.suggestedResolution && (
                       <div>
                         <Label className="text-sm font-medium text-gray-500">
-                          Suggested Resolution
+                          {t(
+                            "provider.projects.detail.viewDispute.suggestedResolution",
+                          )}
                         </Label>
                         <p className="mt-1 whitespace-pre-wrap">
                           {currentDispute.suggestedResolution}
@@ -3813,12 +4185,16 @@ export default function ProviderProjectDetailsPage() {
                     {currentDispute.milestone && (
                       <div>
                         <Label className="text-sm font-medium text-gray-500">
-                          Related Milestone
+                          {t(
+                            "provider.projects.detail.viewDispute.relatedMilestone",
+                          )}
                         </Label>
-                        <p className="mt-1">
-                          {currentDispute.milestone.title} - RM
-                          {currentDispute.milestone.amount.toLocaleString()}
-                        </p>
+                        <div className="mt-1 flex flex-col gap-0.5">
+                          <span>{currentDispute.milestone.title}</span>
+                          {renderMilestoneAmountProviderEquiv(
+                            Number(currentDispute.milestone.amount || 0),
+                          )}
+                        </div>
                       </div>
                     )}
                   </CardContent>
@@ -3831,7 +4207,9 @@ export default function ProviderProjectDetailsPage() {
                     <Card className="border-purple-200 bg-purple-50">
                       <CardHeader>
                         <CardTitle className="text-purple-800">
-                          Admin Resolution Notes
+                          {t(
+                            "provider.projects.detail.viewDispute.adminNotesTitle",
+                          )}
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-4">
@@ -3842,7 +4220,7 @@ export default function ProviderProjectDetailsPage() {
                               adminName?: string;
                               createdAt: string;
                             },
-                            index: number
+                            index: number,
                           ) => {
                             // Check if note contains "--- Admin Note ---" separator
                             const noteParts =
@@ -3859,17 +4237,30 @@ export default function ProviderProjectDetailsPage() {
                                 <div className="flex items-center gap-2 mb-2">
                                   <Avatar className="w-6 h-6">
                                     <AvatarFallback className="bg-purple-100 text-purple-700">
-                                      {note.adminName?.charAt(0) || "A"}
+                                      {note.adminName?.charAt(0) ||
+                                        t(
+                                          "provider.projects.detail.viewDispute.adminFallback",
+                                        ).charAt(0)}
                                     </AvatarFallback>
                                   </Avatar>
                                   <div>
                                     <p className="text-sm font-semibold text-gray-900">
-                                      Resolution Note #{index + 1}
+                                      {t(
+                                        "provider.projects.detail.viewDispute.resolutionNoteN",
+                                        { n: index + 1 },
+                                      )}
                                     </p>
                                     <p className="text-xs text-gray-500">
-                                      By {note.adminName || "Admin"} •{" "}
+                                      {t(
+                                        "provider.projects.detail.viewDispute.byAdmin",
+                                      )}{" "}
+                                      {note.adminName ||
+                                        t(
+                                          "provider.projects.detail.viewDispute.adminFallback",
+                                        )}{" "}
+                                      •{" "}
                                       {new Date(
-                                        note.createdAt
+                                        note.createdAt,
                                       ).toLocaleString()}
                                     </p>
                                   </div>
@@ -3878,7 +4269,9 @@ export default function ProviderProjectDetailsPage() {
                                   {/* Resolution Result */}
                                   <div>
                                     <p className="text-xs font-semibold text-gray-500 mb-1">
-                                      Resolution Result:
+                                      {t(
+                                        "provider.projects.detail.viewDispute.resolutionResult",
+                                      )}
                                     </p>
                                     <p className="text-sm text-gray-700 whitespace-pre-wrap bg-gray-50 p-2 rounded">
                                       {resolutionResult}
@@ -3888,7 +4281,9 @@ export default function ProviderProjectDetailsPage() {
                                   {hasAdminNote && adminNote && (
                                     <div>
                                       <p className="text-xs font-semibold text-purple-600 mb-1">
-                                        Admin Note:
+                                        {t(
+                                          "provider.projects.detail.viewDispute.adminNoteLabel",
+                                        )}
                                       </p>
                                       <p className="text-sm text-gray-700 whitespace-pre-wrap bg-purple-50 p-2 rounded border-l-2 border-purple-300">
                                         {adminNote}
@@ -3898,7 +4293,7 @@ export default function ProviderProjectDetailsPage() {
                                 </div>
                               </div>
                             );
-                          }
+                          },
                         )}
                       </CardContent>
                     </Card>
@@ -3912,7 +4307,9 @@ export default function ProviderProjectDetailsPage() {
                     <Card className="border-green-200 bg-green-50">
                       <CardHeader>
                         <CardTitle className="text-green-800">
-                          Admin Resolution
+                          {t(
+                            "provider.projects.detail.viewDispute.adminResolutionTitle",
+                          )}
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
@@ -3929,21 +4326,34 @@ export default function ProviderProjectDetailsPage() {
                   currentDispute.attachments.length > 0 && (
                     <Card>
                       <CardHeader>
-                        <CardTitle>Attachments</CardTitle>
+                        <CardTitle>
+                          {t(
+                            "provider.projects.detail.viewDispute.attachmentsTitle",
+                          )}
+                        </CardTitle>
                       </CardHeader>
                       <CardContent>
                         <div className="space-y-2">
                           {currentDispute.attachments.map(
                             (url: string, index: number) => {
+                              const unknownUserLabel = t(
+                                "provider.projects.detail.viewDispute.unknownUser",
+                              );
+                              const unknownDateLabel = t(
+                                "provider.projects.detail.viewDispute.unknownDate",
+                              );
                               // Extract filename from path
                               const normalized = url.replace(/\\/g, "/");
                               const filename =
                                 normalized.split("/").pop() ||
-                                `Attachment ${index + 1}`;
+                                t(
+                                  "provider.projects.detail.viewDispute.attachmentFallback",
+                                  { n: index + 1 },
+                                );
                               // Remove timestamp prefix if present (format: timestamp_filename.ext)
                               const cleanFilename = filename.replace(
                                 /^\d+_/,
-                                ""
+                                "",
                               );
 
                               // Try to find attachment metadata in description
@@ -3951,17 +4361,17 @@ export default function ProviderProjectDetailsPage() {
                                 currentDispute.description?.match(
                                   new RegExp(
                                     `\\[Attachment: (.+?) uploaded by (.+?) on (.+?)\\]`,
-                                    "g"
-                                  )
+                                    "g",
+                                  ),
                                 );
-                              let uploadedBy = "Unknown User";
-                              let uploadedAt = "Unknown Date";
+                              let uploadedBy = unknownUserLabel;
+                              let uploadedAt = unknownDateLabel;
 
                               if (attachmentMetadataMatch) {
                                 // Find matching metadata for this file
                                 for (const meta of attachmentMetadataMatch) {
                                   const metaMatch = meta.match(
-                                    /\[Attachment: (.+?) uploaded by (.+?) on (.+?)\]/
+                                    /\[Attachment: (.+?) uploaded by (.+?) on (.+?)\]/,
                                   );
                                   if (metaMatch && metaMatch[1] === filename) {
                                     uploadedBy = metaMatch[2];
@@ -3973,16 +4383,16 @@ export default function ProviderProjectDetailsPage() {
 
                               // Also check if it's from the original dispute creator
                               if (
-                                uploadedBy === "Unknown User" &&
+                                uploadedBy === unknownUserLabel &&
                                 index === 0 &&
                                 currentDispute.attachments &&
                                 currentDispute.attachments.length === 1
                               ) {
                                 uploadedBy =
                                   currentDispute.raisedBy?.name ||
-                                  "Unknown User";
+                                  unknownUserLabel;
                                 uploadedAt = new Date(
-                                  currentDispute.createdAt
+                                  currentDispute.createdAt,
                                 ).toLocaleString();
                               }
 
@@ -3998,7 +4408,13 @@ export default function ProviderProjectDetailsPage() {
                                         {cleanFilename}
                                       </p>
                                       <p className="text-xs text-gray-500">
-                                        Uploaded by {uploadedBy} • {uploadedAt}
+                                        {t(
+                                          "provider.projects.detail.viewDispute.uploadedByLine",
+                                          {
+                                            name: uploadedBy,
+                                            date: uploadedAt,
+                                          },
+                                        )}
                                       </p>
                                     </div>
                                   </div>
@@ -4008,11 +4424,11 @@ export default function ProviderProjectDetailsPage() {
                                       attachmentUrl === "#" ||
                                       (!attachmentUrl.startsWith("http") &&
                                         !attachmentUrl.startsWith(
-                                          "/uploads/"
+                                          "/uploads/",
                                         ) &&
                                         !attachmentUrl.includes(
                                           process.env.NEXT_PUBLIC_API_URL ||
-                                            "localhost"
+                                            "localhost",
                                         ));
 
                                     return (
@@ -4033,17 +4449,20 @@ export default function ProviderProjectDetailsPage() {
                                                     await getR2DownloadUrl(url); // Use original URL/key - url is from the map function
                                                   window.open(
                                                     downloadUrl.downloadUrl,
-                                                    "_blank"
+                                                    "_blank",
                                                   );
                                                 } catch (error) {
                                                   console.error(
                                                     "Failed to get download URL:",
-                                                    error
+                                                    error,
                                                   );
                                                   toast({
-                                                    title: "Error",
-                                                    description:
-                                                      "Failed to download attachment",
+                                                    title: t(
+                                                      "provider.projects.toast.error",
+                                                    ),
+                                                    description: t(
+                                                      "provider.projects.toast.downloadFailed",
+                                                    ),
                                                     variant: "destructive",
                                                   });
                                                 }
@@ -4053,38 +4472,52 @@ export default function ProviderProjectDetailsPage() {
                                       >
                                         <Button variant="outline" size="sm">
                                           <Download className="w-4 h-4 mr-2" />
-                                          Download
+                                          {t(
+                                            "provider.projects.detail.viewDispute.download",
+                                          )}
                                         </Button>
                                       </a>
                                     );
                                   })()}
                                 </div>
                               );
-                            }
+                            },
                           )}
                         </div>
                       </CardContent>
                     </Card>
                   )}
 
-                {/* Update Dispute (if not CLOSED and not RESOLVED) */}
-                {currentDispute.status !== "CLOSED" &&
+                {/* Add update only for the active (open) dispute while viewing it */}
+                {activeDispute &&
+                  currentDispute.id === activeDispute.id &&
+                  currentDispute.status !== "CLOSED" &&
                   currentDispute.status !== "RESOLVED" && (
                     <Card>
                       <CardHeader>
-                        <CardTitle>Add Update</CardTitle>
+                        <CardTitle>
+                          {t(
+                            "provider.projects.detail.viewDispute.addUpdateTitle",
+                          )}
+                        </CardTitle>
                         <CardDescription>
-                          Add additional notes or evidence to your dispute
+                          {t(
+                            "provider.projects.detail.viewDispute.addUpdateDesc",
+                          )}
                         </CardDescription>
                       </CardHeader>
                       <CardContent className="space-y-4">
                         <div>
                           <Label htmlFor="disputeAdditionalNotes">
-                            Additional Notes
+                            {t(
+                              "provider.projects.detail.viewDispute.additionalNotes",
+                            )}
                           </Label>
                           <Textarea
                             id="disputeAdditionalNotes"
-                            placeholder="Add any additional information or updates..."
+                            placeholder={t(
+                              "provider.projects.detail.viewDispute.additionalNotesPlaceholder",
+                            )}
                             value={disputeAdditionalNotes}
                             onChange={(e) =>
                               setDisputeAdditionalNotes(e.target.value)
@@ -4094,7 +4527,9 @@ export default function ProviderProjectDetailsPage() {
                         </div>
                         <div>
                           <Label htmlFor="disputeUpdateAttachments">
-                            Additional Attachments
+                            {t(
+                              "provider.projects.detail.viewDispute.additionalAttachments",
+                            )}
                           </Label>
                           <Input
                             id="disputeUpdateAttachments"
@@ -4137,12 +4572,16 @@ export default function ProviderProjectDetailsPage() {
                           {updatingDispute ? (
                             <>
                               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                              Updating...
+                              {t(
+                                "provider.projects.detail.viewDispute.updating",
+                              )}
                             </>
                           ) : (
                             <>
                               <Send className="w-4 h-4 mr-2" />
-                              Add Update
+                              {t(
+                                "provider.projects.detail.viewDispute.addUpdateButton",
+                              )}
                             </>
                           )}
                         </Button>
@@ -4150,17 +4589,18 @@ export default function ProviderProjectDetailsPage() {
                     </Card>
                   )}
 
-                {/* CLOSED or RESOLVED Dispute Notice */}
                 {(currentDispute.status === "CLOSED" ||
                   currentDispute.status === "RESOLVED") && (
-                  <Card className="border-red-200 bg-red-50">
+                  <Card className="border-amber-200 bg-amber-50">
                     <CardContent className="pt-6">
-                      <div className="flex items-center gap-2 text-red-800">
-                        <AlertCircle className="w-5 h-5" />
-                        <p className="font-medium">
+                      <div className="flex items-start gap-2 text-amber-900">
+                        <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                        <p className="font-medium text-sm leading-relaxed">
                           {currentDispute.status === "CLOSED"
-                            ? "This dispute is closed. Project work has been frozen and no further updates are allowed."
-                            : "This dispute has been resolved. Project completed peacefully. No further updates are allowed."}
+                            ? t("provider.projects.detail.disputeClosedNotice")
+                            : t(
+                                "provider.projects.detail.disputeResolvedNotice",
+                              )}
                         </p>
                       </div>
                     </CardContent>
@@ -4174,12 +4614,12 @@ export default function ProviderProjectDetailsPage() {
                 variant="outline"
                 onClick={() => setViewDisputeDialogOpen(false)}
               >
-                Close
+                {t("provider.projects.detail.common.close")}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
-    </ProviderLayout>
+    
   );
 }

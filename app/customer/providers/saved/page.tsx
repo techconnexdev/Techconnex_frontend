@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { CustomerLayout } from "@/components/customer-layout";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +10,8 @@ import { Eye, MapPin, Star, Trash2, AlertTriangle } from "lucide-react";
 import { getProfileImageUrl } from "@/lib/api";
 import { getUserFriendlyErrorMessage } from "@/lib/errors";
 import { useToast } from "@/hooks/use-toast";
+import { useI18n } from "@/contexts/I18nProvider";
+import { formatProviderMoney } from "@/lib/provider-currency-format";
 
 type SavedProvider = {
   id: string;
@@ -24,6 +25,7 @@ type SavedProvider = {
   rating: number;
   reviewCount: number;
   completedJobs: number;
+  preferredCurrency?: string;
   responseTime: string;
   skills: string[];
   verified?: boolean;
@@ -32,6 +34,7 @@ type SavedProvider = {
 };
 
 export default function SavedProvidersPage() {
+  const { t, locale } = useI18n();
   const { toast } = useToast();
   const [providers, setProviders] = useState<SavedProvider[]>([]);
   const [loading, setLoading] = useState(true);
@@ -121,33 +124,33 @@ export default function SavedProvidersPage() {
   };
 
   return (
-    <CustomerLayout>
+    
       <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-              Saved Providers
+              {t("customer.providers.saved.title")}
             </h1>
             <p className="text-sm sm:text-base text-gray-600 mt-1">
-              Providers you have bookmarked
+              {t("customer.providers.saved.subtitle")}
             </p>
           </div>
         </div>
 
         {loading ? (
           <p className="text-sm sm:text-base text-gray-600 text-center py-8">
-            Loading saved providers...
+            {t("customer.providers.saved.loading")}
           </p>
         ) : error ? (
           <div className="text-center py-8">
             <p className="text-sm sm:text-base text-red-600 mb-4">{error}</p>
             <Button onClick={() => fetchSaved()} variant="outline" size="sm">
-              Try again
+              {t("customer.providers.saved.tryAgain")}
             </Button>
           </div>
         ) : providers.length === 0 ? (
           <p className="text-sm sm:text-base text-gray-600 text-center py-8">
-            You have no saved providers yet.
+            {t("customer.providers.saved.empty")}
           </p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 lg:gap-6">
@@ -171,13 +174,13 @@ export default function SavedProvidersPage() {
                         </h3>
                         {provider.topRated && (
                           <Badge className="bg-yellow-100 text-yellow-800 text-[10px] sm:text-xs">
-                            Top Rated
+                            {t("customer.providers.badge.topRated")}
                           </Badge>
                         )}
                         {!provider.verified && (
                           <Badge className="bg-gray-100 text-gray-700 border-gray-300 text-[10px] sm:text-xs">
                             <AlertTriangle className="w-3 h-3 mr-1" />
-                            Not Verified
+                            {t("customer.providers.badge.notVerified")}
                           </Badge>
                         )}
                       </div>
@@ -200,7 +203,13 @@ export default function SavedProvidersPage() {
                       </span>
                     </div>
                     <div className="text-xs sm:text-sm text-gray-500">
-                      RM{provider.hourlyRate}/hr
+                      {t("customer.providers.detail.hourlyRateLine", {
+                        rate: formatProviderMoney(
+                          Number(provider.hourlyRate) || 0,
+                          provider.preferredCurrency,
+                          locale,
+                        ),
+                      })}
                     </div>
                   </div>
 
@@ -231,7 +240,7 @@ export default function SavedProvidersPage() {
                         className="w-full text-xs sm:text-sm"
                       >
                         <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />{" "}
-                        View Profile
+                        {t("customer.providers.viewProfile")}
                       </Button>
                     </Link>
                     <Button
@@ -241,7 +250,7 @@ export default function SavedProvidersPage() {
                       className="text-xs sm:text-sm w-full sm:w-auto"
                     >
                       <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />{" "}
-                      Remove
+                      {t("customer.providers.saved.remove")}
                     </Button>
                   </div>
                 </CardContent>
@@ -250,6 +259,6 @@ export default function SavedProvidersPage() {
           </div>
         )}
       </div>
-    </CustomerLayout>
+    
   );
 }

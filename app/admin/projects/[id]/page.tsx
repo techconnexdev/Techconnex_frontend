@@ -22,9 +22,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AdminLayout } from "@/components/admin-layout";
 import { useToast } from "@/hooks/use-toast";
+import { useI18n } from "@/contexts/I18nProvider";
+import type { MessageKey } from "@/lib/i18n/messages";
 import {
   getAdminProjectById,
   updateAdminProject,
@@ -173,6 +181,7 @@ interface Project {
   type?: string;
   budgetMin?: number;
   budgetMax?: number;
+  currencyCode?: string;
   timeline?: string;
   originalTimeline?: string;
   providerProposedTimeline?: string;
@@ -207,6 +216,7 @@ export default function AdminProjectDetailPage() {
   const params = useParams();
   const projectId = params.id as string;
   const { toast: toastHook } = useToast();
+  const { t } = useI18n();
 
   const [loading, setLoading] = useState(true);
   const [project, setProject] = useState<Project | null>(null);
@@ -234,15 +244,17 @@ export default function AdminProjectDetailPage() {
       }
     } catch (error: unknown) {
       toastHook({
-        title: "Error",
+        title: t("admin.users.toast.errorTitle"),
         description:
-          error instanceof Error ? error.message : "Failed to load project",
+          error instanceof Error
+            ? error.message
+            : t("admin.projects.detail.toast.loadFailed"),
         variant: "destructive",
       });
     } finally {
       setLoading(false);
     }
-  }, [projectId, toastHook]);
+  }, [projectId, toastHook, t]);
 
   const loadDisputes = useCallback(async () => {
     try {
@@ -432,17 +444,19 @@ export default function AdminProjectDetailPage() {
       const response = await updateAdminProject(projectId, updateData);
       if (response.success) {
         toastHook({
-          title: "Success",
-          description: "Project updated successfully",
+          title: t("admin.users.toast.successTitle"),
+          description: t("admin.projects.detail.toast.updateSuccess"),
         });
         setIsEditing(false);
         loadProject();
       }
     } catch (error: unknown) {
       toastHook({
-        title: "Error",
+        title: t("admin.users.toast.errorTitle"),
         description:
-          error instanceof Error ? error.message : "Failed to update project",
+          error instanceof Error
+            ? error.message
+            : t("admin.projects.detail.toast.updateFailed"),
         variant: "destructive",
       });
     } finally {
@@ -476,9 +490,31 @@ export default function AdminProjectDetailPage() {
 
   const getStatusText = (status: string, type?: string) => {
     if (type === "serviceRequest") {
-      return "Open Opportunity";
+      return t("admin.projects.status.openOpportunity");
     }
-    return status?.replace("_", " ") || status;
+    if (type === "") {
+      const k = String(status || "").toLowerCase();
+      const proposalMap: Record<string, MessageKey> = {
+        pending: "customer.projects.detail.proposalStatus.pending",
+        accepted: "customer.projects.detail.proposalStatus.accepted",
+        rejected: "customer.projects.detail.proposalStatus.rejected",
+      };
+      const mapped = proposalMap[k];
+      if (mapped) return t(mapped);
+      return status?.replace(/_/g, " ") || status;
+    }
+    switch (status?.toUpperCase()) {
+      case "COMPLETED":
+        return t("admin.projects.status.completed");
+      case "IN_PROGRESS":
+        return t("admin.projects.status.inProgress");
+      case "DISPUTED":
+        return t("admin.projects.status.disputed");
+      case "OPEN":
+        return t("admin.projects.status.openOpportunity");
+      default:
+        return status?.replace(/_/g, " ") || status;
+    }
   };
 
   const getMilestoneStatusColor = (status: string) => {
@@ -504,26 +540,19 @@ export default function AdminProjectDetailPage() {
   };
 
   const getMilestoneStatusText = (status: string) => {
-    switch (status?.toUpperCase()) {
-      case "PAID":
-        return "Paid";
-      case "APPROVED":
-        return "Approved";
-      case "SUBMITTED":
-        return "Submitted";
-      case "IN_PROGRESS":
-        return "In Progress";
-      case "LOCKED":
-        return "Locked";
-      case "PENDING":
-        return "Pending";
-      case "DRAFT":
-        return "Draft";
-      case "DISPUTED":
-        return "Disputed";
-      default:
-        return status;
-    }
+    const s = status?.toUpperCase() || "";
+    const map: Record<string, MessageKey> = {
+      PAID: "admin.projects.milestoneStatus.paid",
+      APPROVED: "admin.projects.milestoneStatus.approved",
+      SUBMITTED: "admin.projects.milestoneStatus.submitted",
+      IN_PROGRESS: "admin.projects.milestoneStatus.inProgress",
+      LOCKED: "admin.projects.milestoneStatus.locked",
+      PENDING: "admin.projects.milestoneStatus.pending",
+      DRAFT: "admin.projects.milestoneStatus.draft",
+      DISPUTED: "admin.projects.milestoneStatus.disputed",
+    };
+    const key = map[s];
+    return key ? t(key) : status || "";
   };
 
   const getMilestoneStatusIcon = (status: string) => {
@@ -548,8 +577,12 @@ export default function AdminProjectDetailPage() {
     }
   };
 
-  const formatCurrency = (amount: number) => {
-    return `RM${amount.toLocaleString()}`;
+  const formatCurrency = (amount: number, currencyCode?: string) => {
+    return new Intl.NumberFormat("en-MY", {
+      style: "currency",
+      currency: currencyCode || project?.currencyCode || "MYR",
+      maximumFractionDigits: 0,
+    }).format(amount || 0);
   };
 
   // Helper functions for message attachments
@@ -567,8 +600,11 @@ export default function AdminProjectDetailPage() {
   if (loading) {
     return (
       <AdminLayout>
-        <div className="flex items-center justify-center min-h-[400px] px-4 sm:px-6 lg:px-0">
+        <div className="flex items-center justify-center min-h-[400px] px-4 sm:px-6 lg:px-0 gap-2">
           <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin" />
+          <span className="text-sm text-gray-600">
+            {t("admin.projects.detail.loading")}
+          </span>
         </div>
       </AdminLayout>
     );
@@ -579,11 +615,11 @@ export default function AdminProjectDetailPage() {
       <AdminLayout>
         <div className="text-center py-8 sm:py-12 px-4 sm:px-6 lg:px-0">
           <p className="text-sm sm:text-base text-gray-500">
-            Project not found
+            {t("admin.projects.detail.notFound")}
           </p>
           <Link href="/admin/projects">
             <Button className="mt-3 sm:mt-4 text-xs sm:text-sm">
-              Back to Projects
+              {t("admin.projects.detail.backToList")}
             </Button>
           </Link>
         </div>
@@ -658,7 +694,7 @@ export default function AdminProjectDetailPage() {
                   className="w-full sm:w-auto text-xs sm:text-sm"
                 >
                   <X className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                  Cancel
+                  {t("admin.users.common.cancel")}
                 </Button>
                 <Button
                   onClick={handleSave}
@@ -668,12 +704,12 @@ export default function AdminProjectDetailPage() {
                   {saving ? (
                     <>
                       <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 animate-spin" />
-                      Saving...
+                      {t("admin.users.common.saving")}
                     </>
                   ) : (
                     <>
                       <Save className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                      Save Changes
+                      {t("admin.projects.detail.saveChanges")}
                     </>
                   )}
                 </Button>
@@ -685,7 +721,9 @@ export default function AdminProjectDetailPage() {
                 className="w-full sm:w-auto text-xs sm:text-sm"
               >
                 <Edit className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                {isServiceRequest ? "Edit Opportunity" : "Edit Project"}
+                {isServiceRequest
+                  ? t("admin.projects.detail.editOpportunity")
+                  : t("admin.projects.detail.editProject")}
               </Button>
             )}
           </div>
@@ -703,18 +741,26 @@ export default function AdminProjectDetailPage() {
           </Badge>
           {isServiceRequest && (
             <Badge className="bg-yellow-100 text-yellow-800 text-xs">
-              Opportunity
+              {t("admin.projects.detail.badge.opportunity")}
             </Badge>
           )}
           {disputes.length > 0 && !isServiceRequest && (
             <Badge variant="destructive" className="text-xs">
               <AlertTriangle className="w-3 h-3 mr-1" />
-              {disputes.length} Dispute(s)
+              {disputes.length === 1
+                ? t("admin.projects.detail.badge.disputesOne")
+                : t("admin.projects.detail.badge.disputesMany", {
+                    count: disputes.length,
+                  })}
             </Badge>
           )}
           {isServiceRequest && proposalsCount > 0 && (
             <Badge className="bg-blue-100 text-blue-800 text-xs">
-              {proposalsCount} {proposalsCount === 1 ? "proposal" : "proposals"}
+              {proposalsCount === 1
+                ? t("admin.projects.detail.badge.proposalOne")
+                : t("admin.projects.detail.badge.proposalsMany", {
+                    count: proposalsCount,
+                  })}
             </Badge>
           )}
         </div>
@@ -726,14 +772,16 @@ export default function AdminProjectDetailPage() {
               value="overview"
               className="text-xs sm:text-sm px-2 sm:px-4"
             >
-              Overview
+              {t("admin.projects.detail.tabs.overview")}
             </TabsTrigger>
             {isServiceRequest ? (
               <TabsTrigger
                 value="proposals"
                 className="text-xs sm:text-sm px-2 sm:px-4"
               >
-                Proposals ({proposalsCount})
+                {t("admin.projects.detail.tabs.proposalsCount", {
+                  count: proposalsCount,
+                })}
               </TabsTrigger>
             ) : (
               <>
@@ -741,13 +789,15 @@ export default function AdminProjectDetailPage() {
                   value="milestones"
                   className="text-xs sm:text-sm px-2 sm:px-4"
                 >
-                  Milestones
+                  {t("admin.projects.detail.tabs.milestones")}
                 </TabsTrigger>
                 <TabsTrigger
                   value="proposals"
                   className="text-xs sm:text-sm px-2 sm:px-4"
                 >
-                  Proposals ({proposalsCount})
+                  {t("admin.projects.detail.tabs.proposalsCount", {
+                    count: proposalsCount,
+                  })}
                 </TabsTrigger>
               </>
             )}
@@ -755,26 +805,28 @@ export default function AdminProjectDetailPage() {
               value="files"
               className="text-xs sm:text-sm px-2 sm:px-4"
             >
-              Files
+              {t("admin.projects.detail.tabs.files")}
             </TabsTrigger>
             <TabsTrigger
               value="media"
               className="text-xs sm:text-sm px-2 sm:px-4"
             >
-              Media gallery
+              {t("admin.projects.detail.tabs.mediaGallery")}
             </TabsTrigger>
             <TabsTrigger
               value="messages"
               className="text-xs sm:text-sm px-2 sm:px-4"
             >
-              Messages
+              {t("admin.projects.detail.tabs.messages")}
             </TabsTrigger>
             {disputes.length > 0 && !isServiceRequest && (
               <TabsTrigger
                 value="disputes"
                 className="text-xs sm:text-sm px-2 sm:px-4"
               >
-                Disputes ({disputes.length})
+                {t("admin.projects.detail.tabs.disputesCount", {
+                  count: disputes.length,
+                })}
               </TabsTrigger>
             )}
           </TabsList>
@@ -784,14 +836,14 @@ export default function AdminProjectDetailPage() {
             <Card>
               <CardHeader className="p-4 sm:p-6">
                 <CardTitle className="text-lg sm:text-xl">
-                  Project Details
+                  {t("admin.projects.detail.projectDetails")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-4 sm:p-6 space-y-3 sm:space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div>
                     <Label className="text-xs sm:text-sm font-medium text-gray-500">
-                      Category
+                      {t("admin.projects.detail.labels.category")}
                     </Label>
                     {isEditing ? (
                       <Input
@@ -809,7 +861,7 @@ export default function AdminProjectDetailPage() {
                   </div>
                   <div>
                     <Label className="text-xs sm:text-sm font-medium text-gray-500">
-                      Status
+                      {t("admin.projects.detail.labels.status")}
                     </Label>
                     <div className="mt-1">
                       {isEditing && !isServiceRequest ? (
@@ -824,10 +876,14 @@ export default function AdminProjectDetailPage() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="IN_PROGRESS">
-                              In Progress
+                              {t("admin.projects.detail.statusSelect.inProgress")}
                             </SelectItem>
-                            <SelectItem value="COMPLETED">Completed</SelectItem>
-                            <SelectItem value="DISPUTED">Disputed</SelectItem>
+                            <SelectItem value="COMPLETED">
+                              {t("admin.projects.detail.statusSelect.completed")}
+                            </SelectItem>
+                            <SelectItem value="DISPUTED">
+                              {t("admin.projects.detail.statusSelect.disputed")}
+                            </SelectItem>
                           </SelectContent>
                         </Select>
                       ) : (
@@ -844,7 +900,7 @@ export default function AdminProjectDetailPage() {
                   </div>
                   <div>
                     <Label className="text-xs sm:text-sm font-medium text-gray-500">
-                      Budget Range
+                      {t("admin.projects.detail.labels.budgetRange")}
                     </Label>
                     {isEditing ? (
                       <div className="grid grid-cols-2 gap-2 mt-1">
@@ -857,7 +913,7 @@ export default function AdminProjectDetailPage() {
                               parseFloat(e.target.value) || 0
                             )
                           }
-                          placeholder="Min"
+                          placeholder={t("admin.projects.detail.labels.budgetMin")}
                           className="text-sm sm:text-base"
                         />
                         <Input
@@ -869,7 +925,7 @@ export default function AdminProjectDetailPage() {
                               parseFloat(e.target.value) || 0
                             )
                           }
-                          placeholder="Max"
+                          placeholder={t("admin.projects.detail.labels.budgetMax")}
                           className="text-sm sm:text-base"
                         />
                       </div>
@@ -883,7 +939,7 @@ export default function AdminProjectDetailPage() {
                   {!isServiceRequest && approvedPrice > 0 && (
                     <div>
                       <Label className="text-xs sm:text-sm font-medium text-gray-500">
-                        Approved Price
+                        {t("admin.projects.detail.labels.approvedPrice")}
                       </Label>
                       <p className="text-sm sm:text-base lg:text-lg font-semibold text-green-600 mt-1">
                         {formatCurrency(approvedPrice)}
@@ -892,13 +948,13 @@ export default function AdminProjectDetailPage() {
                   )}
                   <div className="sm:col-span-2">
                     <Label className="text-xs sm:text-sm font-medium text-gray-500">
-                      Timeline
+                      {t("admin.projects.detail.labels.timeline")}
                     </Label>
                     <div className="space-y-2 mt-1">
                       {project.originalTimeline ? (
                         <div>
                           <p className="text-xs text-gray-500 mb-1">
-                            Original Timeline (Company):
+                            {t("admin.projects.detail.labels.timelineOriginal")}
                           </p>
                           {isEditing ? (
                             <Input
@@ -917,7 +973,7 @@ export default function AdminProjectDetailPage() {
                       {project.providerProposedTimeline ? (
                         <div>
                           <p className="text-xs text-gray-500 mb-1">
-                            Provider&apos;s Proposed Timeline:
+                            {t("admin.projects.detail.labels.timelineProvider")}
                           </p>
                           <p className="text-xs sm:text-sm text-gray-900 font-medium">
                             {formatTimeline(
@@ -930,14 +986,14 @@ export default function AdminProjectDetailPage() {
                       {!project.originalTimeline &&
                         !project.providerProposedTimeline && (
                           <p className="text-xs sm:text-sm text-gray-600">
-                            Not specified
+                            {t("admin.projects.detail.labels.timelineNotSpecified")}
                           </p>
                         )}
                     </div>
                   </div>
                   <div>
                     <Label className="text-xs sm:text-sm font-medium text-gray-500">
-                      Priority
+                      {t("admin.projects.detail.labels.priority")}
                     </Label>
                     {isEditing ? (
                       <Select
@@ -950,9 +1006,15 @@ export default function AdminProjectDetailPage() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="low">Low</SelectItem>
-                          <SelectItem value="medium">Medium</SelectItem>
-                          <SelectItem value="high">High</SelectItem>
+                          <SelectItem value="low">
+                            {t("admin.projects.detail.priority.low")}
+                          </SelectItem>
+                          <SelectItem value="medium">
+                            {t("admin.projects.detail.priority.medium")}
+                          </SelectItem>
+                          <SelectItem value="high">
+                            {t("admin.projects.detail.priority.high")}
+                          </SelectItem>
                         </SelectContent>
                       </Select>
                     ) : (
@@ -964,7 +1026,7 @@ export default function AdminProjectDetailPage() {
                 </div>
                 <div>
                   <Label className="text-xs sm:text-sm font-medium text-gray-500">
-                    Description
+                    {t("admin.projects.detail.labels.description")}
                   </Label>
                   {isEditing ? (
                     <Textarea
@@ -988,7 +1050,7 @@ export default function AdminProjectDetailPage() {
                 {requirements && (
                   <div>
                     <Label className="text-xs sm:text-sm font-medium text-gray-500">
-                      Requirements
+                      {t("admin.projects.detail.labels.requirements")}
                     </Label>
                     {isEditing ? (
                       <Textarea
@@ -1009,7 +1071,7 @@ export default function AdminProjectDetailPage() {
                 {deliverables && (
                   <div>
                     <Label className="text-xs sm:text-sm font-medium text-gray-500">
-                      Deliverables
+                      {t("admin.projects.detail.labels.deliverables")}
                     </Label>
                     {isEditing ? (
                       <Textarea
@@ -1030,7 +1092,7 @@ export default function AdminProjectDetailPage() {
                 {project.skills && project.skills.length > 0 && (
                   <div>
                     <Label className="text-xs sm:text-sm font-medium text-gray-500">
-                      Skills Required
+                      {t("admin.projects.detail.labels.skillsRequired")}
                     </Label>
                     {isEditing ? (
                       <Input
@@ -1038,7 +1100,9 @@ export default function AdminProjectDetailPage() {
                         onChange={(e) =>
                           handleFieldChange("skills", e.target.value)
                         }
-                        placeholder="Comma-separated skills"
+                        placeholder={t(
+                          "admin.projects.detail.labels.skillsPlaceholder"
+                        )}
                         className="mt-1 text-sm sm:text-base"
                       />
                     ) : (
@@ -1064,7 +1128,7 @@ export default function AdminProjectDetailPage() {
               <Card>
                 <CardHeader className="p-4 sm:p-6">
                   <CardTitle className="text-lg sm:text-xl">
-                    Client Information
+                    {t("admin.projects.detail.clientInformation")}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-4 sm:p-6">
@@ -1082,7 +1146,8 @@ export default function AdminProjectDetailPage() {
                     <div className="flex-1 space-y-2 min-w-0">
                       <div>
                         <p className="font-semibold text-base sm:text-lg break-words">
-                          {project.customer.name || "N/A"}
+                          {project.customer.name ||
+                            t("admin.projects.common.na")}
                         </p>
                         <p className="text-xs sm:text-sm text-gray-600 break-words">
                           {project.customer.email || ""}
@@ -1121,7 +1186,9 @@ export default function AdminProjectDetailPage() {
                         {project.customer.customerProfile?.industry &&
                         project.customer.customerProfile.industry.trim() ? (
                           <div>
-                            <span className="text-gray-500">Industry: </span>
+                            <span className="text-gray-500">
+                              {t("admin.projects.detail.client.industry")}{" "}
+                            </span>
                             <span className="text-gray-700">
                               {project.customer.customerProfile.industry}
                             </span>
@@ -1131,7 +1198,7 @@ export default function AdminProjectDetailPage() {
                         project.customer.customerProfile.companySize.trim() ? (
                           <div>
                             <span className="text-gray-500">
-                              Company Size:{" "}
+                              {t("admin.projects.detail.client.companySize")}{" "}
                             </span>
                             <span className="text-gray-700">
                               {project.customer.customerProfile.companySize}
@@ -1146,7 +1213,7 @@ export default function AdminProjectDetailPage() {
                             size="sm"
                             className="w-full sm:w-auto text-xs sm:text-sm"
                           >
-                            View Full Profile
+                            {t("admin.projects.detail.viewFullProfile")}
                           </Button>
                         </Link>
                       )}
@@ -1161,7 +1228,7 @@ export default function AdminProjectDetailPage() {
               <Card>
                 <CardHeader className="p-4 sm:p-6">
                   <CardTitle className="text-lg sm:text-xl">
-                    Provider Information
+                    {t("admin.projects.detail.providerInformation")}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-4 sm:p-6">
@@ -1179,7 +1246,8 @@ export default function AdminProjectDetailPage() {
                     <div className="flex-1 space-y-2 min-w-0">
                       <div>
                         <p className="font-semibold text-base sm:text-lg break-words">
-                          {project.provider.name || "N/A"}
+                          {project.provider.name ||
+                            t("admin.projects.common.na")}
                         </p>
                         <p className="text-xs sm:text-sm text-gray-600 break-words">
                           {project.provider.email || ""}
@@ -1228,7 +1296,9 @@ export default function AdminProjectDetailPage() {
                         {project.provider.providerProfile?.totalProjects !==
                           undefined && (
                           <div>
-                            <span className="text-gray-500">Projects: </span>
+                            <span className="text-gray-500">
+                              {t("admin.projects.detail.provider.projects")}{" "}
+                            </span>
                             <span className="text-gray-700">
                               {project.provider.providerProfile.totalProjects}
                             </span>
@@ -1242,7 +1312,7 @@ export default function AdminProjectDetailPage() {
                             size="sm"
                             className="w-full sm:w-auto text-xs sm:text-sm"
                           >
-                            View Full Profile
+                            {t("admin.projects.detail.viewFullProfile")}
                           </Button>
                         </Link>
                       )}
@@ -1258,7 +1328,7 @@ export default function AdminProjectDetailPage() {
               <Card>
                 <CardHeader className="p-4 sm:p-6">
                   <CardTitle className="text-lg sm:text-xl">
-                    Milestones
+                    {t("admin.projects.detail.milestones.title")}
                   </CardTitle>
                   <CardDescription className="text-xs sm:text-sm">
                     {totalMilestones > 0 && (
@@ -1275,7 +1345,13 @@ export default function AdminProjectDetailPage() {
                           </span>
                         </div>
                         <span className="text-xs sm:text-sm text-gray-600">
-                          {completedMilestones} of {totalMilestones} completed
+                          {t(
+                            "admin.projects.detail.milestones.progressCompleted",
+                            {
+                              completed: completedMilestones,
+                              total: totalMilestones,
+                            }
+                          )}
                         </span>
                       </div>
                     )}
@@ -1284,7 +1360,7 @@ export default function AdminProjectDetailPage() {
                 <CardContent className="p-4 sm:p-6">
                   {milestonesArray.length === 0 ? (
                     <p className="text-sm text-gray-500 text-center py-8">
-                      No milestones found
+                      {t("admin.projects.detail.milestones.empty")}
                     </p>
                   ) : (
                     <div className="space-y-4 sm:space-y-6">
@@ -1306,7 +1382,11 @@ export default function AdminProjectDetailPage() {
                               {/* Top Row */}
                               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                                 <h3 className="font-semibold text-sm sm:text-base break-words">
-                                  {milestone.title || `Milestone ${idx + 1}`}
+                                  {milestone.title ||
+                                    t(
+                                      "admin.projects.detail.milestones.defaultTitle",
+                                      { index: idx + 1 }
+                                    )}
                                 </h3>
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <Badge
@@ -1334,7 +1414,9 @@ export default function AdminProjectDetailPage() {
                                           className="text-xs sm:text-sm"
                                         >
                                           <CreditCard className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-1" />
-                                          View Payment
+                                          {t(
+                                            "admin.projects.detail.milestones.viewPayment"
+                                          )}
                                         </Button>
                                       </Link>
                                     )}
@@ -1356,10 +1438,11 @@ export default function AdminProjectDetailPage() {
                                 <div className="flex items-center gap-1">
                                   <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
                                   <span>
-                                    Due:{" "}
-                                    {new Date(
-                                      milestone.dueDate
-                                    ).toLocaleDateString()}
+                                    {t("admin.projects.detail.milestones.due", {
+                                      date: new Date(
+                                        milestone.dueDate
+                                      ).toLocaleDateString(),
+                                    })}
                                   </span>
                                 </div>
                               )}
@@ -1380,7 +1463,11 @@ export default function AdminProjectDetailPage() {
                               milestone.progress && (
                                 <div className="mt-2 sm:mt-3">
                                   <div className="flex justify-between text-xs sm:text-sm mb-1">
-                                    <span>Progress</span>
+                                    <span>
+                                      {t(
+                                        "admin.projects.detail.milestones.progressLabel"
+                                      )}
+                                    </span>
                                     <span>{milestone.progress}%</span>
                                   </div>
                                   <div className="w-full bg-gray-200 rounded-full h-2">
@@ -1398,7 +1485,10 @@ export default function AdminProjectDetailPage() {
                             {milestone.startDeliverables != null && (
                               <div className="mt-3 p-2 sm:p-3 bg-green-50 border border-green-200 rounded-lg">
                                 <p className="text-xs sm:text-sm font-medium text-green-900 mb-1">
-                                  📋 Plan / Deliverables (When Starting Work):
+                                  📋{" "}
+                                  {t(
+                                    "admin.projects.detail.milestones.startDeliverablesTitle"
+                                  )}
                                 </p>
                                 <p className="text-xs sm:text-sm text-green-800 whitespace-pre-wrap break-words">
                                   {typeof milestone.startDeliverables ===
@@ -1429,8 +1519,10 @@ export default function AdminProjectDetailPage() {
                             {milestone.submitDeliverables != null && (
                               <div className="mt-3 p-2 sm:p-3 bg-purple-50 border border-purple-200 rounded-lg">
                                 <p className="text-xs sm:text-sm font-medium text-purple-900 mb-1">
-                                  ✅ Deliverables / Completion Notes (When
-                                  Submitting):
+                                  ✅{" "}
+                                  {t(
+                                    "admin.projects.detail.milestones.submitDeliverablesTitle"
+                                  )}
                                 </p>
                                 <p className="text-xs sm:text-sm text-purple-800 whitespace-pre-wrap break-words">
                                   {typeof milestone.submitDeliverables ===
@@ -1461,7 +1553,10 @@ export default function AdminProjectDetailPage() {
                             {milestone.submissionNote && (
                               <div className="mt-3 p-2 sm:p-3 bg-blue-50 border border-blue-200 rounded-lg">
                                 <p className="text-xs sm:text-sm font-medium text-blue-900 mb-1">
-                                  📝 Submission Note:
+                                  📝{" "}
+                                  {t(
+                                    "admin.projects.detail.milestones.submissionNoteTitle"
+                                  )}
                                 </p>
                                 <p className="text-xs sm:text-sm text-blue-800 whitespace-pre-wrap break-words">
                                   {milestone.submissionNote}
@@ -1488,13 +1583,18 @@ export default function AdminProjectDetailPage() {
                                   return (
                                     <div className="mt-3 p-2 sm:p-3 bg-orange-50 border border-orange-200 rounded-lg">
                                       <p className="text-xs sm:text-sm font-medium text-orange-900 mb-1">
-                                        🔄 Latest Request for Changes (Revision
-                                        #
-                                        {typeof latestRequest.revisionNumber ===
-                                        "number"
-                                          ? latestRequest.revisionNumber
-                                          : milestone.submissionHistory.length}
-                                        ):
+                                        🔄{" "}
+                                        {t(
+                                          "admin.projects.detail.milestones.latestChangesTitle",
+                                          {
+                                            rev:
+                                              typeof latestRequest.revisionNumber ===
+                                              "number"
+                                                ? latestRequest.revisionNumber
+                                                : milestone.submissionHistory
+                                                    .length,
+                                          }
+                                        )}
                                       </p>
                                       <p className="text-xs sm:text-sm text-orange-800 whitespace-pre-wrap break-words">
                                         {String(
@@ -1506,10 +1606,14 @@ export default function AdminProjectDetailPage() {
                                         typeof latestRequest.requestedChangesAt ===
                                           "string" && (
                                           <p className="text-xs text-orange-600 mt-2">
-                                            Requested on:{" "}
-                                            {new Date(
-                                              latestRequest.requestedChangesAt
-                                            ).toLocaleString()}
+                                            {t(
+                                              "admin.projects.detail.milestones.requestedOn",
+                                              {
+                                                date: new Date(
+                                                  latestRequest.requestedChangesAt
+                                                ).toLocaleString(),
+                                              }
+                                            )}
                                           </p>
                                         )}
                                     </div>
@@ -1524,7 +1628,10 @@ export default function AdminProjectDetailPage() {
                                 <div className="flex items-center gap-2 mb-2">
                                   <Paperclip className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-600 flex-shrink-0" />
                                   <span className="text-xs sm:text-sm font-medium text-gray-900">
-                                    📎 Submission Attachment
+                                    📎{" "}
+                                    {t(
+                                      "admin.projects.detail.milestones.submissionAttachmentLabel"
+                                    )}
                                   </span>
                                 </div>
                                 {((): React.ReactNode => {
@@ -1574,9 +1681,10 @@ export default function AdminProjectDetailPage() {
                                                   error
                                                 );
                                                 toastHook({
-                                                  title: "Error",
-                                                  description:
-                                                    "Failed to download attachment",
+                                                  title: t("admin.users.toast.errorTitle"),
+                                                  description: t(
+                                                    "admin.projects.detail.toast.downloadAttachmentFailed"
+                                                  ),
                                                   variant: "destructive",
                                                 });
                                               }
@@ -1586,14 +1694,16 @@ export default function AdminProjectDetailPage() {
                                       className="flex items-start gap-2 sm:gap-3 rounded-lg border border-gray-200 bg-white px-2 sm:px-3 py-2 active:bg-gray-50 sm:hover:bg-gray-50 sm:hover:shadow-sm transition"
                                     >
                                       <div className="flex h-8 w-8 sm:h-9 sm:w-9 flex-none items-center justify-center rounded-md border border-gray-300 bg-gray-100 text-gray-700 text-[10px] sm:text-xs font-medium">
-                                        PDF
+                                        {t("admin.projects.detail.files.pdf")}
                                       </div>
                                       <div className="flex flex-col min-w-0 flex-1">
                                         <span className="text-xs sm:text-sm font-medium text-gray-900 break-all leading-snug">
                                           {fileName}
                                         </span>
                                         <span className="text-[10px] sm:text-xs text-gray-500 leading-snug">
-                                          Click to preview / download
+                                          {t(
+                                            "admin.projects.detail.files.clickPreview"
+                                          )}
                                         </span>
                                       </div>
                                       <div className="ml-auto flex items-center text-gray-500 active:text-gray-700 sm:hover:text-gray-700">
@@ -1610,71 +1720,97 @@ export default function AdminProjectDetailPage() {
                               Array.isArray(milestone.submissionHistory) &&
                               milestone.submissionHistory.length > 0 && (
                                 <div className="mt-3 sm:mt-4 border-t pt-3 sm:pt-4">
-                                  <p className="text-xs sm:text-sm font-semibold text-gray-900 mb-2 sm:mb-3">
-                                    📚 Previous Submission History:
-                                  </p>
-                                  <div className="space-y-2 sm:space-y-3">
-                                    {(
-                                      milestone.submissionHistory as unknown[]
-                                    ).map(
-                                      (
-                                        history: unknown,
-                                        historyIdx: number
-                                      ) => {
-                                        const historyRecord = history as Record<
-                                          string,
-                                          unknown
-                                        >;
-                                        const revisionNumber =
-                                          typeof historyRecord.revisionNumber ===
-                                          "number"
-                                            ? historyRecord.revisionNumber
-                                            : historyIdx + 1;
+                                  <Accordion
+                                    type="single"
+                                    collapsible
+                                    className="w-full"
+                                  >
+                                    <AccordionItem
+                                      value={`history-${String(milestone.id)}`}
+                                      className="border rounded-lg bg-gray-50"
+                                    >
+                                      <AccordionTrigger className="px-3 sm:px-4 py-2.5 text-xs sm:text-sm font-semibold text-gray-900 hover:no-underline">
+                                        <span>
+                                          📚{" "}
+                                          {t(
+                                            "admin.projects.detail.milestones.previousSubmissionHistory"
+                                          )}
+                                        </span>
+                                      </AccordionTrigger>
+                                      <AccordionContent className="px-3 sm:px-4 pb-3 sm:pb-4">
+                                        <div className="space-y-2 sm:space-y-3">
+                                          {(
+                                            milestone.submissionHistory as unknown[]
+                                          ).map(
+                                            (
+                                              history: unknown,
+                                              historyIdx: number
+                                            ) => {
+                                              const historyRecord = history as Record<
+                                                string,
+                                                unknown
+                                              >;
+                                              const revisionNumber =
+                                                typeof historyRecord.revisionNumber ===
+                                                "number"
+                                                  ? historyRecord.revisionNumber
+                                                  : historyIdx + 1;
 
-                                        return (
-                                          <div
-                                            key={historyIdx}
-                                            className="p-2 sm:p-3 bg-gray-50 border border-gray-200 rounded-lg"
-                                          >
-                                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-0 mb-2">
-                                              <p className="text-xs sm:text-sm font-medium text-gray-900">
-                                                Revision #{revisionNumber}
-                                              </p>
-                                              {historyRecord.requestedChangesAt !=
-                                                null &&
-                                                typeof historyRecord.requestedChangesAt ===
-                                                  "string" && (
-                                                  <span className="text-xs text-gray-500">
-                                                    Changes requested:{" "}
-                                                    {new Date(
-                                                      historyRecord.requestedChangesAt
-                                                    ).toLocaleDateString()}
-                                                  </span>
-                                                )}
-                                            </div>
+                                              return (
+                                                <div
+                                                  key={historyIdx}
+                                                  className="p-2 sm:p-3 bg-white border border-gray-200 rounded-lg"
+                                                >
+                                                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-0 mb-2">
+                                                    <p className="text-xs sm:text-sm font-medium text-gray-900">
+                                                      {t(
+                                                        "admin.projects.detail.milestones.revisionHeading",
+                                                        { rev: revisionNumber }
+                                                      )}
+                                                    </p>
+                                                    {historyRecord.requestedChangesAt !=
+                                                      null &&
+                                                      typeof historyRecord.requestedChangesAt ===
+                                                        "string" && (
+                                                        <span className="text-xs text-gray-500">
+                                                          {t(
+                                                            "admin.projects.detail.milestones.changesRequested",
+                                                            {
+                                                              date: new Date(
+                                                                historyRecord.requestedChangesAt
+                                                              ).toLocaleDateString(),
+                                                            }
+                                                          )}
+                                                        </span>
+                                                      )}
+                                                  </div>
 
-                                            {historyRecord.requestedChangesReason !=
+                                                  {historyRecord.requestedChangesReason !=
                                               null &&
                                               typeof historyRecord.requestedChangesReason ===
                                                 "string" && (
-                                                <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded">
-                                                  <p className="text-xs font-medium text-red-900 mb-1">
-                                                    Reason for Changes:
-                                                  </p>
-                                                  <p className="text-xs text-red-800 whitespace-pre-wrap break-words">
-                                                    {String(
-                                                      historyRecord.requestedChangesReason
-                                                    )}
-                                                  </p>
-                                                </div>
-                                              )}
+                                                    <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded">
+                                                      <p className="text-xs font-medium text-red-900 mb-1">
+                                                        {t(
+                                                          "admin.projects.detail.milestones.reasonForChanges"
+                                                        )}
+                                                      </p>
+                                                      <p className="text-xs text-red-800 whitespace-pre-wrap break-words">
+                                                        {String(
+                                                          historyRecord.requestedChangesReason
+                                                        )}
+                                                      </p>
+                                                    </div>
+                                                  )}
 
-                                            {historyRecord.submitDeliverables !=
+                                                  {historyRecord.submitDeliverables !=
                                               null && (
-                                              <div className="mb-2">
-                                                <p className="text-xs font-medium text-gray-700 mb-1">
-                                                  Deliverables:
-                                                </p>
+                                                    <div className="mb-2">
+                                                      <p className="text-xs font-medium text-gray-700 mb-1">
+                                                        {t(
+                                                          "admin.projects.detail.milestones.deliverablesHeading"
+                                                        )}
+                                                      </p>
                                                 <p className="text-xs text-gray-600 whitespace-pre-wrap break-words">
                                                   {typeof historyRecord.submitDeliverables ===
                                                     "object" &&
@@ -1707,7 +1843,9 @@ export default function AdminProjectDetailPage() {
                                                 "string" && (
                                                 <div className="mb-2">
                                                   <p className="text-xs font-medium text-gray-700 mb-1">
-                                                    Note:
+                                                    {t(
+                                                      "admin.projects.detail.milestones.noteHeading"
+                                                    )}
                                                   </p>
                                                   <p className="text-xs text-gray-600 whitespace-pre-wrap break-words">
                                                     {String(
@@ -1723,7 +1861,9 @@ export default function AdminProjectDetailPage() {
                                                 "string" && (
                                                 <div>
                                                   <p className="text-xs font-medium text-gray-700 mb-1">
-                                                    Attachment:
+                                                    {t(
+                                                      "admin.projects.detail.milestones.attachmentHeading"
+                                                    )}
                                                   </p>
                                                   {((): React.ReactNode => {
                                                     const attachmentUrl =
@@ -1784,10 +1924,12 @@ export default function AdminProjectDetailPage() {
                                                                     error
                                                                   );
                                                                   toastHook({
-                                                                    title:
-                                                                      "Error",
-                                                                    description:
-                                                                      "Failed to download attachment",
+                                                                    title: t(
+                                                                      "admin.users.toast.errorTitle"
+                                                                    ),
+                                                                    description: t(
+                                                                      "admin.projects.detail.toast.downloadAttachmentFailed"
+                                                                    ),
                                                                     variant:
                                                                       "destructive",
                                                                   });
@@ -1814,10 +1956,14 @@ export default function AdminProjectDetailPage() {
                                                 ).getTime()
                                               ) && (
                                                 <p className="text-xs text-gray-500 mt-2">
-                                                  Submitted:{" "}
-                                                  {new Date(
-                                                    historyRecord.submittedAt
-                                                  ).toLocaleString()}
+                                                  {t(
+                                                    "admin.projects.detail.milestones.historySubmittedLine",
+                                                    {
+                                                      date: new Date(
+                                                        historyRecord.submittedAt
+                                                      ).toLocaleString(),
+                                                    }
+                                                  )}
                                                 </p>
                                               )}
                                           </div>
@@ -1825,6 +1971,9 @@ export default function AdminProjectDetailPage() {
                                       }
                                     )}
                                   </div>
+                                      </AccordionContent>
+                                    </AccordionItem>
+                                  </Accordion>
                                 </div>
                               )}
                           </div>
@@ -1841,16 +1990,18 @@ export default function AdminProjectDetailPage() {
             <Card>
               <CardHeader className="p-4 sm:p-6">
                 <CardTitle className="text-lg sm:text-xl">
-                  Proposals ({project.proposals?.length || 0})
+                  {t("admin.projects.detail.proposals.title", {
+                    count: project.proposals?.length || 0,
+                  })}
                 </CardTitle>
                 <CardDescription className="text-xs sm:text-sm">
-                  Review and manage proposals from providers
+                  {t("admin.projects.detail.proposals.description")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-4 sm:p-6">
                 {!project.proposals || project.proposals.length === 0 ? (
                   <p className="text-xs sm:text-sm text-gray-500 text-center py-6 sm:py-8">
-                    No proposals found
+                    {t("admin.projects.detail.proposals.empty")}
                   </p>
                 ) : (
                   <div className="space-y-3 sm:space-y-4">
@@ -1882,7 +2033,8 @@ export default function AdminProjectDetailPage() {
                               <div className="flex-1 min-w-0">
                                 <div className="flex flex-wrap items-center gap-2 mb-1">
                                   <h3 className="font-semibold text-gray-900 text-sm sm:text-base break-words">
-                                    {proposal.provider?.name || "Provider"}
+                                    {proposal.provider?.name ||
+                                      t("admin.projects.common.provider")}
                                   </h3>
                                   {proposal.provider?.providerProfile?.rating &&
                                     typeof proposal.provider.providerProfile
@@ -1925,16 +2077,20 @@ export default function AdminProjectDetailPage() {
                                             {skill}
                                           </Badge>
                                         ))}
-                                      {proposal.provider.providerProfile.skills
-                                        .length > 3 && (
+                                          {proposal.provider.providerProfile.skills
+                                            .length > 3 && (
                                         <Badge
                                           variant="secondary"
                                           className="text-[10px] leading-tight"
                                         >
-                                          +
-                                          {proposal.provider.providerProfile
-                                            .skills.length - 3}{" "}
-                                          more
+                                          {t(
+                                            "admin.projects.detail.proposals.moreSkills",
+                                            {
+                                              count:
+                                                proposal.provider.providerProfile
+                                                  .skills.length - 3,
+                                            }
+                                          )}
                                         </Badge>
                                       )}
                                     </div>
@@ -1960,7 +2116,7 @@ export default function AdminProjectDetailPage() {
                                     ? new Date(
                                         proposal.createdAt
                                       ).toLocaleDateString()
-                                    : "—"}
+                                    : t("admin.users.common.emDash")}
                                 </span>
                               </div>
 
@@ -1968,20 +2124,22 @@ export default function AdminProjectDetailPage() {
                               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-0">
                                 <div>
                                   <p className="text-xs sm:text-sm text-gray-600">
-                                    Bid Amount
+                                    {t("admin.projects.detail.proposals.bidAmount")}
                                   </p>
                                   <p className="font-semibold text-base sm:text-lg">
-                                    RM{" "}
-                                    {Number(
-                                      proposal.bidAmount ||
-                                        proposal.proposedBudget ||
-                                        0
-                                    ).toLocaleString()}
+                                    {formatCurrency(
+                                      Number(
+                                        proposal.bidAmount ||
+                                          proposal.proposedBudget ||
+                                          0,
+                                      ),
+                                      project.currencyCode,
+                                    )}
                                   </p>
                                 </div>
                                 <div className="text-left sm:text-right">
                                   <p className="text-xs sm:text-sm text-gray-600">
-                                    Timeline
+                                    {t("admin.projects.detail.proposals.timeline")}
                                   </p>
                                   <p className="font-medium text-xs sm:text-sm break-words">
                                     {proposal.deliveryTime
@@ -1993,7 +2151,7 @@ export default function AdminProjectDetailPage() {
                                       ? formatTimeline(
                                           proposal.proposedTimeline
                                         )
-                                      : "—"}
+                                      : t("admin.users.common.emDash")}
                                   </p>
                                 </div>
                               </div>
@@ -2003,7 +2161,9 @@ export default function AdminProjectDetailPage() {
                                 proposal.milestones.length > 0 && (
                                   <div className="text-xs text-gray-600 bg-gray-50 rounded p-2 sm:p-3">
                                     <div className="font-medium text-gray-900 mb-1">
-                                      Proposed Milestones
+                                      {t(
+                                        "admin.projects.detail.proposals.proposedMilestones"
+                                      )}
                                     </div>
                                     <ul className="space-y-1 max-h-24 overflow-y-auto pr-1">
                                       {proposal.milestones.map((m, mIdx) => (
@@ -2012,13 +2172,17 @@ export default function AdminProjectDetailPage() {
                                           className="flex justify-between gap-2"
                                         >
                                           <span className="truncate text-xs">
-                                            {m.title || `Milestone ${mIdx + 1}`}
+                                            {m.title ||
+                                              t(
+                                                "admin.projects.detail.milestones.defaultTitle",
+                                                { index: mIdx + 1 }
+                                              )}
                                           </span>
                                           <span className="text-xs flex-shrink-0">
-                                            RM{" "}
-                                            {Number(
-                                              m.amount || 0
-                                            ).toLocaleString()}
+                                            {formatCurrency(
+                                              Number(m.amount || 0),
+                                              project.currencyCode,
+                                            )}
                                           </span>
                                         </li>
                                       ))}
@@ -2040,7 +2204,7 @@ export default function AdminProjectDetailPage() {
                                       className="w-full text-xs sm:text-sm"
                                     >
                                       <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" />
-                                      View Profile
+                                      {t("admin.projects.detail.dialog.viewProfile")}
                                     </Button>
                                   </Link>
                                 )}
@@ -2056,7 +2220,7 @@ export default function AdminProjectDetailPage() {
                                   }}
                                 >
                                   <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" />
-                                  View Details
+                                  {t("admin.projects.detail.proposals.viewDetails")}
                                 </Button>
                               </div>
                             </div>
@@ -2075,10 +2239,10 @@ export default function AdminProjectDetailPage() {
             <Card>
               <CardHeader className="p-4 sm:p-6">
                 <CardTitle className="text-lg sm:text-xl">
-                  Proposal Attachments
+                  {t("admin.projects.detail.files.proposalAttachments")}
                 </CardTitle>
                 <CardDescription className="text-xs sm:text-sm">
-                  Files attached to proposals
+                  {t("admin.projects.detail.files.proposalAttachmentsDesc")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-4 sm:p-6">
@@ -2100,7 +2264,9 @@ export default function AdminProjectDetailPage() {
                         attachments.forEach((url: string) => {
                           proposalAttachments.push({
                             url,
-                            proposalName: proposal.provider?.name || "Provider",
+                            proposalName:
+                              proposal.provider?.name ||
+                              t("admin.projects.common.provider"),
                             proposalId: proposal.id,
                           });
                         });
@@ -2111,7 +2277,7 @@ export default function AdminProjectDetailPage() {
                   if (proposalAttachments.length === 0) {
                     return (
                       <p className="text-xs sm:text-sm text-gray-500 text-center py-6 sm:py-8">
-                        No proposal attachments found
+                        {t("admin.projects.detail.files.emptyProposal")}
                       </p>
                     );
                   }
@@ -2157,9 +2323,10 @@ export default function AdminProjectDetailPage() {
                                         error
                                       );
                                       toastHook({
-                                        title: "Error",
-                                        description:
-                                          "Failed to download attachment",
+                                        title: t("admin.users.toast.errorTitle"),
+                                        description: t(
+                                          "admin.projects.detail.toast.downloadAttachmentFailed"
+                                        ),
                                         variant: "destructive",
                                       });
                                     }
@@ -2169,15 +2336,16 @@ export default function AdminProjectDetailPage() {
                             className="flex items-start gap-2 sm:gap-3 rounded-lg border border-gray-200 bg-white px-2 sm:px-3 py-2 active:bg-gray-50 sm:hover:bg-gray-50 sm:hover:shadow-sm transition"
                           >
                             <div className="flex h-8 w-8 sm:h-9 sm:w-9 flex-none items-center justify-center rounded-md border border-gray-300 bg-gray-100 text-gray-700 text-[10px] sm:text-xs font-medium">
-                              PDF
+                              {t("admin.projects.detail.files.pdf")}
                             </div>
                             <div className="flex flex-col min-w-0 flex-1">
                               <span className="text-xs sm:text-sm font-medium text-gray-900 break-all leading-snug">
                                 {fileName}
                               </span>
                               <span className="text-[10px] sm:text-xs text-gray-500 leading-snug">
-                                From: {attachment.proposalName} • Click to
-                                preview / download
+                                {t("admin.projects.detail.files.fromProposalHint", {
+                                  from: `${t("admin.projects.detail.files.from")} ${attachment.proposalName}`,
+                                })}
                               </span>
                             </div>
                             <div className="ml-auto flex items-center text-gray-500 active:text-gray-700 sm:hover:text-gray-700">
@@ -2196,10 +2364,10 @@ export default function AdminProjectDetailPage() {
             <Card>
               <CardHeader className="p-4 sm:p-6">
                 <CardTitle className="text-lg sm:text-xl">
-                  Milestone Attachments
+                  {t("admin.projects.detail.files.milestoneAttachments")}
                 </CardTitle>
                 <CardDescription className="text-xs sm:text-sm">
-                  Files submitted with milestone completions
+                  {t("admin.projects.detail.files.milestoneAttachmentsDesc")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-4 sm:p-6">
@@ -2215,7 +2383,9 @@ export default function AdminProjectDetailPage() {
                     if (milestone.submissionAttachmentUrl) {
                       milestoneAttachments.push({
                         url: milestone.submissionAttachmentUrl,
-                        milestoneTitle: milestone.title || "Untitled Milestone",
+                        milestoneTitle:
+                          milestone.title ||
+                          t("admin.projects.detail.untitledMilestone"),
                         milestoneId: milestone.id,
                         submittedAt: milestone.submittedAt,
                       });
@@ -2230,8 +2400,14 @@ export default function AdminProjectDetailPage() {
                           milestoneAttachments.push({
                             url: history.submissionAttachmentUrl,
                             milestoneTitle: `${
-                              milestone.title || "Untitled Milestone"
-                            } (Revision ${history.revisionNumber || "N/A"})`,
+                              milestone.title ||
+                              t("admin.projects.detail.untitledMilestone")
+                            } ${t("admin.projects.detail.revisionSuffix", {
+                              rev: String(
+                                history.revisionNumber ??
+                                  t("admin.projects.common.na")
+                              ),
+                            })}`,
                             milestoneId: milestone.id,
                             submittedAt: history.submittedAt,
                           });
@@ -2243,7 +2419,7 @@ export default function AdminProjectDetailPage() {
                   if (milestoneAttachments.length === 0) {
                     return (
                       <p className="text-xs sm:text-sm text-gray-500 text-center py-6 sm:py-8">
-                        No milestone attachments found
+                        {t("admin.projects.detail.files.emptyMilestone")}
                       </p>
                     );
                   }
@@ -2289,9 +2465,10 @@ export default function AdminProjectDetailPage() {
                                         error
                                       );
                                       toastHook({
-                                        title: "Error",
-                                        description:
-                                          "Failed to download attachment",
+                                        title: t("admin.users.toast.errorTitle"),
+                                        description: t(
+                                          "admin.projects.detail.toast.downloadAttachmentFailed"
+                                        ),
                                         variant: "destructive",
                                       });
                                     }
@@ -2301,20 +2478,23 @@ export default function AdminProjectDetailPage() {
                             className="flex items-start gap-2 sm:gap-3 rounded-lg border border-gray-200 bg-white px-2 sm:px-3 py-2 active:bg-gray-50 sm:hover:bg-gray-50 sm:hover:shadow-sm transition"
                           >
                             <div className="flex h-8 w-8 sm:h-9 sm:w-9 flex-none items-center justify-center rounded-md border border-gray-300 bg-gray-100 text-gray-700 text-[10px] sm:text-xs font-medium">
-                              PDF
+                              {t("admin.projects.detail.files.pdf")}
                             </div>
                             <div className="flex flex-col min-w-0 flex-1">
                               <span className="text-xs sm:text-sm font-medium text-gray-900 break-all leading-snug">
                                 {fileName}
                               </span>
                               <span className="text-[10px] sm:text-xs text-gray-500 leading-snug">
-                                From: {attachment.milestoneTitle}
+                                {t("admin.projects.detail.files.from")}{" "}
+                                {attachment.milestoneTitle}
                                 {attachment.submittedAt &&
-                                  ` • Submitted: ${new Date(
-                                    attachment.submittedAt
-                                  ).toLocaleDateString()}`}
+                                  ` • ${t("admin.projects.detail.files.submitted", {
+                                    date: new Date(
+                                      attachment.submittedAt
+                                    ).toLocaleDateString(),
+                                  })}`}
                                 <span className="block mt-0.5">
-                                  Click to preview / download
+                                  {t("admin.projects.detail.files.clickPreview")}
                                 </span>
                               </span>
                             </div>
@@ -2333,10 +2513,10 @@ export default function AdminProjectDetailPage() {
             <Card>
               <CardHeader className="p-4 sm:p-6">
                 <CardTitle className="text-lg sm:text-xl">
-                  Message Attachments
+                  {t("admin.projects.detail.files.messageAttachments")}
                 </CardTitle>
                 <CardDescription className="text-xs sm:text-sm">
-                  Files attached to project messages
+                  {t("admin.projects.detail.files.messageAttachmentsDesc")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-4 sm:p-6">
@@ -2369,7 +2549,7 @@ export default function AdminProjectDetailPage() {
                         const senderName =
                           (messageSender?.name as string) ||
                           (message.senderName as string) ||
-                          "Unknown";
+                          t("admin.projects.common.unknown");
                         const sentAt =
                           (message.createdAt as string) ||
                           (message.timestamp as string) ||
@@ -2392,7 +2572,7 @@ export default function AdminProjectDetailPage() {
                   if (messageAttachments.length === 0) {
                     return (
                       <p className="text-xs sm:text-sm text-gray-500 text-center py-6 sm:py-8">
-                        No message attachments found
+                        {t("admin.projects.detail.files.emptyMessage")}
                       </p>
                     );
                   }
@@ -2438,9 +2618,10 @@ export default function AdminProjectDetailPage() {
                                         error
                                       );
                                       toastHook({
-                                        title: "Error",
-                                        description:
-                                          "Failed to download attachment",
+                                        title: t("admin.users.toast.errorTitle"),
+                                        description: t(
+                                          "admin.projects.detail.toast.downloadAttachmentFailed"
+                                        ),
                                         variant: "destructive",
                                       });
                                     }
@@ -2450,20 +2631,23 @@ export default function AdminProjectDetailPage() {
                             className="flex items-start gap-2 sm:gap-3 rounded-lg border border-gray-200 bg-white px-2 sm:px-3 py-2 active:bg-gray-50 sm:hover:bg-gray-50 sm:hover:shadow-sm transition"
                           >
                             <div className="flex h-8 w-8 sm:h-9 sm:w-9 flex-none items-center justify-center rounded-md border border-gray-300 bg-gray-100 text-gray-700 text-[10px] sm:text-xs font-medium">
-                              PDF
+                              {t("admin.projects.detail.files.pdf")}
                             </div>
                             <div className="flex flex-col min-w-0 flex-1">
                               <span className="text-xs sm:text-sm font-medium text-gray-900 break-all leading-snug">
                                 {fileName}
                               </span>
                               <span className="text-[10px] sm:text-xs text-gray-500 leading-snug">
-                                From: {attachment.senderName}
+                                {t("admin.projects.detail.files.from")}{" "}
+                                {attachment.senderName}
                                 {attachment.sentAt &&
-                                  ` • Sent: ${new Date(
-                                    attachment.sentAt
-                                  ).toLocaleDateString()}`}
+                                  ` • ${t("admin.projects.detail.files.sent", {
+                                    date: new Date(
+                                      attachment.sentAt
+                                    ).toLocaleDateString(),
+                                  })}`}
                                 <span className="block mt-0.5">
-                                  Click to preview / download
+                                  {t("admin.projects.detail.files.clickPreview")}
                                 </span>
                               </span>
                             </div>
@@ -2484,10 +2668,10 @@ export default function AdminProjectDetailPage() {
             <Card>
               <CardHeader className="p-4 sm:p-6">
                 <CardTitle className="text-lg sm:text-xl">
-                  Media gallery
+                  {t("admin.projects.detail.media.title")}
                 </CardTitle>
                 <CardDescription className="text-xs sm:text-sm">
-                  All images and files from proposals, milestones, messages, and disputes in one view
+                  {t("admin.projects.detail.media.description")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-4 sm:p-6">
@@ -2517,8 +2701,13 @@ export default function AdminProjectDetailPage() {
                         attachments.forEach((url: string) => {
                           addUrl(
                             url,
-                            (url.split("/").pop() || "Attachment") as string,
-                            `Proposal · ${proposal.provider?.name || "Provider"}`
+                            (url.split("/").pop() ||
+                              t("admin.projects.detail.media.labelAttachment")) as string,
+                            t("admin.projects.detail.media.sourceProposal", {
+                              name:
+                                proposal.provider?.name ||
+                                t("admin.projects.common.provider"),
+                            })
                           );
                         });
                       }
@@ -2530,8 +2719,12 @@ export default function AdminProjectDetailPage() {
                       addUrl(
                         milestone.submissionAttachmentUrl,
                         (milestone.submissionAttachmentUrl.split("/").pop() ||
-                          "Submission") as string,
-                        `Milestone: ${milestone.title || "Untitled"}`
+                          t("admin.projects.detail.media.labelSubmission")) as string,
+                        t("admin.projects.detail.media.sourceMilestone", {
+                          title:
+                            milestone.title ||
+                            t("admin.projects.detail.media.untitled"),
+                        })
                       );
                     }
                     if (
@@ -2543,8 +2736,16 @@ export default function AdminProjectDetailPage() {
                           addUrl(
                             history.submissionAttachmentUrl,
                             (history.submissionAttachmentUrl.split("/").pop() ||
-                              "Revision") as string,
-                            `Milestone: ${milestone.title || "Untitled"} (rev ${history.revisionNumber ?? "N/A"})`
+                              t("admin.projects.detail.media.labelRevision")) as string,
+                            t("admin.projects.detail.media.sourceMilestoneRev", {
+                              title:
+                                milestone.title ||
+                                t("admin.projects.detail.media.untitled"),
+                              rev: String(
+                                history.revisionNumber ??
+                                  t("admin.projects.common.na")
+                              ),
+                            })
                           );
                         }
                       });
@@ -2556,17 +2757,23 @@ export default function AdminProjectDetailPage() {
                       if (String(message.projectId) !== String(projectId)) return;
                       const attachments = message.attachments;
                       if (Array.isArray(attachments) && attachments.length > 0) {
+                        const rawSender =
+                          (message.sender as Record<string, unknown>)?.name ??
+                          message.senderName;
                         const senderName =
-                          (message.sender as Record<string, unknown>)?.name ||
-                          (message.senderName as string) ||
-                          "Unknown";
+                          typeof rawSender === "string" && rawSender.trim()
+                            ? rawSender
+                            : t("admin.projects.common.unknown");
                         attachments.forEach((url: unknown) => {
                           const urlStr =
                             typeof url === "string" ? url : String(url);
                           addUrl(
                             urlStr,
-                            (urlStr.split("/").pop() || "Attachment") as string,
-                            `Message · ${senderName}`
+                            (urlStr.split("/").pop() ||
+                              t("admin.projects.detail.media.labelAttachment")) as string,
+                            t("admin.projects.detail.media.sourceMessage", {
+                              name: senderName,
+                            })
                           );
                         });
                       }
@@ -2580,8 +2787,13 @@ export default function AdminProjectDetailPage() {
                         attachments.forEach((url: string) => {
                           addUrl(
                             url,
-                            (url.split("/").pop() || "Attachment") as string,
-                            `Dispute · ${d.raisedBy?.name || "User"}`
+                            (url.split("/").pop() ||
+                              t("admin.projects.detail.media.labelAttachment")) as string,
+                            t("admin.projects.detail.media.sourceDispute", {
+                              name:
+                                d.raisedBy?.name ||
+                                t("admin.projects.common.user"),
+                            })
                           );
                         });
                       }
@@ -2591,7 +2803,7 @@ export default function AdminProjectDetailPage() {
                   if (items.length === 0) {
                     return (
                       <p className="text-xs sm:text-sm text-gray-500 text-center py-8 sm:py-12">
-                        No media or attachments yet
+                        {t("admin.projects.detail.media.empty")}
                       </p>
                     );
                   }
@@ -2616,8 +2828,10 @@ export default function AdminProjectDetailPage() {
                       } catch (err) {
                         console.error(err);
                         toastHook({
-                          title: "Error",
-                          description: "Failed to open file",
+                          title: t("admin.users.toast.errorTitle"),
+                          description: t(
+                            "admin.projects.detail.toast.openFileFailed"
+                          ),
                           variant: "destructive",
                         });
                       }
@@ -2684,10 +2898,10 @@ export default function AdminProjectDetailPage() {
             <Card>
               <CardHeader className="p-4 sm:p-6">
                 <CardTitle className="text-lg sm:text-xl">
-                  Project Messages
+                  {t("admin.projects.detail.messages.title")}
                 </CardTitle>
                 <CardDescription className="text-xs sm:text-sm">
-                  Communication between customer and provider
+                  {t("admin.projects.detail.messages.description")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-4 sm:p-6 pt-0">
@@ -2695,14 +2909,14 @@ export default function AdminProjectDetailPage() {
                   <div className="flex items-center justify-center py-8">
                     <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
                     <span className="ml-2 text-sm text-gray-600">
-                      Loading messages...
+                      {t("admin.projects.detail.messages.loading")}
                     </span>
                   </div>
                 ) : messages.length === 0 ? (
                   <div className="text-center py-8">
                     <MessageSquare className="w-12 h-12 mx-auto text-gray-400 mb-2" />
                     <p className="text-sm text-gray-500">
-                      No messages found for this project
+                      {t("admin.projects.detail.messages.empty")}
                     </p>
                   </div>
                 ) : (
@@ -2722,7 +2936,7 @@ export default function AdminProjectDetailPage() {
                       const senderName =
                         (messageSender?.name as string) ||
                         (message.senderName as string) ||
-                        "User";
+                        t("admin.projects.detail.messages.fallbackUser");
                       const avatarChar = senderName?.charAt?.(0) || "U";
                       const messageId = message.id as
                         | string
@@ -2867,9 +3081,10 @@ export default function AdminProjectDetailPage() {
                                                           error
                                                         );
                                                         toastHook({
-                                                          title: "Error",
-                                                          description:
-                                                            "Failed to download attachment",
+                                                          title: t("admin.users.toast.errorTitle"),
+                                                          description: t(
+                                                            "admin.projects.detail.toast.downloadAttachmentFailed"
+                                                          ),
                                                           variant:
                                                             "destructive",
                                                         });
@@ -2909,9 +3124,10 @@ export default function AdminProjectDetailPage() {
                                                           error
                                                         );
                                                         toastHook({
-                                                          title: "Error",
-                                                          description:
-                                                            "Failed to download attachment",
+                                                          title: t("admin.users.toast.errorTitle"),
+                                                          description: t(
+                                                            "admin.projects.detail.toast.downloadAttachmentFailed"
+                                                          ),
                                                           variant:
                                                             "destructive",
                                                         });
@@ -2934,7 +3150,7 @@ export default function AdminProjectDetailPage() {
                             <p className="text-xs text-gray-500 mt-1">
                               {ts
                                 ? new Date(ts).toLocaleString()
-                                : "No timestamp"}
+                                : t("admin.projects.detail.messages.noTimestamp")}
                             </p>
                           </div>
                         </div>
@@ -2951,7 +3167,7 @@ export default function AdminProjectDetailPage() {
               <Card>
                 <CardHeader className="p-4 sm:p-6">
                   <CardTitle className="text-lg sm:text-xl">
-                    Related Disputes
+                    {t("admin.projects.detail.disputes.title")}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-4 sm:p-6">
@@ -2964,7 +3180,7 @@ export default function AdminProjectDetailPage() {
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-start gap-2 sm:gap-0 mb-2">
                           <div className="flex-1 min-w-0">
                             <p className="font-medium text-sm sm:text-base break-words">
-                              {dispute.reason || "N/A"}
+                              {dispute.reason || t("admin.projects.common.na")}
                             </p>
                             <div className="text-xs sm:text-sm text-gray-600 mt-2 whitespace-pre-wrap break-words">
                               {(() => {
@@ -3036,7 +3252,9 @@ export default function AdminProjectDetailPage() {
                                           className="inline-flex items-center gap-1"
                                         >
                                           <span className="text-blue-600">
-                                            [Attachment:
+                                            {t(
+                                              "admin.projects.detail.disputes.attachmentLink"
+                                            )}
                                           </span>
                                           <button
                                             onClick={async (e) => {
@@ -3063,9 +3281,10 @@ export default function AdminProjectDetailPage() {
                                                   error
                                                 );
                                                 toastHook({
-                                                  title: "Error",
-                                                  description:
-                                                    "Failed to download attachment",
+                                                  title: t("admin.users.toast.errorTitle"),
+                                                  description: t(
+                                                    "admin.projects.detail.toast.downloadAttachmentFailed"
+                                                  ),
                                                   variant: "destructive",
                                                 });
                                               }
@@ -3075,8 +3294,13 @@ export default function AdminProjectDetailPage() {
                                             {filename}
                                           </button>
                                           <span className="text-gray-600">
-                                            uploaded by {uploadedBy} on{" "}
-                                            {uploadedAt}]
+                                            {t(
+                                              "admin.projects.detail.disputes.uploadedByOn",
+                                              {
+                                                user: uploadedBy,
+                                                date: uploadedAt,
+                                              }
+                                            )}
                                           </span>
                                         </span>
                                       );
@@ -3116,7 +3340,9 @@ export default function AdminProjectDetailPage() {
                         </div>
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-0 mt-2">
                           <span className="text-xs sm:text-sm text-gray-600 break-words">
-                            Raised by: {dispute.raisedBy?.name || "N/A"}
+                            {t("admin.projects.detail.disputes.raisedBy")}{" "}
+                            {dispute.raisedBy?.name ||
+                              t("admin.projects.common.na")}
                           </span>
                           <Link href={`/admin/disputes/${dispute.id}`}>
                             <Button
@@ -3124,7 +3350,7 @@ export default function AdminProjectDetailPage() {
                               size="sm"
                               className="w-full sm:w-auto text-xs sm:text-sm"
                             >
-                              View Dispute
+                              {t("admin.projects.detail.disputes.viewDispute")}
                             </Button>
                           </Link>
                         </div>
@@ -3150,12 +3376,14 @@ export default function AdminProjectDetailPage() {
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
             <DialogHeader>
               <DialogTitle className="text-lg sm:text-xl">
-                Proposal Details
+                {t("admin.projects.detail.dialog.title")}
               </DialogTitle>
               <DialogDescription className="text-xs sm:text-sm">
-                Detailed information about{" "}
-                {selectedProposalDetails?.provider?.name || "Provider"}&apos;s
-                proposal
+                {t("admin.projects.detail.dialog.description", {
+                  name:
+                    selectedProposalDetails?.provider?.name ||
+                    t("admin.projects.common.provider"),
+                })}
               </DialogDescription>
             </DialogHeader>
 
@@ -3183,7 +3411,8 @@ export default function AdminProjectDetailPage() {
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                       <div className="min-w-0 flex-1">
                         <h3 className="text-lg sm:text-xl font-semibold break-words">
-                          {selectedProposalDetails.provider?.name || "Provider"}
+                          {selectedProposalDetails.provider?.name ||
+                            t("admin.projects.common.provider")}
                         </h3>
                         <div className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-1 text-xs sm:text-sm text-gray-600 mt-1">
                           {selectedProposalDetails.provider?.providerProfile
@@ -3193,10 +3422,12 @@ export default function AdminProjectDetailPage() {
                               <div className="flex items-center gap-1">
                                 <Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-yellow-400 fill-current flex-shrink-0" />
                                 <span>
-                                  {selectedProposalDetails.provider.providerProfile.rating.toFixed(
-                                    1
-                                  )}{" "}
-                                  rating
+                                  {t("admin.projects.detail.dialog.rating", {
+                                    value:
+                                      selectedProposalDetails.provider.providerProfile.rating.toFixed(
+                                        1
+                                      ),
+                                  })}
                                 </span>
                               </div>
                             )}
@@ -3221,11 +3452,14 @@ export default function AdminProjectDetailPage() {
                         {selectedProposalDetails.provider?.providerProfile
                           ?.yearsExperience && (
                           <p className="text-xs sm:text-sm text-gray-600 mt-1">
-                            {
-                              selectedProposalDetails.provider.providerProfile
-                                .yearsExperience
-                            }{" "}
-                            years experience
+                            {t(
+                              "admin.projects.detail.dialog.yearsExperience",
+                              {
+                                count:
+                                  selectedProposalDetails.provider
+                                    .providerProfile.yearsExperience,
+                              }
+                            )}
                           </p>
                         )}
 
@@ -3256,10 +3490,14 @@ export default function AdminProjectDetailPage() {
                                   variant="secondary"
                                   className="text-[10px] leading-tight"
                                 >
-                                  +
-                                  {selectedProposalDetails.provider
-                                    .providerProfile.skills.length - 4}{" "}
-                                  more
+                                  {t(
+                                    "admin.projects.detail.dialog.moreSkills",
+                                    {
+                                      count:
+                                        selectedProposalDetails.provider
+                                          .providerProfile.skills.length - 4,
+                                    }
+                                  )}
                                 </Badge>
                               )}
                             </div>
@@ -3278,7 +3516,7 @@ export default function AdminProjectDetailPage() {
                             className="flex items-center text-xs sm:text-sm"
                           >
                             <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" />
-                            View Profile
+                            {t("admin.projects.detail.dialog.viewProfile")}
                           </Button>
                         </Link>
                       )}
@@ -3292,7 +3530,7 @@ export default function AdminProjectDetailPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                   <div>
                     <h4 className="font-semibold mb-2 text-sm sm:text-base">
-                      Project
+                      {t("admin.projects.detail.dialog.sectionProject")}
                     </h4>
                     <p className="text-sm sm:text-base text-gray-900 break-words">
                       {project.title || ""}
@@ -3300,20 +3538,22 @@ export default function AdminProjectDetailPage() {
                   </div>
                   <div>
                     <h4 className="font-semibold mb-2 text-sm sm:text-base">
-                      Bid Amount
+                      {t("admin.projects.detail.dialog.sectionBidAmount")}
                     </h4>
                     <p className="text-xl sm:text-2xl font-bold text-green-600">
-                      RM
-                      {Number(
-                        selectedProposalDetails.bidAmount ||
-                          selectedProposalDetails.proposedBudget ||
-                          0
-                      ).toLocaleString()}
+                      {formatCurrency(
+                        Number(
+                          selectedProposalDetails.bidAmount ||
+                            selectedProposalDetails.proposedBudget ||
+                            0,
+                        ),
+                        project.currencyCode,
+                      )}
                     </p>
                   </div>
                   <div>
                     <h4 className="font-semibold mb-2 text-sm sm:text-base">
-                      Proposed Timeline
+                      {t("admin.projects.detail.dialog.sectionProposedTimeline")}
                     </h4>
                     <p className="text-sm sm:text-base text-gray-900 break-words">
                       {selectedProposalDetails.deliveryTime
@@ -3325,12 +3565,12 @@ export default function AdminProjectDetailPage() {
                         ? formatTimeline(
                             selectedProposalDetails.proposedTimeline
                           )
-                        : "—"}
+                        : t("admin.users.common.emDash")}
                     </p>
                   </div>
                   <div>
                     <h4 className="font-semibold mb-2 text-sm sm:text-base">
-                      Status
+                      {t("admin.projects.detail.dialog.sectionStatus")}
                     </h4>
                     <Badge
                       className={`${getStatusColor(
@@ -3349,7 +3589,7 @@ export default function AdminProjectDetailPage() {
                 {selectedProposalDetails.coverLetter && (
                   <div>
                     <h4 className="font-semibold mb-2 text-sm sm:text-base">
-                      Cover Letter
+                      {t("admin.projects.detail.dialog.coverLetter")}
                     </h4>
                     <div className="bg-gray-50 p-3 sm:p-4 rounded-lg">
                       <p className="text-xs sm:text-sm text-gray-700 whitespace-pre-wrap break-words">
@@ -3368,7 +3608,7 @@ export default function AdminProjectDetailPage() {
                     .length > 0 && (
                     <div>
                       <h4 className="font-semibold mb-2 text-sm sm:text-base">
-                        Skills
+                        {t("admin.projects.detail.dialog.skills")}
                       </h4>
                       <div className="flex flex-wrap gap-2">
                         {selectedProposalDetails.provider.providerProfile.skills.map(
@@ -3396,7 +3636,7 @@ export default function AdminProjectDetailPage() {
                     .length > 0 && (
                     <div>
                       <h4 className="font-semibold mb-2 text-sm sm:text-base">
-                        Portfolio
+                        {t("admin.projects.detail.dialog.portfolio")}
                       </h4>
                       <div className="space-y-2">
                         {selectedProposalDetails.provider.providerProfile.portfolios.map(
@@ -3413,7 +3653,9 @@ export default function AdminProjectDetailPage() {
                             >
                               {portfolio.title ||
                                 portfolio.externalUrl ||
-                                `Portfolio ${index + 1}`}
+                                t("admin.projects.detail.dialog.portfolioItem", {
+                                  index: index + 1,
+                                })}
                             </a>
                           )
                         )}
@@ -3426,7 +3668,7 @@ export default function AdminProjectDetailPage() {
                   selectedProposalDetails.milestones.length > 0 && (
                     <div>
                       <h4 className="font-semibold mb-2 text-sm sm:text-base">
-                        Proposed Milestones
+                        {t("admin.projects.detail.dialog.proposedMilestones")}
                       </h4>
                       <div className="space-y-3 sm:space-y-4">
                         {selectedProposalDetails.milestones
@@ -3446,16 +3688,21 @@ export default function AdminProjectDetailPage() {
                                       #{m.order || idx + 1}
                                     </Badge>
                                     <span className="font-medium text-gray-900 break-words">
-                                      {m.title || "Untitled milestone"}
+                                      {m.title ||
+                                        t(
+                                          "admin.projects.detail.dialog.untitledMilestone"
+                                        )}
                                     </span>
                                   </div>
                                   <div className="text-left sm:text-right">
                                     <span className="text-xs sm:text-sm text-gray-500 block">
-                                      Amount
+                                      {t("admin.projects.detail.dialog.amount")}
                                     </span>
                                     <span className="text-base sm:text-lg font-semibold text-gray-900">
-                                      RM{" "}
-                                      {Number(m.amount || 0).toLocaleString()}
+                                      {formatCurrency(
+                                        Number(m.amount || 0),
+                                        project.currencyCode,
+                                      )}
                                     </span>
                                   </div>
                                 </div>
@@ -3470,10 +3717,14 @@ export default function AdminProjectDetailPage() {
                                     <div className="flex items-center gap-1">
                                       <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
                                       <span>
-                                        Due:{" "}
-                                        {new Date(
-                                          m.dueDate
-                                        ).toLocaleDateString()}
+                                        {t(
+                                          "admin.projects.detail.milestones.due",
+                                          {
+                                            date: new Date(
+                                              m.dueDate
+                                            ).toLocaleDateString(),
+                                          }
+                                        )}
                                       </span>
                                     </div>
                                   )}
@@ -3494,7 +3745,7 @@ export default function AdminProjectDetailPage() {
                     selectedProposalDetails.attachments.length > 0)) && (
                   <div className="mt-4 sm:mt-6">
                     <h4 className="font-semibold mb-3 flex items-center text-gray-900 text-sm sm:text-base">
-                      Attachments
+                      {t("admin.projects.detail.dialog.attachments")}
                     </h4>
                     <div className="space-y-2">
                       {(
@@ -3540,9 +3791,10 @@ export default function AdminProjectDetailPage() {
                                         error
                                       );
                                       toastHook({
-                                        title: "Error",
-                                        description:
-                                          "Failed to download attachment",
+                                        title: t("admin.users.toast.errorTitle"),
+                                        description: t(
+                                          "admin.projects.detail.toast.downloadAttachmentFailed"
+                                        ),
                                         variant: "destructive",
                                       });
                                     }
@@ -3552,14 +3804,14 @@ export default function AdminProjectDetailPage() {
                             className="flex items-start gap-2 sm:gap-3 rounded-lg border border-gray-200 bg-white px-2 sm:px-3 py-2 active:bg-gray-50 sm:hover:bg-gray-50 sm:hover:shadow-sm transition"
                           >
                             <div className="flex h-8 w-8 sm:h-9 sm:w-9 flex-none items-center justify-center rounded-md border border-gray-300 bg-gray-100 text-gray-700 text-[10px] sm:text-xs font-medium">
-                              PDF
+                              {t("admin.projects.detail.files.pdf")}
                             </div>
                             <div className="flex flex-col min-w-0 flex-1">
                               <span className="text-xs sm:text-sm font-medium text-gray-900 break-all leading-snug">
                                 {fileName}
                               </span>
                               <span className="text-[10px] sm:text-xs text-gray-500 leading-snug">
-                                Click to preview / download
+                                {t("admin.projects.detail.files.clickPreview")}
                               </span>
                             </div>
                             <div className="ml-auto flex items-center text-gray-500 active:text-gray-700 sm:hover:text-gray-700">
@@ -3583,7 +3835,7 @@ export default function AdminProjectDetailPage() {
                 }}
                 className="w-full sm:w-auto text-xs sm:text-sm"
               >
-                Close
+                {t("admin.projects.detail.dialog.close")}
               </Button>
             </DialogFooter>
           </DialogContent>

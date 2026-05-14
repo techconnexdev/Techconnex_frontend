@@ -42,6 +42,18 @@ import {
 } from "@/lib/api";
 import { MediaImage } from "@/components/ui/media-image";
 import type { ProfileData } from "../types";
+import { useI18n } from "@/contexts/I18nProvider";
+import {
+  PROFILE_COMPANY_SIZE,
+  PROFILE_CONTRACT,
+  PROFILE_CORE_VALUE,
+  PROFILE_FUNDING,
+  PROFILE_HIRE_CATEGORY,
+  PROFILE_HIRING_FREQ,
+  PROFILE_INDUSTRY,
+  PROFILE_REMOTE,
+  profileStoredLabel,
+} from "@/lib/i18n/customerProfileOptionMaps";
 
 type Props = {
   value: ProfileData;
@@ -62,6 +74,7 @@ export default function CompanyInfo({
   const [newMediaUrl, setNewMediaUrl] = useState("");
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  const { t } = useI18n();
 
   // Lightbox state
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -163,7 +176,7 @@ export default function CompanyInfo({
 
     if (currentCount >= MAX_IMAGES) {
       toast.error(
-        `Maximum ${MAX_IMAGES} images allowed. Please remove some images first.`
+        t("customer.profile.company.toast.maxImages", { max: MAX_IMAGES }),
       );
       setNewMediaUrl("");
       return;
@@ -194,7 +207,9 @@ export default function CompanyInfo({
 
     if (currentCount >= MAX_MEDIA_IMAGES) {
       toast.error(
-        `Maximum ${MAX_MEDIA_IMAGES} images allowed. Please remove some images first.`
+        t("customer.profile.company.toast.maxImages", {
+          max: MAX_MEDIA_IMAGES,
+        }),
       );
       return;
     }
@@ -202,7 +217,10 @@ export default function CompanyInfo({
     if (currentCount + files.length > MAX_MEDIA_IMAGES) {
       const allowed = MAX_MEDIA_IMAGES - currentCount;
       toast.error(
-        `You can only add ${allowed} more image(s). Maximum ${MAX_MEDIA_IMAGES} images allowed.`
+        t("customer.profile.company.toast.addMore", {
+          n: allowed,
+          max: MAX_MEDIA_IMAGES,
+        }),
       );
       return;
     }
@@ -211,13 +229,13 @@ export default function CompanyInfo({
       (file) => !ALLOWED_IMAGE_TYPES.includes(file.type)
     );
     if (invalidFiles.length > 0) {
-      toast.error("Only image files are allowed (JPEG, PNG, GIF, WebP)");
+      toast.error(t("customer.profile.company.toast.imagesOnly"));
       return;
     }
 
     const oversizedFiles = files.filter((file) => file.size > MAX_FILE_SIZE);
     if (oversizedFiles.length > 0) {
-      toast.error("Some files exceed 10MB limit");
+      toast.error(t("customer.profile.company.toast.exceeds10mb"));
       return;
     }
 
@@ -233,7 +251,11 @@ export default function CompanyInfo({
             mediaGallery: response.data.mediaGallery,
           },
         });
-        toast.success(`${files.length} image(s) uploaded successfully`);
+        toast.success(
+          t("customer.profile.company.toast.uploadedCount", {
+            n: files.length,
+          }),
+        );
         if (onCompletionUpdate) {
           try {
             const completionResponse = await getCompanyProfileCompletion();
@@ -248,7 +270,9 @@ export default function CompanyInfo({
           }
         }
       } else {
-        toast.error(response.message || "Failed to upload images");
+        toast.error(
+          response.message || t("customer.profile.company.toast.uploadFailed"),
+        );
       }
     } catch (error: unknown) {
       toast.error(
@@ -455,12 +479,34 @@ export default function CompanyInfo({
     "One-time",
   ];
 
+  const industryOptions = [
+    "Technology",
+    "Finance",
+    "Healthcare",
+    "Education",
+    "Manufacturing",
+    "Retail",
+    "Government",
+    "Consulting",
+    "Real Estate",
+    "Other",
+  ];
+
+  const companySizeValues = [
+    "1-10",
+    "11-50",
+    "51-200",
+    "201-1000",
+    "1000+",
+    "150",
+  ] as const;
+
   const editableCardClass = isEditing
     ? "ring-2 ring-blue-300 border-blue-200 bg-blue-50/30"
     : "";
   const editableBadge = isEditing ? (
     <span className="text-xs font-normal text-blue-700 bg-blue-100 px-2 py-0.5 rounded">
-      Editable
+      {t("customer.profile.company.editableBadge")}
     </span>
   ) : null;
 
@@ -470,17 +516,17 @@ export default function CompanyInfo({
       <Card className={editableCardClass}>
         <CardHeader className="p-4 sm:p-6">
           <CardTitle className="text-base sm:text-lg flex items-center gap-2">
-            Business Profile
+            {t("customer.profile.company.card.businessTitle")}
             {editableBadge}
           </CardTitle>
           <CardDescription className="text-xs sm:text-sm">
-            Core information about your company
+            {t("customer.profile.company.card.businessDesc")}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 sm:space-y-4 p-4 sm:p-6 pt-0">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
             <div>
-              <Label>Industry</Label>
+              <Label>{t("customer.profile.company.label.industry")}</Label>
               {isEditing ? (
                 <Select
                   value={value.customerProfile?.industry || ""}
@@ -495,35 +541,32 @@ export default function CompanyInfo({
                   }
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select industry" />
+                    <SelectValue
+                      placeholder={t("customer.profile.company.ph.industry")}
+                    />
                   </SelectTrigger>
                   <SelectContent>
-                    {[
-                      "Technology",
-                      "Finance",
-                      "Healthcare",
-                      "Education",
-                      "Manufacturing",
-                      "Retail",
-                      "Government",
-                      "Consulting",
-                      "Real Estate",
-                      "Other",
-                    ].map((i) => (
+                    {industryOptions.map((i) => (
                       <SelectItem key={i} value={i}>
-                        {i}
+                        {profileStoredLabel(PROFILE_INDUSTRY, i, t)}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               ) : (
                 <p className="text-sm sm:text-base text-gray-900 mt-2">
-                  {value.customerProfile?.industry || "N/A"}
+                  {value.customerProfile?.industry
+                    ? profileStoredLabel(
+                        PROFILE_INDUSTRY,
+                        value.customerProfile.industry,
+                        t,
+                      )
+                    : t("customer.profile.na")}
                 </p>
               )}
             </div>
             <div>
-              <Label>Company Size</Label>
+              <Label>{t("customer.profile.company.label.companySize")}</Label>
               {isEditing ? (
                 <Select
                   value={value.customerProfile?.companySize || ""}
@@ -538,31 +581,32 @@ export default function CompanyInfo({
                   }
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select company size" />
+                    <SelectValue
+                      placeholder={t("customer.profile.company.ph.companySize")}
+                    />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="1-10">Startup (1-10 employees)</SelectItem>
-                    <SelectItem value="11-50">Small (11-50 employees)</SelectItem>
-                    <SelectItem value="51-200">
-                      Medium (51-200 employees)
-                    </SelectItem>
-                    <SelectItem value="201-1000">
-                      Large (201-1000 employees)
-                    </SelectItem>
-                    <SelectItem value="1000+">
-                      Enterprise (1000+ employees)
-                    </SelectItem>
-                    <SelectItem value="150">150 employees</SelectItem>
+                    {companySizeValues.map((size) => (
+                      <SelectItem key={size} value={size}>
+                        {profileStoredLabel(PROFILE_COMPANY_SIZE, size, t)}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               ) : (
                 <p className="text-sm sm:text-base text-gray-900 mt-2">
-                  {value.customerProfile?.companySize || "N/A"}
+                  {value.customerProfile?.companySize
+                    ? profileStoredLabel(
+                        PROFILE_COMPANY_SIZE,
+                        value.customerProfile.companySize,
+                        t,
+                      )
+                    : t("customer.profile.na")}
                 </p>
               )}
             </div>
             <div>
-              <Label>Employee Count</Label>
+              <Label>{t("customer.profile.company.label.employeeCount")}</Label>
               {isEditing ? (
                 <Input
                   type="number"
@@ -580,12 +624,12 @@ export default function CompanyInfo({
                 />
               ) : (
                 <p className="text-sm sm:text-base text-gray-900 mt-2">
-                  {value.customerProfile?.employeeCount || "N/A"}
+                  {value.customerProfile?.employeeCount || t("customer.profile.na")}
                 </p>
               )}
             </div>
             <div>
-              <Label>Established Year</Label>
+              <Label>{t("customer.profile.company.label.establishedYear")}</Label>
               {isEditing ? (
                 <Input
                   type="number"
@@ -605,12 +649,13 @@ export default function CompanyInfo({
                 />
               ) : (
                 <p className="text-sm sm:text-base text-gray-900 mt-2">
-                  {value.customerProfile?.establishedYear || "N/A"}
+                  {value.customerProfile?.establishedYear ||
+                    t("customer.profile.na")}
                 </p>
               )}
             </div>
             <div>
-              <Label>Annual Revenue</Label>
+              <Label>{t("customer.profile.company.label.annualRevenue")}</Label>
               {isEditing ? (
                 <>
                   <Input
@@ -628,17 +673,17 @@ export default function CompanyInfo({
                     placeholder="500000"
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    Enter revenue in your currency
+                    {t("customer.profile.company.hint.revenueCurrency")}
                   </p>
                 </>
               ) : (
                 <p className="text-sm sm:text-base text-gray-900 mt-2">
-                  {value.customerProfile?.annualRevenue || "N/A"}
+                  {value.customerProfile?.annualRevenue || t("customer.profile.na")}
                 </p>
               )}
             </div>
             <div>
-              <Label>Funding Stage</Label>
+              <Label>{t("customer.profile.company.label.fundingStage")}</Label>
               {isEditing ? (
                 <Select
                   value={value.customerProfile?.fundingStage || ""}
@@ -653,19 +698,27 @@ export default function CompanyInfo({
                   }
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select funding stage" />
+                    <SelectValue
+                      placeholder={t("customer.profile.company.ph.fundingStage")}
+                    />
                   </SelectTrigger>
                   <SelectContent>
                     {fundingStageOptions.map((option) => (
                       <SelectItem key={option} value={option}>
-                        {option}
+                        {profileStoredLabel(PROFILE_FUNDING, option, t)}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               ) : (
                 <p className="text-sm sm:text-base text-gray-900 mt-2">
-                  {value.customerProfile?.fundingStage || "N/A"}
+                  {value.customerProfile?.fundingStage
+                    ? profileStoredLabel(
+                        PROFILE_FUNDING,
+                        value.customerProfile.fundingStage,
+                        t,
+                      )
+                    : t("customer.profile.na")}
                 </p>
               )}
             </div>
@@ -677,11 +730,11 @@ export default function CompanyInfo({
       <Card className={editableCardClass}>
         <CardHeader className="p-4 sm:p-6">
           <CardTitle className="text-base sm:text-lg flex items-center gap-2">
-            Hiring Preferences
+            {t("customer.profile.company.card.hiringTitle")}
             {editableBadge}
           </CardTitle>
           <CardDescription className="text-xs sm:text-sm">
-            Your company&apos;s hiring and contract preferences
+            {t("customer.profile.company.card.hiringDesc")}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -730,24 +783,32 @@ export default function CompanyInfo({
                   }
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select remote policy" />
+                    <SelectValue
+                      placeholder={t("customer.profile.company.ph.remotePolicy")}
+                    />
                   </SelectTrigger>
                   <SelectContent>
                     {remotePolicyOptions.map((option) => (
                       <SelectItem key={option} value={option}>
-                        {option}
+                        {profileStoredLabel(PROFILE_REMOTE, option, t)}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               ) : (
                 <p className="text-sm sm:text-base text-gray-900 mt-2">
-                  {value.customerProfile?.remotePolicy || "N/A"}
+                  {value.customerProfile?.remotePolicy
+                    ? profileStoredLabel(
+                        PROFILE_REMOTE,
+                        value.customerProfile.remotePolicy,
+                        t,
+                      )
+                    : t("customer.profile.na")}
                 </p>
               )}
             </div>
             <div>
-              <Label>Hiring Frequency</Label>
+              <Label>{t("customer.profile.company.label.hiringFrequency")}</Label>
               {isEditing ? (
                 <Select
                   value={value.customerProfile?.hiringFrequency || ""}
@@ -762,19 +823,29 @@ export default function CompanyInfo({
                   }
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select hiring frequency" />
+                    <SelectValue
+                      placeholder={t(
+                        "customer.profile.company.ph.hiringFrequency",
+                      )}
+                    />
                   </SelectTrigger>
                   <SelectContent>
                     {hiringFrequencyOptions.map((option) => (
                       <SelectItem key={option} value={option}>
-                        {option}
+                        {profileStoredLabel(PROFILE_HIRING_FREQ, option, t)}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               ) : (
                 <p className="text-sm sm:text-base text-gray-900 mt-2">
-                  {value.customerProfile?.hiringFrequency || "N/A"}
+                  {value.customerProfile?.hiringFrequency
+                    ? profileStoredLabel(
+                        PROFILE_HIRING_FREQ,
+                        value.customerProfile.hiringFrequency,
+                        t,
+                      )
+                    : t("customer.profile.na")}
                 </p>
               )}
             </div>
@@ -784,7 +855,7 @@ export default function CompanyInfo({
 
           {/* Preferred Contract Types */}
           <div className="space-y-4">
-            <Label>Preferred Contract Types</Label>
+            <Label>{t("customer.profile.company.label.contractTypes")}</Label>
             {isEditing ? (
               <div className="flex flex-wrap gap-2 p-3 border rounded-lg bg-gray-50">
                 {contractTypeOptions.map((type) => (
@@ -808,7 +879,7 @@ export default function CompanyInfo({
                       toggleArrayItem("preferredContractTypes", type)
                     }
                   >
-                    {type}
+                    {profileStoredLabel(PROFILE_CONTRACT, type, t)}
                   </Badge>
                 ))}
               </div>
@@ -819,13 +890,13 @@ export default function CompanyInfo({
                   value.customerProfile.preferredContractTypes.map(
                     (type, index) => (
                       <Badge key={index} variant="secondary">
-                        {type}
+                        {profileStoredLabel(PROFILE_CONTRACT, type, t)}
                       </Badge>
                     )
                   )
                 ) : (
                   <span className="text-sm text-gray-500">
-                    No contract types specified
+                    {t("customer.profile.company.empty.contractTypes")}
                   </span>
                 )}
               </div>
@@ -836,9 +907,9 @@ export default function CompanyInfo({
 
           {/* Categories Hiring For */}
           <div className="space-y-4">
-            <Label>Categories Hiring For</Label>
+            <Label>{t("customer.profile.company.label.categoriesHiring")}</Label>
             <p className="text-sm text-gray-600">
-              Select the types of roles you typically hire for
+              {t("customer.profile.company.hint.categoriesHiring")}
             </p>
             {isEditing ? (
               <>
@@ -846,7 +917,7 @@ export default function CompanyInfo({
                   <Input
                     value={customCategory}
                     onChange={(e) => setCustomCategory(e.target.value)}
-                    placeholder="Type a category and press Add"
+                    placeholder={t("customer.profile.company.ph.category")}
                     onKeyPress={(e) =>
                       e.key === "Enter" &&
                       (e.preventDefault(), handleAddCustomCategory())
@@ -865,8 +936,9 @@ export default function CompanyInfo({
                   value.customerProfile.categoriesHiringFor.length > 0 && (
                     <div className="space-y-2">
                       <Label className="text-sm font-medium">
-                        Selected Categories (
-                        {value.customerProfile.categoriesHiringFor.length})
+                        {t("customer.profile.company.label.selectedCategories", {
+                          n: value.customerProfile.categoriesHiringFor.length,
+                        })}
                       </Label>
                       <div className="flex flex-wrap gap-2 p-3 border rounded-lg bg-gray-50">
                         {value.customerProfile.categoriesHiringFor.map(
@@ -875,7 +947,11 @@ export default function CompanyInfo({
                               key={index}
                               className="bg-green-600 hover:bg-green-700 text-white pr-1"
                             >
-                              {category}
+                              {profileStoredLabel(
+                                PROFILE_HIRE_CATEGORY,
+                                category,
+                                t,
+                              )}
                               <button
                                 type="button"
                                 onClick={() =>
@@ -894,7 +970,7 @@ export default function CompanyInfo({
 
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">
-                    Popular Categories (click to add)
+                    {t("customer.profile.company.label.popularCategories")}
                   </Label>
                   <div className="flex flex-wrap gap-2 p-3 border rounded-lg bg-gray-50">
                     {popularHiringCategories
@@ -913,7 +989,11 @@ export default function CompanyInfo({
                             toggleArrayItem("categoriesHiringFor", category)
                           }
                         >
-                          {category}
+                          {profileStoredLabel(
+                            PROFILE_HIRE_CATEGORY,
+                            category,
+                            t,
+                          )}
                         </Badge>
                       ))}
                   </div>
@@ -926,13 +1006,13 @@ export default function CompanyInfo({
                   value.customerProfile.categoriesHiringFor.map(
                     (cat, index) => (
                       <Badge key={index} variant="secondary">
-                        {cat}
+                        {profileStoredLabel(PROFILE_HIRE_CATEGORY, cat, t)}
                       </Badge>
                     )
                   )
                 ) : (
                   <span className="text-sm text-gray-500">
-                    No categories specified
+                    {t("customer.profile.company.empty.categories")}
                   </span>
                 )}
               </div>
@@ -945,16 +1025,18 @@ export default function CompanyInfo({
       <Card className={editableCardClass}>
         <CardHeader className="p-4 sm:p-6">
           <CardTitle className="text-base sm:text-lg flex items-center gap-2">
-            Branding & Culture
+            {t("customer.profile.company.card.cultureTitle")}
             {editableBadge}
           </CardTitle>
           <CardDescription className="text-xs sm:text-sm">
-            Mission, values, and company culture
+            {t("customer.profile.company.card.cultureDesc")}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <Label htmlFor="mission">Mission</Label>
+            <Label htmlFor="mission">
+              {t("customer.profile.company.label.mission")}
+            </Label>
             {isEditing ? (
               <Textarea
                 id="mission"
@@ -969,11 +1051,11 @@ export default function CompanyInfo({
                     },
                   })
                 }
-                placeholder="Describe your company's mission..."
+                placeholder={t("customer.profile.company.ph.mission")}
               />
             ) : (
               <p className="text-sm sm:text-base text-gray-900 mt-2 whitespace-pre-wrap">
-                {value.customerProfile?.mission || "N/A"}
+                {value.customerProfile?.mission || t("customer.profile.na")}
               </p>
             )}
           </div>
@@ -981,9 +1063,9 @@ export default function CompanyInfo({
           <Separator />
 
           <div className="space-y-4">
-            <Label>Company Values</Label>
+            <Label>{t("customer.profile.company.label.values")}</Label>
             <p className="text-sm text-gray-600">
-              Select values that represent your company culture
+              {t("customer.profile.company.hint.values")}
             </p>
             {isEditing ? (
               <>
@@ -991,7 +1073,7 @@ export default function CompanyInfo({
                   <Input
                     value={customValue}
                     onChange={(e) => setCustomValue(e.target.value)}
-                    placeholder="Type a value and press Add"
+                    placeholder={t("customer.profile.company.ph.value")}
                     onKeyPress={(e) =>
                       e.key === "Enter" &&
                       (e.preventDefault(), handleAddCustomValue())
@@ -1010,7 +1092,9 @@ export default function CompanyInfo({
                   value.customerProfile.values.length > 0 && (
                     <div className="space-y-2">
                       <Label className="text-sm font-medium">
-                        Selected Values ({value.customerProfile.values.length})
+                        {t("customer.profile.company.label.selectedValues", {
+                          n: value.customerProfile.values.length,
+                        })}
                       </Label>
                       <div className="flex flex-wrap gap-2 p-3 border rounded-lg bg-gray-50">
                         {value.customerProfile.values.map((val, index) => (
@@ -1019,7 +1103,7 @@ export default function CompanyInfo({
                             className="bg-purple-600 hover:bg-purple-700 text-white pr-1"
                           >
                             <Heart className="w-3 h-3 mr-1" />
-                            {val}
+                            {profileStoredLabel(PROFILE_CORE_VALUE, val, t)}
                             <button
                               type="button"
                               onClick={() => removeArrayItem("values", index)}
@@ -1035,7 +1119,7 @@ export default function CompanyInfo({
 
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">
-                    Common Values (click to add)
+                    {t("customer.profile.company.label.commonValues")}
                   </Label>
                   <div className="flex flex-wrap gap-2 p-3 border rounded-lg bg-gray-50">
                     {companyValues
@@ -1050,7 +1134,7 @@ export default function CompanyInfo({
                           onClick={() => toggleArrayItem("values", val)}
                         >
                           <Heart className="w-3 h-3 mr-1" />
-                          {val}
+                          {profileStoredLabel(PROFILE_CORE_VALUE, val, t)}
                         </Badge>
                       ))}
                   </div>
@@ -1062,12 +1146,12 @@ export default function CompanyInfo({
                 value.customerProfile.values.length > 0 ? (
                   value.customerProfile.values.map((val, index) => (
                     <Badge key={index} variant="secondary">
-                      {val}
+                      {profileStoredLabel(PROFILE_CORE_VALUE, val, t)}
                     </Badge>
                   ))
                 ) : (
                   <span className="text-sm text-gray-500">
-                    No values specified
+                    {t("customer.profile.company.empty.values")}
                   </span>
                 )}
               </div>
@@ -1077,7 +1161,9 @@ export default function CompanyInfo({
           <Separator />
 
           <div>
-            <Label htmlFor="benefits">Benefits</Label>
+            <Label htmlFor="benefits">
+              {t("customer.profile.company.label.benefits")}
+            </Label>
             {isEditing ? (
               <>
                 <Textarea
@@ -1099,10 +1185,10 @@ export default function CompanyInfo({
                       },
                     })
                   }
-                  placeholder="Describe employee benefits or company benefits..."
+                  placeholder={t("customer.profile.company.ph.benefits")}
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Can be plain text or JSON format
+                  {t("customer.profile.company.hint.benefitsJson")}
                 </p>
               </>
             ) : (
@@ -1111,7 +1197,7 @@ export default function CompanyInfo({
                   ? value.customerProfile.benefits
                   : value.customerProfile?.benefits
                   ? JSON.stringify(value.customerProfile.benefits, null, 2)
-                  : "N/A"}
+                  : t("customer.profile.na")}
               </p>
             )}
           </div>
@@ -1119,19 +1205,22 @@ export default function CompanyInfo({
           <Separator />
 
           <div className="space-y-4">
-            <Label>Media Gallery</Label>
+            <Label>{t("customer.profile.company.label.mediaGallery")}</Label>
             <p className="text-sm text-gray-600">
-              Upload images or add URLs to showcase your company
+              {t("customer.profile.company.hint.mediaGallery")}
             </p>
             {isEditing ? (
               <>
                 {/* File Upload Section */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <Label className="text-sm font-medium">Upload Images</Label>
+                    <Label className="text-sm font-medium">
+                      {t("customer.profile.company.label.uploadImages")}
+                    </Label>
                     <span className="text-xs text-gray-500">
-                      {value.customerProfile?.mediaGallery?.length || 0} / 10
-                      images
+                      {t("customer.profile.company.label.imageCount", {
+                        n: value.customerProfile?.mediaGallery?.length || 0,
+                      })}
                     </span>
                   </div>
                   <div
@@ -1172,7 +1261,7 @@ export default function CompanyInfo({
                         <div className="flex flex-col items-center">
                           <Loader2 className="w-8 h-8 animate-spin text-gray-400 mb-2" />
                           <p className="text-sm text-gray-600">
-                            Uploading images...
+                            {t("customer.profile.company.media.uploading")}
                           </p>
                         </div>
                       ) : (
@@ -1181,11 +1270,11 @@ export default function CompanyInfo({
                           <p className="text-sm text-gray-600">
                             {(value.customerProfile?.mediaGallery?.length ||
                               0) >= 10
-                              ? "Maximum 10 images reached"
-                              : "Click to upload or drag and drop images here"}
+                              ? t("customer.profile.company.media.maxReached")
+                              : t("customer.profile.company.media.dropHint")}
                           </p>
                           <p className="text-xs text-gray-500 mt-1">
-                            JPEG, PNG, GIF, WebP (Max 10MB each, Max 10 images)
+                            {t("customer.profile.company.media.fileHint")}
                           </p>
                         </>
                       )}
@@ -1195,13 +1284,15 @@ export default function CompanyInfo({
 
                 {/* URL Input Section */}
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium">Or Add URL</Label>
+                  <Label className="text-sm font-medium">
+                    {t("customer.profile.company.label.orUrl")}
+                  </Label>
                   <div className="flex gap-2">
                     <Input
                       value={newMediaUrl}
                       onChange={(e) => setNewMediaUrl(e.target.value)}
                       type="url"
-                      placeholder="https://example.com/image1.jpg"
+                      placeholder={t("customer.profile.company.ph.mediaUrl")}
                       disabled={
                         (value.customerProfile?.mediaGallery?.length || 0) >= 10
                       }
@@ -1223,7 +1314,7 @@ export default function CompanyInfo({
                   </div>
                   {(value.customerProfile?.mediaGallery?.length || 0) >= 10 && (
                     <p className="text-xs text-red-600">
-                      Maximum 10 images reached. Remove some images to add more.
+                      {t("customer.profile.company.media.removeToAdd")}
                     </p>
                   )}
                 </div>
@@ -1233,8 +1324,9 @@ export default function CompanyInfo({
                   value.customerProfile.mediaGallery.length > 0 && (
                     <div className="space-y-2">
                       <Label className="text-sm font-medium">
-                        Media Gallery (
-                        {value.customerProfile.mediaGallery.length})
+                        {t("customer.profile.company.label.galleryCount", {
+                          n: value.customerProfile.mediaGallery.length,
+                        })}
                       </Label>
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                         {value.customerProfile.mediaGallery.map(
@@ -1296,10 +1388,9 @@ export default function CompanyInfo({
                   value.customerProfile.mediaGallery.length === 0) && (
                   <div className="text-center py-8 text-gray-500 border-2 border-dashed border-gray-200 rounded-lg">
                     <ImageIcon className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                    <p>No media added yet</p>
+                    <p>{t("customer.profile.company.media.emptyEdit")}</p>
                     <p className="text-sm">
-                      Upload images or add URLs to showcase your company&apos;s
-                      visual content
+                      {t("customer.profile.company.media.emptyEditHint")}
                     </p>
                   </div>
                 )}
@@ -1338,7 +1429,7 @@ export default function CompanyInfo({
                                   className="opacity-0 group-hover:opacity-100 transition-opacity pointer-events-auto"
                                 >
                                   <Download className="w-4 h-4 mr-2" />
-                                  Download
+                                  {t("customer.profile.company.download")}
                                 </Button>
                               </div>
                             </>
@@ -1362,7 +1453,7 @@ export default function CompanyInfo({
                 ) : (
                   <div className="text-center py-8 text-gray-500 border-2 border-dashed border-gray-200 rounded-lg">
                     <ImageIcon className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                    <p>No media added</p>
+                    <p>{t("customer.profile.company.media.emptyView")}</p>
                   </div>
                 )}
               </div>

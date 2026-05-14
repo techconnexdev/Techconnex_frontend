@@ -23,7 +23,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -45,12 +44,9 @@ import {
   ThumbsUp,
   Eye,
   Clock,
-  DollarSign,
   Users,
   MapPin,
   Star,
-  Send,
-  Paperclip,
   CheckCircle,
   Loader2,
   Sparkles,
@@ -58,31 +54,25 @@ import {
   Calendar,
   SlidersHorizontal,
 } from "lucide-react";
-import { ProviderLayout } from "@/components/provider-layout";
 import { PROPOSAL_REQUIRED } from "@/contexts/ProviderCompletionContext";
 import { ProfileCompletionGateModal } from "@/components/provider/ProfileCompletionGateModal";
 import { ProviderOpportunitiesTour } from "@/components/provider/ProviderOpportunitiesTour";
-import { toast } from "@/lib/toast";
+import { ProviderPreferredCurrencyDialog } from "@/components/provider/ProviderPreferredCurrencyDialog";
 import {
   getProviderOpportunities,
   getProviderRecommendedOpportunities,
   getProviderProfile,
   getProviderProfileCompletion,
-  sendProposal,
   getServiceRequestAiDrafts,
   getProfileImageUrl,
 } from "@/lib/api";
 import { getUserFriendlyErrorMessage } from "@/lib/errors";
 import { FriendlyErrorState } from "@/components/FriendlyErrorState";
-import { validateFileBeforeUpload } from "@/lib/upload";
-import {
-  formatTimeline,
-  buildTimelineData,
-  timelineToDays,
-} from "@/lib/timeline-utils";
-import { formatBidAmountDisplay, parseBidAmountInput } from "@/lib/utils";
+import { formatTimeline, timelineToDays } from "@/lib/timeline-utils";
 import Link from "next/link";
 import { MarkdownViewer } from "@/components/markdown/MarkdownViewer";
+import { useI18n } from "@/contexts/I18nProvider";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type OpportunityCustomer = {
   id?: string;
@@ -111,6 +101,7 @@ type OpportunityData = {
   budgetMin: number;
   budgetMax: number;
   budgetType: string;
+  currencyCode?: string;
   timeline: string;
   originalTimeline: string | null;
   originalTimelineInDays: number;
@@ -153,10 +144,133 @@ const OPPORTUNITIES_URL_KEYS = {
   sort: "sort",
 } as const;
 
+const formatCurrencyAmount = (amount: number, currencyCode: string = "MYR") =>
+  new Intl.NumberFormat("en-MY", {
+    style: "currency",
+    currency: currencyCode,
+    maximumFractionDigits: 2,
+  }).format(amount || 0);
+
+function OpportunityListSkeleton({
+  count = 4,
+  variant = "default",
+  loadingLabel,
+}: {
+  count?: number;
+  variant?: "default" | "recommended";
+  loadingLabel: string;
+}) {
+  const cardClass =
+    variant === "recommended"
+      ? "group relative border-2 border-gray-200 rounded-lg sm:rounded-xl bg-white"
+      : "group relative sm:hover:shadow-lg transition-shadow";
+
+  return (
+    <div
+      className="space-y-4 sm:space-y-6"
+      role="status"
+      aria-busy="true"
+      aria-live="polite"
+    >
+      <span className="sr-only">{loadingLabel}</span>
+      {Array.from({ length: count }).map((_, i) => (
+        <Card key={i} className={cardClass}>
+          <CardHeader className="p-4 sm:p-6">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-2">
+              <Skeleton className="h-7 sm:h-8 w-[min(100%,20rem)] max-w-full" />
+              <Skeleton className="h-5 w-14 sm:w-16 shrink-0 rounded-full" />
+              <Skeleton className="h-5 w-16 sm:w-20 shrink-0 rounded-full" />
+            </div>
+            <Skeleton className="h-4 w-full max-w-3xl" />
+            <Skeleton className="h-4 w-full max-w-2xl mt-2" />
+            <Skeleton className="h-4 w-2/3 max-w-xl mt-1 hidden sm:block" />
+          </CardHeader>
+          <CardContent className="p-4 sm:p-6 space-y-3 sm:space-y-4">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+              <div className="flex items-center space-x-3 sm:space-x-4 flex-1 min-w-0 w-full sm:w-auto">
+                <Skeleton className="h-10 w-10 sm:h-12 sm:w-12 rounded-full shrink-0" />
+                <div className="min-w-0 flex-1 space-y-2">
+                  <Skeleton className="h-4 w-36 sm:w-44" />
+                  <Skeleton className="h-3 w-52 sm:w-64 max-w-full" />
+                </div>
+              </div>
+              <div className="text-left sm:text-right w-full sm:w-auto space-y-2 shrink-0">
+                <Skeleton className="h-5 w-28 sm:ml-auto" />
+                <Skeleton className="h-3 w-24 sm:ml-auto" />
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-1.5 sm:gap-2">
+              <Skeleton className="h-6 w-16 rounded-full" />
+              <Skeleton className="h-6 w-20 rounded-full" />
+              <Skeleton className="h-6 w-14 rounded-full" />
+              <Skeleton className="h-6 w-[4.5rem] rounded-full hidden sm:block" />
+            </div>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 pt-3 sm:pt-4 border-t">
+              <div className="space-y-2">
+                <Skeleton className="h-3 w-28" />
+                <Skeleton className="h-3 w-36 sm:w-44" />
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                <Skeleton className="h-9 w-full sm:w-[7.5rem] rounded-md" />
+                <Skeleton className="h-9 w-full sm:w-[9.5rem] rounded-md" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
 export default function ProviderOpportunitiesPage() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { t, locale } = useI18n();
+
+  const formatRecommendationsCacheLine = useCallback(
+    (cachedAt: number, nextRefreshAt: number) => {
+      const now = Date.now();
+      const ageMs = now - cachedAt;
+      const remainingMs = nextRefreshAt - now;
+      const ageMinutes = Math.floor(ageMs / 60000);
+
+      const updated =
+        ageMinutes < 1
+          ? t("provider.dashboard.reco.updated.justNow")
+          : ageMinutes === 1
+            ? t("provider.dashboard.reco.updated.oneMinute")
+            : t("provider.dashboard.reco.updated.nMinutes", { n: ageMinutes });
+
+      if (remainingMs <= 0) return updated;
+
+      const remainingMinutes = Math.floor(remainingMs / 60000);
+      const remainingHours = Math.floor(remainingMinutes / 60);
+      const remainingMins = remainingMinutes % 60;
+
+      let nextPart: string;
+      if (remainingHours > 0 && remainingMins > 0) {
+        nextPart = t("provider.dashboard.reco.next.hoursMinutes", {
+          h: remainingHours,
+          m: remainingMins,
+        });
+      } else if (remainingHours > 0) {
+        nextPart =
+          remainingHours === 1
+            ? t("provider.dashboard.reco.next.hourOne")
+            : t("provider.dashboard.reco.next.hoursN", { n: remainingHours });
+      } else if (remainingMins === 1) {
+        nextPart = t("provider.dashboard.reco.next.minuteOne");
+      } else {
+        nextPart = t("provider.dashboard.reco.next.minutesN", {
+          n: remainingMins,
+        });
+      }
+
+      return `${updated} • ${nextPart}`;
+    },
+    [t],
+  );
 
   const [searchQuery, setSearchQuery] = useState("");
   const [submissionFilter, setSubmissionFilter] = useState("all");
@@ -171,46 +285,17 @@ export default function ProviderOpportunitiesPage() {
   /** True if the URL had no "tags" param when first read (e.g. refresh or clean link). Don't auto-add tags in that case. */
   const urlHadNoTagsOnLoad = useRef(true);
 
-  const [proposalCompletionChecking, setProposalCompletionChecking] = useState(false);
+  const [proposalCompletionChecking, setProposalCompletionChecking] =
+    useState(false);
   const [proposalGateOpen, setProposalGateOpen] = useState(false);
   const [selectedProject, setSelectedProject] =
     useState<OpportunityData | null>(null);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
-  const [isProposalModalOpen, setIsProposalModalOpen] = useState(false);
-  type Milestone = {
-    sequence: number;
-    title: string;
-    description?: string;
-    amount: number;
-    dueDate?: string;
-    daysFromStart?: number;
-    durationAmount?: string;
-    durationUnit?: "day" | "week" | "month" | "";
-  };
-
-  type ProposalFormData = {
-    coverLetter: string;
-    bidAmount: string;
-    timelineAmount: string;
-    timelineUnit: "day" | "week" | "month" | "";
-    milestones: Milestone[];
-    attachments: File[];
-  };
-
-  const [proposalData, setProposalData] = useState({
-    coverLetter: "",
-    bidAmount: "",
-    timelineAmount: "",
-    timelineUnit: "" as "day" | "week" | "month" | "",
-    milestones: [] as Milestone[],
-    attachments: [] as File[],
-  });
 
   // API state
   const [opportunities, setOpportunities] = useState<OpportunityData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [submittingProposal, setSubmittingProposal] = useState(false);
 
   // Recommended opportunities state
   const [recommendedOpportunities, setRecommendedOpportunities] = useState<
@@ -226,26 +311,6 @@ export default function ProviderOpportunitiesPage() {
   const [expandedOpportunityId, setExpandedOpportunityId] = useState<
     string | null
   >(null);
-  const [proposalErrors, setProposalErrors] = useState<{
-    bidAmount?: string;
-    timelineAmount?: string;
-    timelineUnit?: string;
-    coverLetter?: string;
-    milestones?: string;
-    attachments?: string;
-    milestoneFields?: Record<
-      number,
-      {
-        title?: string;
-        description?: string;
-        amount?: string;
-        dueDate?: string;
-        daysFromStart?: string;
-        durationAmount?: string;
-        durationUnit?: string;
-      }
-    >;
-  }>({});
 
   // Helper function to map opportunity data
   // useRecommendationInsights: if true, use aiExplanation from opportunity (for recommended tab), if false, ignore it (for all tab - will use drafts)
@@ -262,13 +327,31 @@ export default function ProviderOpportunitiesPage() {
       ? String(opportunity.description)
       : undefined,
     client:
-      (opportunity.customer as OpportunityCustomer)?.name || "Unknown Client",
+      (opportunity.customer as OpportunityCustomer)?.name ||
+      t("provider.dashboard.unknownClient"),
     clientId: (opportunity.customer as OpportunityCustomer)?.id || null,
-    budget: `RM ${((opportunity.budgetMin as number) || 0).toLocaleString()} - RM ${((opportunity.budgetMax as number) || 0).toLocaleString()}`,
-    budgetMin: (opportunity.budgetMin as number) || 0,
-    budgetMax: (opportunity.budgetMax as number) || 0,
+    budget: `${formatCurrencyAmount(
+      Number(opportunity.displayBudgetMin ?? opportunity.budgetMin ?? 0),
+      String(
+        opportunity.displayCurrencyCode || opportunity.currencyCode || "MYR",
+      ),
+    )} - ${formatCurrencyAmount(
+      Number(opportunity.displayBudgetMax ?? opportunity.budgetMax ?? 0),
+      String(
+        opportunity.displayCurrencyCode || opportunity.currencyCode || "MYR",
+      ),
+    )}`,
+    budgetMin:
+      Number(opportunity.displayBudgetMin ?? opportunity.budgetMin ?? 0) || 0,
+    budgetMax:
+      Number(opportunity.displayBudgetMax ?? opportunity.budgetMax ?? 0) || 0,
     budgetType: "fixed",
-    timeline: formatTimeline(opportunity.timeline as string) || "Not specified",
+    currencyCode: String(
+      opportunity.displayCurrencyCode || opportunity.currencyCode || "MYR",
+    ),
+    timeline:
+      formatTimeline(opportunity.timeline as string) ||
+      t("customer.dashboard.timelineNotSpecified"),
     originalTimeline: (opportunity.timeline as string) || null,
     originalTimelineInDays: (() => {
       if (!opportunity.timeline) return 0;
@@ -299,7 +382,7 @@ export default function ProviderOpportunitiesPage() {
     category: opportunity.category ? String(opportunity.category) : undefined,
     location:
       (opportunity.customer as OpportunityCustomer)?.customerProfile
-        ?.location || "Not specified",
+        ?.location || t("customer.dashboard.timelineNotSpecified"),
     clientRating: 4.5,
     projectsPosted:
       (opportunity.customer as OpportunityCustomer)?.customerProfile
@@ -331,10 +414,10 @@ export default function ProviderOpportunitiesPage() {
     clientInfo: {
       companySize:
         (opportunity.customer as OpportunityCustomer)?.customerProfile
-          ?.companySize || "Not specified",
+          ?.companySize || t("customer.dashboard.timelineNotSpecified"),
       industry:
         (opportunity.customer as OpportunityCustomer)?.customerProfile
-          ?.industry || "Not specified",
+          ?.industry || t("customer.dashboard.timelineNotSpecified"),
       memberSince: new Date(
         (opportunity.customer as OpportunityCustomer)?.createdAt || Date.now(),
       )
@@ -342,11 +425,25 @@ export default function ProviderOpportunitiesPage() {
         .toString(),
       totalSpent: (opportunity.customer as OpportunityCustomer)?.customerProfile
         ?.totalSpend
-        ? `RM ${Number(
-            (opportunity.customer as OpportunityCustomer).customerProfile
-              ?.totalSpend,
-          ).toLocaleString()}`
-        : "RM 0",
+        ? formatCurrencyAmount(
+            Number(
+              (opportunity.customer as OpportunityCustomer).customerProfile
+                ?.totalSpend,
+            ),
+            String(
+              opportunity.displayCurrencyCode ||
+                opportunity.currencyCode ||
+                "MYR",
+            ),
+          )
+        : formatCurrencyAmount(
+            0,
+            String(
+              opportunity.displayCurrencyCode ||
+                opportunity.currencyCode ||
+                "MYR",
+            ),
+          ),
       avgRating: 4.5,
     },
     originalData: opportunity,
@@ -463,8 +560,10 @@ export default function ProviderOpportunitiesPage() {
           .filter(Boolean);
         if (serviceRequestIds.length > 0) {
           try {
-            const draftRes =
-              await getServiceRequestAiDrafts(serviceRequestIds);
+            const draftRes = await getServiceRequestAiDrafts(
+              serviceRequestIds,
+              locale,
+            );
             if (draftRes?.success && Array.isArray(draftRes.drafts)) {
               const draftMap = new Map<string, string>(
                 (draftRes.drafts as AiDraft[]).map((d: AiDraft) => [
@@ -499,7 +598,7 @@ export default function ProviderOpportunitiesPage() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, sortBy]);
+  }, [searchQuery, sortBy, t]);
 
   useEffect(() => {
     fetchOpportunities();
@@ -515,7 +614,7 @@ export default function ProviderOpportunitiesPage() {
         setLoadingRecommended(true);
         setErrorRecommended(null);
 
-        const response = await getProviderRecommendedOpportunities();
+        const response = await getProviderRecommendedOpportunities(locale);
         if (response.success) {
           const mappedRecommended = (response.recommendations || []).map(
             (opp: Record<string, unknown>) => {
@@ -548,7 +647,7 @@ export default function ProviderOpportunitiesPage() {
     };
     fetchRecommendedOpportunitiesRef.current = fetchRecommendedOpportunities;
     fetchRecommendedOpportunities();
-  }, []);
+  }, [locale, t]);
 
   // Auto-refresh when 2-hour cache expires
   useEffect(() => {
@@ -573,47 +672,6 @@ export default function ProviderOpportunitiesPage() {
     if (score >= 70) return "text-yellow-600 bg-yellow-100";
     return "text-gray-600 bg-gray-100";
   };
-  // Keep sequences clean and sorted
-  const normalizeDraftSequences = (items: Milestone[]) =>
-    items
-      .map((m, i) => ({ ...m, sequence: i + 1 }))
-      .sort((a, b) => a.sequence - b.sequence);
-
-  const addProposalMilestone = () => {
-    setProposalData((prev) => ({
-      ...prev,
-      milestones: normalizeDraftSequences([
-        ...prev.milestones,
-        {
-          sequence: prev.milestones.length + 1,
-          title: "",
-          description: "",
-          amount: 0,
-          durationAmount: "1",
-          durationUnit: "week",
-        },
-      ]),
-    }));
-  };
-
-  const updateProposalMilestone = (i: number, patch: Partial<Milestone>) => {
-    setProposalData((prev) => ({
-      ...prev,
-      milestones: normalizeDraftSequences(
-        prev.milestones.map((m, idx) => (idx === i ? { ...m, ...patch } : m)),
-      ),
-    }));
-  };
-
-  const removeProposalMilestone = (i: number) => {
-    setProposalData((prev) => ({
-      ...prev,
-      milestones: normalizeDraftSequences(
-        prev.milestones.filter((_, idx) => idx !== i),
-      ),
-    }));
-  };
-
   const globalTagList = useMemo(() => {
     const set = new Set<string>();
     opportunities.forEach((o) => {
@@ -688,490 +746,33 @@ export default function ProviderOpportunitiesPage() {
     try {
       const res = await getProviderProfileCompletion();
       const data = res?.data ?? res;
-      const completion = typeof (data as { completion?: number })?.completion === "number"
-        ? (data as { completion: number }).completion
-        : 0;
+      const completion =
+        typeof (data as { completion?: number })?.completion === "number"
+          ? (data as { completion: number }).completion
+          : 0;
       if (completion < PROPOSAL_REQUIRED) {
         setProposalGateOpen(true);
         return;
       }
-      setSelectedProject(opportunity);
-      setIsProposalModalOpen(true);
-      setProposalData({
-        coverLetter: "",
-        bidAmount: "",
-        timelineAmount: "",
-        timelineUnit: "",
-        milestones: [],
-        attachments: [],
-      });
+      router.push(`/provider/opportunities/${opportunity.id}/proposal`);
     } catch {
       setProposalGateOpen(true);
     } finally {
       setProposalCompletionChecking(false);
     }
   };
-  // --- Proposal validation helpers ---
-  // --- Proposal validation ---
-  function validateProposal(form: ProposalFormData) {
-    const newErrors: {
-      bidAmount?: string;
-      timelineAmount?: string;
-      timelineUnit?: string;
-      coverLetter?: string;
-      milestones?: string;
-      milestoneFields?: Record<
-        number,
-        {
-          title?: string;
-          description?: string;
-          amount?: string;
-          dueDate?: string;
-        }
-      >;
-    } = {};
-
-    const messages: string[] = [];
-
-    // Bid amount: required, >0, and within budget range
-    const bidAmountNum = Number(form.bidAmount);
-    if (!form.bidAmount) {
-      newErrors.bidAmount = "Bid amount is required.";
-      messages.push("Bid amount is required.");
-    } else if (isNaN(bidAmountNum) || bidAmountNum <= 0) {
-      newErrors.bidAmount = "Bid amount must be a positive number.";
-      messages.push("Bid amount must be a positive number.");
-    } else if (selectedProject) {
-      const budgetMin = selectedProject.budgetMin || 0;
-      const budgetMax = selectedProject.budgetMax || 0;
-      if (bidAmountNum < budgetMin || bidAmountNum > budgetMax) {
-        newErrors.bidAmount = `Bid amount must be between RM ${budgetMin.toLocaleString()} and RM ${budgetMax.toLocaleString()}.`;
-        messages.push(
-          `Bid amount must be within the budget range (RM ${budgetMin.toLocaleString()} - RM ${budgetMax.toLocaleString()}).`,
-        );
-      }
-    }
-
-    // Timeline: required, and must be <= original timeline
-    const timelineAmountNum = Number(form.timelineAmount);
-    if (!form.timelineAmount) {
-      newErrors.timelineAmount = "Timeline amount is required.";
-      messages.push("Timeline amount is required.");
-    } else if (isNaN(timelineAmountNum) || timelineAmountNum <= 0) {
-      newErrors.timelineAmount = "Timeline amount must be greater than 0.";
-      messages.push("Timeline amount must be greater than 0.");
-    }
-
-    if (!form.timelineUnit) {
-      newErrors.timelineUnit = "Timeline unit is required.";
-      messages.push("Timeline unit is required.");
-    } else if (selectedProject && selectedProject.originalTimelineInDays > 0) {
-      // Check if provider timeline is <= original timeline
-      const providerTimelineInDays = timelineToDays(
-        timelineAmountNum,
-        form.timelineUnit,
-      );
-      if (providerTimelineInDays > selectedProject.originalTimelineInDays) {
-        const originalTimelineDisplay =
-          formatTimeline(selectedProject.originalTimeline) ||
-          `${selectedProject.originalTimelineInDays} days`;
-        newErrors.timelineAmount = `Your timeline must be equal to or less than the company's timeline (${originalTimelineDisplay}).`;
-        messages.push(
-          `Your timeline must be equal to or less than the company's timeline (${originalTimelineDisplay}).`,
-        );
-      }
-    }
-
-    // Cover letter: required, min length 20
-    if (!form.coverLetter || form.coverLetter.trim().length < 20) {
-      newErrors.coverLetter = "Cover letter must be at least 20 characters.";
-      messages.push("Cover letter must be at least 20 characters.");
-    }
-
-    const milestoneFieldErrors: Record<
-      number,
-      {
-        title?: string;
-        description?: string;
-        amount?: string;
-        dueDate?: string;
-        daysFromStart?: string;
-        durationAmount?: string;
-        durationUnit?: string;
-      }
-    > = {};
-
-    const deliveryTimeDays = timelineToDays(
-      Number(form.timelineAmount),
-      form.timelineUnit,
-    );
-
-    if (form.milestones.length === 0) {
-      newErrors.milestones = "At least one milestone is required.";
-      messages.push("At least one milestone is required.");
-    } else {
-      form.milestones.forEach((m: Milestone, idx: number) => {
-        milestoneFieldErrors[idx] = {};
-
-        if (!m.title || !m.title.trim()) {
-          const errorMsg = "Title is required.";
-          milestoneFieldErrors[idx].title = errorMsg;
-          messages.push(`Milestone #${idx + 1}: title is required.`);
-        }
-        if (!m.description || !m.description.trim()) {
-          const errorMsg = "Description is required.";
-          milestoneFieldErrors[idx].description = errorMsg;
-          messages.push(`Milestone #${idx + 1}: description is required.`);
-        }
-        if (
-          m.amount == null ||
-          isNaN(Number(m.amount)) ||
-          Number(m.amount) <= 0
-        ) {
-          const errorMsg = "Amount must be greater than 0.";
-          milestoneFieldErrors[idx].amount = errorMsg;
-          messages.push(`Milestone #${idx + 1}: amount must be > 0.`);
-        }
-        const durAmount =
-          m.durationAmount != null ? String(m.durationAmount).trim() : "";
-        const durUnit = m.durationUnit || "";
-        if (!durAmount || isNaN(Number(durAmount)) || Number(durAmount) <= 0) {
-          milestoneFieldErrors[idx].durationAmount =
-            "Amount is required and must be > 0.";
-          messages.push(`Milestone #${idx + 1}: duration amount is required.`);
-        }
-        if (!durUnit) {
-          milestoneFieldErrors[idx].durationUnit = "Unit is required.";
-          messages.push(`Milestone #${idx + 1}: duration unit is required.`);
-        }
-      });
-
-      if (deliveryTimeDays > 0 && form.milestones.length > 0) {
-        const milestonesDurationDays = form.milestones.reduce((sum, m) => {
-          const d = timelineToDays(
-            Number(m.durationAmount || 0),
-            m.durationUnit || "",
-          );
-          return sum + (d > 0 ? d : 0);
-        }, 0);
-        if (milestonesDurationDays !== deliveryTimeDays) {
-          const msg = `Total of milestone durations must equal your delivery timeline (${deliveryTimeDays} days). Currently ${milestonesDurationDays} days.`;
-          newErrors.milestones = newErrors.milestones || msg;
-          messages.push(msg);
-        }
-      }
-
-      // Only add milestoneFieldErrors if there are any errors
-      if (Object.keys(milestoneFieldErrors).length > 0) {
-        newErrors.milestoneFields = milestoneFieldErrors;
-      }
-
-      // sum rule: milestones total must equal bidAmount
-      if (!isNaN(bidAmountNum) && bidAmountNum > 0) {
-        const sumMilestones = form.milestones.reduce(
-          (sum: number, m: Milestone) => {
-            const val = Number(m.amount);
-            if (!isNaN(val)) return sum + val;
-            return sum;
-          },
-          0,
-        );
-
-        if (sumMilestones !== bidAmountNum) {
-          const msg = `Total of milestones (RM ${sumMilestones}) must equal your bid amount (RM ${bidAmountNum}).`;
-          newErrors.milestones = msg;
-          messages.push(msg);
-        }
-      }
-    }
-
-    return { fieldErrors: newErrors, messages };
-  }
-
-  const handleProposalSubmit = async () => {
-    // 1. run validation
-    const { fieldErrors, messages } = validateProposal(proposalData);
-
-    // save inline field errors to state (like customer form does with setErrors) :contentReference[oaicite:2]{index=2}
-    setProposalErrors(fieldErrors);
-
-    // if there are validation problems, stop here and toast
-    if (messages.length > 0) {
-      toast.error(messages.map((m) => `• ${m}`).join("\n"));
-      return;
-    }
-
-    // 2. make sure we have selectedProject data
-    if (!selectedProject?.originalData) {
-      toast.error("Invalid project data");
-      return;
-    }
-
-    // 3. attachments validation (same as before)
-    if (proposalData.attachments.length > MAX_FILES) {
-      toast.error("You can only upload up to 3 attachments");
-      return;
-    }
-    for (const file of proposalData.attachments) {
-      if (file.size > MAX_SIZE_BYTES) {
-        toast.error(`"${file.name}" is larger than 10 MB`);
-        return;
-      }
-    }
-
-    try {
-      setSubmittingProposal(true);
-
-      const sorted = normalizeDraftSequences(proposalData.milestones);
-      let cumulativeDays = 0;
-      const normalized = sorted.map((m: Milestone, idx: number) => {
-        const durationDays = timelineToDays(
-          Number(m.durationAmount || 0),
-          m.durationUnit || "",
-        );
-        cumulativeDays += durationDays > 0 ? durationDays : 0;
-        return {
-          sequence: idx + 1,
-          title: (m.title || "").trim(),
-          description: m.description || "",
-          amount: Number(m.amount || 0),
-          daysFromStart: cumulativeDays,
-        };
-      });
-
-      // Build multipart/form-data
-      const formDataToSend = new FormData();
-
-      formDataToSend.append(
-        "serviceRequestId",
-        String(selectedProject.originalData.id || ""),
-      );
-
-      formDataToSend.append(
-        "bidAmount",
-        parseFloat(proposalData.bidAmount).toString(),
-      );
-
-      // Build timeline data from amount and unit
-      const { timeline, timelineInDays } = buildTimelineData(
-        Number(proposalData.timelineAmount),
-        proposalData.timelineUnit,
-      );
-
-      formDataToSend.append("deliveryTime", timelineInDays.toString());
-      formDataToSend.append("timeline", timeline);
-      formDataToSend.append("timelineInDays", timelineInDays.toString());
-
-      formDataToSend.append("coverLetter", proposalData.coverLetter);
-
-      normalized.forEach((m, idx) => {
-        const row = m as {
-          sequence: number;
-          title: string;
-          description: string;
-          amount: number;
-          daysFromStart?: number;
-        };
-        formDataToSend.append(
-          `milestones[${idx}][sequence]`,
-          String(row.sequence),
-        );
-        formDataToSend.append(`milestones[${idx}][title]`, row.title);
-        formDataToSend.append(
-          `milestones[${idx}][description]`,
-          row.description,
-        );
-        formDataToSend.append(
-          `milestones[${idx}][amount]`,
-          row.amount != null ? String(row.amount) : "0",
-        );
-        if (row.daysFromStart != null) {
-          formDataToSend.append(
-            `milestones[${idx}][daysFromStart]`,
-            String(row.daysFromStart),
-          );
-        }
-      });
-
-      proposalData.attachments.forEach((file) => {
-        formDataToSend.append("attachments", file);
-      });
-
-      // Pass attachments explicitly so they are uploaded to R2 and saved to attachmentUrls
-      const response = await sendProposal(formDataToSend, proposalData.attachments);
-
-      if (response.success) {
-        toast.success("Proposal submitted successfully!");
-        setIsProposalModalOpen(false);
-        setSelectedProject(null);
-
-        // Reset form + errors
-        setProposalData({
-          coverLetter: "",
-          bidAmount: "",
-          timelineAmount: "",
-          timelineUnit: "",
-          milestones: [],
-          attachments: [],
-        });
-        setProposalErrors({});
-
-        // Refresh opportunities from backend to get updated hasSubmitted status
-        // This ensures the "Already Submitted" filter will show the newly submitted opportunity
-        try {
-          const refreshResponse = await getProviderOpportunities({
-            page: 1,
-            limit: 100,
-            search: searchQuery,
-          });
-
-          if (refreshResponse.success) {
-            let mappedOpportunities = (refreshResponse.opportunities || []).map(
-              (opp: Record<string, unknown>) => mapOpportunityData(opp, false),
-            );
-
-            // Fetch AiDraft summaries and merge into opportunities
-            const serviceRequestIds = mappedOpportunities
-              .map((opp: OpportunityData) => opp.serviceRequestId)
-              .filter(Boolean);
-            if (serviceRequestIds.length > 0) {
-              try {
-                const draftRes =
-                  await getServiceRequestAiDrafts(serviceRequestIds);
-                if (draftRes?.success && Array.isArray(draftRes.drafts)) {
-                  const draftMap = new Map<string, string>(
-                    (draftRes.drafts as AiDraft[]).map((d: AiDraft) => [
-                      d.referenceId,
-                      d.summary || "",
-                    ]),
-                  );
-                  mappedOpportunities = mappedOpportunities.map(
-                    (opp: OpportunityData) => ({
-                      ...opp,
-                      aiExplanation:
-                        opp.serviceRequestId &&
-                        draftMap.has(opp.serviceRequestId)
-                          ? draftMap.get(opp.serviceRequestId) || null
-                          : null,
-                    }),
-                  );
-                }
-              } catch (err) {
-                console.warn(
-                  "Failed to fetch AI drafts after proposal submission",
-                  err,
-                );
-              }
-            }
-
-            setOpportunities(mappedOpportunities);
-          }
-        } catch (err) {
-          console.error(
-            "Failed to refresh opportunities after proposal submission",
-            err,
-          );
-          // Fallback: optimistic UI update
-          const updatedOpportunities = opportunities.map((opp) =>
-            opp.id === selectedProject?.id
-              ? {
-                  ...opp,
-                  hasSubmitted: true,
-                  proposals: opp.proposals + 1,
-                }
-              : opp,
-          );
-          setOpportunities(updatedOpportunities);
-        }
-      } else {
-        toast.error(
-          getUserFriendlyErrorMessage(
-            undefined,
-            "provider opportunities submit proposal",
-          ),
-        );
-      }
-    } catch (err) {
-      toast.error(
-        getUserFriendlyErrorMessage(
-          err,
-          "provider opportunities submit proposal",
-        ),
-      );
-    } finally {
-      setSubmittingProposal(false);
-    }
-  };
-
-  const MAX_FILES = 3;
-  const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
-
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const incoming = Array.from(event.target.files || []);
-
-    if (incoming.length === 0) return;
-
-    // --- Reset previous attachment errors ---
-    setProposalErrors((prev) => ({ ...prev, attachments: undefined }));
-
-    // --- Check file sizes (10 MB per file for proposals) ---
-    for (const file of incoming) {
-      if (file.size > MAX_SIZE_BYTES) {
-        toast.error(`"${file.name}" is larger than 10 MB`);
-        setProposalErrors((prev) => ({
-          ...prev,
-          attachments: `"${file.name}" exceeds 10 MB.`,
-        }));
-        event.target.value = "";
-        return;
-      }
-    }
-
-    // --- Check file types (documents + images; same as backend) ---
-    for (const file of incoming) {
-      const { valid, error } = validateFileBeforeUpload(file, "document");
-      if (!valid) {
-        toast.error(error || `"${file.name}" is not an allowed file type`);
-        setProposalErrors((prev) => ({
-          ...prev,
-          attachments: error || "Invalid file type.",
-        }));
-        event.target.value = "";
-        return;
-      }
-    }
-
-    setProposalData((prev) => {
-      const combined = [...prev.attachments, ...incoming];
-
-      // --- File count validation ---
-      if (combined.length > MAX_FILES) {
-        const errorMsg = `You can upload a maximum of ${MAX_FILES} files only. Remove some before adding new ones.`;
-        toast.error(errorMsg);
-        setProposalErrors((prev) => ({ ...prev, attachments: errorMsg }));
-        event.target.value = "";
-        return prev; // stop update
-      }
-
-      return {
-        ...prev,
-        attachments: combined,
-      };
-    });
-
-    // reset input
-    event.target.value = "";
-  };
-
-  const removeAttachment = (index: number) => {
-    setProposalData((prev) => ({
-      ...prev,
-      attachments: prev.attachments.filter((_, i) => i !== index),
-    }));
-  };
 
   return (
-    <ProviderLayout>
+    <>
+      <ProviderPreferredCurrencyDialog
+        tourStorageKeyPrefix="provider-opportunities-tour-done"
+        onSaved={async () => {
+          await Promise.all([
+            fetchOpportunities(),
+            fetchRecommendedOpportunitiesRef.current?.(),
+          ]);
+        }}
+      />
       <ProviderOpportunitiesTour />
       <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
         {/* Header */}
@@ -1181,10 +782,10 @@ export default function ProviderOpportunitiesPage() {
         >
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-              Job Opportunities
+              {t("provider.opportunities.title")}
             </h1>
             <p className="text-sm sm:text-base text-gray-600 mt-1">
-              Discover projects that match your skills and expertise
+              {t("provider.opportunities.subtitle")}
             </p>
           </div>
           {/* <div className="flex gap-3">
@@ -1204,7 +805,9 @@ export default function ProviderOpportunitiesPage() {
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                     <Input
-                      placeholder="Search opportunities by title, client, or skills..."
+                      placeholder={t(
+                        "provider.opportunities.searchPlaceholder",
+                      )}
                       className="pl-10 text-sm sm:text-base"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
@@ -1216,12 +819,22 @@ export default function ProviderOpportunitiesPage() {
                   onValueChange={setSubmissionFilter}
                 >
                   <SelectTrigger className="w-full sm:w-44 text-sm sm:text-base">
-                    <SelectValue placeholder="Status" />
+                    <SelectValue
+                      placeholder={t(
+                        "provider.opportunities.statusPlaceholder",
+                      )}
+                    />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="not-submitted">Not Submitted</SelectItem>
-                    <SelectItem value="submitted">Already Submitted</SelectItem>
+                    <SelectItem value="all">
+                      {t("provider.opportunities.filter.all")}
+                    </SelectItem>
+                    <SelectItem value="not-submitted">
+                      {t("provider.opportunities.filter.notSubmitted")}
+                    </SelectItem>
+                    <SelectItem value="submitted">
+                      {t("provider.opportunities.filter.submitted")}
+                    </SelectItem>
                   </SelectContent>
                 </Select>
                 <Select
@@ -1229,11 +842,17 @@ export default function ProviderOpportunitiesPage() {
                   onValueChange={(v) => setSortBy(v as "best-match" | "newest")}
                 >
                   <SelectTrigger className="w-full sm:w-44 text-sm sm:text-base">
-                    <SelectValue placeholder="Sort" />
+                    <SelectValue
+                      placeholder={t("provider.opportunities.sortPlaceholder")}
+                    />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="best-match">Best match</SelectItem>
-                    <SelectItem value="newest">Newest</SelectItem>
+                    <SelectItem value="best-match">
+                      {t("provider.opportunities.sort.bestMatch")}
+                    </SelectItem>
+                    <SelectItem value="newest">
+                      {t("provider.opportunities.sort.newest")}
+                    </SelectItem>
                   </SelectContent>
                 </Select>
                 <Popover>
@@ -1244,7 +863,7 @@ export default function ProviderOpportunitiesPage() {
                       className="w-full sm:w-auto text-sm sm:text-base shrink-0"
                     >
                       <SlidersHorizontal className="w-4 h-4 mr-2" />
-                      Filters
+                      {t("provider.opportunities.filters")}
                       {selectedTags.length > 0 && (
                         <span className="ml-1.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-xs font-medium">
                           {selectedTags.length}
@@ -1259,7 +878,7 @@ export default function ProviderOpportunitiesPage() {
                           htmlFor="use-profile-tags"
                           className="text-sm font-medium cursor-pointer"
                         >
-                          Use my profile tags
+                          {t("provider.opportunities.useProfileTags")}
                         </Label>
                         <Switch
                           id="use-profile-tags"
@@ -1269,20 +888,20 @@ export default function ProviderOpportunitiesPage() {
                       </div>
                       <p className="text-xs text-gray-500">
                         {useProfileTags
-                          ? "Tag options from your profile (skills, expertise). Pre-selected: most relevant to current opportunities."
-                          : "Show full tag list from all opportunities."}
+                          ? t("provider.opportunities.tagsHelpOn")
+                          : t("provider.opportunities.tagsHelpOff")}
                       </p>
                       <Separator />
                       <div>
                         <Label className="text-sm font-medium mb-2 block">
-                          Tags
+                          {t("provider.opportunities.tagsLabel")}
                         </Label>
                         <div className="max-h-48 overflow-y-auto rounded-md border border-gray-200 p-2 space-y-1.5">
                           {tagOptions.length === 0 ? (
                             <p className="text-xs text-gray-500 py-2">
                               {useProfileTags
-                                ? "Add skills in your profile to see tags here."
-                                : "No tags yet."}
+                                ? t("provider.opportunities.tagsEmptyProfile")
+                                : t("provider.opportunities.tagsEmptyAll")}
                             </p>
                           ) : (
                             tagOptions.map((tag) => (
@@ -1320,7 +939,7 @@ export default function ProviderOpportunitiesPage() {
                             className="mt-2 text-xs"
                             onClick={() => setSelectedTags([])}
                           >
-                            Clear tags
+                            {t("provider.opportunities.clearTags")}
                           </Button>
                         )}
                       </div>
@@ -1334,17 +953,9 @@ export default function ProviderOpportunitiesPage() {
 
         {/* Opportunities */}
         {loading ? (
-          <Card>
-            <CardContent className="p-8 sm:p-12 text-center">
-              <Loader2 className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-4 animate-spin" />
-              <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
-                Loading opportunities...
-              </h3>
-              <p className="text-sm sm:text-base text-gray-600">
-                Please wait while we fetch available opportunities.
-              </p>
-            </CardContent>
-          </Card>
+          <OpportunityListSkeleton
+            loadingLabel={`${t("provider.opportunities.loading")}. ${t("provider.opportunities.loadingDesc")}`}
+          />
         ) : error ? (
           <Card>
             <CardContent className="p-4 sm:p-6">
@@ -1371,13 +982,13 @@ export default function ProviderOpportunitiesPage() {
                 value="all"
                 className="text-xs sm:text-sm px-2 sm:px-4"
               >
-                All
+                {t("provider.opportunities.tab.all")}
               </TabsTrigger>
               <TabsTrigger
                 value="recommended"
                 className="text-xs sm:text-sm px-2 sm:px-4"
               >
-                AI Recommended
+                {t("provider.opportunities.tab.recommended")}
               </TabsTrigger>
             </TabsList>
 
@@ -1412,7 +1023,7 @@ export default function ProviderOpportunitiesPage() {
                           <div className="flex items-center gap-1.5 px-2 py-1 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-full text-xs font-medium shadow-md">
                             <Sparkles className="w-3 h-3" />
                             <span className="hidden sm:inline">
-                              AI Insights
+                              {t("provider.dashboard.opportunity.aiInsights")}
                             </span>
                           </div>
                         </div>
@@ -1435,25 +1046,30 @@ export default function ProviderOpportunitiesPage() {
                                           : "bg-yellow-100 text-yellow-700 border-yellow-300"
                                     }`}
                                   >
-                                    {opportunity.matchScore}% match
+                                    {t(
+                                      "provider.dashboard.opportunity.matchPercent",
+                                      {
+                                        n: opportunity.matchScore,
+                                      },
+                                    )}
                                   </Badge>
                                 )}
                               {opportunity.urgent && (
                                 <Badge className="bg-red-100 text-red-800 text-xs shrink-0">
                                   <Clock className="w-3 h-3 mr-1" />
-                                  Urgent
+                                  {t("provider.opportunities.urgent")}
                                 </Badge>
                               )}
                               {opportunity.verified && (
                                 <Badge className="bg-green-100 text-green-800 text-xs shrink-0">
                                   <CheckCircle className="w-3 h-3 mr-1" />
-                                  Verified Client
+                                  {t("provider.opportunities.verifiedClient")}
                                 </Badge>
                               )}
                               {opportunity.hasSubmitted && (
                                 <Badge className="bg-green-100 text-green-800 text-xs shrink-0">
                                   <CheckCircle className="w-3 h-3 mr-1" />
-                                  Submitted
+                                  {t("provider.opportunities.submitted")}
                                 </Badge>
                               )}
                             </div>
@@ -1505,7 +1121,9 @@ export default function ProviderOpportunitiesPage() {
                                 </div>
                                 <span>•</span>
                                 <span>
-                                  {opportunity.projectsPosted} projects posted
+                                  {t("provider.opportunities.projectsPosted", {
+                                    n: opportunity.projectsPosted,
+                                  })}
                                 </span>
                                 <span>•</span>
                                 <div className="flex items-center">
@@ -1519,7 +1137,6 @@ export default function ProviderOpportunitiesPage() {
                           </div>
                           <div className="text-left sm:text-right w-full sm:w-auto">
                             <div className="flex items-center text-green-600 font-semibold text-sm sm:text-base">
-                              <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 flex-shrink-0" />
                               <span className="break-words">
                                 {opportunity.budget}
                               </span>
@@ -1561,10 +1178,14 @@ export default function ProviderOpportunitiesPage() {
                               >
                                 <Sparkles className="w-3.5 h-3.5 shrink-0" />
                                 <span className="hidden sm:inline">
-                                  Hover to see AI insights
+                                  {t(
+                                    "provider.dashboard.opportunity.hoverInsights",
+                                  )}
                                 </span>
                                 <span className="sm:hidden">
-                                  Tap to see AI insights
+                                  {t(
+                                    "provider.dashboard.opportunity.tapInsights",
+                                  )}
                                 </span>
                                 <ChevronRight
                                   className={`w-3 h-3 shrink-0 transition-transform ${
@@ -1586,7 +1207,7 @@ export default function ProviderOpportunitiesPage() {
                                     <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600" />
                                   </div>
                                   <p className="text-xs sm:text-sm font-semibold text-blue-900">
-                                    About this opportunity:
+                                    {t("provider.opportunities.aiAbout")}
                                   </p>
                                   {/* Close button for mobile */}
                                   <button
@@ -1594,7 +1215,9 @@ export default function ProviderOpportunitiesPage() {
                                       setExpandedOpportunityId(null)
                                     }
                                     className="ml-auto lg:hidden text-blue-600 active:text-blue-800 sm:hover:text-blue-800 p-1"
-                                    aria-label="Close insights"
+                                    aria-label={t(
+                                      "provider.dashboard.opportunity.closeInsightsAria",
+                                    )}
                                   >
                                     <span className="text-lg">×</span>
                                   </button>
@@ -1651,7 +1274,16 @@ export default function ProviderOpportunitiesPage() {
                             <span>{opportunity.postedTime}</span>
                             <div className="flex items-center">
                               <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 flex-shrink-0" />
-                              {opportunity.proposals} proposals
+                              {opportunity.proposals === 1
+                                ? t(
+                                    "provider.dashboard.opportunity.proposalOne",
+                                  )
+                                : t(
+                                    "provider.dashboard.opportunity.proposalsN",
+                                    {
+                                      n: opportunity.proposals,
+                                    },
+                                  )}
                             </div>
                           </div>
                           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
@@ -1665,7 +1297,9 @@ export default function ProviderOpportunitiesPage() {
                                 className="w-full sm:w-auto text-xs sm:text-sm"
                               >
                                 <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                                View Details
+                                {t(
+                                  "provider.dashboard.opportunity.viewDetails",
+                                )}
                               </Button>
                             </Link>
                             {opportunity.hasSubmitted ? (
@@ -1675,7 +1309,7 @@ export default function ProviderOpportunitiesPage() {
                                 className="w-full sm:w-auto text-xs sm:text-sm"
                               >
                                 <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                                Submitted
+                                {t("provider.opportunities.submitted")}
                               </Button>
                             ) : (
                               <Button
@@ -1691,7 +1325,9 @@ export default function ProviderOpportunitiesPage() {
                                 ) : (
                                   <ThumbsUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                                 )}
-                                {proposalCompletionChecking ? "Checking…" : "Submit Proposal"}
+                                {proposalCompletionChecking
+                                  ? t("provider.opportunities.checking")
+                                  : t("provider.opportunities.submitProposal")}
                               </Button>
                             )}
                           </div>
@@ -1705,17 +1341,10 @@ export default function ProviderOpportunitiesPage() {
 
             <TabsContent value="recommended" className="space-y-4 sm:space-y-6">
               {loadingRecommended ? (
-                <Card>
-                  <CardContent className="p-8 sm:p-12 text-center">
-                    <Loader2 className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-4 animate-spin" />
-                    <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
-                      Loading recommended opportunities...
-                    </h3>
-                    <p className="text-sm sm:text-base text-gray-600">
-                      Please wait while we fetch AI-matched opportunities.
-                    </p>
-                  </CardContent>
-                </Card>
+                <OpportunityListSkeleton
+                  variant="recommended"
+                  loadingLabel={`${t("provider.opportunities.loadingRecommended")}. ${t("provider.opportunities.loadingRecommendedDesc")}`}
+                />
               ) : errorRecommended ? (
                 <Card>
                   <CardContent className="p-4 sm:p-6">
@@ -1737,18 +1366,21 @@ export default function ProviderOpportunitiesPage() {
                     </div>
                     <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
                       {recommendationsCacheInfo.requiresSkills
-                        ? "Add skills to see recommendations"
-                        : "No recommended opportunities found"}
+                        ? t("provider.opportunities.reco.addSkillsTitle")
+                        : t("provider.opportunities.reco.emptyTitle")}
                     </h3>
                     <p className="text-sm sm:text-base text-gray-600 mb-4">
                       {recommendationsCacheInfo.requiresSkills
-                        ? "Match score and AI insights are based on your profile skills. Add skills in your profile to get personalized recommendations."
-                        : "Check back later for AI-matched opportunities based on your skills and preferences."}
+                        ? t("provider.opportunities.reco.addSkillsBody")
+                        : t("provider.opportunities.reco.emptyBody")}
                     </p>
                     {recommendationsCacheInfo.requiresSkills && (
                       <Link href="/provider/profile">
-                        <Button variant="default" className="text-xs sm:text-sm">
-                          Go to Profile
+                        <Button
+                          variant="default"
+                          className="text-xs sm:text-sm"
+                        >
+                          {t("provider.opportunities.goToProfile")}
                         </Button>
                       </Link>
                     )}
@@ -1759,47 +1391,10 @@ export default function ProviderOpportunitiesPage() {
                   {recommendationsCacheInfo.cachedAt &&
                     recommendationsCacheInfo.nextRefreshAt && (
                       <div className="text-xs text-gray-500 mb-3 sm:mb-4">
-                        {(() => {
-                          const now = Date.now();
-                          const cachedAt = recommendationsCacheInfo.cachedAt;
-                          const nextRefreshAt =
-                            recommendationsCacheInfo.nextRefreshAt;
-                          const ageMs = now - cachedAt;
-                          const remainingMs = nextRefreshAt - now;
-
-                          const ageMinutes = Math.floor(ageMs / 60000);
-                          const remainingMinutes = Math.floor(
-                            remainingMs / 60000,
-                          );
-                          const remainingHours = Math.floor(
-                            remainingMinutes / 60,
-                          );
-                          const remainingMins = remainingMinutes % 60;
-
-                          return (
-                            <>
-                              <span>
-                                Updated: {ageMinutes} minute
-                                {ageMinutes !== 1 ? "s" : ""} ago
-                              </span>
-                              {remainingMs > 0 && (
-                                <>
-                                  {" • "}
-                                  <span>
-                                    Next refresh: in{" "}
-                                    {remainingHours > 0
-                                      ? `${remainingHours} hour${
-                                          remainingHours !== 1 ? "s" : ""
-                                        } `
-                                      : ""}
-                                    {remainingMins} minute
-                                    {remainingMins !== 1 ? "s" : ""}
-                                  </span>
-                                </>
-                              )}
-                            </>
-                          );
-                        })()}
+                        {formatRecommendationsCacheLine(
+                          recommendationsCacheInfo.cachedAt,
+                          recommendationsCacheInfo.nextRefreshAt,
+                        )}
                       </div>
                     )}
                   <div className="space-y-3 sm:space-y-4">
@@ -1818,7 +1413,9 @@ export default function ProviderOpportunitiesPage() {
                                 <div className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-full text-xs font-medium shadow-md">
                                   <Sparkles className="w-3 h-3" />
                                   <span className="hidden sm:inline">
-                                    AI Insights
+                                    {t(
+                                      "provider.dashboard.opportunity.aiInsights",
+                                    )}
                                   </span>
                                 </div>
                               </div>
@@ -1841,7 +1438,10 @@ export default function ProviderOpportunitiesPage() {
                                               : "bg-yellow-100 text-yellow-700 border-yellow-300"
                                         }`}
                                       >
-                                        {opportunity.matchScore}% match
+                                        {t(
+                                          "provider.dashboard.opportunity.matchPercent",
+                                          { n: opportunity.matchScore },
+                                        )}
                                       </Badge>
                                     )}
                                   </div>
@@ -1855,7 +1455,9 @@ export default function ProviderOpportunitiesPage() {
                                       </p>
                                       {opportunity.verified && (
                                         <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium shrink-0">
-                                          ✓ Verified
+                                          {t(
+                                            "provider.dashboard.opportunity.verified",
+                                          )}
                                         </span>
                                       )}
                                     </div>
@@ -1882,10 +1484,14 @@ export default function ProviderOpportunitiesPage() {
                                     >
                                       <Sparkles className="w-3.5 h-3.5 shrink-0" />
                                       <span className="hidden sm:inline">
-                                        Hover to see AI insights
+                                        {t(
+                                          "provider.dashboard.opportunity.hoverInsights",
+                                        )}
                                       </span>
                                       <span className="sm:hidden">
-                                        Tap to see AI insights
+                                        {t(
+                                          "provider.dashboard.opportunity.tapInsights",
+                                        )}
                                       </span>
                                       <ChevronRight
                                         className={`w-3 h-3 shrink-0 transition-transform ${
@@ -1907,7 +1513,9 @@ export default function ProviderOpportunitiesPage() {
                                           <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600" />
                                         </div>
                                         <p className="text-xs sm:text-sm font-semibold text-blue-900">
-                                          Why this is recommended for you:
+                                          {t(
+                                            "provider.dashboard.opportunity.whyRecommended",
+                                          )}
                                         </p>
                                         {/* Close button for mobile */}
                                         <button
@@ -1915,7 +1523,9 @@ export default function ProviderOpportunitiesPage() {
                                             setExpandedOpportunityId(null)
                                           }
                                           className="ml-auto lg:hidden text-blue-600 active:text-blue-800 sm:hover:text-blue-800 p-1"
-                                          aria-label="Close insights"
+                                          aria-label={t(
+                                            "provider.dashboard.opportunity.closeInsightsAria",
+                                          )}
                                         >
                                           <span className="text-lg">×</span>
                                         </button>
@@ -1969,8 +1579,13 @@ export default function ProviderOpportunitiesPage() {
                                     variant="secondary"
                                     className="text-xs border"
                                   >
-                                    +{(opportunity.skills || []).length - 6}{" "}
-                                    more
+                                    {t(
+                                      "provider.dashboard.opportunity.moreSkills",
+                                      {
+                                        n:
+                                          (opportunity.skills || []).length - 6,
+                                      },
+                                    )}
                                   </Badge>
                                 )}
                               </div>
@@ -1990,8 +1605,14 @@ export default function ProviderOpportunitiesPage() {
                                   )}
                                   {opportunity.proposals !== undefined && (
                                     <span className="whitespace-nowrap">
-                                      {opportunity.proposals} proposal
-                                      {opportunity.proposals !== 1 ? "s" : ""}
+                                      {opportunity.proposals === 1
+                                        ? t(
+                                            "provider.dashboard.opportunity.proposalOne",
+                                          )
+                                        : t(
+                                            "provider.dashboard.opportunity.proposalsN",
+                                            { n: opportunity.proposals },
+                                          )}
                                     </span>
                                   )}
                                 </div>
@@ -2006,7 +1627,9 @@ export default function ProviderOpportunitiesPage() {
                                       className="w-full sm:w-auto text-xs sm:text-sm"
                                     >
                                       <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                                      View Details
+                                      {t(
+                                        "provider.dashboard.opportunity.viewDetails",
+                                      )}
                                     </Button>
                                   </Link>
                                   {opportunity.hasSubmitted ? (
@@ -2016,7 +1639,7 @@ export default function ProviderOpportunitiesPage() {
                                       className="w-full sm:w-auto text-xs sm:text-sm"
                                     >
                                       <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                                      Submitted
+                                      {t("provider.opportunities.submitted")}
                                     </Button>
                                   ) : (
                                     <Button
@@ -2032,7 +1655,11 @@ export default function ProviderOpportunitiesPage() {
                                       ) : (
                                         <ThumbsUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                                       )}
-                                      {proposalCompletionChecking ? "Checking…" : "Submit Proposal"}
+                                      {proposalCompletionChecking
+                                        ? t("provider.opportunities.checking")
+                                        : t(
+                                            "provider.opportunities.submitProposal",
+                                          )}
                                     </Button>
                                   )}
                                 </div>
@@ -2057,8 +1684,10 @@ export default function ProviderOpportunitiesPage() {
                 {selectedProject?.title}
               </DialogTitle>
               <DialogDescription className="text-base">
-                Posted by {selectedProject?.client} •{" "}
-                {selectedProject?.postedTime}
+                {t("provider.opportunities.details.postedBy", {
+                  client: selectedProject?.client ?? "",
+                  time: selectedProject?.postedTime ?? "",
+                })}
               </DialogDescription>
             </DialogHeader>
 
@@ -2069,7 +1698,7 @@ export default function ProviderOpportunitiesPage() {
                   <div className="md:col-span-2 space-y-4">
                     <div>
                       <h3 className="font-semibold text-lg mb-2">
-                        Project Description
+                        {t("provider.opportunities.details.projectDescription")}
                       </h3>
                       <p className="text-gray-700 leading-relaxed">
                         {selectedProject.fullDescription}
@@ -2078,22 +1707,26 @@ export default function ProviderOpportunitiesPage() {
 
                     <div>
                       <h3 className="font-semibold text-lg mb-2">
-                        Requirements
+                        {t("provider.opportunities.details.requirements")}
                       </h3>
                       <MarkdownViewer
                         content={selectedProject.requirements}
-                        emptyMessage="No requirements specified."
+                        emptyMessage={t(
+                          "provider.opportunities.details.noRequirements",
+                        )}
                         className="text-gray-700"
                       />
                     </div>
 
                     <div>
                       <h3 className="font-semibold text-lg mb-2">
-                        Deliverables
+                        {t("provider.opportunities.details.deliverables")}
                       </h3>
                       <MarkdownViewer
                         content={selectedProject.deliverables}
-                        emptyMessage="No deliverables specified."
+                        emptyMessage={t(
+                          "provider.opportunities.details.noDeliverables",
+                        )}
                         className="text-gray-700"
                       />
                     </div>
@@ -2103,42 +1736,54 @@ export default function ProviderOpportunitiesPage() {
                     <Card>
                       <CardHeader>
                         <CardTitle className="text-lg">
-                          Project Details
+                          {t("provider.opportunities.details.projectDetails")}
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-3">
                         <div className="flex items-center justify-between">
-                          <span className="text-gray-600">Budget:</span>
+                          <span className="text-gray-600">
+                            {t("provider.opportunities.details.budget")}
+                          </span>
                           <span className="font-semibold text-green-600">
                             {selectedProject.budget}
                           </span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-gray-600">Timeline:</span>
+                          <span className="text-gray-600">
+                            {t("provider.opportunities.details.timeline")}
+                          </span>
                           <span className="font-semibold">
                             {formatTimeline(selectedProject?.timeline)}
                           </span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-gray-600">Proposals:</span>
+                          <span className="text-gray-600">
+                            {t("provider.opportunities.details.proposals")}
+                          </span>
                           <span className="font-semibold">
                             {selectedProject.proposals}
                           </span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-gray-600">Location:</span>
+                          <span className="text-gray-600">
+                            {t("provider.opportunities.details.location")}
+                          </span>
                           <span className="font-semibold">
                             {selectedProject.location}
                           </span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-gray-600">Match Score:</span>
+                          <span className="text-gray-600">
+                            {t("provider.opportunities.details.matchScore")}
+                          </span>
                           <Badge
                             className={getMatchScoreColor(
                               selectedProject.matchScore || 0,
                             )}
                           >
-                            {selectedProject.matchScore || 0}%
+                            {t("provider.opportunities.details.matchPercent", {
+                              n: selectedProject.matchScore || 0,
+                            })}
                           </Badge>
                         </div>
                       </CardContent>
@@ -2147,7 +1792,7 @@ export default function ProviderOpportunitiesPage() {
                     <Card>
                       <CardHeader>
                         <CardTitle className="text-lg">
-                          Client Information
+                          {t("provider.opportunities.details.clientInfo")}
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-3">
@@ -2175,33 +1820,50 @@ export default function ProviderOpportunitiesPage() {
                             </p>
                             <div className="flex items-center text-sm text-gray-500">
                               <Star className="w-3 h-3 text-yellow-400 mr-1" />
-                              {selectedProject.clientRating} (
-                              {selectedProject.projectsPosted} projects)
+                              {t(
+                                "provider.opportunities.details.clientRatingProjects",
+                                {
+                                  rating: selectedProject.clientRating,
+                                  n: selectedProject.projectsPosted,
+                                },
+                              )}
                             </div>
                           </div>
                         </div>
                         <Separator />
                         <div className="space-y-2 text-sm">
                           <div className="flex justify-between">
-                            <span className="text-gray-600">Company Size:</span>
+                            <span className="text-gray-600">
+                              {t("provider.opportunities.details.companySize")}
+                            </span>
                             <span>
                               {selectedProject.clientInfo?.companySize}
                             </span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-gray-600">Industry:</span>
+                            <span className="text-gray-600">
+                              {t("provider.opportunities.details.industry")}
+                            </span>
                             <span>{selectedProject.clientInfo?.industry}</span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-gray-600">Member Since:</span>
+                            <span className="text-gray-600">
+                              {t("provider.opportunities.details.memberSince")}
+                            </span>
                             <span>
                               {selectedProject.clientInfo?.memberSince}
                             </span>
                           </div>
                           <div className="flex justify-between">
-                            <span className="text-gray-600">Total Spent:</span>
+                            <span className="text-gray-600">
+                              {t("provider.opportunities.details.totalSpent")}
+                            </span>
                             <span className="text-green-600 font-semibold">
-                              {selectedProject.clientInfo?.totalSpent || "RM 0"}
+                              {selectedProject.clientInfo?.totalSpent ||
+                                formatCurrencyAmount(
+                                  0,
+                                  selectedProject?.currencyCode || "MYR",
+                                )}
                             </span>
                           </div>
                         </div>
@@ -2212,7 +1874,9 @@ export default function ProviderOpportunitiesPage() {
                             >
                               <Button variant="outline" className="w-full">
                                 <Eye className="w-4 h-4 mr-2" />
-                                View Company
+                                {t(
+                                  "provider.opportunities.details.viewCompany",
+                                )}
                               </Button>
                             </Link>
                           </div>
@@ -2225,7 +1889,7 @@ export default function ProviderOpportunitiesPage() {
                 {/* Skills Required */}
                 <div>
                   <h3 className="font-semibold text-lg mb-3">
-                    Skills Required
+                    {t("provider.opportunities.details.skillsRequired")}
                   </h3>
                   <div className="flex flex-wrap gap-2">
                     {selectedProject.skills.map((skill: string) => (
@@ -2247,7 +1911,7 @@ export default function ProviderOpportunitiesPage() {
                 variant="outline"
                 onClick={() => setIsDetailsModalOpen(false)}
               >
-                Close
+                {t("provider.opportunities.details.close")}
               </Button>
               <Button
                 onClick={() => {
@@ -2256,626 +1920,15 @@ export default function ProviderOpportunitiesPage() {
                     void handleSubmitProposal(selectedProject);
                   }
                 }}
-                disabled={selectedProject?.hasSubmitted || proposalCompletionChecking}
+                disabled={
+                  selectedProject?.hasSubmitted || proposalCompletionChecking
+                }
               >
                 {selectedProject?.hasSubmitted
-                  ? "Already Submitted"
+                  ? t("provider.opportunities.details.alreadySubmitted")
                   : proposalCompletionChecking
-                    ? "Checking…"
-                    : "Submit Proposal"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Proposal Submission Modal */}
-        <Dialog
-          open={isProposalModalOpen}
-          onOpenChange={setIsProposalModalOpen}
-        >
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="text-xl">Submit Proposal</DialogTitle>
-              <DialogDescription>
-                Submit your proposal for &quot;{selectedProject?.title}&quot;
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-6">
-              {/* Bid Amount */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="bidAmount">Your Bid Amount (RM) *</Label>
-                  <Input
-                    id="bidAmount"
-                    type="text"
-                    inputMode="decimal"
-                    placeholder="15,000.00"
-                    value={formatBidAmountDisplay(proposalData.bidAmount)}
-                    onChange={(e) =>
-                      setProposalData((prev) => ({
-                        ...prev,
-                        bidAmount: parseBidAmountInput(e.target.value),
-                      }))
-                    }
-                    className={
-                      proposalErrors.bidAmount
-                        ? "border-red-500 focus-visible:ring-red-500"
-                        : ""
-                    }
-                  />
-                  {proposalErrors.bidAmount && (
-                    <p className="text-xs text-red-600">
-                      {proposalErrors.bidAmount}
-                    </p>
-                  )}
-                  <p className="text-xs text-gray-500 mt-1">
-                    Client budget range: RM{" "}
-                    {selectedProject?.budgetMin?.toLocaleString() || "0"} - RM{" "}
-                    {selectedProject?.budgetMax?.toLocaleString() || "0"}
-                  </p>
-                </div>
-                <div>
-                  <Label htmlFor="timeline">Delivery Timeline *</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id="timelineAmount"
-                      type="number"
-                      placeholder="e.g. 2"
-                      min="1"
-                      value={proposalData.timelineAmount}
-                      onChange={(e) =>
-                        setProposalData((prev) => ({
-                          ...prev,
-                          timelineAmount: e.target.value,
-                        }))
-                      }
-                      className={
-                        proposalErrors.timelineAmount
-                          ? "border-red-500 focus-visible:ring-red-500"
-                          : ""
-                      }
-                    />
-                    <Select
-                      value={proposalData.timelineUnit}
-                      onValueChange={(value: "day" | "week" | "month") =>
-                        setProposalData((prev) => ({
-                          ...prev,
-                          timelineUnit: value,
-                        }))
-                      }
-                    >
-                      <SelectTrigger
-                        className={
-                          proposalErrors.timelineUnit
-                            ? "border-red-500 focus:ring-red-500"
-                            : ""
-                        }
-                      >
-                        <SelectValue placeholder="Unit" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="day">Day(s)</SelectItem>
-                        <SelectItem value="week">Week(s)</SelectItem>
-                        <SelectItem value="month">Month(s)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {proposalErrors.timelineAmount && (
-                    <p className="text-xs text-red-600 mt-1">
-                      {proposalErrors.timelineAmount}
-                    </p>
-                  )}
-                  {proposalErrors.timelineUnit && (
-                    <p className="text-xs text-red-600 mt-1">
-                      {proposalErrors.timelineUnit}
-                    </p>
-                  )}
-                  <p className="text-xs text-gray-500 mt-1">
-                    Company timeline:{" "}
-                    {selectedProject?.originalTimeline
-                      ? formatTimeline(selectedProject.originalTimeline)
-                      : "Not specified"}
-                  </p>
-                  {proposalData.timelineAmount && proposalData.timelineUnit && (
-                    <p className="text-xs text-gray-500 mt-1">
-                      Your timeline:{" "}
-                      {formatTimeline(
-                        proposalData.timelineAmount,
-                        proposalData.timelineUnit,
-                      )}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {/* Cover Letter */}
-              <div>
-                <Label htmlFor="coverLetter">Cover Letter *</Label>
-                <Textarea
-                  id="coverLetter"
-                  placeholder="Introduce yourself and explain why you're the best fit for this project..."
-                  className={`min-h-[120px] ${
-                    proposalErrors.coverLetter
-                      ? "border-red-500 focus-visible:ring-red-500"
-                      : ""
-                  }`}
-                  value={proposalData.coverLetter}
-                  onChange={(e) =>
-                    setProposalData((prev) => ({
-                      ...prev,
-                      coverLetter: e.target.value,
-                    }))
-                  }
-                />
-                {proposalErrors.coverLetter && (
-                  <p className="text-xs text-red-600">
-                    {proposalErrors.coverLetter}
-                  </p>
-                )}
-                <p className="text-xs text-gray-500 mt-1">
-                  {proposalData.coverLetter.length}/1000 characters
-                </p>
-              </div>
-
-              {/* Project Milestones (Required) */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <Label>
-                    Project Milestones <span className="text-red-500">*</span>
-                  </Label>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={addProposalMilestone}
-                  >
-                    + Add Milestone
-                  </Button>
-                </div>
-
-                {proposalData.milestones.length === 0 && (
-                  <p
-                    className={`text-sm ${
-                      proposalErrors.milestones
-                        ? "text-red-600 font-medium"
-                        : "text-gray-500"
-                    }`}
-                  >
-                    {proposalErrors.milestones ||
-                      "At least one milestone is required. Click 'Add Milestone' to get started."}
-                  </p>
-                )}
-
-                <div className="space-y-3">
-                  {proposalData.milestones.map((m, i) => (
-                    <Card key={i}>
-                      <CardContent className="p-4 space-y-3">
-                        <div className="grid md:grid-cols-12 gap-3">
-                          <div className="md:col-span-1">
-                            <label className="text-sm font-medium">Seq</label>
-                            <Input type="number" value={i + 1} disabled />
-                          </div>
-                          <div className="md:col-span-4">
-                            <label className="text-sm font-medium">
-                              Title <span className="text-red-500">*</span>
-                            </label>
-                            <Input
-                              value={m.title}
-                              onChange={(e) => {
-                                updateProposalMilestone(i, {
-                                  title: e.target.value,
-                                });
-                                // Clear error when user starts typing
-                                if (
-                                  proposalErrors.milestoneFields?.[i]?.title
-                                ) {
-                                  setProposalErrors((prev) => ({
-                                    ...prev,
-                                    milestoneFields: {
-                                      ...prev.milestoneFields,
-                                      [i]: {
-                                        ...prev.milestoneFields?.[i],
-                                        title: undefined,
-                                      },
-                                    },
-                                  }));
-                                }
-                              }}
-                              placeholder="Milestone title (required)"
-                              className={
-                                proposalErrors.milestoneFields?.[i]?.title
-                                  ? "border-red-500 focus-visible:ring-red-500"
-                                  : ""
-                              }
-                            />
-                            {proposalErrors.milestoneFields?.[i]?.title && (
-                              <p className="text-xs text-red-600 mt-1">
-                                {proposalErrors.milestoneFields[i].title}
-                              </p>
-                            )}
-                          </div>
-                          <div className="md:col-span-3">
-                            <label className="text-sm font-medium">
-                              Amount (RM)
-                            </label>
-                            <Input
-                              type="number"
-                              value={String(m.amount ?? 0)}
-                              onChange={(e) => {
-                                updateProposalMilestone(i, {
-                                  amount: Number(e.target.value),
-                                });
-                                // Clear error when user starts typing
-                                if (
-                                  proposalErrors.milestoneFields?.[i]?.amount
-                                ) {
-                                  setProposalErrors((prev) => ({
-                                    ...prev,
-                                    milestoneFields: {
-                                      ...prev.milestoneFields,
-                                      [i]: {
-                                        ...prev.milestoneFields?.[i],
-                                        amount: undefined,
-                                      },
-                                    },
-                                  }));
-                                }
-                              }}
-                              className={
-                                proposalErrors.milestoneFields?.[i]?.amount
-                                  ? "border-red-500 focus-visible:ring-red-500"
-                                  : ""
-                              }
-                            />
-                            {proposalErrors.milestoneFields?.[i]?.amount && (
-                              <p className="text-xs text-red-600 mt-1">
-                                {proposalErrors.milestoneFields[i].amount}
-                              </p>
-                            )}
-                          </div>
-                          <div className="md:col-span-4">
-                            <label className="text-sm font-medium">
-                              Duration <span className="text-red-500">*</span>
-                            </label>
-                            <div className="flex flex-col sm:flex-row gap-2 mt-1.5">
-                              <Input
-                                type="number"
-                                min={1}
-                                placeholder="e.g. 1"
-                                value={m.durationAmount ?? ""}
-                                onChange={(e) => {
-                                  updateProposalMilestone(i, {
-                                    durationAmount: e.target.value,
-                                    durationUnit: m.durationUnit || "",
-                                  });
-                                  if (
-                                    proposalErrors.milestoneFields?.[i]
-                                      ?.durationAmount
-                                  ) {
-                                    setProposalErrors((prev) => ({
-                                      ...prev,
-                                      milestoneFields: {
-                                        ...prev.milestoneFields,
-                                        [i]: {
-                                          ...prev.milestoneFields?.[i],
-                                          durationAmount: undefined,
-                                        },
-                                      },
-                                    }));
-                                  }
-                                }}
-                                className={
-                                  proposalErrors.milestoneFields?.[i]
-                                    ?.durationAmount
-                                    ? "border-red-500 focus-visible:ring-red-500"
-                                    : ""
-                                }
-                              />
-                              <Select
-                                value={m.durationUnit || ""}
-                                onValueChange={(
-                                  value: "day" | "week" | "month",
-                                ) => {
-                                  updateProposalMilestone(i, {
-                                    durationAmount: m.durationAmount ?? "",
-                                    durationUnit: value,
-                                  });
-                                  if (
-                                    proposalErrors.milestoneFields?.[i]
-                                      ?.durationUnit
-                                  ) {
-                                    setProposalErrors((prev) => ({
-                                      ...prev,
-                                      milestoneFields: {
-                                        ...prev.milestoneFields,
-                                        [i]: {
-                                          ...prev.milestoneFields?.[i],
-                                          durationUnit: undefined,
-                                        },
-                                      },
-                                    }));
-                                  }
-                                }}
-                              >
-                                <SelectTrigger
-                                  className={
-                                    proposalErrors.milestoneFields?.[i]
-                                      ?.durationUnit
-                                      ? "border-red-500 focus:ring-red-500"
-                                      : ""
-                                  }
-                                >
-                                  <SelectValue placeholder="Unit" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="day">Day(s)</SelectItem>
-                                  <SelectItem value="week">Week(s)</SelectItem>
-                                  <SelectItem value="month">
-                                    Month(s)
-                                  </SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            {(proposalErrors.milestoneFields?.[i]
-                              ?.durationAmount ||
-                              proposalErrors.milestoneFields?.[i]
-                                ?.durationUnit) && (
-                              <p className="text-xs text-red-600 mt-1">
-                                {proposalErrors.milestoneFields[i]
-                                  .durationAmount ||
-                                  proposalErrors.milestoneFields[i]
-                                    .durationUnit}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className="text-sm font-medium">
-                            Description <span className="text-red-500">*</span>
-                          </label>
-                          <Textarea
-                            rows={2}
-                            value={m.description || ""}
-                            onChange={(e) => {
-                              updateProposalMilestone(i, {
-                                description: e.target.value,
-                              });
-                              // Clear error when user starts typing
-                              if (
-                                proposalErrors.milestoneFields?.[i]?.description
-                              ) {
-                                setProposalErrors((prev) => ({
-                                  ...prev,
-                                  milestoneFields: {
-                                    ...prev.milestoneFields,
-                                    [i]: {
-                                      ...prev.milestoneFields?.[i],
-                                      description: undefined,
-                                    },
-                                  },
-                                }));
-                              }
-                            }}
-                            placeholder="Milestone description (required)"
-                            className={
-                              proposalErrors.milestoneFields?.[i]?.description
-                                ? "border-red-500 focus-visible:ring-red-500"
-                                : ""
-                            }
-                          />
-                          {proposalErrors.milestoneFields?.[i]?.description && (
-                            <p className="text-xs text-red-600 mt-1">
-                              {proposalErrors.milestoneFields[i].description}
-                            </p>
-                          )}
-                        </div>
-
-                        <div className="flex justify-end">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => removeProposalMilestone(i)}
-                          >
-                            Remove
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-                {/* Milestones total check (bid + time) */}
-                {proposalData.milestones.length > 0 && (
-                  <div className="mt-4 rounded-md border p-3 text-sm space-y-3">
-                    {(() => {
-                      const bidAmountNum = Number(proposalData.bidAmount || 0);
-                      const sumMilestones = proposalData.milestones.reduce(
-                        (sum, m) => {
-                          const val = Number(m.amount);
-                          if (!isNaN(val)) return sum + val;
-                          return sum;
-                        },
-                        0,
-                      );
-                      const bidMatch =
-                        bidAmountNum > 0 && sumMilestones === bidAmountNum;
-
-                      const deliveryTimeDays = timelineToDays(
-                        Number(proposalData.timelineAmount || 0),
-                        proposalData.timelineUnit || "",
-                      );
-                      const milestonesDurationDays =
-                        proposalData.milestones.reduce(
-                          (sum, m) =>
-                            sum +
-                            (timelineToDays(
-                              Number(m.durationAmount || 0),
-                              m.durationUnit || "",
-                            ) || 0),
-                          0,
-                        );
-                      const timeMatch =
-                        deliveryTimeDays > 0 &&
-                        milestonesDurationDays === deliveryTimeDays;
-
-                      return (
-                        <>
-                          <div className="flex justify-between flex-wrap gap-2">
-                            <div>
-                              <div className="font-medium">
-                                Milestones total: RM {sumMilestones || 0}
-                              </div>
-                              <div>Your bid: RM {bidAmountNum || 0}</div>
-                            </div>
-                            <div
-                              className={
-                                "text-xs font-semibold " +
-                                (bidMatch ? "text-green-600" : "text-red-600")
-                              }
-                            >
-                              {bidMatch
-                                ? "Total matches bid ✅"
-                                : "Total does not match bid ❗"}
-                            </div>
-                          </div>
-                          <div className="flex justify-between flex-wrap gap-2 border-t pt-2">
-                            <div>
-                              <div className="font-medium">
-                                Milestones duration total:{" "}
-                                {milestonesDurationDays} days
-                              </div>
-                              <div>
-                                Your delivery timeline: {deliveryTimeDays} days
-                              </div>
-                            </div>
-                            <div
-                              className={
-                                "text-xs font-semibold " +
-                                (timeMatch ? "text-green-600" : "text-red-600")
-                              }
-                            >
-                              {timeMatch
-                                ? "Total matches delivery timeline ✅"
-                                : "Total does not match delivery timeline ❗"}
-                            </div>
-                          </div>
-                        </>
-                      );
-                    })()}
-                  </div>
-                )}
-                {proposalErrors.milestones && (
-                  <p className="text-xs text-red-600 mt-1">
-                    {proposalErrors.milestones}
-                  </p>
-                )}
-              </div>
-
-              {/* File Attachments */}
-              <div>
-                <Label>Attachments (Optional)</Label>
-                <div
-                  className={`border-2 border-dashed rounded-lg p-6 text-center ${
-                    proposalErrors.attachments
-                      ? "border-red-500 bg-red-50"
-                      : "border-gray-300"
-                  }`}
-                >
-                  <input
-                    type="file"
-                    multiple
-                    onChange={handleFileUpload}
-                    className="hidden"
-                    id="file-upload"
-                    accept=".pdf,.doc,.docx,.txt,.csv,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.webp"
-                  />
-                  <label htmlFor="file-upload" className="cursor-pointer">
-                    <Paperclip className="w-8 h-8 mx-auto text-gray-400 mb-2" />
-                    <p className="text-sm text-gray-600">
-                      Click to upload portfolio, resume, or relevant documents
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      PDF, DOC, DOCX, TXT, CSV, XLS, XLSX, JPG, PNG, GIF, WEBP (Max 10MB each)
-                    </p>
-                  </label>
-                </div>
-
-                {/* Uploaded Files */}
-                {proposalData.attachments.length > 0 && (
-                  <div className="mt-3 space-y-2">
-                    {proposalData.attachments.map((file, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center justify-between bg-gray-50 p-2 rounded"
-                      >
-                        <span className="text-sm text-gray-700">
-                          {file.name}
-                        </span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeAttachment(index)}
-                        >
-                          Remove
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {proposalErrors.attachments && (
-                  <p className="text-xs text-red-600 mt-2">
-                    {proposalErrors.attachments}
-                  </p>
-                )}
-              </div>
-
-              {/* Proposal Summary */}
-              <Card className="bg-gray-50">
-                <CardContent className="p-4">
-                  <h4 className="font-semibold mb-2">Proposal Summary</h4>
-                  <div className="space-y-1 text-sm">
-                    <div className="flex justify-between">
-                      <span>Your Bid:</span>
-                      <span className="font-semibold">
-                        RM {proposalData.bidAmount || "0"}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Timeline:</span>
-                      <span>
-                        {formatTimeline(
-                          proposalData.timelineAmount,
-                          proposalData.timelineUnit,
-                        ) || "Not specified"}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Attachments:</span>
-                      <span>{proposalData.attachments.length} files</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setIsProposalModalOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleProposalSubmit}
-                disabled={submittingProposal}
-              >
-                {submittingProposal ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Send className="w-4 h-4 mr-2" />
-                )}
-                {submittingProposal ? "Submitting..." : "Submit Proposal"}
+                    ? t("provider.opportunities.checking")
+                    : t("provider.opportunities.submitProposal")}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -2885,8 +1938,8 @@ export default function ProviderOpportunitiesPage() {
         open={proposalGateOpen}
         onOpenChange={setProposalGateOpen}
         requiredPercent={PROPOSAL_REQUIRED}
-        actionLabel="submit proposals"
+        actionLabel={t("provider.opportunities.gate.submitProposals")}
       />
-    </ProviderLayout>
+    </>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
-import React, { useState, useEffect, useCallback } from "react";
+//projects
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,7 +14,14 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Calendar,
   DollarSign,
@@ -36,9 +44,8 @@ import {
   HelpCircle,
 } from "lucide-react";
 import NextLink from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
-import { CustomerLayout } from "@/components/customer-layout";
 import {
   getProjectById,
   getCompanyProjectRequests,
@@ -46,7 +53,7 @@ import {
   acceptProjectRequest,
   rejectProjectRequest,
   createDispute,
-  getDisputeByProject,
+  getDisputesByProject,
   updateDispute,
   getProfileImageUrl,
   getAttachmentUrl,
@@ -56,6 +63,7 @@ import { toast } from "@/components/ui/use-toast";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -95,6 +103,9 @@ import { useRecommendedProviders } from "@/hooks/useRecommendedProviders";
 import { RecommendedProvidersList } from "@/components/customer/RecommendedProvidersList";
 import type { RecommendedProvider } from "@/hooks/useRecommendedProviders";
 import { getUserFriendlyErrorMessage } from "@/lib/errors";
+import { useI18n } from "@/contexts/I18nProvider";
+import type { MessageKey } from "@/lib/i18n/messages";
+import { CustomerProjectReviewInline } from "@/components/customer/projects/CustomerProjectReviewInline";
 
 // Project type definition
 interface Project {
@@ -165,12 +176,24 @@ interface Dispute {
   [key: string]: unknown; // Allow additional properties
 }
 
+/** Milestone statuses that cannot be linked to a dispute (picker + submit validation). */
+const DISPUTE_MILESTONE_EXCLUDED_STATUSES = new Set([
+  "LOCKED",
+  "DRAFT",
+  "PAID",
+  "DISBUTED",
+  "APPROVED",
+]);
+
 /** AI Recommended Providers for an opportunity (ServiceRequest) – same UI as dashboard. */
 function AIRecommendedProvidersSection({
   serviceRequestId,
+  showScrollNote = false,
 }: {
   serviceRequestId: string;
+  showScrollNote?: boolean;
 }) {
+  const { t, locale } = useI18n();
   const { providers, loading, error } =
     useRecommendedProviders(serviceRequestId);
   const router = useRouter();
@@ -180,15 +203,19 @@ function AIRecommendedProvidersSection({
     );
   };
   return (
-    <Card>
+    <Card id="recommended-providers-section">
       <CardHeader className="p-4 sm:p-6">
         <CardTitle className="text-base sm:text-lg">
-          AI Recommended Providers
+          {t("customer.projects.detail.aiRecommendedTitle")}
         </CardTitle>
         <CardDescription className="text-xs sm:text-sm">
-          Top 5 providers matched to this opportunity (same algorithm as
-          provider opportunities)
+          {t("customer.projects.detail.aiRecommendedDesc")}
         </CardDescription>
+        {showScrollNote ? (
+          <div className="mt-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs sm:text-sm text-blue-700">
+            {t("customer.projects.detail.aiRecommendedScrollNote")}
+          </div>
+        ) : null}
       </CardHeader>
       <CardContent className="p-4 sm:p-6">
         <RecommendedProvidersList
@@ -196,7 +223,7 @@ function AIRecommendedProvidersSection({
           loading={loading}
           error={error}
           onContact={handleContact}
-          emptyMessage="No recommended providers for this project."
+          emptyMessage={t("customer.projects.detail.emptyRecommendations")}
         />
       </CardContent>
     </Card>
@@ -208,8 +235,12 @@ export default function ProjectDetailsPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const { t, locale } = useI18n();
   const { toast: toastHook } = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const shouldFocusRecommended =
+    searchParams.get("focus") === "recommended-providers";
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -224,7 +255,17 @@ export default function ProjectDetailsPage({
   const [selectedMilestoneForReject, setSelectedMilestoneForReject] = useState<
     string | null
   >(null);
+  const [approveMilestoneDialogOpen, setApproveMilestoneDialogOpen] =
+    useState(false);
+  const [milestoneIdPendingApprove, setMilestoneIdPendingApprove] = useState<
+    string | null
+  >(null);
+  const [approvingIndividualMilestoneId, setApprovingIndividualMilestoneId] =
+    useState<string | null>(null);
   const [selectedProposalForAction, setSelectedProposalForAction] =
+    useState<ProviderRequest | null>(null);
+  const [acceptConfirmOpen, setAcceptConfirmOpen] = useState(false);
+  const [acceptingProposal, setAcceptingProposal] =
     useState<ProviderRequest | null>(null);
 
   // for milestone editing after accepting
@@ -232,6 +273,8 @@ export default function ProjectDetailsPage({
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [milestonesDraft, setMilestonesDraft] = useState<Milestone[]>([]);
   const [savingMilestonesModal, setSavingMilestonesModal] = useState(false);
+  const [approvingMilestonesModal, setApprovingMilestonesModal] =
+    useState(false);
   const [milestoneApprovalStateModal, setMilestoneApprovalStateModal] =
     useState({
       milestonesLocked: false,
@@ -288,9 +331,9 @@ export default function ProjectDetailsPage({
   });
 
   // Project milestone management
-  const [milestoneEditorOpen, setMilestoneEditorOpen] = useState(false);
   const [projectMilestones, setProjectMilestones] = useState<Milestone[]>([]);
   const [savingMilestones, setSavingMilestones] = useState(false);
+  const [approvingMilestones, setApprovingMilestones] = useState(false);
   const [milestoneApprovalState, setMilestoneApprovalState] = useState({
     milestonesLocked: false,
     companyApproved: false,
@@ -331,14 +374,15 @@ export default function ProjectDetailsPage({
   const [disputeDialogOpen, setDisputeDialogOpen] = useState(false);
   const [viewDisputeDialogOpen, setViewDisputeDialogOpen] = useState(false);
   const [currentDispute, setCurrentDispute] = useState<Dispute | null>(null);
+  const [projectDisputes, setProjectDisputes] = useState<Dispute[]>([]);
   const [disputeReason, setDisputeReason] = useState("");
   const [disputeDescription, setDisputeDescription] = useState("");
-  const [disputeContestedAmount, setDisputeContestedAmount] = useState("");
   const [disputeSuggestedResolution, setDisputeSuggestedResolution] =
     useState("");
   const [disputeAttachments, setDisputeAttachments] = useState<File[]>([]);
   const [selectedMilestoneForDispute, setSelectedMilestoneForDispute] =
     useState<string | null>(null);
+  const [projectLevelDisputeAck, setProjectLevelDisputeAck] = useState(false);
   const [creatingDispute, setCreatingDispute] = useState(false);
   const [updatingDispute, setUpdatingDispute] = useState(false);
   const [disputeAdditionalNotes, setDisputeAdditionalNotes] = useState("");
@@ -391,7 +435,38 @@ export default function ProjectDetailsPage({
     /** True if in top 5 fits. */
     isTopFive?: boolean;
     /** AI summary stored at proposal creation (why it fits + drawbacks). */
-    aiFitExplanation?: string | null;
+    aiFitExplanation?: string | Record<string, string> | null;
+  }
+  function normalizeExplanationLocale(locale: string): "en" | "id" | "ar" {
+    const lower = String(locale || "en").toLowerCase();
+    if (lower.startsWith("id")) return "id";
+    if (lower.startsWith("ar")) return "ar";
+    return "en";
+  }
+  function getLocalizedAiFitExplanation(
+    value: string | Record<string, string> | null | undefined,
+    locale: string,
+  ): string {
+    if (typeof value === "string") return value.trim();
+    if (!value || typeof value !== "object") return "";
+    const localeKey = normalizeExplanationLocale(locale);
+    const byLocale = typeof value[localeKey] === "string" ? value[localeKey].trim() : "";
+    const en = typeof value.en === "string" ? value.en.trim() : "";
+    const id = typeof value.id === "string" ? value.id.trim() : "";
+    const ar = typeof value.ar === "string" ? value.ar.trim() : "";
+    return byLocale || en || id || ar || "";
+  }
+  function hasAiFitExplanationForLocale(
+    value: string | Record<string, string> | null | undefined,
+    locale: string,
+  ): boolean {
+    const localeKey = normalizeExplanationLocale(locale);
+    if (typeof value === "string") {
+      return localeKey === "en" && value.trim().length > 0;
+    }
+    if (!value || typeof value !== "object") return false;
+    const text = value[localeKey];
+    return typeof text === "string" && text.trim().length > 0;
   }
   const isImage = (file: string) => /\.(jpg|jpeg|png|gif|webp)$/i.test(file);
 
@@ -432,16 +507,13 @@ export default function ProjectDetailsPage({
   const rightPanelColumnRef = React.useRef<HTMLDivElement | null>(null);
   const [panelTopOffset, setPanelTopOffset] = React.useState(0);
 
-  const DEFAULT_BID_SUMMARY =
-    "Review this proposal’s bid amount, timeline, and milestones. Check the provider’s profile and cover letter to assess how well they match your project.";
-
   const getBidSummary = (
     proposalId: string,
-    stored: string | null | undefined,
+    stored: string | Record<string, string> | null | undefined,
     cached: string | undefined,
   ) => {
-    const text = (stored && stored.trim()) || (cached && cached.trim());
-    return text || DEFAULT_BID_SUMMARY;
+    const text = getLocalizedAiFitExplanation(stored, locale) || (cached && cached.trim());
+    return text || t("customer.projects.detail.defaultBidSummary");
   };
 
   // Align right panel with the hovered card (desktop only)
@@ -474,14 +546,17 @@ export default function ProjectDetailsPage({
   // Fetch AI bid explanation only for legacy proposals (no stored aiFitExplanation)
   useEffect(() => {
     if (!openExplanationId) return;
-    const hasStored = proposals.find(
+    const hasStoredForLocale = hasAiFitExplanationForLocale(
+      proposals.find(
       (x) => x.id === openExplanationId,
-    )?.aiFitExplanation;
-    if (hasStored) return; // Use stored value, no fetch
+      )?.aiFitExplanation,
+      locale,
+    );
+    if (hasStoredForLocale) return; // Use stored locale value, no fetch
     if (fetchedExplanationIds.current.has(openExplanationId)) return;
     fetchedExplanationIds.current.add(openExplanationId);
     setExplanationLoading((prev) => ({ ...prev, [openExplanationId]: true }));
-    getBidExplanation(openExplanationId)
+    getBidExplanation(openExplanationId, locale)
       .then((r) => {
         if (r.success && r.explanation)
           setExplanationCache((prev) => ({
@@ -496,7 +571,13 @@ export default function ProjectDetailsPage({
           [openExplanationId]: false,
         })),
       );
-  }, [openExplanationId, proposals]);
+  }, [locale, openExplanationId, proposals]);
+
+  useEffect(() => {
+    fetchedExplanationIds.current.clear();
+    setExplanationCache({});
+    setExplanationLoading({});
+  }, [locale]);
 
   useEffect(() => {
     if (!project) return;
@@ -562,6 +643,18 @@ export default function ProjectDetailsPage({
     };
   }, [params]);
 
+  useEffect(() => {
+    if (!shouldFocusRecommended || loading) return;
+    const target = document.getElementById("recommended-providers-section");
+    if (!target) return;
+
+    const timer = window.setTimeout(() => {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 200);
+
+    return () => window.clearTimeout(timer);
+  }, [shouldFocusRecommended, loading, project?.id, project?.type]);
+
   // Load auth token and user from localStorage (client-side)
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -600,10 +693,11 @@ export default function ProjectDetailsPage({
       });
       const data = await res.json();
       if (data?.success) {
+        const threadProjectId = String(project.id ?? resolvedId ?? "");
         const filtered = Array.isArray(data.data)
           ? data.data.filter(
               (msg: Record<string, unknown>) =>
-                String(msg.projectId) === String(resolvedId),
+                String(msg.projectId) === threadProjectId,
             )
           : [];
 
@@ -704,26 +798,92 @@ export default function ProjectDetailsPage({
                   title: string;
                   description?: string;
                   amount: number;
-                  dueDate: string;
-                  order: number;
+                  dueDate?: string;
+                  daysFromStart?: number | string;
+                  order?: number;
+                  sequence?: number;
                 }) => ({
                   title: m.title,
                   description: m.description,
                   amount: m.amount,
                   dueDate: m.dueDate,
-                  order: m.order,
+                  daysFromStart:
+                    m.daysFromStart != null
+                      ? Number(m.daysFromStart)
+                      : undefined,
+                  order: m.order ?? m.sequence ?? 0,
                 }),
               )
             : [],
           matchScore: p.matchScore as number | undefined,
           rank: p.rank as number | undefined,
           isTopFive: p.isTopFive as boolean | undefined,
-          aiFitExplanation: (p.aiFitExplanation as string | undefined) ?? null,
+          aiFitExplanation:
+            (p.aiFitExplanation as string | Record<string, string> | undefined) ??
+            null,
         };
       });
     },
     [],
   );
+
+  const activeDispute = useMemo(
+    () =>
+      projectDisputes.find(
+        (d) => d.status !== "CLOSED" && d.status !== "RESOLVED",
+      ) ?? null,
+    [projectDisputes],
+  );
+
+  /** Hide when project completed (e.g. admin refund-to-company) or an open dispute exists. */
+  const canReportNewDispute = useMemo(() => {
+    if (!project) return false;
+    if (String(project.status ?? "").toUpperCase() === "COMPLETED")
+      return false;
+    if (activeDispute) return false;
+    return true;
+  }, [project, activeDispute]);
+
+  useEffect(() => {
+    if (!canReportNewDispute && disputeDialogOpen) setDisputeDialogOpen(false);
+  }, [canReportNewDispute, disputeDialogOpen]);
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (
+      tab === "overview" ||
+      tab === "milestones" ||
+      tab === "bids" ||
+      tab === "files" ||
+      tab === "messages"
+    ) {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
+
+  /** Matches selected milestone amount, or 0 for project-level / no milestone. */
+  const reportDisputeContestedAmount = useMemo(() => {
+    if (!selectedMilestoneForDispute) return 0;
+    const m = projectMilestones.find(
+      (x) => x.id === selectedMilestoneForDispute,
+    );
+    if (!m) return 0;
+    const n = Number(m.amount);
+    return Number.isFinite(n) ? n : 0;
+  }, [selectedMilestoneForDispute, projectMilestones]);
+
+  const loadProjectDisputes = useCallback(async (projectId: string) => {
+    try {
+      const res = await getDisputesByProject(projectId);
+      const list =
+        res.success && Array.isArray(res.data) ? (res.data as Dispute[]) : [];
+      setProjectDisputes(list);
+      return list;
+    } catch {
+      setProjectDisputes([]);
+      return [];
+    }
+  }, []);
 
   // Fetch project data + proposals (bids)
   useEffect(() => {
@@ -747,17 +907,23 @@ export default function ProjectDetailsPage({
         }
 
         const loadedProject = projectRes.project;
+        const loadedId = String(loadedProject.id ?? "");
+        if (
+          loadedId &&
+          resolvedId &&
+          loadedId !== String(resolvedId)
+        ) {
+          const qs = searchParams.toString();
+          router.replace(
+            `/customer/projects/${loadedId}${qs ? `?${qs}` : ""}`,
+          );
+        }
         setProject(loadedProject);
 
-        // Fetch dispute for this project
         try {
-          const disputeRes = await getDisputeByProject(loadedProject.id);
-          if (disputeRes.success && disputeRes.data) {
-            setCurrentDispute(disputeRes.data);
-          }
+          await loadProjectDisputes(loadedProject.id as string);
         } catch {
-          // No dispute exists yet, which is fine
-          console.log("No dispute found for project");
+          console.log("No disputes loaded for project");
         }
 
         // figure out the "request id" to ask proposals for
@@ -816,7 +982,7 @@ export default function ProjectDetailsPage({
     };
 
     fetchAll();
-  }, [resolvedId, mapProposalsToProviderRequests]);
+  }, [resolvedId, mapProposalsToProviderRequests, loadProjectDisputes, router]);
 
   // Function to refresh all project data
   const refreshProjectData = async () => {
@@ -829,6 +995,13 @@ export default function ProjectDetailsPage({
       }
 
       const loadedProject = projectRes.project;
+      const loadedId = String(loadedProject.id ?? "");
+      if (loadedId && resolvedId && loadedId !== String(resolvedId)) {
+        const qs = searchParams.toString();
+        router.replace(
+          `/customer/projects/${loadedId}${qs ? `?${qs}` : ""}`,
+        );
+      }
       setProject(loadedProject);
 
       // Refresh milestones
@@ -904,15 +1077,7 @@ export default function ProjectDetailsPage({
         milestonesApprovedAt: milestoneData.milestonesApprovedAt,
       });
 
-      // Refresh dispute if exists
-      try {
-        const disputeRes = await getDisputeByProject(loadedProject.id);
-        if (disputeRes.success && disputeRes.data) {
-          setCurrentDispute(disputeRes.data);
-        }
-      } catch {
-        // No dispute exists, which is fine
-      }
+      await loadProjectDisputes(loadedProject.id as string);
 
       // Refresh proposals/bids
       let serviceRequestId: string | null = null;
@@ -1037,38 +1202,76 @@ export default function ProjectDetailsPage({
 
   if (loading) {
     return (
-      <CustomerLayout>
-        <div className="flex items-center justify-center py-8 sm:py-12 px-4">
-          <div className="flex items-center space-x-2">
-            <Loader2 className="w-5 h-5 sm:w-6 sm:h-6 animate-spin" />
-            <span className="text-sm sm:text-base">Loading project...</span>
+      <div className="space-y-4 sm:space-y-6 px-4 py-4 sm:px-6 sm:py-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-56 sm:w-72" />
+            <Skeleton className="h-4 w-40 sm:w-56" />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-9 w-24 rounded-md" />
+            <Skeleton className="h-9 w-28 rounded-md" />
           </div>
         </div>
-      </CustomerLayout>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Skeleton className="h-24 rounded-lg" />
+          <Skeleton className="h-24 rounded-lg" />
+          <Skeleton className="h-24 rounded-lg" />
+          <Skeleton className="h-24 rounded-lg" />
+        </div>
+
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-44" />
+            <Skeleton className="h-4 w-72 max-w-full" />
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-3/4" />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-36" />
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Skeleton className="h-16 w-full rounded-lg" />
+            <Skeleton className="h-16 w-full rounded-lg" />
+            <Skeleton className="h-16 w-full rounded-lg" />
+          </CardContent>
+        </Card>
+
+        <div className="flex items-center justify-center pt-2">
+          <span className="text-sm text-muted-foreground">
+            {t("customer.projects.detail.loading")}
+          </span>
+        </div>
+      </div>
     );
   }
 
   if (error || !project) {
     return (
-      <CustomerLayout>
-        <div className="flex items-center justify-center py-8 sm:py-12 px-4">
-          <div className="text-center">
-            <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
-              Error loading project
-            </h3>
-            <p className="text-sm sm:text-base text-gray-600 mb-4">
-              {error || "Project not found"}
-            </p>
-            <Button
-              onClick={() => window.location.reload()}
-              size="sm"
-              className="sm:size-default"
-            >
-              Try Again
-            </Button>
-          </div>
+      <div className="flex items-center justify-center py-8 sm:py-12 px-4">
+        <div className="text-center">
+          <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
+            {t("customer.projects.detail.errorTitle")}
+          </h3>
+          <p className="text-sm sm:text-base text-gray-600 mb-4">
+            {error || t("customer.projects.detail.notFound")}
+          </p>
+          <Button
+            onClick={() => window.location.reload()}
+            size="sm"
+            className="sm:size-default"
+          >
+            {t("customer.projects.detail.tryAgain")}
+          </Button>
         </div>
-      </CustomerLayout>
+      </div>
     );
   }
 
@@ -1102,37 +1305,27 @@ export default function ProjectDetailsPage({
 
   const getStatusText = (status: string) => {
     const S = norm(status);
-    switch (S) {
-      case "COMPLETED":
-        return "Completed";
-      case "PAID":
-        return "Paid";
-      case "APPROVED":
-        return "Approved";
-      case "SUBMITTED":
-        return "Submitted";
-      case "IN_PROGRESS":
-        return "In Progress";
-      case "LOCKED":
-        return "Locked";
-      case "OPEN":
-      case "PENDING":
-        return "Pending";
-      case "DRAFT":
-        return "Draft";
-      case "ON_HOLD":
-        return "On Hold";
-      case "CANCELLED":
-        return "Cancelled";
-      case "REJECTED":
-        return "Rejected";
-      default:
-        return status;
-    }
+    const map: Record<string, MessageKey> = {
+      COMPLETED: "customer.dashboard.status.completed",
+      PAID: "customer.projects.milestone.paid",
+      APPROVED: "customer.projects.milestone.approved",
+      SUBMITTED: "customer.projects.milestone.submitted",
+      IN_PROGRESS: "customer.projects.milestone.inProgress",
+      LOCKED: "customer.projects.milestone.locked",
+      OPEN: "customer.projects.milestone.pending",
+      PENDING: "customer.projects.milestone.pending",
+      DRAFT: "customer.projects.milestone.draft",
+      ON_HOLD: "customer.projects.milestone.onHold",
+      CANCELLED: "customer.dashboard.status.cancelled",
+      REJECTED: "customer.projects.milestone.rejected",
+    };
+    const key = map[S];
+    return key ? t(key) : status;
   };
 
   const getMilestoneStatusIcon = (status: string) => {
-    switch (status) {
+    const S = norm(status);
+    switch (S) {
       case "PAID":
         return <CheckCircle className="w-5 h-5 text-green-600" />;
       case "APPROVED":
@@ -1151,6 +1344,17 @@ export default function ProjectDetailsPage({
         return <AlertCircle className="w-5 h-5 text-gray-400" />;
     }
   };
+
+  const paidMilestonesForDispute = projectMilestones.filter(
+    (m: Milestone) =>
+      Boolean(m.status) &&
+      !DISPUTE_MILESTONE_EXCLUDED_STATUSES.has(m.status as string),
+  );
+  const disputeMilestoneSubmitBlocked =
+    projectMilestones.length > 0 &&
+    (paidMilestonesForDispute.length > 0
+      ? !selectedMilestoneForDispute
+      : !projectLevelDisputeAck);
 
   // Helpers for project milestone editor
   const normalizeMilestoneSequences = (items: Milestone[]): Milestone[] =>
@@ -1227,7 +1431,11 @@ export default function ProjectDetailsPage({
   };
   // ⬇️ ADD THIS just after you define `project` (and `proposals` if present)
   const currency: string =
-    typeof project?.currency === "string" ? project.currency : "RM";
+    typeof project?.displayCurrencyCode === "string"
+      ? project.displayCurrencyCode
+      : typeof project?.currencyCode === "string"
+        ? project.currencyCode
+        : "MYR";
   const bidCount = Number(
     project?.bidCount ?? (Array.isArray(proposals) ? proposals.length : 0),
   );
@@ -1308,11 +1516,14 @@ export default function ProjectDetailsPage({
         payload,
       );
       setProject(updated);
-      toast({ title: "Saved", description: "Project updated successfully." });
+      toast({
+        title: t("customer.projects.detail.toast.savedTitle"),
+        description: t("customer.projects.detail.toast.savedDesc"),
+      });
       setIsEditOpen(false);
     } catch (err) {
       toast({
-        title: "Update failed",
+        title: t("customer.projects.detail.toast.updateFailedTitle"),
         description: getUserFriendlyErrorMessage(
           err,
           "customer project detail update",
@@ -1344,23 +1555,28 @@ export default function ProjectDetailsPage({
       };
 
       if (!m.title || !m.title.trim()) {
-        milestoneErrors.title = "Title is required.";
+        milestoneErrors.title = t("customer.projects.detail.validation.titleRequired");
         hasErrors = true;
       }
       if (!m.description || !m.description.trim()) {
-        milestoneErrors.description = "Description is required.";
+        milestoneErrors.description = t(
+          "customer.projects.detail.validation.descriptionRequired",
+        );
         hasErrors = true;
       }
       const durAmount =
         mm.durationAmount != null ? String(mm.durationAmount).trim() : "";
       const durUnit = mm.durationUnit || "";
       if (!durAmount || Number(durAmount) <= 0) {
-        milestoneErrors.durationAmount =
-          "Duration amount is required and must be > 0.";
+        milestoneErrors.durationAmount = t(
+          "customer.projects.detail.validation.durationAmount",
+        );
         hasErrors = true;
       }
       if (!durUnit) {
-        milestoneErrors.durationUnit = "Unit is required.";
+        milestoneErrors.durationUnit = t(
+          "customer.projects.detail.validation.unitRequired",
+        );
         hasErrors = true;
       }
       if (Object.keys(milestoneErrors).length > 0)
@@ -1392,7 +1608,12 @@ export default function ProjectDetailsPage({
       );
 
       if (sumMilestones !== bidAmount) {
-        const msg = `Total of milestones (RM ${sumMilestones.toLocaleString()}) must equal the bid amount (RM ${bidAmount.toLocaleString()}).`;
+        const msg = t("customer.projects.detail.validation.sumMismatch", {
+          sumCurrency: currency,
+          sum: sumMilestones.toLocaleString(),
+          bidCurrency: currency,
+          bid: bidAmount.toLocaleString(),
+        });
         errors[-1] = { ...errors[-1], title: errors[-1]?.title ?? msg };
         hasErrors = true;
       }
@@ -1401,15 +1622,16 @@ export default function ProjectDetailsPage({
     if (hasErrors) {
       setMilestoneErrors(errors);
       toast({
-        title: "Validation Error",
-        description:
-          "Please fill required fields. Milestone durations must total the delivery timeline and amounts must equal the bid.",
+        title: t("customer.projects.detail.toast.validationTitle"),
+        description: t("customer.projects.detail.toast.milestoneValidationDesc"),
         variant: "destructive",
       });
       return;
     }
 
     setMilestoneErrors({});
+
+    if (savingMilestones || approvingMilestones) return;
 
     try {
       setSavingMilestones(true);
@@ -1515,12 +1737,12 @@ export default function ProjectDetailsPage({
       await refreshProjectData();
 
       toast({
-        title: "Milestones updated",
-        description: "Milestone changes have been saved.",
+        title: t("customer.projects.detail.toast.milestonesUpdatedTitle"),
+        description: t("customer.projects.detail.toast.milestonesUpdatedDesc"),
       });
     } catch (e) {
       toast({
-        title: "Save failed",
+        title: t("customer.projects.detail.toast.saveFailedTitle"),
         description: getUserFriendlyErrorMessage(
           e,
           "customer project detail save milestones",
@@ -1535,7 +1757,9 @@ export default function ProjectDetailsPage({
   // ADD - confirm
   const handleApproveProjectMilestones = async () => {
     if (!project?.id) return;
+    if (savingMilestones || approvingMilestones) return;
     try {
+      setApprovingMilestones(true);
       const res = await approveCompanyMilestones(project.id as string);
 
       setMilestoneApprovalState({
@@ -1548,54 +1772,73 @@ export default function ProjectDetailsPage({
       // Refresh project data to get updated milestones
       await refreshProjectData();
 
-      // Always close the inline milestone editor
-      setMilestoneEditorOpen(false);
-
       // Toast feedback
       toast({
-        title: "Milestones approved",
+        title: t("customer.projects.detail.toast.milestonesApprovedTitle"),
         description: res.milestonesLocked
-          ? "Milestones are now locked. Work can start."
-          : "Waiting for provider to approve.",
+          ? t("customer.projects.detail.toast.milestonesApprovedLockedDesc")
+          : t("customer.projects.detail.toast.milestonesApprovedWaitingDesc"),
       });
 
       // Pop the finalize/summary dialog
       setMilestoneFinalizeOpen(true);
     } catch (e) {
       toast({
-        title: "Approval failed",
+        title: t("customer.projects.detail.toast.approvalFailedTitle"),
         description: getUserFriendlyErrorMessage(
           e,
           "customer project detail approve milestones",
         ),
         variant: "destructive",
       });
+    } finally {
+      setApprovingMilestones(false);
     }
   };
 
-  // Approve individual milestone
+  // Approve individual milestone (after confirmation)
   const handleApproveIndividualMilestone = async (milestoneId: string) => {
     try {
+      setApprovingIndividualMilestoneId(milestoneId);
       await approveIndividualMilestone(milestoneId);
 
       // Refresh all project data including milestones
       await refreshProjectData();
 
       toast({
-        title: "Milestone approved",
-        description:
-          "The milestone has been approved and is ready for payment.",
+        title: t("customer.projects.detail.toast.milestoneApprovedTitle"),
+        description: t("customer.projects.detail.toast.milestoneApprovedDesc"),
       });
+      setApproveMilestoneDialogOpen(false);
+      setMilestoneIdPendingApprove(null);
     } catch (e) {
       toast({
-        title: "Approval failed",
+        title: t("customer.projects.detail.toast.approvalFailedTitle"),
         description: getUserFriendlyErrorMessage(
           e,
           "customer project detail approve milestone",
         ),
         variant: "destructive",
       });
+    } finally {
+      setApprovingIndividualMilestoneId(null);
     }
+  };
+
+  const handleOpenApproveMilestoneDialog = (milestoneId: string) => {
+    setMilestoneIdPendingApprove(milestoneId);
+    setApproveMilestoneDialogOpen(true);
+  };
+
+  const handleCancelApproveMilestone = () => {
+    if (approvingIndividualMilestoneId) return;
+    setApproveMilestoneDialogOpen(false);
+    setMilestoneIdPendingApprove(null);
+  };
+
+  const handleConfirmApproveMilestone = () => {
+    if (!milestoneIdPendingApprove) return;
+    void handleApproveIndividualMilestone(milestoneIdPendingApprove);
   };
 
   // Open request changes dialog
@@ -1611,9 +1854,8 @@ export default function ProjectDetailsPage({
 
     if (!requestChangesReason.trim()) {
       toast({
-        title: "Notes Required",
-        description:
-          "Please provide notes about the required changes so the provider knows what to fix.",
+        title: t("customer.projects.detail.toast.notesRequiredTitle"),
+        description: t("customer.projects.detail.toast.notesRequiredDesc"),
         variant: "destructive",
       });
       return;
@@ -1635,12 +1877,12 @@ export default function ProjectDetailsPage({
       setRequestChangesReason("");
 
       toast({
-        title: "Changes Requested",
-        description: "Milestone has been sent back to provider for revision.",
+        title: t("customer.projects.detail.toast.changesRequestedTitle"),
+        description: t("customer.projects.detail.toast.changesRequestedDesc"),
       });
     } catch (e) {
       toast({
-        title: "Error",
+        title: t("customer.projects.detail.toast.errorTitle"),
         description: getUserFriendlyErrorMessage(
           e,
           "customer project detail request changes",
@@ -1681,61 +1923,17 @@ export default function ProjectDetailsPage({
         ),
       );
 
-      // Immediately load project milestones for edit (convert daysFromStart → duration)
-      if (projectId) {
-        const milestoneData = await getCompanyProjectMilestones(projectId);
-        const rawDraft: Milestone[] = Array.isArray(milestoneData.milestones)
-          ? milestoneData.milestones.map(
-              (m: Milestone | Record<string, unknown>) =>
-                ({
-                  ...(m as Milestone),
-                  sequence: ((m as Milestone).order ??
-                    (m as Record<string, unknown>).order) as number,
-                }) as Milestone,
-            )
-          : [];
-        const sortedDraft = [...rawDraft].sort(
-          (a, b) => ((a.order as number) ?? 0) - ((b.order as number) ?? 0),
-        );
-        const withDurationDraft = sortedDraft.map((m, i) => {
-          const prev = sortedDraft[i - 1] as
-            | { daysFromStart?: number }
-            | undefined;
-          const currDays =
-            (m as Milestone & { daysFromStart?: number }).daysFromStart ?? 0;
-          const prevDays = prev?.daysFromStart ?? 0;
-          const durationDays = currDays - prevDays;
-          return {
-            ...m,
-            durationAmount: durationDays > 0 ? String(durationDays) : "",
-            durationUnit: (durationDays > 0 ? "day" : "") as
-              | "day"
-              | "week"
-              | "month"
-              | "",
-          } as Milestone & { durationAmount?: string; durationUnit?: string };
-        });
-        setMilestonesDraft(withDurationDraft);
-        setOriginalMilestonesDraft(
-          JSON.parse(JSON.stringify(withDurationDraft)),
-        );
-        setMilestoneApprovalStateModal({
-          milestonesLocked: milestoneData.milestonesLocked,
-          companyApproved: milestoneData.companyApproved,
-          providerApproved: milestoneData.providerApproved,
-          milestonesApprovedAt: milestoneData.milestonesApprovedAt,
-        });
-        setActiveProjectId(projectId);
-        setMilestonesOpen(true);
-      }
-
       toast({
-        title: "Request Accepted",
-        description: "Edit milestones and confirm to finalize.",
+        title: t("customer.projects.detail.toast.requestAcceptedTitle"),
+        description: t("customer.projects.detail.toast.requestAcceptedDesc"),
       });
+
+      if (projectId) {
+        router.push(`/customer/projects/${projectId}/milestones`);
+      }
     } catch (err) {
       toast({
-        title: "Error",
+        title: t("customer.projects.detail.toast.errorTitle"),
         description: getUserFriendlyErrorMessage(
           err,
           "customer project detail accept request",
@@ -1768,23 +1966,28 @@ export default function ProjectDetailsPage({
         durationUnit?: string;
       };
       if (!m.title || !m.title.trim()) {
-        milestoneErrors.title = "Title is required.";
+        milestoneErrors.title = t("customer.projects.detail.validation.titleRequired");
         hasErrors = true;
       }
       if (!m.description || !m.description.trim()) {
-        milestoneErrors.description = "Description is required.";
+        milestoneErrors.description = t(
+          "customer.projects.detail.validation.descriptionRequired",
+        );
         hasErrors = true;
       }
       const durAmount =
         mm.durationAmount != null ? String(mm.durationAmount).trim() : "";
       const durUnit = mm.durationUnit || "";
       if (!durAmount || Number(durAmount) <= 0) {
-        milestoneErrors.durationAmount =
-          "Duration amount is required and must be > 0.";
+        milestoneErrors.durationAmount = t(
+          "customer.projects.detail.validation.durationAmount",
+        );
         hasErrors = true;
       }
       if (!durUnit) {
-        milestoneErrors.durationUnit = "Unit is required.";
+        milestoneErrors.durationUnit = t(
+          "customer.projects.detail.validation.unitRequired",
+        );
         hasErrors = true;
       }
       if (Object.keys(milestoneErrors).length > 0)
@@ -1816,7 +2019,12 @@ export default function ProjectDetailsPage({
       );
 
       if (sumMilestones !== bidAmount) {
-        const msg = `Total of milestones (RM ${sumMilestones.toLocaleString()}) must equal the bid amount (RM ${bidAmount.toLocaleString()}).`;
+        const msg = t("customer.projects.detail.validation.sumMismatch", {
+          sumCurrency: currency,
+          sum: sumMilestones.toLocaleString(),
+          bidCurrency: currency,
+          bid: bidAmount.toLocaleString(),
+        });
         errors[-1] = { ...errors[-1], title: errors[-1]?.title ?? msg };
         hasErrors = true;
       }
@@ -1825,15 +2033,16 @@ export default function ProjectDetailsPage({
     if (hasErrors) {
       setMilestoneDraftErrors(errors);
       toast({
-        title: "Validation Error",
-        description:
-          "Please fill required fields. Milestone durations must total the delivery timeline and amounts must equal the bid.",
+        title: t("customer.projects.detail.toast.validationTitle"),
+        description: t("customer.projects.detail.toast.milestoneValidationDesc"),
         variant: "destructive",
       });
       return;
     }
 
     setMilestoneDraftErrors({});
+
+    if (savingMilestonesModal || approvingMilestonesModal) return;
 
     try {
       setSavingMilestonesModal(true);
@@ -1908,12 +2117,12 @@ export default function ProjectDetailsPage({
       setOriginalMilestonesDraft(JSON.parse(JSON.stringify(withDurationDr)));
 
       toast({
-        title: "Milestones updated",
-        description: "Milestone changes have been saved.",
+        title: t("customer.projects.detail.toast.milestonesUpdatedTitle"),
+        description: t("customer.projects.detail.toast.milestonesUpdatedDesc"),
       });
     } catch (e) {
       toast({
-        title: "Save failed",
+        title: t("customer.projects.detail.toast.saveFailedTitle"),
         description: getUserFriendlyErrorMessage(
           e,
           "customer project detail save accepted milestones",
@@ -1928,8 +2137,10 @@ export default function ProjectDetailsPage({
   // Approve milestones after editing (inside modal)
   const handleApproveAcceptedMilestones = async () => {
     if (!activeProjectId) return;
+    if (savingMilestonesModal || approvingMilestonesModal) return;
 
     try {
+      setApprovingMilestonesModal(true);
       const res = await approveCompanyMilestones(activeProjectId);
 
       // sync the approval state shown in the finalize dialog
@@ -1945,23 +2156,25 @@ export default function ProjectDetailsPage({
 
       // 2. Show success toast
       toast({
-        title: "Milestones approved",
+        title: t("customer.projects.detail.toast.milestonesApprovedTitle"),
         description: res.milestonesLocked
-          ? "Milestones are now locked. Work can start."
-          : "Waiting for provider approval.",
+          ? t("customer.projects.detail.toast.milestonesApprovedLockedDesc")
+          : t("customer.projects.detail.toast.milestonesApprovedWaitingDesc"),
       });
 
       // 3. Open the summary/status dialog
       setMilestoneFinalizeOpen(true);
     } catch (e) {
       toast({
-        title: "Approval failed",
+        title: t("customer.projects.detail.toast.approvalFailedTitle"),
         description: getUserFriendlyErrorMessage(
           e,
           "customer project detail approve accepted milestones",
         ),
         variant: "destructive",
       });
+    } finally {
+      setApprovingMilestonesModal(false);
     }
   };
 
@@ -2023,12 +2236,12 @@ export default function ProjectDetailsPage({
       setSelectedProposalForAction(null);
 
       toast({
-        title: "Request Rejected",
-        description: "The provider has been notified.",
+        title: t("customer.projects.detail.toast.requestRejectedTitle"),
+        description: t("customer.projects.detail.toast.requestRejectedDesc"),
       });
     } catch (err) {
       toast({
-        title: "Error",
+        title: t("customer.projects.detail.toast.errorTitle"),
         description: getUserFriendlyErrorMessage(
           err,
           "customer project detail reject request",
@@ -2044,8 +2257,8 @@ export default function ProjectDetailsPage({
   const handleCreateDispute = async () => {
     if (!disputeReason.trim() || !disputeDescription.trim()) {
       toast({
-        title: "Validation Error",
-        description: "Reason and description are required fields",
+        title: t("customer.projects.detail.toast.validationTitle"),
+        description: t("customer.projects.detail.toast.reasonDescriptionRequired"),
         variant: "destructive",
       });
       return;
@@ -2053,29 +2266,56 @@ export default function ProjectDetailsPage({
 
     if (!project?.id) {
       toast({
-        title: "Error",
-        description: "Project ID is missing",
+        title: t("customer.projects.detail.toast.errorTitle"),
+        description: t("customer.projects.detail.toast.projectIdMissing"),
         variant: "destructive",
       });
       return;
     }
 
-    // Validate that selected milestone is not approved or paid
-    if (selectedMilestoneForDispute) {
-      const selectedMilestone = projectMilestones.find(
-        (m: Milestone) => m.id === selectedMilestoneForDispute,
-      );
-      if (
-        selectedMilestone &&
-        (selectedMilestone.status === "APPROVED" ||
-          selectedMilestone.status === "PAID")
-      ) {
-        toast({
-          title: "Validation Error",
-          description: `Cannot create a dispute for milestone "${selectedMilestone.title}" as it has already been approved or paid.`,
-          variant: "destructive",
-        });
-        return;
+    let milestoneIdPayload: string | undefined;
+    if (projectMilestones.length > 0) {
+      if (paidMilestonesForDispute.length > 0) {
+        if (!selectedMilestoneForDispute) {
+          toast({
+            title: t("customer.projects.detail.toast.validationTitle"),
+            description: t(
+              "customer.projects.detail.toast.disputeSelectPaidMilestone",
+            ),
+            variant: "destructive",
+          });
+          return;
+        }
+        const selectedMilestone = projectMilestones.find(
+          (m: Milestone) => m.id === selectedMilestoneForDispute,
+        );
+        if (
+          !selectedMilestone ||
+          !selectedMilestone.status ||
+          DISPUTE_MILESTONE_EXCLUDED_STATUSES.has(selectedMilestone.status)
+        ) {
+          toast({
+            title: t("customer.projects.detail.toast.validationTitle"),
+            description: t(
+              "customer.projects.detail.toast.disputeInvalidPaidMilestone",
+            ),
+            variant: "destructive",
+          });
+          return;
+        }
+        milestoneIdPayload = selectedMilestoneForDispute;
+      } else {
+        if (!projectLevelDisputeAck) {
+          toast({
+            title: t("customer.projects.detail.toast.validationTitle"),
+            description: t(
+              "customer.projects.detail.toast.disputeProjectLevelAckRequired",
+            ),
+            variant: "destructive",
+          });
+          return;
+        }
+        milestoneIdPayload = undefined;
       }
     }
 
@@ -2083,22 +2323,23 @@ export default function ProjectDetailsPage({
       setCreatingDispute(true);
       await createDispute({
         projectId: project.id as string,
-        milestoneId: selectedMilestoneForDispute || undefined,
+        milestoneId: milestoneIdPayload,
         reason: disputeReason.trim(),
         description: disputeDescription.trim(),
-        contestedAmount: disputeContestedAmount
-          ? parseFloat(disputeContestedAmount)
-          : undefined,
+        contestedAmount: reportDisputeContestedAmount,
         suggestedResolution: disputeSuggestedResolution.trim() || undefined,
         attachments:
           disputeAttachments.length > 0 ? disputeAttachments : undefined,
       });
 
+      const wasUpdatingExisting = Boolean(activeDispute);
       toast({
-        title: currentDispute ? "Dispute Updated" : "Dispute Created",
-        description: currentDispute
-          ? "Your dispute has been updated successfully."
-          : "Your dispute has been submitted successfully. The milestone has been frozen.",
+        title: wasUpdatingExisting
+          ? t("customer.projects.detail.toast.disputeUpdatedTitle")
+          : t("customer.projects.detail.toast.disputeCreatedTitle"),
+        description: wasUpdatingExisting
+          ? t("customer.projects.detail.toast.disputeUpdatedDesc")
+          : t("customer.projects.detail.toast.disputeCreatedDesc"),
       });
 
       // Refresh all project data including dispute and milestones
@@ -2108,13 +2349,13 @@ export default function ProjectDetailsPage({
       setDisputeDialogOpen(false);
       setDisputeReason("");
       setDisputeDescription("");
-      setDisputeContestedAmount("");
       setDisputeSuggestedResolution("");
       setDisputeAttachments([]);
       setSelectedMilestoneForDispute(null);
+      setProjectLevelDisputeAck(false);
     } catch (error: unknown) {
       toast({
-        title: "Error",
+        title: t("customer.projects.detail.toast.errorTitle"),
         description: getUserFriendlyErrorMessage(
           error,
           "customer project detail create dispute",
@@ -2129,14 +2370,16 @@ export default function ProjectDetailsPage({
   const handleViewDispute = async () => {
     if (!project?.id) return;
     try {
-      const disputeRes = await getDisputeByProject(project.id as string);
-      if (disputeRes.success && disputeRes.data) {
-        setCurrentDispute(disputeRes.data);
-        setViewDisputeDialogOpen(true);
-      }
+      const list = await loadProjectDisputes(project.id as string);
+      const pick =
+        list.find((d) => d.status !== "CLOSED" && d.status !== "RESOLVED") ||
+        list[0] ||
+        null;
+      setCurrentDispute(pick);
+      setViewDisputeDialogOpen(true);
     } catch (error: unknown) {
       toast({
-        title: "Error",
+        title: t("customer.projects.detail.toast.errorTitle"),
         description: getUserFriendlyErrorMessage(
           error,
           "customer project detail load dispute",
@@ -2147,14 +2390,14 @@ export default function ProjectDetailsPage({
   };
 
   const handleUpdateDispute = async () => {
-    if (!currentDispute?.id) return;
+    if (!activeDispute?.id) return;
     if (
       !disputeAdditionalNotes.trim() &&
       disputeUpdateAttachments.length === 0
     ) {
       toast({
-        title: "Validation Error",
-        description: "Please add notes or attachments to update the dispute",
+        title: t("customer.projects.detail.toast.validationTitle"),
+        description: t("customer.projects.detail.toast.disputeUpdateNeedsContent"),
         variant: "destructive",
       });
       return;
@@ -2162,7 +2405,7 @@ export default function ProjectDetailsPage({
 
     try {
       setUpdatingDispute(true);
-      await updateDispute(currentDispute.id as string, {
+      await updateDispute(activeDispute.id as string, {
         additionalNotes: disputeAdditionalNotes.trim() || undefined,
         attachments:
           disputeUpdateAttachments.length > 0
@@ -2172,8 +2415,8 @@ export default function ProjectDetailsPage({
       });
 
       toast({
-        title: "Dispute Updated",
-        description: "Your update has been added to the dispute.",
+        title: t("customer.projects.detail.toast.disputeUpdateSuccessTitle"),
+        description: t("customer.projects.detail.toast.disputeUpdateSuccessDesc"),
       });
 
       // Refresh all project data including dispute
@@ -2184,7 +2427,7 @@ export default function ProjectDetailsPage({
       setDisputeUpdateAttachments([]);
     } catch (error: unknown) {
       toast({
-        title: "Error",
+        title: t("customer.projects.detail.toast.errorTitle"),
         description: getUserFriendlyErrorMessage(
           error,
           "customer project detail update dispute",
@@ -2241,18 +2484,55 @@ export default function ProjectDetailsPage({
     }
   };
 
-  // Check if any milestone is not locked (to show dispute button)
-  const hasUnlockedMilestone = () => {
-    if (!projectMilestones || projectMilestones.length === 0) {
-      return false; // No milestones means no unlocked milestones
-    }
-    return projectMilestones.some(
-      (milestone: Milestone) => milestone.status !== "LOCKED",
+  const getProposalStatusLabel = (s: string) => {
+    const k = String(s || "").toLowerCase();
+    if (k === "pending")
+      return t("customer.projects.detail.proposalStatus.pending");
+    if (k === "accepted")
+      return t("customer.projects.detail.proposalStatus.accepted");
+    if (k === "rejected")
+      return t("customer.projects.detail.proposalStatus.rejected");
+    return s;
+  };
+
+  const getDisputeStatusLabel = (raw: string) => {
+    const k = String(raw || "")
+      .toUpperCase()
+      .replace(/\s+/g, "_");
+    const map: Record<string, MessageKey> = {
+      OPEN: "customer.projects.detail.disputeStatus.open",
+      UNDER_REVIEW: "customer.projects.detail.disputeStatus.under_review",
+      RESOLVED: "customer.projects.detail.disputeStatus.resolved",
+      CLOSED: "customer.projects.detail.disputeStatus.closed",
+      REJECTED: "customer.projects.detail.disputeStatus.rejected",
+    };
+    const key = map[k];
+    if (key) return t(key);
+    return (
+      raw.replace(/_/g, " ") ||
+      t("customer.projects.detail.viewDispute.unknown")
     );
   };
 
+  const translateDisputeReason = (reason: string) => {
+    const map: Record<string, MessageKey> = {
+      "Missed deadline": "customer.projects.detail.disputeReason.missedDeadline",
+      "Low quality": "customer.projects.detail.disputeReason.lowQuality",
+      "Payment not released":
+        "customer.projects.detail.disputeReason.paymentNotReleased",
+      "Work not completed":
+        "customer.projects.detail.disputeReason.workNotCompleted",
+      "Communication issues":
+        "customer.projects.detail.disputeReason.communicationIssues",
+      "Scope change": "customer.projects.detail.disputeReason.scopeChange",
+      "Other": "customer.projects.detail.disputeReason.other",
+    };
+    const key = map[reason];
+    return key ? t(key) : reason;
+  };
+
   return (
-    <CustomerLayout>
+    <>
       <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
         {/* Header */}
         <div className="flex flex-col lg:flex-row justify-between items-start gap-3 sm:gap-4">
@@ -2266,12 +2546,12 @@ export default function ProjectDetailsPage({
               </Badge>
               {(project.priority as string) === "high" && (
                 <Badge variant="destructive" className="text-xs sm:text-sm">
-                  High Priority
+                  {t("customer.projects.detail.badge.highPriority")}
                 </Badge>
               )}
               {Boolean(project.isFeatured) && (
                 <Badge className="bg-purple-100 text-purple-800 text-xs sm:text-sm">
-                  Featured
+                  {t("customer.projects.detail.badge.featured")}
                 </Badge>
               )}
             </div>
@@ -2282,7 +2562,7 @@ export default function ProjectDetailsPage({
               <div className="flex items-center gap-1">
                 <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
                 <span>
-                  Created:{" "}
+                  {t("customer.projects.detail.meta.created")}{" "}
                   {new Date(
                     project.createdAt as string | number | Date,
                   ).toLocaleDateString()}
@@ -2290,7 +2570,11 @@ export default function ProjectDetailsPage({
               </div>
               <div className="flex items-center gap-1">
                 <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
-                <span>{bidCount} bids</span>
+                <span>
+                  {t("customer.projects.detail.meta.bids", {
+                    count: bidCount,
+                  })}
+                </span>
               </div>
               {/* Date range only shown if startDate and endDate exist */}
               {Boolean(project.startDate) &&
@@ -2317,8 +2601,12 @@ export default function ProjectDetailsPage({
               className="flex-1 sm:flex-initial text-xs sm:text-sm"
             >
               <Edit className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-              <span className="hidden sm:inline">Edit Project</span>
-              <span className="sm:hidden">Edit</span>
+              <span className="hidden sm:inline">
+                {t("customer.projects.detail.editDialog.title")}
+              </span>
+              <span className="sm:hidden">
+                {t("customer.projects.detail.header.editShort")}
+              </span>
             </Button>
             */}
 
@@ -2342,32 +2630,37 @@ export default function ProjectDetailsPage({
               <span className="hidden sm:inline">Message Provider</span>
               <span className="sm:hidden">Message</span>
             </Button> */}
-            {Boolean(currentDispute) ? (
+            {projectDisputes.length > 0 && (
               <Button
                 variant="outline"
                 className="bg-orange-50 hover:bg-orange-100 text-orange-700 border-orange-300 flex-1 sm:flex-initial text-xs sm:text-sm"
                 onClick={handleViewDispute}
               >
                 <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                <span className="hidden sm:inline">View Dispute</span>
-                <span className="sm:hidden">Dispute</span>
+                <span className="hidden sm:inline">
+                  {projectDisputes.length > 1
+                    ? t("customer.projects.detail.viewDisputes")
+                    : t("customer.projects.detail.viewDispute")}
+                </span>
+                <span className="sm:hidden">
+                  {t("customer.projects.detail.dispute.mobileShort")}
+                </span>
               </Button>
-            ) : (project?.status as string) !== "COMPLETED" &&
-              hasUnlockedMilestone() ? (
+            )}
+            {canReportNewDispute && (
               <Button
                 className="bg-red-600 hover:bg-red-700 text-white flex-1 sm:flex-initial text-xs sm:text-sm"
                 onClick={() => setDisputeDialogOpen(true)}
-                disabled={
-                  (project?.status as string) === "DISPUTED" &&
-                  (currentDispute as { status?: string } | null)?.status ===
-                    "CLOSED"
-                }
               >
                 <AlertCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                <span className="hidden sm:inline">Report Dispute</span>
-                <span className="sm:hidden">Dispute</span>
+                <span className="hidden sm:inline">
+                  {t("customer.projects.detail.reportDispute")}
+                </span>
+                <span className="sm:hidden">
+                  {t("customer.projects.detail.dispute.mobileShort")}
+                </span>
               </Button>
-            ) : null}
+            )}
           </div>
         </div>
 
@@ -2379,18 +2672,18 @@ export default function ProjectDetailsPage({
               <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-amber-900">
-                  Approve milestones to proceed
+                  {t("customer.projects.detail.reminder.approveTitle")}
                 </p>
                 <p className="text-xs sm:text-sm text-amber-800 mt-0.5">
-                  Please review and approve the milestone plan in the{" "}
+                  {t("customer.projects.detail.reminder.approveBodyBeforeTab")}{" "}
                   <Button
                     variant="link"
                     className="h-auto p-0 text-amber-800 underline font-semibold"
                     onClick={() => setActiveTab("milestones")}
                   >
-                    Milestones
+                    {t("customer.projects.detail.reminder.milestonesTab")}
                   </Button>{" "}
-                  tab so the project can move forward.
+                  {t("customer.projects.detail.reminder.approveBodyAfterTab")}
                 </p>
               </div>
             </div>
@@ -2403,7 +2696,7 @@ export default function ProjectDetailsPage({
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
                   <p className="text-xs sm:text-sm text-gray-500">
-                    Approved Price
+                    {t("customer.projects.detail.stats.approvedPriceShort")}
                   </p>
                   <p className="text-lg sm:text-xl lg:text-2xl font-bold mt-1 break-words">
                     {currency} {fmt(approvedPriceValue || 0)}
@@ -2418,7 +2711,7 @@ export default function ProjectDetailsPage({
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
                   <p className="text-xs sm:text-sm text-gray-500">
-                    Total Spent
+                    {t("customer.projects.detail.stats.totalSpent")}
                   </p>
                   <p className="text-lg sm:text-xl lg:text-2xl font-bold mt-1 break-words">
                     {currency} {fmt(totalSpentValue || 0)}
@@ -2432,7 +2725,9 @@ export default function ProjectDetailsPage({
             <CardContent className="p-3 sm:p-4 lg:p-6">
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs sm:text-sm text-gray-500">Progress</p>
+                  <p className="text-xs sm:text-sm text-gray-500">
+                    {t("customer.projects.detail.stats.progress")}
+                  </p>
                   <p className="text-lg sm:text-xl lg:text-2xl font-bold mt-1">
                     {progressValue || 0}%
                   </p>
@@ -2452,10 +2747,10 @@ export default function ProjectDetailsPage({
                 <div className="flex items-center justify-between">
                   <div className="flex-1 min-w-0">
                     <p className="text-xs sm:text-sm text-gray-500">
-                      Days Left
+                      {t("customer.projects.detail.stats.daysLeft")}
                     </p>
                     <p className="text-lg sm:text-xl lg:text-2xl font-bold mt-1">
-                      —
+                      {t("customer.projects.detail.milestone.emDash")}
                     </p>
                   </div>
                   <Calendar className="w-6 h-6 sm:w-7 sm:h-7 lg:w-8 lg:h-8 text-gray-400 flex-shrink-0 ml-2" />
@@ -2468,7 +2763,9 @@ export default function ProjectDetailsPage({
                 <div className="flex items-center justify-between">
                   <div className="flex-1 min-w-0">
                     <p className="text-xs sm:text-sm text-gray-500">
-                      {daysLeftValue < 0 ? "Late" : "Days Left"}
+                      {daysLeftValue < 0
+                        ? t("customer.projects.detail.stats.late")
+                        : t("customer.projects.detail.stats.daysLeft")}
                     </p>
                     <p
                       className={`text-lg sm:text-xl lg:text-2xl font-bold mt-1 ${
@@ -2476,9 +2773,11 @@ export default function ProjectDetailsPage({
                       }`}
                     >
                       {daysLeftValue < 0
-                        ? `Late ${Math.abs(daysLeftValue)} day${
-                            Math.abs(daysLeftValue) !== 1 ? "s" : ""
-                          }`
+                        ? Math.abs(daysLeftValue) === 1
+                          ? t("customer.projects.detail.stats.lateByOneDay")
+                          : t("customer.projects.detail.stats.lateByDays", {
+                              n: Math.abs(daysLeftValue),
+                            })
                         : daysLeftValue}
                     </p>
                   </div>
@@ -2499,7 +2798,7 @@ export default function ProjectDetailsPage({
             <CardContent className="p-4 sm:p-5 lg:p-6">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-2">
                 <h3 className="font-semibold text-sm sm:text-base">
-                  Overall Progress
+                  {t("customer.projects.detail.progressBarTitle")}
                 </h3>
                 <span className="text-xs sm:text-sm text-gray-500">
                   {typeof project.progress === "number"
@@ -2507,7 +2806,7 @@ export default function ProjectDetailsPage({
                     : typeof project.progress === "string"
                       ? Number(project.progress) || 0
                       : 0}
-                  % Complete
+                  {t("customer.projects.detail.percentCompleteSuffix")}
                 </span>
               </div>
               <Progress
@@ -2529,7 +2828,7 @@ export default function ProjectDetailsPage({
           <Card>
             <CardHeader className="p-4 sm:p-6">
               <CardTitle className="text-lg sm:text-xl">
-                Assigned Provider
+                {t("customer.projects.detail.assignedProvider")}
               </CardTitle>
             </CardHeader>
             <CardContent className="p-4 sm:p-6">
@@ -2548,7 +2847,8 @@ export default function ProjectDetailsPage({
                   </Avatar>
                   <div className="flex-1 min-w-0">
                     <h3 className="font-semibold text-sm sm:text-base truncate">
-                      {project.assignedProvider.name || "Unknown Provider"}
+                      {project.assignedProvider.name ||
+                        t("customer.projects.detail.unknownProvider")}
                     </h3>
                     <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm text-gray-500">
                       <div className="flex items-center gap-1">
@@ -2562,7 +2862,7 @@ export default function ProjectDetailsPage({
                       <span className="truncate">
                         {project.assignedProvider.providerProfile
                           ?.completedJobs || 0}{" "}
-                        jobs completed
+                        {t("customer.projects.detail.jobsCompleted")}
                       </span>
                     </div>
                   </div>
@@ -2574,14 +2874,14 @@ export default function ProjectDetailsPage({
                     className="w-full sm:w-auto text-xs sm:text-sm"
                   >
                     <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                    Message
+                    {t("customer.projects.detail.message")}
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     className="w-full sm:w-auto text-xs sm:text-sm"
                   >
-                    View Profile
+                    {t("customer.projects.detail.viewProfile")}
                   </Button>
                 </div>
               </div>
@@ -2600,31 +2900,31 @@ export default function ProjectDetailsPage({
               value="overview"
               className="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md bg-gray-100 text-gray-600 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-md transition-all duration-200 font-medium"
             >
-              Overview
+              {t("customer.projects.detail.tab.overview")}
             </TabsTrigger>
             <TabsTrigger
               value="milestones"
               className="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md bg-gray-100 text-gray-600 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-md transition-all duration-200 font-medium"
             >
-              Milestones
+              {t("customer.projects.detail.tab.milestones")}
             </TabsTrigger>
             <TabsTrigger
               value="bids"
               className="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md bg-gray-100 text-gray-600 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-md transition-all duration-200 font-medium"
             >
-              Bids
+              {t("customer.projects.detail.tab.bids")}
             </TabsTrigger>
             <TabsTrigger
               value="files"
               className="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md bg-gray-100 text-gray-600 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-md transition-all duration-200 font-medium"
             >
-              Files
+              {t("customer.projects.detail.tab.files")}
             </TabsTrigger>
             <TabsTrigger
               value="messages"
               className="text-xs sm:text-sm px-3 sm:px-4 py-2 sm:py-2.5 rounded-md bg-gray-100 text-gray-600 data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-md transition-all duration-200 font-medium"
             >
-              Messages
+              {t("customer.projects.detail.tab.messages")}
             </TabsTrigger>
           </TabsList>
 
@@ -2634,14 +2934,14 @@ export default function ProjectDetailsPage({
             <Card>
               <CardHeader className="p-4 sm:p-6">
                 <CardTitle className="text-base sm:text-lg">
-                  Project Details
+                  {t("customer.projects.detail.projectDetails")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 sm:space-y-4 p-4 sm:p-6 pt-0">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div>
                     <Label className="text-xs sm:text-sm font-medium text-gray-500">
-                      Category
+                      {t("customer.projects.detail.label.category")}
                     </Label>
                     <div className="mt-1">
                       <Badge variant="secondary" className="text-xs sm:text-sm">
@@ -2655,7 +2955,7 @@ export default function ProjectDetailsPage({
                       project.budgetMax != null)) && (
                     <div>
                       <Label className="text-xs sm:text-sm font-medium text-gray-500">
-                        Budget Range
+                        {t("customer.projects.detail.label.budgetRange")}
                       </Label>
                       <p className="text-base sm:text-lg mt-1 break-words">
                         {currency}{" "}
@@ -2676,7 +2976,7 @@ export default function ProjectDetailsPage({
                   {approvedPriceValue > 0 && (
                     <div>
                       <Label className="text-xs sm:text-sm font-medium text-gray-500">
-                        Approved Price
+                        {t("customer.projects.detail.label.approvedPrice")}
                       </Label>
                       <p className="text-base sm:text-lg font-semibold text-green-600 mt-1">
                         {currency} {fmt(approvedPriceValue)}
@@ -2685,7 +2985,7 @@ export default function ProjectDetailsPage({
                   )}
                   <div className="sm:col-span-2">
                     <Label className="text-xs sm:text-sm font-medium text-gray-500">
-                      Timeline
+                      {t("customer.projects.detail.label.timeline")}
                     </Label>
                     <div className="space-y-2 mt-1">
                       {(() => {
@@ -2708,7 +3008,7 @@ export default function ProjectDetailsPage({
                           return companyTimeline ? (
                             <div>
                               <p className="text-xs text-gray-500 mb-1">
-                                Timeline (Company):
+                                {t("customer.projects.detail.label.timelineCompany")}
                               </p>
                               <p className="text-sm text-gray-900 font-medium">
                                 {formatTimeline(companyTimeline)}
@@ -2716,7 +3016,7 @@ export default function ProjectDetailsPage({
                             </div>
                           ) : (
                             <p className="text-sm text-gray-600">
-                              Not specified
+                              {t("customer.projects.detail.notSpecified")}
                             </p>
                           );
                         }
@@ -2738,7 +3038,9 @@ export default function ProjectDetailsPage({
                                 {totalDays > 0 && (
                                   <div>
                                     <p className="text-xs text-gray-500 mb-1">
-                                      Approved Timeline (Company & Provider):
+                                      {t(
+                                        "customer.projects.detail.label.timelineApprovedBoth",
+                                      )}
                                     </p>
                                     <p className="text-sm font-semibold text-green-600">
                                       {formatDurationDays(totalDays)}
@@ -2748,7 +3050,9 @@ export default function ProjectDetailsPage({
                                 {lastDueDate && (
                                   <div>
                                     <p className="text-xs text-gray-500 mb-1">
-                                      Due date (project):
+                                      {t(
+                                        "customer.projects.detail.label.dueDateProject",
+                                      )}
                                     </p>
                                     <p className="text-sm font-semibold text-green-600">
                                       {new Date(
@@ -2766,7 +3070,9 @@ export default function ProjectDetailsPage({
                           return (
                             <div>
                               <p className="text-xs text-gray-500 mb-1">
-                                Agreed Timeline (Company & Provider):
+                                {t(
+                                  "customer.projects.detail.label.agreedTimeline",
+                                )}
                               </p>
                               <p className="text-sm text-gray-900 font-medium">
                                 {formatTimeline(
@@ -2783,21 +3089,23 @@ export default function ProjectDetailsPage({
                         return fallbackCompanyTimeline ? (
                           <div>
                             <p className="text-xs text-gray-500 mb-1">
-                              Timeline (Company):
+                              {t("customer.projects.detail.label.timelineCompany")}
                             </p>
                             <p className="text-sm text-gray-900 font-medium">
                               {formatTimeline(fallbackCompanyTimeline)}
                             </p>
                           </div>
                         ) : (
-                          <p className="text-sm text-gray-600">Not specified</p>
+                          <p className="text-sm text-gray-600">
+                            {t("customer.projects.detail.notSpecified")}
+                          </p>
                         );
                       })()}
                     </div>
                   </div>
                   <div className="sm:col-span-2">
                     <Label className="text-xs sm:text-sm font-medium text-gray-500">
-                      Required Skills
+                      {t("customer.projects.detail.label.requiredSkills")}
                     </Label>
                     <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-1">
                       {skills.map((skill) => (
@@ -2815,134 +3123,183 @@ export default function ProjectDetailsPage({
               </CardContent>
             </Card>
 
+            {project &&
+              String(project.status ?? "").toUpperCase() === "COMPLETED" &&
+              (() => {
+                const providerForReview =
+                  project.assignedProvider ||
+                  (project.provider as
+                    | { id?: string; name?: string }
+                    | undefined);
+                const reviewProviderId =
+                  providerForReview?.id ??
+                  (project as { providerId?: string }).providerId;
+                if (!reviewProviderId || !project.id) return null;
+                return (
+                  <CustomerProjectReviewInline
+                    projectId={String(project.id)}
+                    providerId={String(reviewProviderId)}
+                    providerName={providerForReview?.name}
+                    projectCompleted
+                  />
+                );
+              })()}
+
             {/* Provider Details - when provider is available and both are matched */}
-            {(project.assignedProvider || project.provider) && (() => {
-              const provider = project.assignedProvider || project.provider as {
-                id?: string;
-                name?: string;
-                avatar?: string;
-                providerProfile?: {
-                  profileImageUrl?: string;
-                  rating?: number | string;
-                  bio?: string;
-                  major?: string;
-                  location?: string;
-                  completedJobs?: number;
-                };
-              } | undefined;
-              if (!provider) return null;
-              const providerId = provider.id ?? (project as { providerId?: string }).providerId;
-              const profile = provider.providerProfile as { profileImageUrl?: string; rating?: number | string; bio?: string; major?: string; location?: string; completedJobs?: number } | undefined;
-              const profileImageUrl = profile?.profileImageUrl || provider.avatar;
-              const rating = profile?.rating ?? 0;
-              const bio = profile?.bio;
-              const major = profile?.major;
-              const location = profile?.location;
-              const completedJobs = profile?.completedJobs ?? 0;
-              return (
-                <Card>
-                  <CardHeader className="p-4 sm:p-6">
-                    <CardTitle className="text-base sm:text-lg">
-                      Provider Details
-                    </CardTitle>
-                    <CardDescription className="text-xs sm:text-sm">
-                      Assigned provider for this project
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="p-4 sm:p-6 pt-0">
-                    <div className="flex flex-col sm:flex-row sm:items-start gap-4">
-                      <div className="flex items-center space-x-3 sm:space-x-4 flex-shrink-0">
-                        <Avatar className="w-12 h-12 sm:w-14 sm:h-14">
-                          <AvatarImage
-                            src={getProfileImageUrl(profileImageUrl)}
-                          />
-                          <AvatarFallback>
-                            {provider.name?.charAt(0) || "?"}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="min-w-0">
-                          <h3 className="font-semibold text-sm sm:text-base truncate">
-                            {provider.name || "Unknown Provider"}
-                          </h3>
-                          <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm text-gray-500 mt-0.5">
-                            <div className="flex items-center gap-1">
-                              <Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-yellow-400 fill-current flex-shrink-0" />
-                              <span>{Number(rating) || 0}</span>
+            {(project.assignedProvider || project.provider) &&
+              (() => {
+                const provider =
+                  project.assignedProvider ||
+                  (project.provider as
+                    | {
+                        id?: string;
+                        name?: string;
+                        avatar?: string;
+                        providerProfile?: {
+                          profileImageUrl?: string;
+                          rating?: number | string;
+                          bio?: string;
+                          major?: string;
+                          location?: string;
+                          completedJobs?: number;
+                        };
+                      }
+                    | undefined);
+                if (!provider) return null;
+                const providerId =
+                  provider.id ??
+                  (project as { providerId?: string }).providerId;
+                const profile = provider.providerProfile as
+                  | {
+                      profileImageUrl?: string;
+                      rating?: number | string;
+                      bio?: string;
+                      major?: string;
+                      location?: string;
+                      completedJobs?: number;
+                    }
+                  | undefined;
+                const profileImageUrl =
+                  profile?.profileImageUrl || provider.avatar;
+                const rating = profile?.rating ?? 0;
+                const bio = profile?.bio;
+                const major = profile?.major;
+                const location = profile?.location;
+                const completedJobs = profile?.completedJobs ?? 0;
+                return (
+                  <Card>
+                    <CardHeader className="p-4 sm:p-6">
+                      <CardTitle className="text-base sm:text-lg">
+                        {t("customer.projects.detail.providerCard.title")}
+                      </CardTitle>
+                      <CardDescription className="text-xs sm:text-sm">
+                        {t("customer.projects.detail.providerCard.subtitle")}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-4 sm:p-6 pt-0">
+                      <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+                        <div className="flex items-center space-x-3 sm:space-x-4 flex-shrink-0">
+                          <Avatar className="w-12 h-12 sm:w-14 sm:h-14">
+                            <AvatarImage
+                              src={getProfileImageUrl(profileImageUrl)}
+                            />
+                            <AvatarFallback>
+                              {provider.name?.charAt(0) || "?"}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0">
+                            <h3 className="font-semibold text-sm sm:text-base truncate">
+                              {provider.name ||
+                                t("customer.projects.detail.unknownProvider")}
+                            </h3>
+                            <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm text-gray-500 mt-0.5">
+                              <div className="flex items-center gap-1">
+                                <Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-yellow-400 fill-current flex-shrink-0" />
+                                <span>{Number(rating) || 0}</span>
+                              </div>
+                              <span className="hidden sm:inline">•</span>
+                              <span>
+                                {completedJobs}{" "}
+                                {t("customer.projects.detail.jobsCompleted")}
+                              </span>
+                              {(major || location) && (
+                                <>
+                                  <span className="hidden sm:inline">•</span>
+                                  <span className="truncate">
+                                    {[major, location]
+                                      .filter(Boolean)
+                                      .join(" · ")}
+                                  </span>
+                                </>
+                              )}
                             </div>
-                            <span className="hidden sm:inline">•</span>
-                            <span>{completedJobs} jobs completed</span>
-                            {(major || location) && (
-                              <>
-                                <span className="hidden sm:inline">•</span>
-                                <span className="truncate">
-                                  {[major, location].filter(Boolean).join(" · ")}
-                                </span>
-                              </>
-                            )}
                           </div>
                         </div>
+                        {(bio || major || location) && (
+                          <div className="flex-1 text-xs sm:text-sm text-gray-600 border-t sm:border-t-0 sm:border-l pt-3 sm:pt-0 sm:pl-4 sm:border-gray-200">
+                            {bio && <p className="line-clamp-3">{bio}</p>}
+                            {!bio && (major || location) && (
+                              <p>
+                                {major && <span>{major}</span>}
+                                {major && location && " · "}
+                                {location && <span>{location}</span>}
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </div>
-                      {(bio || major || location) && (
-                        <div className="flex-1 text-xs sm:text-sm text-gray-600 border-t sm:border-t-0 sm:border-l pt-3 sm:pt-0 sm:pl-4 sm:border-gray-200">
-                          {bio && (
-                            <p className="line-clamp-3">{bio}</p>
-                          )}
-                          {!bio && (major || location) && (
-                            <p>
-                              {major && <span>{major}</span>}
-                              {major && location && " · "}
-                              {location && <span>{location}</span>}
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap gap-2 mt-4">
-                      <Button
-                        variant="default"
-                        size="sm"
-                        className="text-xs sm:text-sm"
-                        onClick={() =>
-                          handleContact(
-                            providerId,
-                            provider.name,
-                            typeof profileImageUrl === "string" ? profileImageUrl : undefined,
-                          )
-                        }
-                      >
-                        <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                        Message
-                      </Button>
-                      {providerId && (
+                      <div className="flex flex-wrap gap-2 mt-4">
                         <Button
-                          variant="outline"
+                          variant="default"
                           size="sm"
                           className="text-xs sm:text-sm"
-                          asChild
+                          onClick={() =>
+                            handleContact(
+                              providerId,
+                              provider.name,
+                              typeof profileImageUrl === "string"
+                                ? profileImageUrl
+                                : undefined,
+                            )
+                          }
                         >
-                          <NextLink href={`/customer/providers/${providerId}`}>
-                            View Profile
-                          </NextLink>
+                          <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+                          {t("customer.projects.detail.message")}
                         </Button>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })()}
+                        {providerId && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-xs sm:text-sm"
+                            asChild
+                          >
+                            <NextLink
+                              href={`/customer/providers/${providerId}`}
+                            >
+                              {t("customer.projects.detail.viewProfile")}
+                            </NextLink>
+                          </Button>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })()}
 
             {/* Requirements and Deliverables side by side */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
               <Card>
                 <CardHeader className="p-4 sm:p-6">
                   <CardTitle className="text-base sm:text-lg">
-                    Requirements
+                    {t("customer.projects.detail.editDialog.labelRequirements")}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-4 sm:p-6 pt-0">
                   <MarkdownViewer
                     content={requirements}
-                    emptyMessage="No requirements specified."
+                    emptyMessage={t(
+                      "customer.projects.detail.overview.requirementsEmpty",
+                    )}
                     className="text-xs sm:text-sm"
                   />
                 </CardContent>
@@ -2950,13 +3307,15 @@ export default function ProjectDetailsPage({
               <Card>
                 <CardHeader className="p-4 sm:p-6">
                   <CardTitle className="text-base sm:text-lg">
-                    Deliverables
+                    {t("customer.projects.detail.editDialog.labelDeliverables")}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-4 sm:p-6 pt-0">
                   <MarkdownViewer
                     content={deliverables}
-                    emptyMessage="No deliverables specified."
+                    emptyMessage={t(
+                      "customer.projects.detail.overview.deliverablesEmpty",
+                    )}
                     className="text-xs sm:text-sm"
                   />
                 </CardContent>
@@ -2965,7 +3324,10 @@ export default function ProjectDetailsPage({
 
             {/* AI Recommended Providers under all overview details */}
             {project?.type === "ServiceRequest" && project?.id && (
-              <AIRecommendedProvidersSection serviceRequestId={project.id} />
+              <AIRecommendedProvidersSection
+                serviceRequestId={project.id}
+                showScrollNote={shouldFocusRecommended}
+              />
             )}
           </TabsContent>
 
@@ -2974,19 +3336,20 @@ export default function ProjectDetailsPage({
             <Card>
               <CardHeader className="p-4 sm:p-6">
                 <CardTitle className="text-base sm:text-lg">
-                  Project Milestones
+                  {t("customer.projects.detail.milestones.sectionTitle")}
                 </CardTitle>
                 <CardDescription className="text-xs sm:text-sm">
-                  Track progress through key project milestones
+                  {t("customer.projects.detail.milestones.sectionDesc")}
                 </CardDescription>
                 {project?.type === "Project" && (
                   <div className="flex flex-wrap items-center gap-2 mt-3 sm:mt-4">
                     <Badge variant="outline" className="text-xs sm:text-sm">
-                      Company{" "}
-                      {milestoneApprovalState.companyApproved ? "✓" : "✗"} ·
-                      Provider{" "}
+                      {t("customer.projects.detail.milestones.badgeCompany")}{" "}
+                      {milestoneApprovalState.companyApproved ? "✓" : "✗"} ·{" "}
+                      {t("customer.projects.detail.milestones.badgeProvider")}{" "}
                       {milestoneApprovalState.providerApproved ? "✓" : "✗"}
-                      {milestoneApprovalState.milestonesLocked && " · LOCKED"}
+                      {milestoneApprovalState.milestonesLocked &&
+                        ` · ${t("customer.projects.detail.milestones.locked")}`}
                     </Badge>
                     {milestoneApprovalState.milestonesLocked &&
                       projectMilestones &&
@@ -3003,7 +3366,10 @@ export default function ProjectDetailsPage({
                         const totalDays = last?.daysFromStart ?? 0;
                         return totalDays > 0 ? (
                           <span className="text-xs sm:text-sm text-green-600 font-medium">
-                            Approved timeline: {formatDurationDays(totalDays)}
+                            {t(
+                              "customer.projects.detail.milestones.approvedTimeline",
+                              { duration: formatDurationDays(totalDays) },
+                            )}
                           </span>
                         ) : null;
                       })()}
@@ -3011,25 +3377,33 @@ export default function ProjectDetailsPage({
                       <>
                         <Button
                           variant="outline"
-                          onClick={() => {
-                            // Store original milestones when opening editor
-                            setOriginalProjectMilestones(
-                              JSON.parse(JSON.stringify(projectMilestones)),
-                            );
-                            setMilestoneEditorOpen(true);
-                          }}
+                          asChild
                           size="sm"
                           className="text-xs sm:text-sm"
                         >
-                          Edit Milestones
+                          <NextLink
+                            href={`/customer/projects/${project.id}/milestones`}
+                          >
+                            {t("customer.projects.detail.milestones.editMilestones")}
+                          </NextLink>
                         </Button>
-                        <Button
-                          onClick={handleApproveProjectMilestones}
-                          size="sm"
-                          className="text-xs sm:text-sm"
-                        >
-                          Approve
-                        </Button>
+                        {!milestoneApprovalState.companyApproved && (
+                          <Button
+                            onClick={handleApproveProjectMilestones}
+                            size="sm"
+                            className="inline-flex items-center gap-1.5 text-xs sm:text-sm"
+                            disabled={savingMilestones || approvingMilestones}
+                          >
+                            {approvingMilestones ? (
+                              <>
+                                <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                                {t("customer.projects.detail.milestones.approving")}
+                              </>
+                            ) : (
+                              t("customer.projects.detail.milestones.approve")
+                            )}
+                          </Button>
+                        )}
                       </>
                     )}
                   </div>
@@ -3094,8 +3468,12 @@ export default function ProjectDetailsPage({
                                   );
                                   if (idx < 0)
                                     return milestone.dueDate
-                                      ? `Due: ${new Date(milestone.dueDate).toLocaleDateString()}`
-                                      : "—";
+                                      ? t("customer.projects.detail.milestone.dueLine", {
+                                          date: new Date(
+                                            milestone.dueDate,
+                                          ).toLocaleDateString(),
+                                        })
+                                      : t("customer.projects.detail.milestone.emDash");
                                   const prev = sorted[idx - 1] as
                                     | { daysFromStart?: number }
                                     | undefined;
@@ -3109,10 +3487,20 @@ export default function ProjectDetailsPage({
                                   const durationDays = currDays - prevDays;
                                   const durationStr =
                                     durationDays > 0
-                                      ? `Duration: ${formatDurationDays(durationDays)}`
+                                      ? t(
+                                          "customer.projects.detail.milestone.durationLine",
+                                          {
+                                            duration:
+                                              formatDurationDays(durationDays),
+                                          },
+                                        )
                                       : "";
                                   const dueStr = milestone.dueDate
-                                    ? `Due: ${new Date(milestone.dueDate).toLocaleDateString()}`
+                                    ? t("customer.projects.detail.milestone.dueLine", {
+                                        date: new Date(
+                                          milestone.dueDate,
+                                        ).toLocaleDateString(),
+                                      })
                                     : "";
                                   if (
                                     milestoneApprovalState.milestonesLocked &&
@@ -3122,7 +3510,11 @@ export default function ProjectDetailsPage({
                                       .filter(Boolean)
                                       .join(" · ");
                                   }
-                                  return durationStr || dueStr || "—";
+                                  return (
+                                    durationStr ||
+                                    dueStr ||
+                                    t("customer.projects.detail.milestone.emDash")
+                                  );
                                 })()}
                               </span>
                             </div>
@@ -3130,19 +3522,25 @@ export default function ProjectDetailsPage({
                               <div className="flex items-center gap-1">
                                 <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
                                 <span>
-                                  Completed:{" "}
-                                  {new Date(
-                                    milestone.completedAt,
-                                  ).toLocaleDateString()}
+                                  {t(
+                                    "customer.projects.detail.milestone.completedLine",
+                                    {
+                                      date: new Date(
+                                        milestone.completedAt,
+                                      ).toLocaleDateString(),
+                                    },
+                                  )}
                                 </span>
                               </div>
                             )}
                           </div>
-                          {milestone.status === "in_progress" &&
+                          {norm(milestone.status) === "IN_PROGRESS" &&
                             milestone.progress && (
                               <div className="mt-2 sm:mt-3">
                                 <div className="flex justify-between text-xs sm:text-sm mb-1">
-                                  <span>Progress</span>
+                                  <span>
+                                    {t("customer.projects.detail.stats.progress")}
+                                  </span>
                                   <span>{milestone.progress}%</span>
                                 </div>
                                 <Progress
@@ -3156,7 +3554,10 @@ export default function ProjectDetailsPage({
                           {milestone.startDeliverables ? (
                             <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-lg">
                               <p className="text-sm font-medium text-green-900 mb-1">
-                                📋 Plan / Deliverables (When Starting Work):
+                                📋{" "}
+                                {t(
+                                  "customer.projects.detail.milestone.planDeliverablesTitle",
+                                )}
                               </p>
                               <p className="text-sm text-green-800 whitespace-pre-wrap">
                                 {typeof milestone.startDeliverables ===
@@ -3182,8 +3583,10 @@ export default function ProjectDetailsPage({
                           {milestone.submitDeliverables ? (
                             <div className="mt-3 p-3 bg-purple-50 border border-purple-200 rounded-lg">
                               <p className="text-sm font-medium text-purple-900 mb-1">
-                                ✅ Deliverables / Completion Notes (When
-                                Submitting):
+                                ✅{" "}
+                                {t(
+                                  "customer.projects.detail.milestone.submitDeliverablesTitle",
+                                )}
                               </p>
                               <p className="text-sm text-purple-800 whitespace-pre-wrap">
                                 {typeof milestone.submitDeliverables ===
@@ -3211,7 +3614,10 @@ export default function ProjectDetailsPage({
                           {milestone.submissionNote && (
                             <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                               <p className="text-sm font-medium text-blue-900 mb-1">
-                                📝 Submission Note:
+                                📝{" "}
+                                {t(
+                                  "customer.projects.detail.milestone.submissionNoteTitle",
+                                )}
                               </p>
                               <p className="text-sm text-blue-800 whitespace-pre-wrap">
                                 {milestone.submissionNote}
@@ -3237,12 +3643,18 @@ export default function ProjectDetailsPage({
                                 return (
                                   <div className="mt-3 p-3 bg-orange-50 border border-orange-200 rounded-lg">
                                     <p className="text-sm font-medium text-orange-900 mb-1">
-                                      🔄 Latest Request for Changes (Revision #
-                                      {typeof latestRequest.revisionNumber ===
-                                      "number"
-                                        ? latestRequest.revisionNumber
-                                        : milestone.submissionHistory.length}
-                                      ):
+                                      🔄{" "}
+                                      {t(
+                                        "customer.projects.detail.milestone.latestChangesTitle",
+                                        {
+                                          n:
+                                            typeof latestRequest.revisionNumber ===
+                                            "number"
+                                              ? latestRequest.revisionNumber
+                                              : milestone.submissionHistory
+                                                  .length,
+                                        },
+                                      )}
                                     </p>
                                     <p className="text-sm text-orange-800 whitespace-pre-wrap">
                                       {latestRequest.requestedChangesReason}
@@ -3251,7 +3663,9 @@ export default function ProjectDetailsPage({
                                     typeof latestRequest.requestedChangesAt ===
                                       "string" ? (
                                       <p className="text-xs text-orange-600 mt-2">
-                                        Requested on:{" "}
+                                        {t(
+                                          "customer.projects.detail.milestone.requestedOn",
+                                        )}{" "}
                                         {new Date(
                                           latestRequest.requestedChangesAt,
                                         ).toLocaleString()}
@@ -3269,7 +3683,10 @@ export default function ProjectDetailsPage({
                               <div className="flex items-center gap-2 mb-2">
                                 <Paperclip className="w-4 h-4 text-gray-600" />
                                 <span className="text-sm font-medium text-gray-900">
-                                  📎 Submission Attachment
+                                  📎{" "}
+                                  {t(
+                                    "customer.projects.detail.milestone.submissionAttachment",
+                                  )}
                                 </span>
                               </div>
                               {((): React.ReactNode => {
@@ -3279,7 +3696,10 @@ export default function ProjectDetailsPage({
                                     "/",
                                   );
                                 const fileName =
-                                  normalized.split("/").pop() || "attachment";
+                                  normalized.split("/").pop() ||
+                                  t(
+                                    "customer.projects.detail.milestone.attachmentFallbackName",
+                                  );
                                 const attachmentUrl = getAttachmentUrl(
                                   milestone.submissionAttachmentUrl,
                                 );
@@ -3322,11 +3742,12 @@ export default function ProjectDetailsPage({
                                               );
                                             } catch (error) {
                                               toastHook({
-                                                title: "Error",
-                                                description: getUserFriendlyErrorMessage(
-                                                  error,
-                                                  "customer project attachment download",
-                                                ),
+                                                title: t("customer.projects.detail.toast.errorTitle"),
+                                                description:
+                                                  getUserFriendlyErrorMessage(
+                                                    error,
+                                                    "customer project attachment download",
+                                                  ),
                                                 variant: "destructive",
                                               });
                                             }
@@ -3337,7 +3758,9 @@ export default function ProjectDetailsPage({
                                   >
                                     {/* Icon circle */}
                                     <div className="flex h-9 w-9 flex-none items-center justify-center rounded-md border border-gray-300 bg-gray-100 text-gray-700 text-xs font-medium">
-                                      PDF
+                                      {t(
+                                        "customer.projects.detail.milestone.attachmentPdfBadge",
+                                      )}
                                     </div>
 
                                     {/* File info */}
@@ -3346,7 +3769,9 @@ export default function ProjectDetailsPage({
                                         {fileName}
                                       </span>
                                       <span className="text-xs text-gray-500 leading-snug">
-                                        Click to preview / download
+                                        {t(
+                                          "customer.projects.detail.milestone.clickPreviewDownload",
+                                        )}
                                       </span>
                                     </div>
 
@@ -3366,9 +3791,14 @@ export default function ProjectDetailsPage({
                             milestone.submissionHistory.length > 0 && (
                               <div className="mt-4 border-t pt-4">
                                 <p className="text-sm font-semibold text-gray-900 mb-3">
-                                  📚 Previous Submission History:
+                                  📚{" "}
+                                  {t("customer.projects.detail.milestone.historyTitle")}
                                 </p>
-                                <div className="space-y-3">
+                                <Accordion
+                                  type="single"
+                                  collapsible
+                                  className="w-full space-y-2"
+                                >
                                   {(
                                     milestone.submissionHistory as unknown[]
                                   ).map((history: unknown, idx: number) => {
@@ -3385,32 +3815,45 @@ export default function ProjectDetailsPage({
                                         : idx + 1;
 
                                     return (
-                                      <div
+                                      <AccordionItem
                                         key={idx}
-                                        className="p-3 bg-gray-50 border border-gray-200 rounded-lg"
+                                        value={`revision-${milestone.id}-${idx}`}
+                                        className="bg-gray-50 border border-gray-200 rounded-lg px-3"
                                       >
-                                        <div className="flex items-center justify-between mb-2">
-                                          <p className="text-sm font-medium text-gray-900">
-                                            Revision #{revisionNumber}
-                                          </p>
-                                          {historyRecord.requestedChangesAt &&
-                                          typeof historyRecord.requestedChangesAt ===
-                                            "string" ? (
-                                            <span className="text-xs text-gray-500">
-                                              Changes requested:{" "}
-                                              {new Date(
-                                                historyRecord.requestedChangesAt,
-                                              ).toLocaleDateString()}
-                                            </span>
-                                          ) : null}
-                                        </div>
+                                        <AccordionTrigger className="py-3 hover:no-underline">
+                                          <div className="flex w-full items-center justify-between gap-3 pr-2 text-left">
+                                            <p className="text-sm font-medium text-gray-900">
+                                              {t(
+                                                "customer.projects.detail.milestone.revisionN",
+                                                { n: revisionNumber },
+                                              )}
+                                            </p>
+                                            {historyRecord.requestedChangesAt &&
+                                            typeof historyRecord.requestedChangesAt ===
+                                              "string" ? (
+                                              <span className="text-xs text-gray-500">
+                                                {t(
+                                                  "customer.projects.detail.milestone.changesRequestedLine",
+                                                  {
+                                                    date: new Date(
+                                                      historyRecord.requestedChangesAt,
+                                                    ).toLocaleDateString(),
+                                                  },
+                                                )}
+                                              </span>
+                                            ) : null}
+                                          </div>
+                                        </AccordionTrigger>
+                                        <AccordionContent className="pb-3">
 
                                         {historyRecord.requestedChangesReason &&
                                         typeof historyRecord.requestedChangesReason ===
                                           "string" ? (
                                           <div className="mb-2 p-2 bg-red-50 border border-red-200 rounded">
                                             <p className="text-xs font-medium text-red-900 mb-1">
-                                              Reason for Changes:
+                                              {t(
+                                                "customer.projects.detail.milestone.reasonForChanges",
+                                              )}
                                             </p>
                                             <p className="text-xs text-red-800">
                                               {
@@ -3423,7 +3866,9 @@ export default function ProjectDetailsPage({
                                         {historyRecord.submitDeliverables ? (
                                           <div className="mb-2">
                                             <p className="text-xs font-medium text-gray-700 mb-1">
-                                              Deliverables:
+                                              {t(
+                                                "customer.projects.detail.milestone.historyDeliverables",
+                                              )}
                                             </p>
                                             <p className="text-xs text-gray-600 whitespace-pre-wrap">
                                               {typeof historyRecord.submitDeliverables ===
@@ -3454,7 +3899,9 @@ export default function ProjectDetailsPage({
                                           "string" ? (
                                           <div className="mb-2">
                                             <p className="text-xs font-medium text-gray-700 mb-1">
-                                              Note:
+                                              {t(
+                                                "customer.projects.detail.milestone.historyNote",
+                                              )}
                                             </p>
                                             <p className="text-xs text-gray-600 whitespace-pre-wrap">
                                               {historyRecord.submissionNote}
@@ -3467,7 +3914,9 @@ export default function ProjectDetailsPage({
                                           "string" ? (
                                           <div>
                                             <p className="text-xs font-medium text-gray-700 mb-1">
-                                              Attachment:
+                                              {t(
+                                                "customer.projects.detail.milestone.historyAttachment",
+                                              )}
                                             </p>
                                             {((): React.ReactNode => {
                                               const attachmentUrl =
@@ -3494,7 +3943,9 @@ export default function ProjectDetailsPage({
                                                 );
                                               const fileName =
                                                 normalized.split("/").pop() ||
-                                                "attachment";
+                                                t(
+                                                  "customer.projects.detail.milestone.attachmentFallbackName",
+                                                );
 
                                               return (
                                                 <a
@@ -3530,11 +3981,12 @@ export default function ProjectDetailsPage({
                                                             );
                                                           } catch (error) {
                                                             toastHook({
-                                                              title: "Error",
-                                                              description: getUserFriendlyErrorMessage(
-                                                                error,
-                                                                "customer project attachment download",
-                                                              ),
+                                                              title: t("customer.projects.detail.toast.errorTitle"),
+                                                              description:
+                                                                getUserFriendlyErrorMessage(
+                                                                  error,
+                                                                  "customer project attachment download",
+                                                                ),
                                                               variant:
                                                                 "destructive",
                                                             });
@@ -3560,16 +4012,21 @@ export default function ProjectDetailsPage({
                                           ).getTime(),
                                         ) ? (
                                           <p className="text-xs text-gray-500 mt-2">
-                                            Submitted:{" "}
-                                            {new Date(
-                                              historyRecord.submittedAt,
-                                            ).toLocaleString()}
+                                            {t(
+                                              "customer.projects.detail.milestone.submittedLine",
+                                              {
+                                                dateTime: new Date(
+                                                  historyRecord.submittedAt,
+                                                ).toLocaleString(),
+                                              },
+                                            )}
                                           </p>
                                         ) : null}
-                                      </div>
+                                        </AccordionContent>
+                                      </AccordionItem>
                                     );
                                   })}
-                                </div>
+                                </Accordion>
                               </div>
                             )}
 
@@ -3580,21 +4037,29 @@ export default function ProjectDetailsPage({
                           >
                             <DialogContent>
                               <DialogHeader>
-                                <DialogTitle>Request Changes</DialogTitle>
+                                <DialogTitle>
+                                  {t(
+                                    "customer.projects.detail.requestChangesDialog.title",
+                                  )}
+                                </DialogTitle>
                                 <DialogDescription>
-                                  Add notes about the required changes. The
-                                  provider will be notified and can resubmit
-                                  after making the changes.
+                                  {t(
+                                    "customer.projects.detail.requestChangesDialog.desc",
+                                  )}
                                 </DialogDescription>
                               </DialogHeader>
                               <div className="space-y-4">
                                 <div>
                                   <Label htmlFor="requestChangesReason">
-                                    Changes Required Notes *
+                                    {t(
+                                      "customer.projects.detail.requestChangesDialog.label",
+                                    )}
                                   </Label>
                                   <Textarea
                                     id="requestChangesReason"
-                                    placeholder="Please describe what changes are needed..."
+                                    placeholder={t(
+                                      "customer.projects.detail.requestChangesDialog.placeholder",
+                                    )}
                                     value={requestChangesReason}
                                     onChange={(e) =>
                                       setRequestChangesReason(e.target.value)
@@ -3603,8 +4068,9 @@ export default function ProjectDetailsPage({
                                     required
                                   />
                                   <p className="text-xs text-gray-500 mt-1">
-                                    This note will be visible to the provider
-                                    and saved in submission history.
+                                    {t(
+                                      "customer.projects.detail.requestChangesDialog.hint",
+                                    )}
                                   </p>
                                 </div>
                               </div>
@@ -3617,13 +4083,15 @@ export default function ProjectDetailsPage({
                                     setSelectedMilestoneForReject(null);
                                   }}
                                 >
-                                  Cancel
+                                  {t("customer.projects.detail.common.cancel")}
                                 </Button>
                                 <Button
                                   onClick={handleRejectMilestone}
                                   disabled={!requestChangesReason.trim()}
                                 >
-                                  Request Changes
+                                  {t(
+                                    "customer.projects.detail.milestone.requestChanges",
+                                  )}
                                 </Button>
                               </DialogFooter>
                             </DialogContent>
@@ -3644,8 +4112,12 @@ export default function ProjectDetailsPage({
                                       index > 0 &&
                                       projectMilestones[index - 1].status !==
                                         "APPROVED"
-                                        ? "You must approve the previous milestone before continuing to the next one."
-                                        : "You must complete the payment before the provider can start working."
+                                        ? t(
+                                            "customer.projects.detail.milestone.lockPreviousNotApproved",
+                                          )
+                                        : t(
+                                            "customer.projects.detail.milestone.lockPaymentFirst",
+                                          )
                                     }
                                   </p>
                                 </div>
@@ -3655,7 +4127,9 @@ export default function ProjectDetailsPage({
                                     disabled={
                                       index > 0 &&
                                       projectMilestones[index - 1].status !==
-                                        "APPROVED"
+                                        "APPROVED" &&
+                                      projectMilestones[index - 1].status !==
+                                        "PAID"
                                         ? true
                                         : false
                                     }
@@ -3666,7 +4140,7 @@ export default function ProjectDetailsPage({
                                     className="bg-blue-600 hover:bg-blue-700 text-xs sm:text-sm w-full sm:w-auto"
                                   >
                                     <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                                    Pay Now
+                                    {t("customer.projects.detail.milestone.payNow")}
                                   </Button>
                                 </div>
                               </>
@@ -3677,14 +4151,32 @@ export default function ProjectDetailsPage({
                               <Button
                                 size="sm"
                                 onClick={() =>
-                                  handleApproveIndividualMilestone(
+                                  handleOpenApproveMilestoneDialog(
                                     milestone.id!,
                                   )
                                 }
+                                disabled={
+                                  approvingIndividualMilestoneId ===
+                                  milestone.id
+                                }
                                 className="bg-green-600 hover:bg-green-700 text-xs sm:text-sm w-full sm:w-auto"
                               >
-                                <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                                Approve Milestone
+                                {approvingIndividualMilestoneId ===
+                                milestone.id ? (
+                                  <>
+                                    <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 animate-spin" />
+                                    {t(
+                                      "customer.projects.detail.milestone.approvingShort",
+                                    )}
+                                  </>
+                                ) : (
+                                  <>
+                                    <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+                                    {t(
+                                      "customer.projects.detail.milestone.approveMilestone",
+                                    )}
+                                  </>
+                                )}
                               </Button>
                               <Button
                                 size="sm"
@@ -3695,7 +4187,9 @@ export default function ProjectDetailsPage({
                                 className="text-xs sm:text-sm w-full sm:w-auto"
                               >
                                 <AlertCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                                Request Changes
+                                {t(
+                                  "customer.projects.detail.milestone.requestChanges",
+                                )}
                               </Button>
                             </div>
                           ) : null}
@@ -3704,10 +4198,62 @@ export default function ProjectDetailsPage({
                     ))
                   ) : (
                     <p className="text-gray-600 text-center py-8">
-                      No milestones found
+                      {t("customer.projects.detail.milestones.noneFound")}
                     </p>
                   )}
                 </div>
+
+                <Dialog
+                  open={approveMilestoneDialogOpen}
+                  onOpenChange={(open) => {
+                    if (!open && !approvingIndividualMilestoneId) {
+                      setApproveMilestoneDialogOpen(false);
+                      setMilestoneIdPendingApprove(null);
+                    }
+                  }}
+                >
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>
+                        {t(
+                          "customer.projects.detail.approveMilestoneDialog.title",
+                        )}
+                      </DialogTitle>
+                      <DialogDescription>
+                        {t(
+                          "customer.projects.detail.approveMilestoneDialog.desc",
+                        )}
+                      </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                      <Button
+                        variant="outline"
+                        onClick={handleCancelApproveMilestone}
+                        disabled={!!approvingIndividualMilestoneId}
+                      >
+                        {t("customer.projects.detail.common.cancel")}
+                      </Button>
+                      <Button
+                        onClick={handleConfirmApproveMilestone}
+                        disabled={!!approvingIndividualMilestoneId}
+                        className="bg-green-600 hover:bg-green-700"
+                      >
+                        {approvingIndividualMilestoneId &&
+                        approvingIndividualMilestoneId ===
+                          milestoneIdPendingApprove ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            {t(
+                              "customer.projects.detail.milestone.approvingShort",
+                            )}
+                          </>
+                        ) : (
+                          t("customer.projects.detail.common.confirm")
+                        )}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
               </CardContent>
             </Card>
           </TabsContent>
@@ -3719,19 +4265,23 @@ export default function ProjectDetailsPage({
                 <CardTitle className="text-base sm:text-lg font-semibold flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                   <span>
                     {proposals.length === 0
-                      ? "Received Proposals (0)"
+                      ? t("customer.projects.detail.bids.titleReceivedZero")
                       : proposals.length <= 5
-                        ? `Received Proposals (${proposals.length})`
-                        : `Best 5 of ${proposals.length} proposals`}
+                        ? t("customer.projects.detail.bids.titleReceived", {
+                            n: proposals.length,
+                          })
+                        : t("customer.projects.detail.bids.titleBestOf", {
+                            total: proposals.length,
+                          })}
                   </span>
                   {bidsLoading && (
                     <span className="text-xs text-gray-500 font-normal">
-                      Loading…
+                      {t("customer.projects.detail.bids.loading")}
                     </span>
                   )}
                 </CardTitle>
                 <CardDescription className="text-xs sm:text-sm text-gray-600">
-                  Review and manage proposals from providers
+                  {t("customer.projects.detail.bids.sectionDesc")}
                 </CardDescription>
               </CardHeader>
 
@@ -3741,7 +4291,9 @@ export default function ProjectDetailsPage({
                 )}
 
                 {!bidsLoading && proposals.length === 0 ? (
-                  <div className="text-sm text-gray-500">No proposals yet.</div>
+                  <div className="text-sm text-gray-500">
+                    {t("customer.projects.detail.bids.empty")}
+                  </div>
                 ) : (
                   <div className="space-y-4">
                     <div className="flex gap-0 lg:gap-4 relative">
@@ -3786,7 +4338,10 @@ export default function ProjectDetailsPage({
                                           <Sparkles className="w-4 h-4 text-blue-600" />
                                         </div>
                                         <span className="text-sm font-semibold text-gray-900 truncate">
-                                          {p.providerName || "Provider"}
+                                          {p.providerName ||
+                                            t(
+                                              "customer.projects.detail.common.providerNameFallback",
+                                            )}
                                         </span>
                                       </div>
                                       <button
@@ -3796,19 +4351,23 @@ export default function ProjectDetailsPage({
                                           setOpenExplanationId(null);
                                         }}
                                         className="shrink-0 p-1.5 rounded-md text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                        aria-label="Close"
+                                        aria-label={t(
+                                          "customer.projects.detail.bids.closeAria",
+                                        )}
                                       >
                                         <X className="w-4 h-4" />
                                       </button>
                                     </div>
                                     <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
-                                      Why this bid fits
+                                      {t("customer.projects.detail.bids.whyFits")}
                                     </p>
                                     {!p.aiFitExplanation &&
                                     explanationLoading[p.id] ? (
                                       <div className="flex items-center gap-2 text-sm text-gray-600">
                                         <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
-                                        <span>Loading…</span>
+                                        <span>
+                                          {t("customer.projects.detail.bids.loading")}
+                                        </span>
                                       </div>
                                     ) : (
                                       <p className="text-sm text-gray-700 leading-relaxed">
@@ -3857,27 +4416,41 @@ export default function ProjectDetailsPage({
                                     <div className="flex-1 min-w-0">
                                       <div className="flex flex-wrap items-center gap-2 mb-1">
                                         <h3 className="font-semibold text-gray-900 text-sm sm:text-base truncate">
-                                          {p.providerName || "Provider"}
+                                          {p.providerName ||
+                                            t(
+                                              "customer.projects.detail.common.providerNameFallback",
+                                            )}
                                         </h3>
                                         {p.isTopFive && (
                                           <Badge
                                             className="bg-blue-100 text-blue-800 border-blue-300 text-xs shrink-0"
-                                            title="One of the top 5 best-fit bids"
+                                            title={t(
+                                              "customer.projects.detail.bids.topBidTooltip",
+                                            )}
                                           >
                                             <Sparkles className="w-3 h-3 mr-1" />
-                                            Best {p.rank ?? ""}
+                                            {t(
+                                              "customer.projects.detail.bids.bestRank",
+                                              { rank: p.rank ?? "" },
+                                            )}
                                           </Badge>
                                         )}
                                         {p.matchScore != null &&
                                           p.matchScore > 0 && (
                                             <span className="text-xs text-gray-500">
-                                              {p.matchScore}% match
+                                              {t(
+                                                "customer.projects.detail.bids.matchPercent",
+                                                { n: p.matchScore },
+                                              )}
                                             </span>
                                           )}
                                         <div className="flex items-center gap-1">
                                           <Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-yellow-400 fill-current flex-shrink-0" />
                                           <span className="text-xs sm:text-sm text-gray-600">
-                                            {p.providerRating ?? "No rating"}
+                                            {p.providerRating ??
+                                              t(
+                                                "customer.projects.detail.bids.noRating",
+                                              )}
                                           </span>
                                         </div>
                                         {/* Mobile: tap to show AI summary in-card */}
@@ -3893,10 +4466,14 @@ export default function ProjectDetailsPage({
                                               );
                                             }}
                                             className="lg:hidden inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-2 py-1"
-                                            aria-label="See why this bid is recommended"
+                                            aria-label={t(
+                                              "customer.projects.detail.bids.seeWhyAria",
+                                            )}
                                           >
                                             <HelpCircle className="w-3.5 h-3.5" />
-                                            Tap here to see
+                                            {t(
+                                              "customer.projects.detail.bids.tapHereToSee",
+                                            )}
                                           </button>
                                         )}
                                       </div>
@@ -3926,7 +4503,12 @@ export default function ProjectDetailsPage({
                                                 variant="secondary"
                                                 className="text-[10px] leading-tight"
                                               >
-                                                +{p.skills.length - 3} more
+                                                {t(
+                                                  "customer.projects.detail.bids.moreSkills",
+                                                  {
+                                                    n: p.skills.length - 3,
+                                                  },
+                                                )}
                                               </Badge>
                                             )}
                                           </div>
@@ -3949,13 +4531,9 @@ export default function ProjectDetailsPage({
                                                 : "bg-gray-100 text-gray-800"
                                         }
                                       >
-                                        {p.status === "pending"
-                                          ? "Pending"
-                                          : p.status === "accepted"
-                                            ? "Accepted"
-                                            : p.status === "rejected"
-                                              ? "Rejected"
-                                              : p.status}
+                                        {getProposalStatusLabel(
+                                          String(p.status ?? ""),
+                                        )}
                                       </Badge>
 
                                       <span className="text-sm text-gray-500">
@@ -3966,7 +4544,9 @@ export default function ProjectDetailsPage({
                                           ? new Date(
                                               p.submittedAt,
                                             ).toLocaleDateString()
-                                          : "—"}
+                                          : t(
+                                              "customer.projects.detail.milestone.emDash",
+                                            )}
                                       </span>
                                     </div>
 
@@ -3974,10 +4554,12 @@ export default function ProjectDetailsPage({
                                     <div className="flex justify-between items-center">
                                       <div>
                                         <p className="text-sm text-gray-600">
-                                          Bid Amount
+                                          {t(
+                                            "customer.projects.detail.bids.bidAmount",
+                                          )}
                                         </p>
                                         <p className="font-semibold text-lg">
-                                          RM{" "}
+                                          {currency}{" "}
                                           {Number(
                                             p.bidAmount ?? 0,
                                           ).toLocaleString()}
@@ -3985,10 +4567,15 @@ export default function ProjectDetailsPage({
                                       </div>
                                       <div className="text-right">
                                         <p className="text-sm text-gray-600">
-                                          Timeline
+                                          {t(
+                                            "customer.projects.detail.label.timeline",
+                                          )}
                                         </p>
                                         <p className="font-medium">
-                                          {p.proposedTimeline || "—"}
+                                          {p.proposedTimeline ||
+                                            t(
+                                              "customer.projects.detail.milestone.emDash",
+                                            )}
                                         </p>
                                       </div>
                                     </div>
@@ -3997,7 +4584,9 @@ export default function ProjectDetailsPage({
                                     {!!p.milestones?.length && (
                                       <div className="text-xs text-gray-600 bg-gray-50 rounded p-2">
                                         <div className="font-medium text-gray-900 mb-1">
-                                          Proposed Milestones
+                                          {t(
+                                            "customer.projects.detail.bids.proposedMilestonesSection",
+                                          )}
                                         </div>
                                         <ul className="space-y-1 max-h-24 overflow-y-auto pr-1">
                                           {p.milestones.map(
@@ -4018,10 +4607,13 @@ export default function ProjectDetailsPage({
                                               >
                                                 <span className="truncate">
                                                   {m.title ||
-                                                    `Milestone ${idx + 1}`}
+                                                    t(
+                                                      "customer.projects.detail.bids.milestoneFallback",
+                                                      { n: idx + 1 },
+                                                    )}
                                                 </span>
                                                 <span>
-                                                  RM{" "}
+                                                  {currency}{" "}
                                                   {Number(
                                                     m.amount || 0,
                                                   ).toLocaleString()}
@@ -4099,7 +4691,9 @@ export default function ProjectDetailsPage({
                                       >
                                         <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 shrink-0" />
                                         <span className="truncate">
-                                          Show details
+                                          {t(
+                                            "customer.projects.detail.bids.showDetails",
+                                          )}
                                         </span>
                                       </Button>
                                       <NextLink
@@ -4113,7 +4707,9 @@ export default function ProjectDetailsPage({
                                         >
                                           <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 shrink-0" />
                                           <span className="truncate">
-                                            View Profile
+                                            {t(
+                                              "customer.projects.detail.viewProfile",
+                                            )}
                                           </span>
                                         </Button>
                                       </NextLink>
@@ -4187,20 +4783,25 @@ export default function ProjectDetailsPage({
                                   <span className="text-sm font-semibold text-gray-900 truncate">
                                     {proposals.find(
                                       (x) => x.id === openExplanationId,
-                                    )?.providerName || "Provider"}
+                                    )?.providerName ||
+                                      t(
+                                        "customer.projects.detail.common.providerNameFallback",
+                                      )}
                                   </span>
                                 </div>
                                 <button
                                   type="button"
                                   onClick={() => setOpenExplanationId(null)}
                                   className="lg:hidden p-1.5 rounded-md text-gray-500 hover:bg-gray-100 focus:outline-none flex-shrink-0"
-                                  aria-label="Close"
+                                  aria-label={t(
+                                    "customer.projects.detail.bids.closeAria",
+                                  )}
                                 >
                                   <X className="w-4 h-4" />
                                 </button>
                               </div>
                               <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
-                                Why this bid fits
+                                {t("customer.projects.detail.bids.whyFits")}
                               </p>
                               {!proposals.find(
                                 (x) => x.id === openExplanationId,
@@ -4208,7 +4809,9 @@ export default function ProjectDetailsPage({
                               explanationLoading[openExplanationId] ? (
                                 <div className="flex items-center gap-2 text-sm text-gray-600">
                                   <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
-                                  <span>Loading…</span>
+                                  <span>
+                                    {t("customer.projects.detail.bids.loading")}
+                                  </span>
                                 </div>
                               ) : (
                                 <p className="text-sm text-gray-700 leading-relaxed">
@@ -4242,7 +4845,9 @@ export default function ProjectDetailsPage({
                               size="sm"
                               className="text-xs sm:text-sm"
                             >
-                              Show all proposals
+                              {t(
+                                "customer.projects.detail.bids.showAllProposals",
+                              )}
                             </Button>
                           </NextLink>
                         </div>
@@ -4260,10 +4865,10 @@ export default function ProjectDetailsPage({
             <Card>
               <CardHeader className="p-4 sm:p-6">
                 <CardTitle className="text-base sm:text-lg">
-                  Proposal Attachments
+                  {t("customer.projects.detail.files.proposalAttachments")}
                 </CardTitle>
                 <CardDescription className="text-xs sm:text-sm">
-                  Files attached to accepted proposals
+                  {t("customer.projects.detail.files.proposalAttachmentsDesc")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-4 sm:p-6 pt-0">
@@ -4296,7 +4901,9 @@ export default function ProjectDetailsPage({
                   if (proposalAttachments.length === 0) {
                     return (
                       <p className="text-sm text-gray-500 text-center py-8">
-                        No proposal attachments found
+                        {t(
+                          "customer.projects.detail.files.noProposalAttachments",
+                        )}
                       </p>
                     );
                   }
@@ -4338,11 +4945,12 @@ export default function ProjectDetailsPage({
                                       );
                                     } catch (error) {
                                       toastHook({
-                                        title: "Error",
-                                        description: getUserFriendlyErrorMessage(
-                                          error,
-                                          "customer project attachment download",
-                                        ),
+                                        title: t("customer.projects.detail.toast.errorTitle"),
+                                        description:
+                                          getUserFriendlyErrorMessage(
+                                            error,
+                                            "customer project attachment download",
+                                          ),
                                         variant: "destructive",
                                       });
                                     }
@@ -4359,8 +4967,10 @@ export default function ProjectDetailsPage({
                                 {fileName}
                               </span>
                               <span className="text-xs text-gray-500 leading-snug">
-                                From: {attachment.proposalName} • Click to
-                                preview / download
+                                {t(
+                                  "customer.projects.detail.files.fromClickHint",
+                                  { name: attachment.proposalName },
+                                )}
                               </span>
                             </div>
                             <div className="ml-auto flex items-center text-gray-500 hover:text-gray-700">
@@ -4378,9 +4988,11 @@ export default function ProjectDetailsPage({
             {/* Milestone Attachments Section */}
             <Card>
               <CardHeader>
-                <CardTitle>Milestone Attachments</CardTitle>
+                <CardTitle>
+                  {t("customer.projects.detail.files.milestoneAttachments")}
+                </CardTitle>
                 <CardDescription>
-                  Files attached to milestone submissions
+                  {t("customer.projects.detail.files.milestoneAttachmentsDesc")}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -4424,11 +5036,19 @@ export default function ProjectDetailsPage({
                           ) {
                             milestoneAttachments.push({
                               url: historyRecord.submissionAttachmentUrl,
-                              milestoneTitle: `${milestone.title} (Revision ${
-                                typeof historyRecord.revisionNumber === "number"
-                                  ? historyRecord.revisionNumber
-                                  : "N/A"
-                              })`,
+                              milestoneTitle: t(
+                                "customer.projects.detail.files.revisionLabel",
+                                {
+                                  title: String(milestone.title ?? ""),
+                                  rev:
+                                    typeof historyRecord.revisionNumber ===
+                                    "number"
+                                      ? String(historyRecord.revisionNumber)
+                                      : t(
+                                          "customer.projects.detail.files.revisionNA",
+                                        ),
+                                },
+                              ),
                               milestoneId: milestone.id,
                               submittedAt:
                                 typeof historyRecord.submittedAt === "string"
@@ -4444,7 +5064,9 @@ export default function ProjectDetailsPage({
                   if (milestoneAttachments.length === 0) {
                     return (
                       <p className="text-sm text-gray-500 text-center py-8">
-                        No milestone attachments found
+                        {t(
+                          "customer.projects.detail.files.noMilestoneAttachments",
+                        )}
                       </p>
                     );
                   }
@@ -4486,11 +5108,12 @@ export default function ProjectDetailsPage({
                                       );
                                     } catch (error) {
                                       toastHook({
-                                        title: "Error",
-                                        description: getUserFriendlyErrorMessage(
-                                          error,
-                                          "customer project attachment download",
-                                        ),
+                                        title: t("customer.projects.detail.toast.errorTitle"),
+                                        description:
+                                          getUserFriendlyErrorMessage(
+                                            error,
+                                            "customer project attachment download",
+                                          ),
                                         variant: "destructive",
                                       });
                                     }
@@ -4507,16 +5130,26 @@ export default function ProjectDetailsPage({
                                 {fileName}
                               </span>
                               <span className="text-xs text-gray-500 leading-snug">
-                                From: {attachment.milestoneTitle}
+                                {t("customer.projects.detail.files.fromNameLine", {
+                                  name: attachment.milestoneTitle,
+                                })}
                                 {attachment.submittedAt &&
-                                  !isNaN(
-                                    new Date(attachment.submittedAt).getTime(),
-                                  ) &&
-                                  ` • Submitted: ${new Date(
-                                    attachment.submittedAt,
-                                  ).toLocaleDateString()}`}
+                                !isNaN(
+                                  new Date(attachment.submittedAt).getTime(),
+                                )
+                                  ? t(
+                                      "customer.projects.detail.files.submittedPart",
+                                      {
+                                        date: new Date(
+                                          attachment.submittedAt,
+                                        ).toLocaleDateString(),
+                                      },
+                                    )
+                                  : ""}
                                 <span className="block mt-0.5">
-                                  Click to preview / download
+                                  {t(
+                                    "customer.projects.detail.milestone.clickPreviewDownload",
+                                  )}
                                 </span>
                               </span>
                             </div>
@@ -4535,9 +5168,11 @@ export default function ProjectDetailsPage({
             {/* Message Attachments Section */}
             <Card>
               <CardHeader>
-                <CardTitle>Message Attachments</CardTitle>
+                <CardTitle>
+                  {t("customer.projects.detail.files.messageAttachments")}
+                </CardTitle>
                 <CardDescription>
-                  Files attached to project messages
+                  {t("customer.projects.detail.files.messageAttachmentsDesc")}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -4551,7 +5186,7 @@ export default function ProjectDetailsPage({
                               ((message.sender as Record<string, unknown>)
                                 ?.name as string) ||
                               (message.senderName as string) ||
-                              "User",
+                              t("customer.projects.detail.messages.senderUser"),
                             messageId: message.id as string,
                             timestamp:
                               (message.createdAt as string) ||
@@ -4562,7 +5197,9 @@ export default function ProjectDetailsPage({
                   if (messageAttachments.length === 0) {
                     return (
                       <p className="text-sm text-gray-500 text-center py-8">
-                        No message attachments found
+                        {t(
+                          "customer.projects.detail.files.noMessageAttachments",
+                        )}
                       </p>
                     );
                   }
@@ -4605,11 +5242,12 @@ export default function ProjectDetailsPage({
                                       );
                                     } catch (error) {
                                       toastHook({
-                                        title: "Error",
-                                        description: getUserFriendlyErrorMessage(
-                                          error,
-                                          "customer project attachment download",
-                                        ),
+                                        title: t("customer.projects.detail.toast.errorTitle"),
+                                        description:
+                                          getUserFriendlyErrorMessage(
+                                            error,
+                                            "customer project attachment download",
+                                          ),
                                         variant: "destructive",
                                       });
                                     }
@@ -4626,8 +5264,10 @@ export default function ProjectDetailsPage({
                                 {fileName}
                               </span>
                               <span className="text-xs text-gray-500 leading-snug">
-                                From: {attachment.senderName} • Click to preview
-                                / download
+                                {t(
+                                  "customer.projects.detail.files.fromSenderHint",
+                                  { name: attachment.senderName },
+                                )}
                               </span>
                             </div>
                           </a>
@@ -4645,10 +5285,10 @@ export default function ProjectDetailsPage({
             <Card>
               <CardHeader className="p-4 sm:p-6">
                 <CardTitle className="text-base sm:text-lg">
-                  Project Messages
+                  {t("customer.projects.detail.messages.sectionTitle")}
                 </CardTitle>
                 <CardDescription className="text-xs sm:text-sm">
-                  Communication with your assigned provider
+                  {t("customer.projects.detail.messages.sectionDesc")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-4 sm:p-6 pt-0">
@@ -4671,7 +5311,9 @@ export default function ProjectDetailsPage({
                     const senderName =
                       (messageSender?.name as string) ||
                       (message.senderName as string) ||
-                      (isCurrentUser ? "You" : "User");
+                      (isCurrentUser
+                        ? t("customer.projects.detail.messages.senderYou")
+                        : t("customer.projects.detail.messages.senderUser"));
                     const avatarChar = senderName?.charAt?.(0) || "U";
                     const messageId = message.id as string | number | undefined;
                     const messageKey =
@@ -4790,7 +5432,7 @@ export default function ProjectDetailsPage({
                           )
                         }
                       >
-                        Contact
+                        {t("customer.projects.detail.contact")}
                       </Button>
                     </div>
                   </>
@@ -4805,13 +5447,15 @@ export default function ProjectDetailsPage({
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-lg sm:text-xl">
-              Edit Project
+              {t("customer.projects.detail.editDialog.title")}
             </DialogTitle>
           </DialogHeader>
 
           <div className="grid grid-cols-1 gap-3 sm:gap-4">
             <div>
-              <Label className="text-sm sm:text-base">Title</Label>
+              <Label className="text-sm sm:text-base">
+                {t("customer.projects.detail.editDialog.labelTitle")}
+              </Label>
               <Input
                 value={edit.title}
                 onChange={(e) => setEdit({ ...edit, title: e.target.value })}
@@ -4820,7 +5464,9 @@ export default function ProjectDetailsPage({
             </div>
 
             <div>
-              <Label className="text-sm sm:text-base">Description</Label>
+              <Label className="text-sm sm:text-base">
+                {t("customer.projects.detail.editDialog.labelDescription")}
+              </Label>
               <Textarea
                 rows={4}
                 value={edit.description}
@@ -4833,7 +5479,9 @@ export default function ProjectDetailsPage({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
               <div>
-                <Label className="text-sm sm:text-base">Category</Label>
+                <Label className="text-sm sm:text-base">
+                  {t("customer.projects.detail.editDialog.labelCategory")}
+                </Label>
                 <Input
                   value={edit.category}
                   onChange={(e) =>
@@ -4843,7 +5491,9 @@ export default function ProjectDetailsPage({
                 />
               </div>
               <div>
-                <Label className="text-sm sm:text-base">Priority</Label>
+                <Label className="text-sm sm:text-base">
+                  {t("customer.projects.detail.editDialog.labelPriority")}
+                </Label>
                 <Input
                   value={edit.priority}
                   onChange={(e) =>
@@ -4853,7 +5503,9 @@ export default function ProjectDetailsPage({
                 />
               </div>
               <div>
-                <Label className="text-sm sm:text-base">Timeline</Label>
+                <Label className="text-sm sm:text-base">
+                  {t("customer.projects.detail.editDialog.labelTimeline")}
+                </Label>
                 <Input
                   value={edit.timeline}
                   onChange={(e) =>
@@ -4866,7 +5518,9 @@ export default function ProjectDetailsPage({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div>
-                <Label className="text-sm sm:text-base">Budget Min</Label>
+                <Label className="text-sm sm:text-base">
+                  {t("customer.projects.detail.editDialog.labelBudgetMin")}
+                </Label>
                 <Input
                   type="number"
                   inputMode="decimal"
@@ -4878,7 +5532,9 @@ export default function ProjectDetailsPage({
                 />
               </div>
               <div>
-                <Label className="text-sm sm:text-base">Budget Max</Label>
+                <Label className="text-sm sm:text-base">
+                  {t("customer.projects.detail.editDialog.labelBudgetMax")}
+                </Label>
                 <Input
                   type="number"
                   inputMode="decimal"
@@ -4893,11 +5549,13 @@ export default function ProjectDetailsPage({
 
             <div>
               <Label className="text-sm sm:text-base">
-                Skills (comma / new line)
+                {t("customer.projects.detail.editDialog.labelSkills")}
               </Label>
               <Textarea
                 rows={2}
-                placeholder="React, Node.js, PostgreSQL"
+                placeholder={t(
+                  "customer.projects.detail.editDialog.skillsPlaceholder",
+                )}
                 value={edit.skills}
                 onChange={(e) => setEdit({ ...edit, skills: e.target.value })}
                 className="mt-1.5 text-sm sm:text-base"
@@ -4906,27 +5564,35 @@ export default function ProjectDetailsPage({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div>
-                <Label className="text-sm sm:text-base">Requirements</Label>
+                <Label className="text-sm sm:text-base">
+                  {t("customer.projects.detail.editDialog.labelRequirements")}
+                </Label>
                 <div className="mt-1.5">
                   <RichEditor
                     content={edit.requirements}
                     onChange={(value) =>
                       setEdit({ ...edit, requirements: value })
                     }
-                    placeholder="Enter project requirements..."
+                    placeholder={t(
+                      "customer.projects.detail.editDialog.requirementsPlaceholder",
+                    )}
                     initialHeight={200}
                   />
                 </div>
               </div>
               <div>
-                <Label className="text-sm sm:text-base">Deliverables</Label>
+                <Label className="text-sm sm:text-base">
+                  {t("customer.projects.detail.editDialog.labelDeliverables")}
+                </Label>
                 <div className="mt-1.5">
                   <RichEditor
                     content={edit.deliverables}
                     onChange={(value) =>
                       setEdit({ ...edit, deliverables: value })
                     }
-                    placeholder="Enter project deliverables..."
+                    placeholder={t(
+                      "customer.projects.detail.editDialog.deliverablesPlaceholder",
+                    )}
                     initialHeight={200}
                   />
                 </div>
@@ -4940,292 +5606,16 @@ export default function ProjectDetailsPage({
               onClick={() => setIsEditOpen(false)}
               className="w-full sm:w-auto text-sm sm:text-base"
             >
-              Cancel
+              {t("customer.projects.detail.common.cancel")}
             </Button>
             <Button
               onClick={handleSave}
               className="w-full sm:w-auto text-sm sm:text-base"
             >
-              <Edit className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" /> Save
-              Changes
+              <Edit className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />{" "}
+              {t("customer.projects.detail.editDialog.saveChanges")}
             </Button>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={milestoneEditorOpen} onOpenChange={setMilestoneEditorOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl">
-              Edit Milestones
-            </DialogTitle>
-            <DialogDescription className="text-xs sm:text-sm">
-              Company {milestoneApprovalState.companyApproved ? "✓" : "✗"} ·
-              Provider {milestoneApprovalState.providerApproved ? "✓" : "✗"}
-              {milestoneApprovalState.milestonesLocked && " · LOCKED"}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-3 sm:space-y-4">
-            {milestoneErrors[-1]?.title && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-md">
-                <p className="text-sm text-red-600 font-medium">
-                  {milestoneErrors[-1].title}
-                </p>
-              </div>
-            )}
-            {projectMilestones.map((m, i) => (
-              <Card key={i}>
-                <CardContent className="p-3 sm:p-4 space-y-3">
-                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                    <div className="sm:col-span-1">
-                      <label className="text-xs sm:text-sm font-medium">
-                        Seq
-                      </label>
-                      <Input
-                        type="number"
-                        value={i + 1}
-                        disabled
-                        className="mt-1.5 text-sm sm:text-base"
-                      />
-                    </div>
-                    <div className="sm:col-span-12 md:col-span-4">
-                      <label className="text-xs sm:text-sm font-medium">
-                        Title <span className="text-red-500">*</span>
-                      </label>
-                      <Input
-                        value={m.title}
-                        onChange={(e) => {
-                          updateProjectMilestone(i, { title: e.target.value });
-                          if (milestoneErrors[i]?.title) {
-                            setMilestoneErrors((prev) => ({
-                              ...prev,
-                              [i]: { ...prev[i], title: undefined },
-                            }));
-                          }
-                        }}
-                        className={`mt-1.5 text-sm sm:text-base ${
-                          milestoneErrors[i]?.title
-                            ? "border-red-500 focus-visible:ring-red-500"
-                            : ""
-                        }`}
-                      />
-                      {milestoneErrors[i]?.title && (
-                        <p className="text-xs text-red-600 mt-1">
-                          {milestoneErrors[i].title}
-                        </p>
-                      )}
-                    </div>
-                    <div className="sm:col-span-12 md:col-span-3">
-                      <label className="text-xs sm:text-sm font-medium">
-                        Amount
-                      </label>
-                      <Input
-                        type="number"
-                        value={String(m.amount ?? 0)}
-                        onChange={(e) => {
-                          updateProjectMilestone(i, {
-                            amount: Number(e.target.value),
-                          });
-                          // Clear sum error when amount changes
-                          if (milestoneErrors[-1]) {
-                            setMilestoneErrors((prev) => {
-                              const newErrors = { ...prev };
-                              delete newErrors[-1];
-                              return newErrors;
-                            });
-                          }
-                        }}
-                        className="mt-1.5 text-sm sm:text-base"
-                      />
-                    </div>
-                    <div className="sm:col-span-12 md:col-span-4">
-                      <label className="text-xs sm:text-sm font-medium">
-                        Duration <span className="text-red-500">*</span>
-                      </label>
-                      <div className="flex gap-2 mt-1.5">
-                        <Input
-                          type="number"
-                          min={1}
-                          placeholder="e.g. 1"
-                          value={
-                            (m as Milestone & { durationAmount?: string })
-                              .durationAmount ?? ""
-                          }
-                          onChange={(e) => {
-                            updateProjectMilestone(i, {
-                              durationAmount: e.target.value,
-                              durationUnit:
-                                (m as Milestone & { durationUnit?: string })
-                                  .durationUnit || "",
-                            } as Partial<Milestone>);
-                            if (
-                              milestoneErrors[i]?.durationAmount ||
-                              milestoneErrors[i]?.durationUnit
-                            ) {
-                              setMilestoneErrors((prev) => ({
-                                ...prev,
-                                [i]: {
-                                  ...prev[i],
-                                  durationAmount: undefined,
-                                  durationUnit: undefined,
-                                },
-                              }));
-                            }
-                            if (milestoneErrors[-1]) {
-                              setMilestoneErrors((prev) => {
-                                const next = { ...prev };
-                                delete next[-1];
-                                return next;
-                              });
-                            }
-                          }}
-                          className={`text-sm sm:text-base flex-1 ${
-                            milestoneErrors[i]?.durationAmount
-                              ? "border-red-500 focus-visible:ring-red-500"
-                              : ""
-                          }`}
-                        />
-                        <Select
-                          value={
-                            (m as Milestone & { durationUnit?: string })
-                              .durationUnit || ""
-                          }
-                          onValueChange={(value: "day" | "week" | "month") => {
-                            updateProjectMilestone(i, {
-                              durationAmount:
-                                (m as Milestone & { durationAmount?: string })
-                                  .durationAmount ?? "",
-                              durationUnit: value,
-                            } as Partial<Milestone>);
-                            if (milestoneErrors[i]?.durationUnit) {
-                              setMilestoneErrors((prev) => ({
-                                ...prev,
-                                [i]: { ...prev[i], durationUnit: undefined },
-                              }));
-                            }
-                            if (milestoneErrors[-1]) {
-                              setMilestoneErrors((prev) => {
-                                const next = { ...prev };
-                                delete next[-1];
-                                return next;
-                              });
-                            }
-                          }}
-                        >
-                          <SelectTrigger
-                            className={`text-sm sm:text-base w-[100px] ${
-                              milestoneErrors[i]?.durationUnit
-                                ? "border-red-500 focus:ring-red-500"
-                                : ""
-                            }`}
-                          >
-                            <SelectValue placeholder="Unit" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="day">Day(s)</SelectItem>
-                            <SelectItem value="week">Week(s)</SelectItem>
-                            <SelectItem value="month">Month(s)</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      {(milestoneErrors[i]?.durationAmount ||
-                        milestoneErrors[i]?.durationUnit) && (
-                        <p className="text-xs text-red-600 mt-1">
-                          {milestoneErrors[i].durationAmount ||
-                            milestoneErrors[i].durationUnit}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-xs sm:text-sm font-medium">
-                      Description <span className="text-red-500">*</span>
-                    </label>
-                    <Textarea
-                      rows={2}
-                      value={m.description || ""}
-                      onChange={(e) => {
-                        updateProjectMilestone(i, {
-                          description: e.target.value,
-                        });
-                        if (milestoneErrors[i]?.description) {
-                          setMilestoneErrors((prev) => ({
-                            ...prev,
-                            [i]: { ...prev[i], description: undefined },
-                          }));
-                        }
-                      }}
-                      className={`mt-1.5 text-sm sm:text-base ${
-                        milestoneErrors[i]?.description
-                          ? "border-red-500 focus-visible:ring-red-500"
-                          : ""
-                      }`}
-                    />
-                    {milestoneErrors[i]?.description && (
-                      <p className="text-xs text-red-600 mt-1">
-                        {milestoneErrors[i].description}
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="flex justify-end">
-                    <Button
-                      variant="outline"
-                      onClick={() => removeProjectMilestone(i)}
-                      size="sm"
-                      className="text-xs sm:text-sm"
-                    >
-                      Remove
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-
-            <p className="text-xs text-gray-600 pt-2 border-t border-gray-200 mt-2">
-              If you made any updates or changes to the milestones, save changes first before approving.
-            </p>
-            <div className="flex flex-col sm:flex-row justify-between gap-3 sm:gap-2 pt-2">
-              <Button
-                variant="outline"
-                onClick={addProjectMilestone}
-                size="sm"
-                className="text-xs sm:text-sm w-full sm:w-auto"
-              >
-                + Add Milestone
-              </Button>
-              <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-                <Button
-                  variant="outline"
-                  onClick={handleSaveProjectMilestones}
-                  disabled={savingMilestones}
-                  size="sm"
-                  className="text-xs sm:text-sm w-full sm:w-auto"
-                >
-                  {savingMilestones ? "Saving..." : "Save Changes"}
-                </Button>
-                <Button
-                  onClick={handleApproveProjectMilestones}
-                  disabled={
-                    JSON.stringify(
-                      normalizeMilestoneSequences(projectMilestones),
-                    ) !==
-                    JSON.stringify(
-                      normalizeMilestoneSequences(originalProjectMilestones),
-                    )
-                  }
-                  size="sm"
-                  className="text-xs sm:text-sm w-full sm:w-auto"
-                >
-                  Approve
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter />
         </DialogContent>
       </Dialog>
 
@@ -5251,7 +5641,7 @@ export default function ProjectDetailsPage({
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-500">Amount to pay:</span>
                   <span className="text-lg font-semibold text-green-600">
-                    RM {selectedMilestoneForPayment.amount}
+                    {currency} {selectedMilestoneForPayment.amount}
                   </span>
                 </div>
               </div>
@@ -5308,14 +5698,18 @@ export default function ProjectDetailsPage({
               title: selectedMilestoneForPayment?.title || "",
               amount: selectedMilestoneForPayment?.amount || 0,
               projectId: project?.id || "",
+              currency:
+                typeof project?.currencyCode === "string"
+                  ? project.currencyCode
+                  : "MYR",
             }}
             type={"customer"}
             onSuccess={() => {
               setPaymentDialogOpen(false);
               refreshProjectData();
               toast({
-                title: "Payment successful",
-                description: "Milestone payment has been processed.",
+                title: t("customer.projects.detail.toast.paymentSuccessTitle"),
+                description: t("customer.projects.detail.toast.paymentSuccessDesc"),
               });
             }}
           />
@@ -5339,7 +5733,7 @@ export default function ProjectDetailsPage({
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-500">Amount to pay:</span>
                   <span className="text-lg font-semibold text-green-600">
-                    RM {selectedMilestoneForPayment.amount}
+                    {currency} {selectedMilestoneForPayment.amount}
                   </span>
                 </div>
               </div>
@@ -5388,11 +5782,10 @@ export default function ProjectDetailsPage({
         <DialogContent className="p-5 sm:p-6 max-w-xl">
           <DialogHeader className="space-y-1.5 text-left">
             <DialogTitle className="text-lg sm:text-xl font-semibold tracking-tight">
-              Reject Request
+              {t("customer.projects.detail.rejectDialog.title")}
             </DialogTitle>
             <DialogDescription className="text-sm text-gray-600 leading-relaxed">
-              Please provide a reason for rejecting this request. This will help
-              the provider improve their future proposals.
+              {t("customer.projects.detail.rejectDialog.desc")}
             </DialogDescription>
           </DialogHeader>
 
@@ -5402,11 +5795,13 @@ export default function ProjectDetailsPage({
                 htmlFor="rejectReason"
                 className="text-sm font-semibold text-gray-900 tracking-tight"
               >
-                Reason for rejection
+                {t("customer.projects.detail.rejectDialog.reasonLabel")}
               </Label>
               <Textarea
                 id="rejectReason"
-                placeholder="Please explain why you're rejecting this request..."
+                placeholder={t(
+                  "customer.projects.detail.rejectDialog.placeholder",
+                )}
                 value={rejectReason}
                 onChange={(e) => setRejectReason(e.target.value)}
                 rows={4}
@@ -5421,7 +5816,7 @@ export default function ProjectDetailsPage({
               onClick={() => setRejectDialogOpen(false)}
               className="w-full sm:w-auto text-sm"
             >
-              Cancel
+              {t("customer.projects.detail.common.cancel")}
             </Button>
             <Button
               onClick={() =>
@@ -5436,10 +5831,10 @@ export default function ProjectDetailsPage({
               {processingId === selectedProposalForAction?.id ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Rejecting...
+                  {t("customer.projects.detail.rejectDialog.rejecting")}
                 </>
               ) : (
-                "Reject Request"
+                t("customer.projects.detail.rejectDialog.submit")
               )}
             </Button>
           </DialogFooter>
@@ -5459,12 +5854,15 @@ export default function ProjectDetailsPage({
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto p-5 sm:p-6 text-base">
           <DialogHeader className="space-y-1.5 text-left">
             <DialogTitle className="text-lg sm:text-xl font-semibold tracking-tight">
-              Request Details
+              {t("customer.projects.detail.proposalDetails.title")}
             </DialogTitle>
             <DialogDescription className="text-sm text-gray-600">
-              Detailed information about{" "}
-              {selectedProposalDetails?.provider?.name || "Provider"}&apos;s
-              request
+              {t("customer.projects.detail.proposalDetails.desc", {
+                name:
+                  selectedProposalDetails?.provider?.name ||
+                  selectedProposalDetails?.providerName ||
+                  t("customer.projects.detail.common.providerNameFallback"),
+              })}
             </DialogDescription>
           </DialogHeader>
 
@@ -5500,7 +5898,9 @@ export default function ProjectDetailsPage({
                       <h3 className="text-base sm:text-lg font-semibold text-gray-900 tracking-tight">
                         {selectedProposalDetails.provider?.name ||
                           selectedProposalDetails.providerName ||
-                          "Provider"}
+                          t(
+                            "customer.projects.detail.common.providerNameFallback",
+                          )}
                       </h3>
 
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600 mt-1.5">
@@ -5510,14 +5910,19 @@ export default function ProjectDetailsPage({
                             {selectedProposalDetails.provider?.rating ||
                               selectedProposalDetails.providerRating ||
                               0}{" "}
-                            rating
+                            {t(
+                              "customer.projects.detail.proposalDetails.ratingSuffix",
+                            )}
                           </span>
                         </div>
                       </div>
 
                       {selectedProposalDetails.experience && (
                         <p className="text-sm text-gray-600 mt-2 leading-relaxed">
-                          {selectedProposalDetails.experience} experience
+                          {selectedProposalDetails.experience}{" "}
+                          {t(
+                            "customer.projects.detail.proposalDetails.experienceSuffix",
+                          )}
                         </p>
                       )}
 
@@ -5540,11 +5945,12 @@ export default function ProjectDetailsPage({
                             variant="secondary"
                             className="text-xs leading-tight"
                           >
-                            +
-                            {asArray<string>(
-                              selectedProposalDetails.skills || [],
-                            ).length - 4}{" "}
-                            more
+                            {t("customer.projects.detail.bids.moreSkills", {
+                              n:
+                                asArray<string>(
+                                  selectedProposalDetails.skills || [],
+                                ).length - 4,
+                            })}
                           </Badge>
                         )}
                       </div>
@@ -5564,7 +5970,7 @@ export default function ProjectDetailsPage({
                         className="flex items-center text-sm"
                       >
                         <Eye className="w-4 h-4 mr-1.5" />
-                        View Profile
+                        {t("customer.projects.detail.viewProfile")}
                       </Button>
                     </NextLink>
                   </div>
@@ -5577,7 +5983,7 @@ export default function ProjectDetailsPage({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-5">
                 <div className="space-y-1">
                   <h4 className="text-sm font-semibold text-gray-900 tracking-tight">
-                    Project
+                    {t("customer.projects.detail.proposalDetails.projectHeading")}
                   </h4>
                   <p className="text-sm text-gray-700 leading-relaxed">
                     {selectedProposalDetails.projectTitle || project.title}
@@ -5585,15 +5991,20 @@ export default function ProjectDetailsPage({
                 </div>
                 <div className="space-y-1">
                   <h4 className="text-sm font-semibold text-gray-900 tracking-tight">
-                    Bid Amount
+                    {t(
+                      "customer.projects.detail.proposalDetails.bidAmountHeading",
+                    )}
                   </h4>
                   <p className="text-xl sm:text-2xl font-bold text-green-600">
-                    RM{fmt(selectedProposalDetails.bidAmount || 0)}
+                    {currency}
+                    {fmt(selectedProposalDetails.bidAmount || 0)}
                   </p>
                 </div>
                 <div className="space-y-1">
                   <h4 className="text-sm font-semibold text-gray-900 tracking-tight">
-                    Proposed Timeline
+                    {t(
+                      "customer.projects.detail.proposalDetails.proposedTimelineHeading",
+                    )}
                   </h4>
                   <p className="text-sm text-gray-700 leading-relaxed">
                     {formatTimeline(selectedProposalDetails.proposedTimeline) ||
@@ -5603,22 +6014,21 @@ export default function ProjectDetailsPage({
                             "day",
                           )
                         : null) ||
-                      "—"}
+                      t("customer.projects.detail.milestone.emDash")}
                   </p>
                 </div>
                 <div className="space-y-1">
                   <h4 className="text-sm font-semibold text-gray-900 tracking-tight">
-                    Status
+                    {t("customer.projects.detail.proposalDetails.statusHeading")}
                   </h4>
                   <Badge
                     className={getStatusColor(
                       selectedProposalDetails.status || "pending",
                     )}
                   >
-                    {(selectedProposalDetails.status || "pending")
-                      .charAt(0)
-                      .toUpperCase() +
-                      (selectedProposalDetails.status || "pending").slice(1)}
+                    {getProposalStatusLabel(
+                      selectedProposalDetails.status || "pending",
+                    )}
                   </Badge>
                 </div>
               </div>
@@ -5628,7 +6038,7 @@ export default function ProjectDetailsPage({
               {/* Cover Letter */}
               <div className="space-y-2">
                 <h4 className="text-sm font-semibold text-gray-900 tracking-tight">
-                  Cover Letter
+                  {t("customer.projects.detail.proposalDetails.coverLetter")}
                 </h4>
                 <div className="bg-gray-50/80 p-4 rounded-lg border border-gray-100">
                   <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
@@ -5640,12 +6050,16 @@ export default function ProjectDetailsPage({
               {/* Skills */}
               <div className="space-y-2">
                 <h4 className="text-sm font-semibold text-gray-900 tracking-tight">
-                  Skills
+                  {t("customer.projects.detail.proposalDetails.skillsHeading")}
                 </h4>
                 <div className="flex flex-wrap gap-2">
                   {asArray<string>(selectedProposalDetails.skills || []).map(
                     (skill: string) => (
-                      <Badge key={skill} variant="secondary" className="text-xs">
+                      <Badge
+                        key={skill}
+                        variant="secondary"
+                        className="text-xs"
+                      >
                         {skill}
                       </Badge>
                     ),
@@ -5656,7 +6070,7 @@ export default function ProjectDetailsPage({
               {/* Portfolio */}
               <div className="space-y-2">
                 <h4 className="text-sm font-semibold text-gray-900 tracking-tight">
-                  Portfolio
+                  {t("customer.projects.detail.proposalDetails.portfolioHeading")}
                 </h4>
                 <div className="space-y-1.5">
                   {asArray<string>(selectedProposalDetails.portfolio || []).map(
@@ -5675,7 +6089,9 @@ export default function ProjectDetailsPage({
                   {asArray<string>(selectedProposalDetails.portfolio || [])
                     .length === 0 && (
                     <p className="text-sm text-gray-500">
-                      No portfolio links provided
+                      {t(
+                        "customer.projects.detail.proposalDetails.portfolioEmpty",
+                      )}
                     </p>
                   )}
                 </div>
@@ -5686,7 +6102,9 @@ export default function ProjectDetailsPage({
                 selectedProposalDetails.milestones.length > 0 && (
                   <div className="space-y-3">
                     <h4 className="text-sm font-semibold text-gray-900 tracking-tight">
-                      Proposed Milestones
+                      {t(
+                        "customer.projects.detail.proposalDetails.proposedMilestonesHeading",
+                      )}
                     </h4>
 
                     <div className="space-y-3">
@@ -5715,17 +6133,43 @@ export default function ProjectDetailsPage({
                             idx: number,
                           ) => {
                             const prev = sorted[idx - 1] as
-                              | { daysFromStart?: number }
+                              | { daysFromStart?: number | string }
                               | undefined;
-                            const currDays = m.daysFromStart ?? 0;
-                            const prevDays = prev?.daysFromStart ?? 0;
+                            const currDays = Number(m.daysFromStart ?? 0);
+                            const prevDays = Number(prev?.daysFromStart ?? 0);
                             const durationDays = currDays - prevDays;
-                            const showDuration = durationDays > 0;
-                            const displayText = showDuration
-                              ? `Duration: ${formatDurationDays(durationDays)}`
-                              : m.dueDate
-                                ? `Due: ${new Date(m.dueDate).toLocaleDateString()}`
-                                : "—";
+                            const durationStr =
+                              durationDays > 0
+                                ? t(
+                                    "customer.projects.detail.proposalDetails.durationLine",
+                                    {
+                                      duration:
+                                        formatDurationDays(durationDays),
+                                    },
+                                  )
+                                : "";
+                            const byDayStr =
+                              currDays > 0
+                                ? t(
+                                    "customer.projects.detail.proposalDetails.byDayFromStart",
+                                    { n: currDays },
+                                  )
+                                : "";
+                            const dueStr = m.dueDate
+                              ? t(
+                                  "customer.projects.detail.proposalDetails.dueLine",
+                                  {
+                                    date: new Date(
+                                      m.dueDate,
+                                    ).toLocaleDateString(),
+                                  },
+                                )
+                              : "";
+                            const displayText =
+                              durationStr ||
+                              byDayStr ||
+                              dueStr ||
+                              t("customer.projects.detail.milestone.emDash");
                             return (
                               <Card
                                 key={idx}
@@ -5734,19 +6178,27 @@ export default function ProjectDetailsPage({
                                 <CardContent className="p-4 space-y-2">
                                   <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                                     <div className="flex items-center gap-2 min-w-0">
-                                      <Badge variant="secondary" className="text-xs flex-shrink-0">
+                                      <Badge
+                                        variant="secondary"
+                                        className="text-xs flex-shrink-0"
+                                      >
                                         #{m.order || m.sequence || idx + 1}
                                       </Badge>
                                       <span className="font-medium text-sm text-gray-900 break-words">
-                                        {m.title || "Untitled milestone"}
+                                        {m.title ||
+                                          t(
+                                            "customer.projects.detail.proposalDetails.untitledMilestone",
+                                          )}
                                       </span>
                                     </div>
                                     <div className="text-left sm:text-right flex-shrink-0">
                                       <span className="text-xs text-gray-500 block">
-                                        Amount
+                                        {t(
+                                          "customer.projects.detail.proposalDetails.amountLabel",
+                                        )}
                                       </span>
                                       <span className="text-base font-semibold text-gray-900">
-                                        RM{" "}
+                                        {currency}{" "}
                                         {Number(m.amount || 0).toLocaleString()}
                                       </span>
                                     </div>
@@ -5776,7 +6228,9 @@ export default function ProjectDetailsPage({
                 selectedProposalDetails.attachments.length > 0 && (
                   <div className="space-y-3">
                     <h4 className="text-sm font-semibold text-gray-900 tracking-tight">
-                      Attachments
+                      {t(
+                        "customer.projects.detail.proposalDetails.attachmentsHeading",
+                      )}
                     </h4>
 
                     <div className="space-y-2">
@@ -5818,11 +6272,12 @@ export default function ProjectDetailsPage({
                                         );
                                       } catch (error) {
                                         toastHook({
-                                          title: "Error",
-                                          description: getUserFriendlyErrorMessage(
-                                            error,
-                                            "customer project attachment download",
-                                          ),
+                                          title: t("customer.projects.detail.toast.errorTitle"),
+                                          description:
+                                            getUserFriendlyErrorMessage(
+                                              error,
+                                              "customer project attachment download",
+                                            ),
                                           variant: "destructive",
                                         });
                                       }
@@ -5833,7 +6288,9 @@ export default function ProjectDetailsPage({
                             >
                               {/* Icon circle */}
                               <div className="flex h-9 w-9 flex-none items-center justify-center rounded-md border border-gray-300 bg-gray-100 text-gray-700 text-xs font-medium">
-                                PDF
+                                {t(
+                                  "customer.projects.detail.proposalDetails.fileBadgePdf",
+                                )}
                               </div>
 
                               {/* File info */}
@@ -5842,7 +6299,9 @@ export default function ProjectDetailsPage({
                                   {fileName}
                                 </span>
                                 <span className="text-xs text-gray-500 leading-snug">
-                                  Click to preview / download
+                                  {t(
+                                    "customer.projects.detail.milestone.clickPreviewDownload",
+                                  )}
                                 </span>
                               </div>
 
@@ -5879,14 +6338,14 @@ export default function ProjectDetailsPage({
                   onClick={() => {
                     if (!selectedProposalDetails) return;
                     setProposalDetailsOpen(false);
-                    setSelectedProposalDetails(null);
-                    handleAcceptProposal(selectedProposalDetails);
+                    setAcceptingProposal(selectedProposalDetails);
+                    setAcceptConfirmOpen(true);
                   }}
                   disabled={processingId === selectedProposalDetails?.id}
                   className="w-full sm:w-auto text-sm"
                 >
                   <Check className="w-4 h-4 mr-2" />
-                  Accept
+                  {t("customer.projects.detail.proposalDetails.accept")}
                 </Button>
                 <Button
                   variant="outline"
@@ -5898,7 +6357,7 @@ export default function ProjectDetailsPage({
                   className="w-full sm:w-auto text-sm text-red-600 hover:text-red-700"
                 >
                   <X className="w-4 h-4 mr-2" />
-                  Reject
+                  {t("customer.projects.detail.proposalDetails.reject")}
                 </Button>
               </>
             )}
@@ -5911,45 +6370,155 @@ export default function ProjectDetailsPage({
                 }}
                 className="w-full sm:w-auto text-sm"
               >
-                Close
+                {t("customer.projects.detail.common.close")}
               </Button>
             )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      <Dialog
+        open={acceptConfirmOpen}
+        onOpenChange={(open) => {
+          setAcceptConfirmOpen(open);
+          if (!open) setAcceptingProposal(null);
+        }}
+      >
+        <DialogContent className="max-w-xl sm:max-w-2xl p-5 sm:p-6">
+          <DialogHeader className="space-y-1.5 text-left">
+            <DialogTitle className="text-lg sm:text-xl font-semibold tracking-tight">
+              {t("customer.projects.detail.acceptFreelancer.title")}
+            </DialogTitle>
+            <DialogDescription className="text-xs sm:text-sm text-gray-600">
+              {t("customer.projects.detail.acceptFreelancer.desc")}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 sm:space-y-4">
+            <div className="rounded-md border border-gray-200 bg-gray-50 p-3 sm:p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm sm:text-base font-semibold text-gray-900 truncate">
+                    {acceptingProposal?.provider?.name ||
+                      acceptingProposal?.providerName ||
+                      t(
+                        "customer.projects.detail.acceptFreelancer.selectedProvider",
+                      )}
+                  </p>
+                  <p className="text-xs sm:text-sm text-gray-600 mt-1">
+                    {acceptingProposal?.providerLocation ||
+                      t(
+                        "customer.projects.detail.acceptFreelancer.locationUnknown",
+                      )}
+                  </p>
+                </div>
+                <div className="shrink-0 rounded-md bg-blue-100 text-blue-800 px-2 py-1 text-xs sm:text-sm font-semibold">
+                  {t("customer.projects.detail.acceptFreelancer.aiMatch")}{" "}
+                  {Math.round(acceptingProposal?.matchScore ?? 0)}%
+                </div>
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-2 text-xs sm:text-sm text-gray-700">
+                <p>
+                  <span className="font-medium">
+                    {t("customer.projects.detail.acceptFreelancer.bidLabel")}
+                  </span>{" "}
+                  {currency.toUpperCase()}{" "}
+                  {fmt(acceptingProposal?.bidAmount ?? 0)}
+                </p>
+                <p>
+                  <span className="font-medium">
+                    {t(
+                      "customer.projects.detail.acceptFreelancer.timelineLabel",
+                    )}
+                  </span>{" "}
+                  {acceptingProposal?.proposedTimeline ||
+                    t("customer.projects.detail.milestone.emDash")}
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-md border border-blue-100 bg-blue-50/60 p-3 sm:p-4">
+              <p className="text-xs sm:text-sm font-semibold text-blue-900 mb-1">
+                {t("customer.projects.detail.acceptFreelancer.aiInsight")}
+              </p>
+              <p className="text-xs sm:text-sm text-gray-700 whitespace-pre-wrap">
+                {getBidSummary(
+                  acceptingProposal?.id || "",
+                  acceptingProposal?.aiFitExplanation,
+                  acceptingProposal
+                    ? explanationCache[acceptingProposal.id]
+                    : undefined,
+                )}
+              </p>
+            </div>
+          </div>
+          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end pt-4 mt-2 border-t border-gray-100">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setAcceptConfirmOpen(false);
+                setAcceptingProposal(null);
+              }}
+              disabled={
+                !!acceptingProposal && processingId === acceptingProposal.id
+              }
+              className="w-full sm:w-auto text-sm"
+            >
+              {t("customer.projects.detail.acceptFreelancer.no")}
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!acceptingProposal) return;
+                setAcceptConfirmOpen(false);
+                await handleAcceptProposal(acceptingProposal);
+              }}
+              disabled={
+                !!acceptingProposal && processingId === acceptingProposal.id
+              }
+              className="w-full sm:w-auto text-sm"
+            >
+              {t("customer.projects.detail.acceptFreelancer.yes")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Milestones Dialog (after accepting proposal) */}
       <Dialog open={milestonesOpen} onOpenChange={setMilestonesOpen}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden">
           <DialogHeader>
-            <DialogTitle>Edit Milestones</DialogTitle>
+            <DialogTitle>
+              {t("customer.projects.detail.milestonesModal.title")}
+            </DialogTitle>
             <DialogDescription>
-              Company {milestoneApprovalStateModal.companyApproved ? "✓" : "✗"}{" "}
-              · Provider{" "}
-              {milestoneApprovalStateModal.providerApproved ? "✓" : "✗"}
-              {milestoneApprovalStateModal.milestonesLocked && " · LOCKED"}
+              {t("customer.projects.detail.milestonesModal.statusLine", {
+                company: milestoneApprovalStateModal.companyApproved
+                  ? "✓"
+                  : "✗",
+                provider: milestoneApprovalStateModal.providerApproved
+                  ? "✓"
+                  : "✗",
+                locked: milestoneApprovalStateModal.milestonesLocked
+                  ? ` · ${t("customer.projects.detail.milestones.locked")}`
+                  : "",
+              })}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            {milestoneDraftErrors[-1]?.title && (
-              <div className="p-3 bg-red-50 border border-red-200 rounded-md">
-                <p className="text-sm text-red-600 font-medium">
-                  {milestoneDraftErrors[-1].title}
-                </p>
-              </div>
-            )}
+          <div className="space-y-4 overflow-y-auto pr-1 max-h-[calc(90vh-9rem)]">
             {milestonesDraft.map((m, i) => (
               <Card key={i}>
                 <CardContent className="p-4 space-y-3">
                   <div className="grid md:grid-cols-12 gap-3">
                     <div className="md:col-span-1">
-                      <Label>Seq</Label>
+                      <Label>
+                        {t("customer.projects.detail.milestonesModal.seq")}
+                      </Label>
                       <Input type="number" value={i + 1} disabled />
                     </div>
                     <div className="md:col-span-4">
                       <Label>
-                        Title <span className="text-red-500">*</span>
+                        {t("customer.projects.detail.milestonesModal.titleLabel")}{" "}
+                        <span className="text-red-500">*</span>
                       </Label>
                       <Input
                         value={m.title}
@@ -5977,7 +6546,9 @@ export default function ProjectDetailsPage({
                       )}
                     </div>
                     <div className="md:col-span-3">
-                      <Label>Amount</Label>
+                      <Label>
+                        {t("customer.projects.detail.milestonesModal.amount")}
+                      </Label>
                       <Input
                         type="number"
                         value={String(m.amount ?? 0)}
@@ -6001,13 +6572,18 @@ export default function ProjectDetailsPage({
                     </div>
                     <div className="md:col-span-4">
                       <Label>
-                        Duration <span className="text-red-500">*</span>
+                        {t(
+                          "customer.projects.detail.milestonesModal.durationRequired",
+                        )}{" "}
+                        <span className="text-red-500">*</span>
                       </Label>
                       <div className="flex gap-2 mt-1">
                         <Input
                           type="number"
                           min={1}
-                          placeholder="e.g. 1"
+                          placeholder={t(
+                            "customer.projects.detail.milestonesModal.durationPlaceholder",
+                          )}
                           value={
                             (m as Milestone & { durationAmount?: string })
                               .durationAmount ?? ""
@@ -6078,12 +6654,22 @@ export default function ProjectDetailsPage({
                           <SelectTrigger
                             className={`w-[100px] ${milestoneDraftErrors[i]?.durationUnit ? "border-red-500 focus:ring-red-500" : ""}`}
                           >
-                            <SelectValue placeholder="Unit" />
+                            <SelectValue
+                              placeholder={t(
+                                "customer.projects.detail.milestonesModal.unitPlaceholder",
+                              )}
+                            />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="day">Day(s)</SelectItem>
-                            <SelectItem value="week">Week(s)</SelectItem>
-                            <SelectItem value="month">Month(s)</SelectItem>
+                            <SelectItem value="day">
+                              {t("customer.projects.detail.durationUnit.day")}
+                            </SelectItem>
+                            <SelectItem value="week">
+                              {t("customer.projects.detail.durationUnit.week")}
+                            </SelectItem>
+                            <SelectItem value="month">
+                              {t("customer.projects.detail.durationUnit.month")}
+                            </SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -6098,7 +6684,10 @@ export default function ProjectDetailsPage({
                   </div>
                   <div>
                     <Label>
-                      Description <span className="text-red-500">*</span>
+                      {t(
+                        "customer.projects.detail.milestonesModal.description",
+                      )}{" "}
+                      <span className="text-red-500">*</span>
                     </Label>
                     <Textarea
                       rows={2}
@@ -6138,7 +6727,7 @@ export default function ProjectDetailsPage({
                         );
                       }}
                     >
-                      Remove
+                      {t("customer.projects.detail.milestonesModal.remove")}
                     </Button>
                   </div>
                 </CardContent>
@@ -6146,7 +6735,7 @@ export default function ProjectDetailsPage({
             ))}
 
             <p className="text-xs text-gray-600 pt-2 border-t border-gray-200 mt-2">
-              If you made any updates or changes to the milestones, save changes first before approving.
+              {t("customer.projects.detail.milestonesModal.saveFirstHint")}
             </p>
             <div className="flex justify-between pt-2">
               <Button
@@ -6165,31 +6754,61 @@ export default function ProjectDetailsPage({
                   ] as typeof milestonesDraft);
                 }}
               >
-                + Add Milestone
+                {t("customer.projects.detail.milestonesModal.addMilestone")}
               </Button>
               <div className="flex gap-2">
                 <Button
                   variant="outline"
                   onClick={handleSaveAcceptedMilestones}
-                  disabled={savingMilestonesModal}
+                  disabled={savingMilestonesModal || approvingMilestonesModal}
+                  className="inline-flex items-center justify-center gap-2"
                 >
-                  {savingMilestonesModal ? "Saving..." : "Save Changes"}
+                  {savingMilestonesModal ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                      {t("customer.projects.detail.milestonesModal.saving")}
+                    </>
+                  ) : (
+                    t("customer.projects.detail.milestonesModal.saveChanges")
+                  )}
                 </Button>
-                <Button
-                  onClick={handleApproveAcceptedMilestones}
-                  disabled={
-                    JSON.stringify(
-                      normalizeMilestoneSequences(milestonesDraft),
-                    ) !==
-                    JSON.stringify(
-                      normalizeMilestoneSequences(originalMilestonesDraft),
-                    )
-                  }
-                >
-                  Approve
-                </Button>
+                {!milestoneApprovalStateModal.companyApproved && (
+                  <Button
+                    onClick={handleApproveAcceptedMilestones}
+                    disabled={
+                      savingMilestonesModal ||
+                      approvingMilestonesModal ||
+                      JSON.stringify(
+                        normalizeMilestoneSequences(milestonesDraft),
+                      ) !==
+                        JSON.stringify(
+                          normalizeMilestoneSequences(originalMilestonesDraft),
+                        )
+                    }
+                    className="inline-flex items-center justify-center gap-2"
+                  >
+                    {approvingMilestonesModal ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                        {t(
+                          "customer.projects.detail.milestonesModal.approving",
+                        )}
+                      </>
+                    ) : (
+                      t("customer.projects.detail.milestonesModal.approve")
+                    )}
+                  </Button>
+                )}
               </div>
             </div>
+            {milestoneDraftErrors[-1]?.title && (
+              <div
+                className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700 font-medium"
+                role="alert"
+              >
+                {milestoneDraftErrors[-1].title}
+              </div>
+            )}
           </div>
 
           <DialogFooter />
@@ -6203,10 +6822,11 @@ export default function ProjectDetailsPage({
       >
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-xl">Milestones Submitted</DialogTitle>
+            <DialogTitle className="text-xl">
+              {t("customer.projects.detail.milestonesFinalized.title")}
+            </DialogTitle>
             <DialogDescription>
-              These milestones are now awaiting final confirmation, or have been
-              locked if both sides approved.
+              {t("customer.projects.detail.milestonesFinalized.desc")}
             </DialogDescription>
           </DialogHeader>
 
@@ -6215,12 +6835,18 @@ export default function ProjectDetailsPage({
               <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
               <div>
                 <div className="font-semibold text-gray-900">
-                  Company Approved
+                  {t(
+                    "customer.projects.detail.milestonesFinalized.companyTitle",
+                  )}
                 </div>
                 <div>
                   {milestoneApprovalStateModal.companyApproved
-                    ? "You have approved the milestone plan."
-                    : "You haven't approved yet."}
+                    ? t(
+                        "customer.projects.detail.milestonesFinalized.companyYes",
+                      )
+                    : t(
+                        "customer.projects.detail.milestonesFinalized.companyNo",
+                      )}
                 </div>
               </div>
             </div>
@@ -6235,12 +6861,18 @@ export default function ProjectDetailsPage({
               />
               <div>
                 <div className="font-semibold text-gray-900">
-                  Provider Approved
+                  {t(
+                    "customer.projects.detail.milestonesFinalized.providerTitle",
+                  )}
                 </div>
                 <div>
                   {milestoneApprovalStateModal.providerApproved
-                    ? "Provider approved the milestone plan."
-                    : "Waiting for provider approval."}
+                    ? t(
+                        "customer.projects.detail.milestonesFinalized.providerYes",
+                      )
+                    : t(
+                        "customer.projects.detail.milestonesFinalized.providerNo",
+                      )}
                 </div>
               </div>
             </div>
@@ -6255,16 +6887,22 @@ export default function ProjectDetailsPage({
               />
               <div>
                 <div className="font-semibold text-gray-900">
-                  Locked & Ready
+                  {t(
+                    "customer.projects.detail.milestonesFinalized.lockedTitle",
+                  )}
                 </div>
                 <div>
                   {milestoneApprovalStateModal.milestonesLocked
-                    ? "Milestones are locked. Work can start and payments will follow these milestones."
-                    : "Milestones are not locked yet."}
+                    ? t(
+                        "customer.projects.detail.milestonesFinalized.lockedYes",
+                      )
+                    : t(
+                        "customer.projects.detail.milestonesFinalized.lockedNo",
+                      )}
                 </div>
                 {milestoneApprovalStateModal.milestonesApprovedAt && (
                   <div className="text-xs text-gray-500 mt-1">
-                    Locked at{" "}
+                    {t("customer.projects.detail.milestonesFinalized.lockedAt")}{" "}
                     {new Date(
                       milestoneApprovalStateModal.milestonesApprovedAt,
                     ).toLocaleString()}
@@ -6276,93 +6914,159 @@ export default function ProjectDetailsPage({
 
           <DialogFooter className="pt-4">
             <Button onClick={() => setMilestoneFinalizeOpen(false)}>
-              Done
+              {t("customer.projects.detail.milestonesFinalized.done")}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Dispute Creation Dialog */}
-      <Dialog open={disputeDialogOpen} onOpenChange={setDisputeDialogOpen}>
+      <Dialog
+        open={disputeDialogOpen}
+        onOpenChange={(open) => {
+          setDisputeDialogOpen(open);
+          if (open) {
+            setProjectLevelDisputeAck(false);
+            setSelectedMilestoneForDispute(null);
+          }
+        }}
+      >
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Report Dispute</DialogTitle>
+            <DialogTitle>
+              {t("customer.projects.detail.disputeForm.title")}
+            </DialogTitle>
             <DialogDescription>
-              Report a dispute related to this project. The associated milestone
-              will be frozen until the dispute is resolved.
+              {t("customer.projects.detail.disputeForm.desc")}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             {/* Milestone Selection (if applicable) */}
             {projectMilestones && projectMilestones.length > 0 && (
-              <div>
-                <Label htmlFor="disputeMilestone">
-                  Related Milestone (Optional)
-                </Label>
-                <Select
-                  value={selectedMilestoneForDispute || undefined}
-                  onValueChange={(value) =>
-                    setSelectedMilestoneForDispute(value || null)
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a milestone (optional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {projectMilestones
-                      .filter(
-                        (m: Milestone) =>
-                          m.status !== "APPROVED" && m.status !== "PAID",
-                      )
-                      .map((m: Milestone) => (
-                        <SelectItem key={m.id} value={m.id || ""}>
-                          {m.title} - RM{(m.amount || 0).toLocaleString()} (
-                          {m.status})
-                        </SelectItem>
-                      ))}
-                    {projectMilestones.filter(
-                      (m: Milestone) =>
-                        m.status !== "APPROVED" && m.status !== "PAID",
-                    ).length === 0 && (
-                      <SelectItem value="" disabled>
-                        No milestones available for dispute
-                      </SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-gray-500 mt-1">
-                  If selected, this milestone will be frozen until the dispute
-                  is resolved. Approved or paid milestones cannot be disputed.
-                </p>
+              <div className="space-y-3">
+                {paidMilestonesForDispute.length > 0 ? (
+                  <div>
+                    <Label htmlFor="disputeMilestone">
+                      {t(
+                        "customer.projects.detail.dispute.relatedMilestoneLabel",
+                      )}{" "}
+                      <span className="text-red-500">*</span>
+                    </Label>
+                    <Select
+                      value={selectedMilestoneForDispute || undefined}
+                      onValueChange={(value) => {
+                        setSelectedMilestoneForDispute(value || null);
+                        setProjectLevelDisputeAck(false);
+                      }}
+                    >
+                      <SelectTrigger id="disputeMilestone">
+                        <SelectValue
+                          placeholder={t(
+                            "customer.projects.detail.dispute.placeholderSelectPaid",
+                          )}
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {paidMilestonesForDispute.map((m: Milestone) => (
+                          <SelectItem key={m.id} value={m.id || ""}>
+                            {m.title} - {currency}
+                            {(m.amount || 0).toLocaleString()} (
+                            {getStatusText(m.status || "")})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {t(
+                        "customer.projects.detail.dispute.relatedMilestoneHint",
+                      )}
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                      {t(
+                        "customer.projects.detail.dispute.noPaidMilestonesMessage",
+                      )}
+                    </div>
+                    <div className="flex items-start gap-3 rounded-md border border-gray-200 bg-gray-50/80 p-3">
+                      <Checkbox
+                        id="customerProjectLevelDisputeAck"
+                        checked={projectLevelDisputeAck}
+                        onCheckedChange={(c) => {
+                          const on = c === true;
+                          setProjectLevelDisputeAck(on);
+                          if (on) setSelectedMilestoneForDispute(null);
+                        }}
+                        className="mt-0.5"
+                      />
+                      <div className="space-y-1">
+                        <Label
+                          htmlFor="customerProjectLevelDisputeAck"
+                          className="text-sm font-medium leading-snug cursor-pointer"
+                        >
+                          {t(
+                            "customer.projects.detail.dispute.projectLevelLabel",
+                          )}{" "}
+                          <span className="text-red-500">*</span>
+                        </Label>
+                        <p className="text-xs text-gray-600">
+                          {t(
+                            "customer.projects.detail.dispute.projectLevelHint",
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
             {/* Reason */}
             <div>
               <Label htmlFor="disputeReason">
-                Reason for Dispute <span className="text-red-500">*</span>
+                {t("customer.projects.detail.disputeForm.reasonLabel")}{" "}
+                <span className="text-red-500">*</span>
               </Label>
               <Select value={disputeReason} onValueChange={setDisputeReason}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select a reason" />
+                  <SelectValue
+                    placeholder={t(
+                      "customer.projects.detail.disputeForm.reasonPlaceholder",
+                    )}
+                  />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Missed deadline">
-                    Missed deadline
+                    {t(
+                      "customer.projects.detail.disputeReason.missedDeadline",
+                    )}
                   </SelectItem>
-                  <SelectItem value="Low quality">Low quality</SelectItem>
+                  <SelectItem value="Low quality">
+                    {t("customer.projects.detail.disputeReason.lowQuality")}
+                  </SelectItem>
                   <SelectItem value="Payment not released">
-                    Payment not released
+                    {t(
+                      "customer.projects.detail.disputeReason.paymentNotReleased",
+                    )}
                   </SelectItem>
                   <SelectItem value="Work not completed">
-                    Work not completed
+                    {t(
+                      "customer.projects.detail.disputeReason.workNotCompleted",
+                    )}
                   </SelectItem>
                   <SelectItem value="Communication issues">
-                    Communication issues
+                    {t(
+                      "customer.projects.detail.disputeReason.communicationIssues",
+                    )}
                   </SelectItem>
-                  <SelectItem value="Scope change">Scope change</SelectItem>
-                  <SelectItem value="Other">Other</SelectItem>
+                  <SelectItem value="Scope change">
+                    {t("customer.projects.detail.disputeReason.scopeChange")}
+                  </SelectItem>
+                  <SelectItem value="Other">
+                    {t("customer.projects.detail.disputeReason.other")}
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -6370,11 +7074,14 @@ export default function ProjectDetailsPage({
             {/* Description */}
             <div>
               <Label htmlFor="disputeDescription">
-                Detailed Description <span className="text-red-500">*</span>
+                {t("customer.projects.detail.disputeForm.descriptionLabel")}{" "}
+                <span className="text-red-500">*</span>
               </Label>
               <Textarea
                 id="disputeDescription"
-                placeholder="Please provide a detailed description of the dispute..."
+                placeholder={t(
+                  "customer.projects.detail.disputeForm.descriptionPlaceholder",
+                )}
                 value={disputeDescription}
                 onChange={(e) => setDisputeDescription(e.target.value)}
                 rows={6}
@@ -6382,31 +7089,34 @@ export default function ProjectDetailsPage({
               />
             </div>
 
-            {/* Contested Amount */}
-            <div>
-              <Label htmlFor="disputeContestedAmount">
-                Contested Amount (RM)
-              </Label>
-              <Input
-                id="disputeContestedAmount"
-                type="number"
-                placeholder="0.00"
-                value={disputeContestedAmount}
-                onChange={(e) => setDisputeContestedAmount(e.target.value)}
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Optional: Specify the amount in dispute if applicable.
+            <div className="rounded-md border border-gray-200 bg-gray-50/80 px-3 py-2.5 text-sm">
+              <span className="text-gray-600">
+                {t("customer.projects.detail.disputeForm.contestedAmount", {
+                  currency,
+                })}
+              </span>
+              <span className="font-semibold text-gray-900">
+                {reportDisputeContestedAmount.toLocaleString()}
+              </span>
+              <p className="text-xs text-gray-500 mt-1.5">
+                {t("customer.projects.detail.disputeForm.contestedHint", {
+                  currency,
+                })}
               </p>
             </div>
 
             {/* Suggested Resolution */}
             <div>
               <Label htmlFor="disputeSuggestedResolution">
-                Suggested Resolution
+                {t(
+                  "customer.projects.detail.disputeForm.suggestedResolution",
+                )}
               </Label>
               <Textarea
                 id="disputeSuggestedResolution"
-                placeholder="What resolution would you like to see? (Optional)"
+                placeholder={t(
+                  "customer.projects.detail.disputeForm.suggestedPlaceholder",
+                )}
                 value={disputeSuggestedResolution}
                 onChange={(e) => setDisputeSuggestedResolution(e.target.value)}
                 rows={4}
@@ -6415,7 +7125,11 @@ export default function ProjectDetailsPage({
 
             {/* Attachments */}
             <div>
-              <Label htmlFor="disputeAttachments">Attachments (Optional)</Label>
+              <Label htmlFor="disputeAttachments">
+                {t(
+                  "customer.projects.detail.disputeForm.attachmentsOptional",
+                )}
+              </Label>
               <Input
                 id="disputeAttachments"
                 type="file"
@@ -6425,8 +7139,7 @@ export default function ProjectDetailsPage({
                 className="mt-1"
               />
               <p className="text-xs text-gray-500 mt-1">
-                Supported: PDF, DOC, DOCX, XLS, XLSX, ZIP, TXT, JPG, PNG (Max
-                10MB per file)
+                {t("customer.projects.detail.disputeForm.supportedTypes")}
               </p>
               {disputeAttachments.length > 0 && (
                 <div className="mt-2 space-y-2">
@@ -6461,33 +7174,34 @@ export default function ProjectDetailsPage({
                 setDisputeDialogOpen(false);
                 setDisputeReason("");
                 setDisputeDescription("");
-                setDisputeContestedAmount("");
                 setDisputeSuggestedResolution("");
                 setDisputeAttachments([]);
                 setSelectedMilestoneForDispute(null);
+                setProjectLevelDisputeAck(false);
               }}
               disabled={creatingDispute}
             >
-              Cancel
+              {t("customer.projects.detail.common.cancel")}
             </Button>
             <Button
               onClick={handleCreateDispute}
               disabled={
                 creatingDispute ||
                 !disputeReason.trim() ||
-                !disputeDescription.trim()
+                !disputeDescription.trim() ||
+                disputeMilestoneSubmitBlocked
               }
               className="bg-red-600 hover:bg-red-700"
             >
               {creatingDispute ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Submitting...
+                  {t("customer.projects.detail.disputeForm.submitting")}
                 </>
               ) : (
                 <>
                   <AlertCircle className="w-4 h-4 mr-2" />
-                  Submit Dispute
+                  {t("customer.projects.detail.disputeForm.submit")}
                 </>
               )}
             </Button>
@@ -6502,11 +7216,51 @@ export default function ProjectDetailsPage({
       >
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Dispute Details</DialogTitle>
+            <DialogTitle>
+              {t("customer.projects.detail.viewDispute.title")}
+            </DialogTitle>
             <DialogDescription>
-              View dispute information and status
+              {projectDisputes.length > 1
+                ? t("customer.projects.detail.viewDisputesHint")
+                : t("customer.projects.detail.viewDisputeDesc")}
             </DialogDescription>
           </DialogHeader>
+
+          {projectDisputes.length > 1 && (
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">
+                {t("customer.projects.detail.disputeRecordSelect")}
+              </Label>
+              <Select
+                value={(currentDispute?.id as string) || ""}
+                onValueChange={(id) => {
+                  const d = projectDisputes.find((x) => x.id === id);
+                  if (d) setCurrentDispute(d);
+                }}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue
+                    placeholder={t(
+                      "customer.projects.detail.disputeRecordSelect",
+                    )}
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {projectDisputes.map((d, idx) => (
+                    <SelectItem key={String(d.id)} value={String(d.id)}>
+                      #{projectDisputes.length - idx} ·{" "}
+                      {getDisputeStatusLabel(String(d.status || ""))} ·{" "}
+                      {d.createdAt
+                        ? new Date(
+                            d.createdAt as string | number | Date,
+                          ).toLocaleDateString()
+                        : t("customer.projects.detail.viewDispute.unknown")}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {currentDispute && (
             <div className="space-y-6">
@@ -6515,20 +7269,20 @@ export default function ProjectDetailsPage({
                 <Badge
                   className={getDisputeStatusColor(currentDispute.status || "")}
                 >
-                  {currentDispute.status?.replace("_", " ") || "Unknown"}
+                  {getDisputeStatusLabel(currentDispute.status || "")}
                 </Badge>
                 <div className="text-sm text-gray-500">
-                  Created:{" "}
+                  {t("customer.projects.detail.viewDispute.created")}{" "}
                   {currentDispute.createdAt
                     ? new Date(
                         currentDispute.createdAt as string | number | Date,
                       ).toLocaleDateString()
-                    : "Unknown"}
+                    : t("customer.projects.detail.viewDispute.unknown")}
                   {currentDispute.updatedAt &&
                     currentDispute.updatedAt !== currentDispute.createdAt && (
                       <>
                         {" "}
-                        • Updated:{" "}
+                        • {t("customer.projects.detail.viewDispute.updated")}{" "}
                         {new Date(
                           currentDispute.updatedAt as string | number | Date,
                         ).toLocaleDateString()}
@@ -6540,18 +7294,26 @@ export default function ProjectDetailsPage({
               {/* Dispute Information */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Dispute Information</CardTitle>
+                  <CardTitle>
+                    {t("customer.projects.detail.viewDispute.infoTitle")}
+                  </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div>
                     <Label className="text-sm font-medium text-gray-500">
-                      Reason
+                      {t("customer.projects.detail.viewDispute.reason")}
                     </Label>
-                    <p className="mt-1">{currentDispute.reason || "N/A"}</p>
+                    <p className="mt-1">
+                      {currentDispute.reason
+                        ? translateDisputeReason(currentDispute.reason)
+                        : t("customer.projects.detail.viewDispute.notApplicable")}
+                    </p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-500">
-                      Description & Updates
+                      {t(
+                        "customer.projects.detail.viewDispute.descriptionUpdates",
+                      )}
                     </Label>
                     <div className="mt-2 space-y-3">
                       {(() => {
@@ -6570,16 +7332,22 @@ export default function ProjectDetailsPage({
                                 <Avatar className="w-6 h-6">
                                   <AvatarFallback>
                                     {currentDispute.raisedBy?.name?.charAt(0) ||
-                                      "U"}
+                                      t(
+                                        "customer.projects.detail.viewDispute.unknownUser",
+                                      ).charAt(0)}
                                   </AvatarFallback>
                                 </Avatar>
                                 <div>
                                   <p className="text-xs font-semibold text-gray-900">
                                     {currentDispute.raisedBy?.name ||
-                                      "Unknown User"}
+                                      t(
+                                        "customer.projects.detail.viewDispute.unknownUser",
+                                      )}
                                   </p>
                                   <p className="text-xs text-gray-500">
-                                    Original dispute •{" "}
+                                    {t(
+                                      "customer.projects.detail.viewDispute.originalDisputeMeta",
+                                    )}{" "}
                                     {currentDispute.createdAt
                                       ? new Date(
                                           currentDispute.createdAt as
@@ -6587,7 +7355,9 @@ export default function ProjectDetailsPage({
                                             | number
                                             | Date,
                                         ).toLocaleString()
-                                      : "Unknown"}
+                                      : t(
+                                          "customer.projects.detail.viewDispute.unknown",
+                                        )}
                                   </p>
                                 </div>
                               </div>
@@ -6625,34 +7395,52 @@ export default function ProjectDetailsPage({
                                       project?.customer?.id === userIdOrName
                                     ) {
                                       userName =
-                                        project?.customer?.name || "Customer";
+                                        project?.customer?.name ||
+                                        t(
+                                          "customer.projects.detail.viewDispute.roleCustomer",
+                                        );
                                     } else if (
                                       project?.provider?.id === userIdOrName
                                     ) {
                                       userName =
-                                        project?.provider?.name || "Provider";
+                                        project?.provider?.name ||
+                                        t(
+                                          "customer.projects.detail.common.providerNameFallback",
+                                        );
                                     } else if (
                                       currentDispute?.raisedBy?.id ===
                                       userIdOrName
                                     ) {
                                       userName =
                                         currentDispute?.raisedBy?.name ||
-                                        "Unknown User";
+                                        t(
+                                          "customer.projects.detail.viewDispute.unknownUser",
+                                        );
                                     } else {
-                                      userName = "Unknown User";
+                                      userName = t(
+                                        "customer.projects.detail.viewDispute.unknownUser",
+                                      );
                                     }
-                                    updateDate = "Unknown Date";
+                                    updateDate = t(
+                                      "customer.projects.detail.viewDispute.unknownDate",
+                                    );
                                     updateContent = content;
                                   } else {
                                     userName = userIdOrName;
-                                    updateDate = "Unknown Date";
+                                    updateDate = t(
+                                      "customer.projects.detail.viewDispute.unknownDate",
+                                    );
                                     updateContent = content;
                                   }
                                 } else {
                                   // Fallback: treat entire update as content
                                   updateContent = update;
-                                  userName = "Unknown User";
-                                  updateDate = "Unknown Date";
+                                  userName = t(
+                                    "customer.projects.detail.viewDispute.unknownUser",
+                                  );
+                                  updateDate = t(
+                                    "customer.projects.detail.viewDispute.unknownDate",
+                                  );
                                 }
                               }
 
@@ -6688,14 +7476,26 @@ export default function ProjectDetailsPage({
                                           className="text-[10px] px-1.5 py-0"
                                         >
                                           {isCustomer
-                                            ? "Customer"
+                                            ? t(
+                                                "customer.projects.detail.viewDispute.roleCustomer",
+                                              )
                                             : isProvider
-                                              ? "Provider"
-                                              : "User"}
+                                              ? t(
+                                                  "customer.projects.detail.viewDispute.roleProvider",
+                                                )
+                                              : t(
+                                                  "customer.projects.detail.viewDispute.roleUser",
+                                                )}
                                         </Badge>
                                       </div>
                                       <p className="text-xs text-gray-500">
-                                        Update #{idx + 1} • {updateDate}
+                                        {t(
+                                          "customer.projects.detail.viewDispute.updateMetaLine",
+                                          {
+                                            n: idx + 1,
+                                            date: updateDate,
+                                          },
+                                        )}
                                       </p>
                                     </div>
                                   </div>
@@ -6714,10 +7514,13 @@ export default function ProjectDetailsPage({
                   typeof currentDispute.contestedAmount === "number" ? (
                     <div>
                       <Label className="text-sm font-medium text-gray-500">
-                        Contested Amount
+                        {t(
+                          "customer.projects.detail.viewDispute.contestedAmount",
+                        )}
                       </Label>
                       <p className="mt-1 font-medium">
-                        RM{currentDispute.contestedAmount.toLocaleString()}
+                        {currency}
+                        {currentDispute.contestedAmount.toLocaleString()}
                       </p>
                     </div>
                   ) : null}
@@ -6725,7 +7528,9 @@ export default function ProjectDetailsPage({
                   typeof currentDispute.suggestedResolution === "string" ? (
                     <div>
                       <Label className="text-sm font-medium text-gray-500">
-                        Suggested Resolution
+                        {t(
+                          "customer.projects.detail.viewDispute.suggestedResolution",
+                        )}
                       </Label>
                       <p className="mt-1 whitespace-pre-wrap">
                         {currentDispute.suggestedResolution}
@@ -6737,7 +7542,9 @@ export default function ProjectDetailsPage({
                   currentDispute.milestone !== null ? (
                     <div>
                       <Label className="text-sm font-medium text-gray-500">
-                        Related Milestone
+                        {t(
+                          "customer.projects.detail.viewDispute.relatedMilestone",
+                        )}
                       </Label>
                       <p className="mt-1">
                         {(
@@ -6745,8 +7552,8 @@ export default function ProjectDetailsPage({
                             title?: string;
                             amount?: number;
                           }
-                        ).title || "Unknown"}{" "}
-                        - RM
+                        ).title || t("customer.projects.detail.viewDispute.unknown")}{" "}
+                        - {currency}
                         {typeof (
                           currentDispute.milestone as { amount?: number }
                         ).amount === "number"
@@ -6767,7 +7574,9 @@ export default function ProjectDetailsPage({
                   <Card className="border-purple-200 bg-purple-50">
                     <CardHeader>
                       <CardTitle className="text-purple-800">
-                        Admin Resolution Notes
+                        {t(
+                          "customer.projects.detail.viewDispute.adminNotesTitle",
+                        )}
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
@@ -6787,18 +7596,33 @@ export default function ProjectDetailsPage({
                             <div className="flex items-center gap-2 mb-2">
                               <Avatar className="w-6 h-6">
                                 <AvatarFallback className="bg-purple-100 text-purple-700">
-                                  {note.adminName?.charAt(0) || "A"}
+                                  {note.adminName?.charAt(0) ||
+                                    t(
+                                      "customer.projects.detail.viewDispute.adminFallback",
+                                    ).charAt(0)}
                                 </AvatarFallback>
                               </Avatar>
                               <div>
                                 <p className="text-sm font-semibold text-gray-900">
-                                  Resolution Note #{index + 1}
+                                  {t(
+                                    "customer.projects.detail.viewDispute.resolutionNoteN",
+                                    { n: index + 1 },
+                                  )}
                                 </p>
                                 <p className="text-xs text-gray-500">
-                                  By {note.adminName || "Admin"} •{" "}
+                                  {t(
+                                    "customer.projects.detail.viewDispute.byAdmin",
+                                  )}{" "}
+                                  {note.adminName ||
+                                    t(
+                                      "customer.projects.detail.viewDispute.adminFallback",
+                                    )}{" "}
+                                  •{" "}
                                   {note.createdAt
                                     ? new Date(note.createdAt).toLocaleString()
-                                    : "Unknown"}
+                                    : t(
+                                        "customer.projects.detail.viewDispute.unknown",
+                                      )}
                                 </p>
                               </div>
                             </div>
@@ -6820,7 +7644,9 @@ export default function ProjectDetailsPage({
                   <Card className="border-green-200 bg-green-50">
                     <CardHeader>
                       <CardTitle className="text-green-800">
-                        Admin Resolution
+                        {t(
+                          "customer.projects.detail.viewDispute.adminResolutionTitle",
+                        )}
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
@@ -6837,19 +7663,32 @@ export default function ProjectDetailsPage({
                 currentDispute.attachments.length > 0 && (
                   <Card>
                     <CardHeader>
-                      <CardTitle>Attachments</CardTitle>
+                      <CardTitle>
+                        {t(
+                          "customer.projects.detail.viewDispute.attachmentsTitle",
+                        )}
+                      </CardTitle>
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-2">
                         {(currentDispute.attachments as unknown[]).map(
                           (url: unknown, index: number) => {
+                            const unknownUserLabel = t(
+                              "customer.projects.detail.viewDispute.unknownUser",
+                            );
+                            const unknownDateLabel = t(
+                              "customer.projects.detail.viewDispute.unknownDate",
+                            );
                             const urlStr =
                               typeof url === "string" ? url : String(url);
                             // Extract filename from path
                             const normalized = urlStr.replace(/\\/g, "/");
                             const filename =
                               normalized.split("/").pop() ||
-                              `Attachment ${index + 1}`;
+                              t(
+                                "customer.projects.detail.viewDispute.attachmentFallback",
+                                { n: index + 1 },
+                              );
                             // Remove timestamp prefix if present (format: timestamp_filename.ext)
                             const cleanFilename = filename.replace(/^\d+_/, "");
 
@@ -6862,8 +7701,8 @@ export default function ProjectDetailsPage({
                                 "g",
                               ),
                             );
-                            let uploadedBy = "Unknown User";
-                            let uploadedAt = "Unknown Date";
+                            let uploadedBy = unknownUserLabel;
+                            let uploadedAt = unknownDateLabel;
 
                             if (attachmentMetadataMatch) {
                               // Find matching metadata for this file
@@ -6881,14 +7720,14 @@ export default function ProjectDetailsPage({
 
                             // Also check if it's from the original dispute creator
                             if (
-                              uploadedBy === "Unknown User" &&
+                              uploadedBy === unknownUserLabel &&
                               index === 0 &&
                               Array.isArray(currentDispute.attachments) &&
                               currentDispute.attachments.length === 1
                             ) {
                               uploadedBy =
                                 (currentDispute.raisedBy?.name as string) ||
-                                "Unknown User";
+                                unknownUserLabel;
                               uploadedAt = currentDispute.createdAt
                                 ? new Date(
                                     currentDispute.createdAt as
@@ -6896,7 +7735,7 @@ export default function ProjectDetailsPage({
                                       | number
                                       | Date,
                                   ).toLocaleString()
-                                : "Unknown Date";
+                                : unknownDateLabel;
                             }
 
                             return (
@@ -6911,7 +7750,13 @@ export default function ProjectDetailsPage({
                                       {cleanFilename}
                                     </p>
                                     <p className="text-xs text-gray-500">
-                                      Uploaded by {uploadedBy} • {uploadedAt}
+                                      {t(
+                                        "customer.projects.detail.viewDispute.uploadedByLine",
+                                        {
+                                          name: uploadedBy,
+                                          date: uploadedAt,
+                                        },
+                                      )}
                                     </p>
                                   </div>
                                 </div>
@@ -6951,11 +7796,12 @@ export default function ProjectDetailsPage({
                                                 );
                                               } catch (error) {
                                                 toastHook({
-                                                  title: "Error",
-                                                  description: getUserFriendlyErrorMessage(
-                                                    error,
-                                                    "customer project attachment download",
-                                                  ),
+                                                  title: t("customer.projects.detail.toast.errorTitle"),
+                                                  description:
+                                                    getUserFriendlyErrorMessage(
+                                                      error,
+                                                      "customer project attachment download",
+                                                    ),
                                                   variant: "destructive",
                                                 });
                                               }
@@ -6965,7 +7811,9 @@ export default function ProjectDetailsPage({
                                     >
                                       <Button variant="outline" size="sm">
                                         <Download className="w-4 h-4 mr-2" />
-                                        Download
+                                        {t(
+                                          "customer.projects.detail.viewDispute.download",
+                                        )}
                                       </Button>
                                     </a>
                                   );
@@ -6979,24 +7827,35 @@ export default function ProjectDetailsPage({
                   </Card>
                 )}
 
-              {/* Update Dispute (if not CLOSED and not RESOLVED) */}
-              {currentDispute.status !== "CLOSED" &&
+              {activeDispute &&
+                currentDispute.id === activeDispute.id &&
+                currentDispute.status !== "CLOSED" &&
                 currentDispute.status !== "RESOLVED" && (
                   <Card>
                     <CardHeader>
-                      <CardTitle>Add Update</CardTitle>
+                      <CardTitle>
+                        {t(
+                          "customer.projects.detail.viewDispute.addUpdateTitle",
+                        )}
+                      </CardTitle>
                       <CardDescription>
-                        Add additional notes or evidence to your dispute
+                        {t(
+                          "customer.projects.detail.viewDispute.addUpdateDesc",
+                        )}
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <div>
                         <Label htmlFor="disputeAdditionalNotes">
-                          Additional Notes
+                          {t(
+                            "customer.projects.detail.viewDispute.additionalNotes",
+                          )}
                         </Label>
                         <Textarea
                           id="disputeAdditionalNotes"
-                          placeholder="Add any additional information or updates..."
+                          placeholder={t(
+                            "customer.projects.detail.viewDispute.additionalNotesPlaceholder",
+                          )}
                           value={disputeAdditionalNotes}
                           onChange={(e) =>
                             setDisputeAdditionalNotes(e.target.value)
@@ -7006,7 +7865,9 @@ export default function ProjectDetailsPage({
                       </div>
                       <div>
                         <Label htmlFor="disputeUpdateAttachments">
-                          Additional Attachments
+                          {t(
+                            "customer.projects.detail.viewDispute.additionalAttachments",
+                          )}
                         </Label>
                         <Input
                           id="disputeUpdateAttachments"
@@ -7049,12 +7910,16 @@ export default function ProjectDetailsPage({
                         {updatingDispute ? (
                           <>
                             <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            Updating...
+                            {t(
+                              "customer.projects.detail.viewDispute.updating",
+                            )}
                           </>
                         ) : (
                           <>
                             <Send className="w-4 h-4 mr-2" />
-                            Add Update
+                            {t(
+                              "customer.projects.detail.viewDispute.addUpdateButton",
+                            )}
                           </>
                         )}
                       </Button>
@@ -7062,17 +7927,16 @@ export default function ProjectDetailsPage({
                   </Card>
                 )}
 
-              {/* CLOSED or RESOLVED Dispute Notice */}
               {(currentDispute.status === "CLOSED" ||
                 currentDispute.status === "RESOLVED") && (
-                <Card className="border-red-200 bg-red-50">
+                <Card className="border-amber-200 bg-amber-50">
                   <CardContent className="pt-6">
-                    <div className="flex items-center gap-2 text-red-800">
-                      <AlertCircle className="w-5 h-5" />
-                      <p className="font-medium">
+                    <div className="flex items-start gap-2 text-amber-900">
+                      <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                      <p className="font-medium text-sm leading-relaxed">
                         {currentDispute.status === "CLOSED"
-                          ? "This dispute is closed. Project work has been frozen and no further updates are allowed."
-                          : "This dispute has been resolved. Project completed peacefully. No further updates are allowed."}
+                          ? t("customer.projects.detail.disputeClosedNotice")
+                          : t("customer.projects.detail.disputeResolvedNotice")}
                       </p>
                     </div>
                   </CardContent>
@@ -7086,11 +7950,11 @@ export default function ProjectDetailsPage({
               variant="outline"
               onClick={() => setViewDisputeDialogOpen(false)}
             >
-              Close
+              {t("customer.projects.detail.common.close")}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </CustomerLayout>
+    </>
   );
 }

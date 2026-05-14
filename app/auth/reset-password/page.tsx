@@ -18,10 +18,12 @@ import {
 } from "@/components/ui/card";
 import { Lock, Eye, EyeOff, ArrowLeft } from "lucide-react";
 import { getUserFriendlyErrorMessage } from "@/lib/errors";
+import { useI18n } from "@/contexts/I18nProvider";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
 function ResetPasswordForm() {
+  const { t } = useI18n();
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get("token");
@@ -38,11 +40,11 @@ function ResetPasswordForm() {
     setError("");
 
     if (password.length < 8) {
-      setError("Password must be at least 8 characters");
+      setError(t("auth.resetPassword.errorMinLength"));
       return;
     }
     if (password !== confirmPassword) {
-      setError("Passwords do not match");
+      setError(t("auth.resetPassword.errorMismatch"));
       return;
     }
 
@@ -58,7 +60,7 @@ function ResetPasswordForm() {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        throw new Error(data.error || "Failed to reset password. The link may have expired.");
+        throw new Error(data.error || t("auth.resetPassword.errorApi"));
       }
 
       setSuccess(true);
@@ -75,21 +77,21 @@ function ResetPasswordForm() {
       <Card className="bg-white/80 backdrop-blur-sm border-white/20 shadow-xl">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-bold text-gray-900">
-            Invalid link
+            {t("auth.resetPassword.invalidTitle")}
           </CardTitle>
           <CardDescription className="text-gray-600">
-            This reset link is missing or invalid. Please request a new password reset.
+            {t("auth.resetPassword.invalidDesc")}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Link href="/auth/forgot-password">
             <Button className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700">
-              Request new link
+              {t("auth.resetPassword.requestNew")}
             </Button>
           </Link>
           <div className="mt-4 text-center">
             <Link href="/auth/login" className="text-sm text-blue-600 hover:underline">
-              Back to sign in
+              {t("auth.resetPassword.backToSignIn")}
             </Link>
           </div>
         </CardContent>
@@ -102,8 +104,8 @@ function ResetPasswordForm() {
       <Card className="bg-white/80 backdrop-blur-sm border-white/20 shadow-xl">
         <CardContent className="pt-6">
           <div className="p-4 bg-green-50 border border-green-200 rounded-lg text-center">
-            <p className="text-green-800 font-medium">Password updated successfully.</p>
-            <p className="text-green-700 text-sm mt-1">Redirecting you to sign in...</p>
+            <p className="text-green-800 font-medium">{t("auth.resetPassword.successTitle")}</p>
+            <p className="text-green-700 text-sm mt-1">{t("auth.resetPassword.successRedirect")}</p>
           </div>
         </CardContent>
       </Card>
@@ -114,10 +116,10 @@ function ResetPasswordForm() {
     <Card className="bg-white/80 backdrop-blur-sm border-white/20 shadow-xl">
       <CardHeader className="text-center">
         <CardTitle className="text-2xl font-bold text-gray-900">
-          Set new password
+          {t("auth.resetPassword.title")}
         </CardTitle>
         <CardDescription className="text-gray-600">
-          Enter your new password below. It must be at least 8 characters.
+          {t("auth.resetPassword.description")}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -128,7 +130,7 @@ function ResetPasswordForm() {
         )}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="password">New password</Label>
+            <Label htmlFor="password">{t("auth.resetPassword.newPasswordLabel")}</Label>
             <div className="relative">
               <span className="absolute left-3 top-3 text-gray-400">
                 <Lock className="h-4 w-4" />
@@ -137,7 +139,7 @@ function ResetPasswordForm() {
                 id="password"
                 name="password"
                 type={showPassword ? "text" : "password"}
-                placeholder="Enter new password"
+                placeholder={t("auth.resetPassword.newPasswordPlaceholder")}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="pl-10 pr-10 bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
@@ -154,7 +156,7 @@ function ResetPasswordForm() {
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="confirmPassword">Confirm password</Label>
+            <Label htmlFor="confirmPassword">{t("auth.resetPassword.confirmLabel")}</Label>
             <div className="relative">
               <span className="absolute left-3 top-3 text-gray-400">
                 <Lock className="h-4 w-4" />
@@ -163,7 +165,7 @@ function ResetPasswordForm() {
                 id="confirmPassword"
                 name="confirmPassword"
                 type={showPassword ? "text" : "password"}
-                placeholder="Confirm new password"
+                placeholder={t("auth.resetPassword.confirmPlaceholder")}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className="pl-10 bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
@@ -184,7 +186,7 @@ function ResetPasswordForm() {
               {isLoading ? (
                 <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto block" />
               ) : (
-                "Reset password"
+                t("auth.resetPassword.submit")
               )}
             </Button>
           </motion.div>
@@ -195,7 +197,7 @@ function ResetPasswordForm() {
             className="text-sm text-gray-600 hover:text-blue-600 inline-flex items-center gap-1"
           >
             <ArrowLeft className="h-3 w-3" />
-            Back to sign in
+            {t("auth.resetPassword.backToSignIn")}
           </Link>
         </div>
       </CardContent>
@@ -204,6 +206,7 @@ function ResetPasswordForm() {
 }
 
 export default function ResetPasswordPage() {
+  const { t } = useI18n();
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 flex items-center justify-center p-6 relative overflow-hidden">
       <motion.div
@@ -227,13 +230,13 @@ export default function ResetPasswordPage() {
           <Link href="/" className="inline-flex items-center space-x-2 group">
             <Image
               src="/logo.png"
-              alt="TechConnex"
+              alt={t("auth.logoAlt")}
               width={40}
               height={40}
               className="h-10 w-10 rounded-xl object-contain"
             />
             <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-              Techconnex
+              {t("auth.brandName")}
             </span>
           </Link>
         </div>
@@ -241,7 +244,7 @@ export default function ResetPasswordPage() {
         <Suspense fallback={
           <Card className="bg-white/80 backdrop-blur-sm border-white/20 shadow-xl">
             <CardContent className="py-8 text-center text-gray-500">
-              Loading...
+              {t("auth.resetPassword.loading")}
             </CardContent>
           </Card>
         }>

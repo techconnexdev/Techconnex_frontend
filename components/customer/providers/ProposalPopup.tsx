@@ -9,6 +9,7 @@ import { Loader2, X, FileText } from "lucide-react";
 import io from "socket.io-client";
 import { useToast } from "@/hooks/use-toast";
 import { getUserFriendlyErrorMessage } from "@/lib/errors";
+import { useI18n } from "@/contexts/I18nProvider";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -41,6 +42,7 @@ export default function ProposalPopup({
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
   const { toast } = useToast();
+  const { t } = useI18n();
 
   const getUserAndToken = () => {
     if (typeof window === "undefined") return { userId: "", token: "" };
@@ -164,7 +166,7 @@ export default function ProposalPopup({
         socket.close();
         setSending(false);
         toast({
-          title: "Error",
+          title: t("customer.providers.toast.errorTitle"),
           description: getUserFriendlyErrorMessage(
             new Error("Timeout"),
             "customer provider proposal send",
@@ -189,7 +191,7 @@ export default function ProposalPopup({
           setMessage("");
         } else {
           toast({
-            title: "Error",
+            title: t("customer.providers.toast.errorTitle"),
             description: getUserFriendlyErrorMessage(
               undefined,
               "customer provider proposal send",
@@ -225,7 +227,7 @@ export default function ProposalPopup({
           setMessage("");
         } else {
           toast({
-            title: "Error",
+            title: t("customer.providers.toast.errorTitle"),
             description: getUserFriendlyErrorMessage(
               undefined,
               "customer provider proposal send",
@@ -235,7 +237,7 @@ export default function ProposalPopup({
         }
       } catch (httpError) {
         toast({
-          title: "Error",
+          title: t("customer.providers.toast.errorTitle"),
           description: getUserFriendlyErrorMessage(
             httpError,
             "customer provider proposal send",
@@ -259,7 +261,9 @@ export default function ProposalPopup({
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <Card className="w-full max-w-2xl max-h-[90vh] overflow-hidden">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <CardTitle>Request Proposal from {providerName}</CardTitle>
+          <CardTitle>
+            {t("customer.providers.proposal.title", { name: providerName })}
+          </CardTitle>
           <Button variant="ghost" size="icon" onClick={handleClose}>
             <X className="w-4 h-4" />
           </Button>
@@ -268,7 +272,9 @@ export default function ProposalPopup({
         <CardContent className="space-y-4 overflow-y-auto">
           {/* Project Selection */}
           <div>
-            <h3 className="font-medium mb-3">Select a Project</h3>
+            <h3 className="font-medium mb-3">
+              {t("customer.providers.proposal.selectProject")}
+            </h3>
             {loading ? (
               <div className="flex justify-center py-4">
                 <Loader2 className="w-6 h-6 animate-spin" />
@@ -276,16 +282,18 @@ export default function ProposalPopup({
             ) : projectRequests.length === 0 ? (
               <div className="text-center py-6 border rounded-lg">
                 <FileText className="w-12 h-12 mx-auto mb-2 text-gray-400" />
-                <p className="text-gray-500">No open projects available</p>
+                <p className="text-gray-500">
+                  {t("customer.providers.proposal.noProjects")}
+                </p>
                 <p className="text-sm text-gray-400 mt-1">
-                  Create a project first to request a proposal
+                  {t("customer.providers.proposal.noProjectsHint")}
                 </p>
                 <Button
                   variant="outline"
                   className="mt-3"
                   onClick={handleClose}
                 >
-                  Close
+                  {t("customer.providers.proposal.close")}
                 </Button>
               </div>
             ) : (
@@ -328,19 +336,24 @@ export default function ProposalPopup({
           {selectedProject && (
             <div>
               <h3 className="font-medium mb-3">
-                Message to {providerName}
+                {t("customer.providers.proposal.messageTo", {
+                  name: providerName,
+                })}
                 <span className="text-sm font-normal text-gray-500 ml-2">
-                  (Optional)
+                  {t("customer.providers.proposal.optional")}
                 </span>
               </h3>
               <Textarea
-                placeholder={`Hi ${providerName}, I'd like to request a proposal for my project "${selectedProject.title}". Please let me know your availability and estimated timeline.`}
+                placeholder={t("customer.providers.proposal.messagePlaceholder", {
+                  name: providerName,
+                  project: selectedProject.title,
+                })}
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 className="min-h-[100px] resize-none"
               />
               <p className="text-xs text-gray-500 mt-1">
-                If left empty, the project title will be used as the message.
+                {t("customer.providers.proposal.messageHint")}
               </p>
             </div>
           )}
@@ -353,7 +366,7 @@ export default function ProposalPopup({
                 onClick={handleClose}
                 className="flex-1"
               >
-                Cancel
+                {t("customer.providers.proposal.cancel")}
               </Button>
               <Button
                 onClick={handleSendProposal}
@@ -363,10 +376,10 @@ export default function ProposalPopup({
                 {sending ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Sending...
+                    {t("customer.providers.proposal.sending")}
                   </>
                 ) : (
-                  "Send Proposal"
+                  t("customer.providers.proposal.send")
                 )}
               </Button>
             </div>

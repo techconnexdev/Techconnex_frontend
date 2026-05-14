@@ -8,10 +8,10 @@ import {
   service3,
   check,
 } from "@/public/assets";
-import { brainwaveServices, brainwaveServicesIcons } from "@/constants";
-import {
-  Gradient,
-} from "./Design";
+import { brainwaveServicesIcons } from "@/constants";
+import { useI18n } from "@/contexts/I18nProvider";
+import type { MessageKey } from "@/lib/i18n/messages";
+import { Gradient } from "./Design";
 import Generating from "./Generating";
 import { motion, Variants } from "framer-motion";
 import { useState, useEffect } from "react";
@@ -106,6 +106,12 @@ const iconVariants: Variants = {
 };
 
 const Services = () => {
+  const { t } = useI18n();
+  const brainwaveKeys: MessageKey[] = [
+    "home.services.brainwave1",
+    "home.services.brainwave2",
+    "home.services.brainwave3",
+  ];
   const [isHovered, setIsHovered] = useState(false);
   const [isSmallScreen, setIsSmallScreen] = useState(false);
   const [mobileInsightsExpanded, setMobileInsightsExpanded] = useState(false);
@@ -124,8 +130,8 @@ const Services = () => {
     <Section id="ai-intelligence">
       <div className="container">
         <Heading
-          title="The Intelligence Behind the Connection."
-          text="Beyond simple search, our AI understands your project needs and skill sets to create the perfect match instantly."
+          title={t("home.services.headingTitle")}
+          text={t("home.services.headingText")}
         />
 
         <motion.div
@@ -147,7 +153,7 @@ const Services = () => {
               <img
                 className=" md:object-right"
                 width={800}
-                alt="Smartest AI"
+                alt={t("home.services.smartAiAlt")}
                 height={730}
                 src={service1.src}
               />
@@ -157,22 +163,26 @@ const Services = () => {
               className="relative z-1 max-w-[17rem] ml-auto"
               variants={textVariants}
             >
-              <h4 className="h4 mb-4">Precision Recommendations</h4>
+              <h4 className="h4 mb-4">{t("home.services.precisionTitle")}</h4>
               <p className="body-2 mb-[3rem] text-muted-foreground">
-                Our AI analyzes project requirements against provider skills,
-                past performance, and availability to provide a &quot;Match Score&quot;.
+                {t("home.services.precisionBody")}
               </p>
               <ul className="body-2">
-                {brainwaveServices.map((item, index) => (
+                {brainwaveKeys.map((key, index) => (
                   <motion.li
-                    key={index}
+                    key={key}
                     className="flex items-start py-4 border-t border-border"
                     variants={listItemVariants}
                     custom={index}
                     whileHover={{ x: 5, transition: { duration: 0.2 } }}
                   >
-                    <img width={24} height={24} src={check.src} alt="check" />
-                    <p className="ml-4">{item}</p>
+                    <img
+                      width={24}
+                      height={24}
+                      src={check.src}
+                      alt={t("home.services.checkAlt")}
+                    />
+                    <p className="ml-4">{t(key)}</p>
                   </motion.li>
                 ))}
               </ul>
@@ -220,7 +230,7 @@ const Services = () => {
                   className="w-auto h-[70%] max-h-[500px] object-contain transition-opacity duration-300"
                   width={400}
                   height={550}
-                  alt="robot"
+                  alt={t("home.services.robotAlt")}
                 />
               </motion.div>
 
@@ -231,18 +241,18 @@ const Services = () => {
                 viewport={{ once: true }}
                 transition={{ delay: 0.6, duration: 0.5 }}
               >
-                <h4 className="h4 mb-4">Just Hover!</h4>
+                <h4 className="h4 mb-4">{t("home.services.hoverTitle")}</h4>
                 <p className="body-2 mb-4 lg:mb-[3rem] text-n-3">
-                  Our AI-driven engine extracts and highlights the most relevant
-                  details from any profile, allowing you to vet, compare, and
-                  decide with unparalleled speed and accuracy.{" "}
+                  {t("home.services.hoverBody")}
                 </p>
                 <button
                   type="button"
                   onClick={() => setMobileInsightsExpanded((prev) => !prev)}
                   className="lg:hidden self-start px-4 py-2 rounded-full text-sm font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
                 >
-                  {mobileInsightsExpanded ? "Hide AI insights" : "Show AI insights"}
+                  {mobileInsightsExpanded
+                    ? t("home.services.hideInsights")
+                    : t("home.services.showInsights")}
                 </button>
               </motion.div>
 
@@ -261,11 +271,9 @@ const Services = () => {
                 viewport={{ once: true }}
                 transition={{ delay: 0.4, duration: 0.5 }}
               >
-                <h4 className="h4 mb-4">Smart Data Extraction</h4>
+                <h4 className="h4 mb-4">{t("home.services.smartDataTitle")}</h4>
                 <p className="body-2 mb-[2rem] text-n-3">
-                  Whether you are a company uploading a project brief or a
-                  provider submitting a proposal, our AI analyzes your documents
-                  in seconds to streamline your workflow.
+                  {t("home.services.smartDataBody")}
                 </p>
 
                 <motion.ul
@@ -298,7 +306,12 @@ const Services = () => {
                             : ""
                         }
                       >
-                        <img src={item.src} width={24} height={24} alt="icon" />
+                        <img
+                          src={item.src}
+                          width={24}
+                          height={24}
+                          alt={t("home.services.iconAlt")}
+                        />
                       </div>
                     </motion.li>
                   ))}
@@ -318,7 +331,7 @@ const Services = () => {
                   className="w-full h-full object-contain"
                   width={520}
                   height={400}
-                  alt="Scary robot"
+                  alt={t("home.services.scaryRobotAlt")}
                 />
 
                 {/* <VideoChatMessage /> */}

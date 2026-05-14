@@ -17,12 +17,13 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ArrowLeft, Flag, Loader2, FileText } from "lucide-react";
 import { AdminLayout } from "@/components/admin-layout";
 import { useToast } from "@/hooks/use-toast";
+import { useI18n } from "@/contexts/I18nProvider";
 import {
   getAdminConversationReportById,
   getAdminConversationReportMessages,
 } from "@/lib/api";
 import { getProfileImageUrl, getMessageAttachmentUrl } from "@/lib/api";
-import { REPORT_REASONS } from "@/components/messages/ReportConversationDialog";
+import type { MessageKey } from "@/lib/i18n/messages";
 
 type UserInfo = {
   id: string;
@@ -72,6 +73,7 @@ function getMessageSenderAvatar(sender: Message["sender"]) {
 }
 
 export default function AdminConversationReportDetailPage() {
+  const { t, locale } = useI18n();
   const params = useParams();
   const router = useRouter();
   const { toast } = useToast();
@@ -80,6 +82,7 @@ export default function AdminConversationReportDetailPage() {
   const [loading, setLoading] = useState(true);
   const [report, setReport] = useState<Report | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
+  const intlLocale = locale === "id" ? "id-ID" : locale === "ar" ? "ar" : "en-US";
 
   const loadData = useCallback(async () => {
     try {
@@ -92,24 +95,33 @@ export default function AdminConversationReportDetailPage() {
       if (messagesRes.success) setMessages(messagesRes.data || []);
     } catch (error: unknown) {
       toast({
-        title: "Error",
+        title: t("admin.conversationReports.toast.errorTitle"),
         description:
-          error instanceof Error ? error.message : "Failed to load report",
+          error instanceof Error
+            ? error.message
+            : t("admin.conversationReports.detail.loadFailed"),
         variant: "destructive",
       });
       router.push("/admin/conversation-reports");
     } finally {
       setLoading(false);
     }
-  }, [reportId, toast, router]);
+  }, [reportId, toast, router, t]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
+  const REPORT_REASON_I18N: Record<string, MessageKey> = {
+    OUTSOURCE_OFF_PLATFORM: "customer.messages.report.reason.OUTSOURCE_OFF_PLATFORM",
+    SPAM_IRRELEVANT: "customer.messages.report.reason.SPAM_IRRELEVANT",
+    HARASSMENT_INAPPROPRIATE: "customer.messages.report.reason.HARASSMENT_INAPPROPRIATE",
+    FRAUD_IMPERSONATION: "customer.messages.report.reason.FRAUD_IMPERSONATION",
+  };
+
   const getReasonLabel = (reason: string) => {
-    const found = REPORT_REASONS.find((r) => r.value === reason);
-    return found ? found.label : reason;
+    const key = REPORT_REASON_I18N[reason];
+    return key ? t(key) : reason;
   };
 
   const getStatusColor = (status: string) => {
@@ -123,6 +135,14 @@ export default function AdminConversationReportDetailPage() {
       default:
         return "bg-gray-100 text-gray-800";
     }
+  };
+
+  const statusLabel = (status: string) => {
+    const upper = status?.toUpperCase?.() || "";
+    if (upper === "PENDING" || upper === "REVIEWED" || upper === "RESOLVED") {
+      return t(`admin.conversationReports.status.${upper}` as MessageKey);
+    }
+    return t("admin.conversationReports.status.UNKNOWN", { status });
   };
 
   if (loading || !report) {
@@ -151,13 +171,15 @@ export default function AdminConversationReportDetailPage() {
           </Button>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">
-              Report #{reportId.slice(0, 8)}
+              {t("admin.conversationReports.detail.title", {
+                id: reportId.slice(0, 8),
+              })}
             </h1>
             <p className="text-sm text-gray-500">
-              Reported on {new Date(report.createdAt).toLocaleDateString()} ·{" "}
-              <Badge className={getStatusColor(report.status)}>
-                {report.status}
-              </Badge>
+              {t("admin.conversationReports.detail.reportedOn", {
+                date: new Date(report.createdAt).toLocaleDateString(intlLocale),
+                status: statusLabel(report.status),
+              })}
             </p>
           </div>
         </div>
@@ -180,8 +202,12 @@ export default function AdminConversationReportDetailPage() {
           <div className="lg:col-span-1 space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Reporter</CardTitle>
-                <CardDescription>User who submitted the report</CardDescription>
+                <CardTitle className="text-base">
+                  {t("admin.conversationReports.detail.reporter")}
+                </CardTitle>
+                <CardDescription>
+                  {t("admin.conversationReports.detail.reporterDesc")}
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="flex flex-col items-center text-center space-y-3">
@@ -209,13 +235,14 @@ export default function AdminConversationReportDetailPage() {
                       ))}
                     </div>
                     <p className="text-xs text-gray-400 mt-1">
-                      Member since{" "}
-                      {new Date(report.reporter.createdAt).toLocaleDateString()}
+                      {t("admin.conversationReports.detail.memberSince", {
+                        date: new Date(report.reporter.createdAt).toLocaleDateString(intlLocale),
+                      })}
                     </p>
                   </div>
                   <Link href={`/admin/users/${report.reporter.id}`}>
                     <Button variant="outline" size="sm">
-                      View profile
+                      {t("admin.conversationReports.detail.viewProfile")}
                     </Button>
                   </Link>
                 </div>
@@ -224,8 +251,12 @@ export default function AdminConversationReportDetailPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Reported User</CardTitle>
-                <CardDescription>User being reported</CardDescription>
+                <CardTitle className="text-base">
+                  {t("admin.conversationReports.detail.reportedUser")}
+                </CardTitle>
+                <CardDescription>
+                  {t("admin.conversationReports.detail.reportedUserDesc")}
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="flex flex-col items-center text-center space-y-3">
@@ -253,13 +284,14 @@ export default function AdminConversationReportDetailPage() {
                       ))}
                     </div>
                     <p className="text-xs text-gray-400 mt-1">
-                      Member since{" "}
-                      {new Date(report.reported.createdAt).toLocaleDateString()}
+                      {t("admin.conversationReports.detail.memberSince", {
+                        date: new Date(report.reported.createdAt).toLocaleDateString(intlLocale),
+                      })}
                     </p>
                   </div>
                   <Link href={`/admin/users/${report.reported.id}`}>
                     <Button variant="outline" size="sm">
-                      View profile
+                      {t("admin.conversationReports.detail.viewProfile")}
                     </Button>
                   </Link>
                 </div>
@@ -271,16 +303,18 @@ export default function AdminConversationReportDetailPage() {
           <div className="lg:col-span-2">
             <Card className="h-[calc(100vh-18rem)] flex flex-col">
               <CardHeader>
-                <CardTitle>Conversation</CardTitle>
+                <CardTitle>{t("admin.conversationReports.detail.conversation")}</CardTitle>
                 <CardDescription>
-                  Messages between {report.reporter.name} and{" "}
-                  {report.reported.name}
+                  {t("admin.conversationReports.detail.conversationDesc", {
+                    reporter: report.reporter.name,
+                    reported: report.reported.name,
+                  })}
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex-1 overflow-y-auto p-4 space-y-3">
                 {messages.length === 0 ? (
                   <div className="text-center py-12 text-gray-500">
-                    No messages in this conversation
+                    {t("admin.conversationReports.detail.noMessages")}
                   </div>
                 ) : (
                   messages.map((message) => {
@@ -323,7 +357,7 @@ export default function AdminConversationReportDetailPage() {
                                 const fileName =
                                   fileUrl.split("/").pop() ||
                                   fileUrl.split("\\").pop() ||
-                                  "attachment";
+                                  t("admin.conversationReports.detail.attachmentFallback");
                                 return (
                                   <div key={idx} className="mt-1">
                                     {isImage ? (
@@ -334,7 +368,7 @@ export default function AdminConversationReportDetailPage() {
                                       >
                                         <Image
                                           src={attachmentUrl}
-                                          alt="Attachment"
+                                          alt={t("admin.conversationReports.detail.attachmentAlt")}
                                           width={200}
                                           height={200}
                                           className="rounded max-w-[150px] border object-contain"
@@ -371,7 +405,7 @@ export default function AdminConversationReportDetailPage() {
                                     href={`/admin/projects/${message.attachments[0]}`}
                                     className="text-xs underline"
                                   >
-                                    View project
+                                    {t("admin.conversationReports.detail.viewProject")}
                                   </Link>
                                 )}
                               </div>
@@ -387,7 +421,7 @@ export default function AdminConversationReportDetailPage() {
                             >
                               {new Date(
                                 message.createdAt
-                              ).toLocaleTimeString([], {
+                              ).toLocaleTimeString(intlLocale, {
                                 hour: "2-digit",
                                 minute: "2-digit",
                               })}

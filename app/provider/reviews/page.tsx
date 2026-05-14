@@ -37,7 +37,6 @@ import {
   Clock,
   Award,
 } from "lucide-react";
-import { ProviderLayout } from "@/components/provider-layout";
 import { ProviderReviewsTour } from "@/components/provider/ProviderReviewsTour";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -50,6 +49,7 @@ import {
 } from "../../../lib/hooks/useReviews";
 import { getProfileImageUrl } from "@/lib/api";
 import { getUserFriendlyErrorMessage } from "@/lib/errors";
+import { useI18n } from "@/contexts/I18nProvider";
 
 const PROVIDER_CATEGORY_KEYS = [
   "communicationRating",
@@ -94,6 +94,9 @@ const hasAllProviderCategoryRatings = (form: ProviderReviewFormState) =>
   PROVIDER_CATEGORY_KEYS.every((key) => form[key] > 0);
 
 export default function ProviderReviewsPage() {
+  const { t, locale } = useI18n();
+  const dateLocale =
+    locale === "id" ? "id-ID" : locale === "ar" ? "ar" : "en-US";
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<"given" | "received" | "pending">(
     "given",
@@ -192,9 +195,8 @@ export default function ProviderReviewsPage() {
 
     if (!targetProjectId) {
       toast({
-        title: "No companies available",
-        description:
-          "All completed and disputed projects already have reviews.",
+        title: t("provider.reviews.toast.noCompaniesTitle"),
+        description: t("provider.reviews.toast.noCompaniesDesc"),
       });
       return;
     }
@@ -236,22 +238,20 @@ export default function ProviderReviewsPage() {
   };
 
   const handleDeleteReview = async (reviewId: string) => {
-    const confirmed = window.confirm(
-      "Delete this review? This action cannot be undone.",
-    );
+    const confirmed = window.confirm(t("provider.reviews.confirm.delete"));
     if (!confirmed) return;
 
     try {
       await deleteReview(reviewId, true);
       toast({
-        title: "Review deleted",
-        description: "The review has been removed successfully.",
+        title: t("provider.reviews.toast.deletedTitle"),
+        description: t("provider.reviews.toast.deletedDesc"),
       });
       refetchGivenReviews();
       refetchProjects();
     } catch (error: unknown) {
       toast({
-        title: "Unable to delete review",
+        title: t("provider.reviews.toast.deleteFailedTitle"),
         description: getUserFriendlyErrorMessage(
           error,
           "provider reviews delete",
@@ -271,8 +271,8 @@ export default function ProviderReviewsPage() {
       !reviewForm.content.trim()
     ) {
       toast({
-        title: "Missing details",
-        description: "Please rate every category and share your feedback.",
+        title: t("provider.reviews.toast.missingDetailsTitle"),
+        description: t("provider.reviews.toast.missingDetailsDesc"),
         variant: "destructive",
       });
       return;
@@ -281,8 +281,8 @@ export default function ProviderReviewsPage() {
     const overallRating = computeProviderOverallRating(reviewForm);
     if (overallRating === 0) {
       toast({
-        title: "Incomplete categories",
-        description: "Please rate all categories to calculate your rating.",
+        title: t("provider.reviews.toast.incompleteCategoriesTitle"),
+        description: t("provider.reviews.toast.incompleteCategoriesDesc"),
         variant: "destructive",
       });
       return;
@@ -304,8 +304,8 @@ export default function ProviderReviewsPage() {
         );
 
         toast({
-          title: "Review updated",
-          description: "Your review has been updated successfully.",
+          title: t("provider.reviews.toast.updatedTitle"),
+          description: t("provider.reviews.toast.updatedDesc"),
         });
       } else {
         const selectedProject = availableProjectsForReview.find(
@@ -313,9 +313,7 @@ export default function ProviderReviewsPage() {
         );
 
         if (!selectedProject || !selectedProject.customer?.id) {
-          throw new Error(
-            "We could not match the selected project with a company.",
-          );
+          throw new Error(t("provider.reviews.error.projectCompanyMismatch"));
         }
 
         await createReview(
@@ -333,8 +331,8 @@ export default function ProviderReviewsPage() {
         );
 
         toast({
-          title: "Review submitted",
-          description: "Thank you for sharing feedback with this company.",
+          title: t("provider.reviews.toast.submittedTitle"),
+          description: t("provider.reviews.toast.submittedDesc"),
         });
       }
 
@@ -343,7 +341,7 @@ export default function ProviderReviewsPage() {
       refetchProjects();
     } catch (error: unknown) {
       toast({
-        title: "Something went wrong",
+        title: t("provider.reviews.toast.genericErrorTitle"),
         description: getUserFriendlyErrorMessage(
           error,
           "provider reviews save",
@@ -363,8 +361,8 @@ export default function ProviderReviewsPage() {
   const handleSubmitReply = async () => {
     if (!replyingReview || !replyContent.trim()) {
       toast({
-        title: "Reply required",
-        description: "Enter your response before submitting.",
+        title: t("provider.reviews.toast.replyRequiredTitle"),
+        description: t("provider.reviews.toast.replyRequiredDesc"),
         variant: "destructive",
       });
       return;
@@ -373,15 +371,15 @@ export default function ProviderReviewsPage() {
     try {
       await createReply(replyingReview.id, replyContent.trim(), true);
       toast({
-        title: "Reply posted",
-        description: "Your response has been shared with the company.",
+        title: t("provider.reviews.toast.replyPostedTitle"),
+        description: t("provider.reviews.toast.replyPostedDesc"),
       });
       setReplyDialogOpen(false);
       setReplyContent("");
       refetchReceivedReviews();
     } catch (error: unknown) {
       toast({
-        title: "Unable to post reply",
+        title: t("provider.reviews.toast.replyFailedTitle"),
         description: getUserFriendlyErrorMessage(
           error,
           "provider reviews reply",
@@ -392,17 +390,16 @@ export default function ProviderReviewsPage() {
   };
 
   return (
-    <ProviderLayout>
+    <>
       <ProviderReviewsTour />
       <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between" data-tour-step="0">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-              Reviews & Feedback
+              {t("provider.reviews.title")}
             </h1>
             <p className="text-sm sm:text-base text-gray-600 mt-1">
-              Manage the reviews you leave for clients and the feedback you
-              receive for completed or disputed projects.
+              {t("provider.reviews.subtitle")}
             </p>
           </div>
           <Button
@@ -414,38 +411,38 @@ export default function ProviderReviewsPage() {
             data-tour-step="1"
           >
             <Plus className="mr-2 h-4 w-4" />
-            Write Review
+            {t("provider.reviews.writeReview")}
           </Button>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6" data-tour-step="2">
           <StatsCard
-            title="Total Reviews"
+            title={t("provider.reviews.stats.totalTitle")}
             value={
               statsLoading
                 ? "…"
                 : stats.totalReviews.toString().padStart(1, "0")
             }
             icon={<Award className="h-8 w-8 text-blue-600" />}
-            helper="Combined reviews given and received"
+            helper={t("provider.reviews.stats.totalHelper")}
           />
           <StatsCard
-            title="Average Rating"
+            title={t("provider.reviews.stats.avgTitle")}
             value={
               statsLoading ? "…" : (stats.averageRating.toFixed(1) ?? "0.0")
             }
             icon={<Star className="h-8 w-8 text-yellow-500" />}
-            helper="From reviews received by companies"
+            helper={t("provider.reviews.stats.avgHelper")}
           />
           <StatsCard
-            title="Pending Reviews"
+            title={t("provider.reviews.stats.pendingTitle")}
             value={
               statsLoading
                 ? "…"
                 : stats.pendingReviews.toString().padStart(1, "0")
             }
             icon={<Calendar className="h-8 w-8 text-orange-500" />}
-            helper="Clients awaiting your review"
+            helper={t("provider.reviews.stats.pendingHelper")}
           />
         </div>
 
@@ -455,7 +452,7 @@ export default function ProviderReviewsPage() {
               <div className="flex flex-1 items-center gap-2">
                 <Search className="h-4 w-4 text-gray-400 flex-shrink-0" />
                 <Input
-                  placeholder="Search reviews by company or project"
+                  placeholder={t("provider.reviews.searchPlaceholder")}
                   value={searchTerm}
                   onChange={(event) => setSearchTerm(event.target.value)}
                   className="text-sm sm:text-base"
@@ -468,26 +465,40 @@ export default function ProviderReviewsPage() {
                 >
                   <SelectTrigger className="w-full sm:w-48 text-sm sm:text-base">
                     <Filter className="mr-2 h-4 w-4" />
-                    <SelectValue placeholder="Filter rating" />
+                    <SelectValue
+                      placeholder={t("provider.reviews.filterPlaceholder")}
+                    />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All ratings</SelectItem>
+                    <SelectItem value="all">
+                      {t("provider.reviews.filter.allRatings")}
+                    </SelectItem>
                     {[5, 4, 3, 2, 1].map((rating) => (
                       <SelectItem key={rating} value={rating.toString()}>
-                        {rating} stars
+                        {t("provider.reviews.filter.stars", { n: rating })}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
                 <Select value={sortBy} onValueChange={setSortBy}>
                   <SelectTrigger className="w-full sm:w-48 text-sm sm:text-base">
-                    <SelectValue placeholder="Sort by" />
+                    <SelectValue
+                      placeholder={t("provider.reviews.sortPlaceholder")}
+                    />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="newest">Newest first</SelectItem>
-                    <SelectItem value="oldest">Oldest first</SelectItem>
-                    <SelectItem value="highest">Highest rating</SelectItem>
-                    <SelectItem value="lowest">Lowest rating</SelectItem>
+                    <SelectItem value="newest">
+                      {t("provider.reviews.sort.newest")}
+                    </SelectItem>
+                    <SelectItem value="oldest">
+                      {t("provider.reviews.sort.oldest")}
+                    </SelectItem>
+                    <SelectItem value="highest">
+                      {t("provider.reviews.sort.highest")}
+                    </SelectItem>
+                    <SelectItem value="lowest">
+                      {t("provider.reviews.sort.lowest")}
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -507,19 +518,19 @@ export default function ProviderReviewsPage() {
               value="given"
               className="text-xs sm:text-sm w-full sm:w-auto data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-md"
             >
-              Reviews Given
+              {t("provider.reviews.tabs.given")}
             </TabsTrigger>
             <TabsTrigger
               value="received"
               className="text-xs sm:text-sm w-full sm:w-auto data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-md"
             >
-              Reviews Received
+              {t("provider.reviews.tabs.received")}
             </TabsTrigger>
             <TabsTrigger
               value="pending"
               className="text-xs sm:text-sm w-full sm:w-auto data-[state=active]:bg-white data-[state=active]:text-gray-900 data-[state=active]:shadow-md"
             >
-              Pending
+              {t("provider.reviews.tabs.pending")}
             </TabsTrigger>
           </TabsList>
 
@@ -530,7 +541,8 @@ export default function ProviderReviewsPage() {
               loading={givenLoading}
               error={givenError}
               type="given"
-              emptyMessage="You haven't reviewed any companies yet."
+              emptyMessage={t("provider.reviews.empty.given")}
+              dateLocale={dateLocale}
               onEdit={handleOpenEditReview}
               onDelete={(review) => handleDeleteReview(review.id)}
             />
@@ -544,7 +556,8 @@ export default function ProviderReviewsPage() {
               loading={receivedLoading}
               error={receivedError}
               type="received"
-              emptyMessage="No companies have reviewed you yet."
+              emptyMessage={t("provider.reviews.empty.received")}
+              dateLocale={dateLocale}
               onReply={handleOpenReply}
             />
             </div>
@@ -555,6 +568,7 @@ export default function ProviderReviewsPage() {
             <PendingProjectsList
               projects={availableProjectsForReview}
               loading={projectsLoading}
+              dateLocale={dateLocale}
               onWriteReview={(projectId) => handleOpenCreateReview(projectId)}
             />
             </div>
@@ -582,7 +596,7 @@ export default function ProviderReviewsPage() {
           isSubmitting={actionLoading}
         />
       </div>
-    </ProviderLayout>
+    </>
   );
 }
 
@@ -623,6 +637,7 @@ interface ReviewListProps {
   error: string | null;
   type: "given" | "received";
   emptyMessage: string;
+  dateLocale: string;
   onEdit?: (review: Review) => void;
   onDelete?: (review: Review) => void;
   onReply?: (review: Review) => void;
@@ -634,15 +649,18 @@ function ReviewList({
   error,
   type,
   emptyMessage,
+  dateLocale,
   onEdit,
   onDelete,
   onReply,
 }: ReviewListProps) {
+  const { t } = useI18n();
+
   if (loading) {
     return (
       <Card>
         <CardContent className="p-6 text-muted-foreground">
-          Loading reviews...
+          {t("provider.reviews.loading.list")}
         </CardContent>
       </Card>
     );
@@ -652,7 +670,7 @@ function ReviewList({
     return (
       <Card>
         <CardContent className="p-6 text-destructive">
-          {error || "Unable to load reviews."}
+          {error || t("provider.reviews.error.loadFailed")}
         </CardContent>
       </Card>
     );
@@ -662,7 +680,7 @@ function ReviewList({
     return (
       <EmptyState
         icon={<MessageSquare className="h-10 w-10 text-muted-foreground" />}
-        title="No reviews"
+        title={t("provider.reviews.empty.listTitle")}
         description={emptyMessage}
       />
     );
@@ -675,6 +693,7 @@ function ReviewList({
           key={review.id}
           review={review}
           type={type}
+          dateLocale={dateLocale}
           onEdit={onEdit}
           onDelete={onDelete}
           onReply={onReply}
@@ -687,16 +706,20 @@ function ReviewList({
 function ReviewCard({
   review,
   type,
+  dateLocale,
   onReply,
 }: {
   review: Review;
   type: "given" | "received";
+  dateLocale: string;
   onEdit?: (review: Review) => void;
   onDelete?: (review: Review) => void;
   onReply?: (review: Review) => void;
 }) {
+  const { t } = useI18n();
   const counterparty = type === "given" ? review.recipient : review.reviewer;
-  const projectTitle = review.project?.title ?? "Project";
+  const projectTitle =
+    review.project?.title ?? t("provider.reviews.card.projectFallback");
   const reply = review.ReviewReply?.[0];
 
   // Get profile image URL from customerProfile or providerProfile
@@ -711,16 +734,40 @@ function ReviewCard({
   const categories =
     type === "given"
       ? [
-          { label: "Communication", value: review.communicationRating },
-          { label: "Clarity", value: review.qualityRating },
-          { label: "Payment", value: review.timelinessRating },
-          { label: "Professionalism", value: review.professionalismRating },
+          {
+            label: t("provider.reviews.category.communication"),
+            value: review.communicationRating,
+          },
+          {
+            label: t("provider.reviews.category.clarity"),
+            value: review.qualityRating,
+          },
+          {
+            label: t("provider.reviews.category.payment"),
+            value: review.timelinessRating,
+          },
+          {
+            label: t("provider.reviews.category.professionalism"),
+            value: review.professionalismRating,
+          },
         ]
       : [
-          { label: "Quality", value: review.qualityRating },
-          { label: "Timeliness", value: review.timelinessRating },
-          { label: "Communication", value: review.communicationRating },
-          { label: "Professionalism", value: review.professionalismRating },
+          {
+            label: t("provider.reviews.category.quality"),
+            value: review.qualityRating,
+          },
+          {
+            label: t("provider.reviews.category.timeliness"),
+            value: review.timelinessRating,
+          },
+          {
+            label: t("provider.reviews.category.communication"),
+            value: review.communicationRating,
+          },
+          {
+            label: t("provider.reviews.category.professionalism"),
+            value: review.professionalismRating,
+          },
         ];
 
   return (
@@ -737,13 +784,13 @@ function ReviewCard({
             </Avatar>
             <div className="flex-1 min-w-0">
               <h3 className="font-bold text-gray-900 text-base sm:text-lg mb-1">
-                {counterparty?.name ?? "Unknown"}
+                {counterparty?.name ?? t("provider.reviews.card.unknownUser")}
               </h3>
               <p className="text-sm text-gray-600 mb-1 truncate">
                 {projectTitle}
               </p>
               <p className="text-xs text-gray-500">
-                {new Date(review.createdAt).toLocaleDateString("en-US", {
+                {new Date(review.createdAt).toLocaleDateString(dateLocale, {
                   month: "2-digit",
                   day: "2-digit",
                   year: "numeric",
@@ -765,8 +812,8 @@ function ReviewCard({
               className="text-xs bg-gray-50 border-gray-200 text-gray-700"
             >
               {type === "given"
-                ? "You reviewed this company"
-                : "Company review"}
+                ? t("provider.reviews.badge.youReviewedCompany")
+                : t("provider.reviews.badge.companyReview")}
             </Badge>
           </div>
         </div>
@@ -796,10 +843,10 @@ function ReviewCard({
         {reply && (
           <div className="rounded-lg bg-gray-50 border border-gray-200 p-3 sm:p-4 mt-4">
             <p className="text-sm font-semibold text-gray-900 mb-1">
-              Your reply
+              {t("provider.reviews.reply.yourReply")}
             </p>
             <p className="text-xs text-gray-500 mb-2">
-              {new Date(reply.createdAt).toLocaleDateString("en-US", {
+              {new Date(reply.createdAt).toLocaleDateString(dateLocale, {
                 month: "2-digit",
                 day: "2-digit",
                 year: "numeric",
@@ -817,7 +864,9 @@ function ReviewCard({
             variant="secondary"
             className="text-xs bg-gray-100 text-gray-700"
           >
-            {type === "given" ? "Published" : "Received"}
+            {type === "given"
+              ? t("provider.reviews.badge.published")
+              : t("provider.reviews.badge.receivedBadge")}
           </Badge>
           <div className="flex gap-2">
             {type === "received" && (
@@ -829,7 +878,9 @@ function ReviewCard({
                 className="text-xs sm:text-sm border-gray-300 text-gray-700 hover:bg-gray-50"
               >
                 <Reply className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                {reply ? "Replied" : "Reply"}
+                {reply
+                  ? t("provider.reviews.actions.replied")
+                  : t("provider.reviews.actions.reply")}
               </Button>
             )}
           </div>
@@ -842,17 +893,21 @@ function ReviewCard({
 function PendingProjectsList({
   projects,
   loading,
+  dateLocale,
   onWriteReview,
 }: {
   projects: CompletedProject[];
   loading: boolean;
+  dateLocale: string;
   onWriteReview: (projectId: string) => void;
 }) {
+  const { t } = useI18n();
+
   if (loading) {
     return (
       <Card>
         <CardContent className="p-6 text-muted-foreground">
-          Loading pending projects...
+          {t("provider.reviews.pending.loading")}
         </CardContent>
       </Card>
     );
@@ -862,8 +917,8 @@ function PendingProjectsList({
     return (
       <EmptyState
         icon={<Clock className="h-10 w-10 text-muted-foreground" />}
-        title="You're all caught up"
-        description="Every completed and disputed project has been reviewed."
+        title={t("provider.reviews.pending.caughtUpTitle")}
+        description={t("provider.reviews.pending.caughtUpDesc")}
       />
     );
   }
@@ -879,28 +934,29 @@ function PendingProjectsList({
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                 <h3 className="font-semibold text-gray-900 text-sm sm:text-base">
-                  {project.title || "Project"}
+                  {project.title || t("provider.reviews.card.projectFallback")}
                 </h3>
                 {project.status === "DISPUTED" && (
                   <Badge variant="destructive" className="text-xs">
-                    Disputed
+                    {t("provider.reviews.pending.disputed")}
                   </Badge>
                 )}
               </div>
               <p className="text-sm text-gray-600 mb-1">
-                {project.customer?.name ?? "Company"}
+                {project.customer?.name ??
+                  t("provider.reviews.pending.companyFallback")}
               </p>
               <p className="text-xs text-gray-500">
                 {project.completedDate
                   ? new Date(project.completedDate).toLocaleDateString(
-                      "en-US",
+                      dateLocale,
                       {
                         month: "2-digit",
                         day: "2-digit",
                         year: "numeric",
                       },
                     )
-                  : "Completion date unavailable"}
+                  : t("provider.reviews.pending.dateUnavailable")}
               </p>
             </div>
             <Button
@@ -908,7 +964,7 @@ function PendingProjectsList({
               className="w-full sm:w-auto text-xs sm:text-sm"
             >
               <Plus className="mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              Write Review
+              {t("provider.reviews.writeReview")}
             </Button>
           </CardContent>
         </Card>
@@ -936,6 +992,7 @@ function ReviewDialog({
   isSubmitting: boolean;
   mode: "create" | "edit";
 }) {
+  const { t } = useI18n();
   const hasAllRatings = hasAllProviderCategoryRatings(formState);
   const hasProjects = projects.length > 0;
   const disableSubmit =
@@ -949,89 +1006,100 @@ function ReviewDialog({
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>
-            {mode === "edit" ? "Edit review" : "Write a review"}
+            {mode === "edit"
+              ? t("provider.reviews.dialog.editTitle")
+              : t("provider.reviews.dialog.writeTitle")}
           </DialogTitle>
           <DialogDescription>
-            Share transparent feedback with your clients.
+            {t("provider.reviews.dialog.description")}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-6">
           <div>
-            <Label>Project</Label>
+            <Label>{t("provider.reviews.dialog.project")}</Label>
             <Select
               value={formState.projectId}
               onValueChange={(value) => onChange({ projectId: value })}
               disabled={mode === "edit" || !hasProjects}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Select completed or disputed project" />
+                <SelectValue
+                  placeholder={t("provider.reviews.dialog.projectPlaceholder")}
+                />
               </SelectTrigger>
               <SelectContent>
                 {hasProjects ? (
                   projects.map((project) => (
                     <SelectItem key={project.id} value={project.id}>
-                      {project.title || "Project"} —{" "}
-                      {project.customer?.name ?? "Company"}
+                      {t("provider.reviews.dialog.projectOption", {
+                        title:
+                          project.title ||
+                          t("provider.reviews.card.projectFallback"),
+                        company:
+                          project.customer?.name ??
+                          t("provider.reviews.dialog.companyFallback"),
+                      })}
                     </SelectItem>
                   ))
                 ) : (
                   <SelectItem value="none" disabled>
-                    No projects available
+                    {t("provider.reviews.dialog.noProjectsOption")}
                   </SelectItem>
                 )}
               </SelectContent>
             </Select>
             {!hasProjects && mode === "create" && (
               <p className="mt-2 text-xs text-muted-foreground">
-                All completed and disputed projects already have reviews.
+                {t("provider.reviews.dialog.noProjectsHint")}
               </p>
             )}
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
             <RatingInput
-              label="Communication"
+              label={t("provider.reviews.category.communication")}
               value={formState.communicationRating}
               onChange={(value) => onChange({ communicationRating: value })}
             />
             <RatingInput
-              label="Clarity"
+              label={t("provider.reviews.category.clarity")}
               value={formState.clarityRating}
               onChange={(value) => onChange({ clarityRating: value })}
             />
             <RatingInput
-              label="Payment"
+              label={t("provider.reviews.category.payment")}
               value={formState.paymentRating}
               onChange={(value) => onChange({ paymentRating: value })}
             />
             <RatingInput
-              label="Professionalism"
+              label={t("provider.reviews.category.professionalism")}
               value={formState.professionalismRating}
               onChange={(value) => onChange({ professionalismRating: value })}
             />
           </div>
 
           <div>
-            <Label>Overall rating (computed)</Label>
+            <Label>{t("provider.reviews.dialog.overallLabel")}</Label>
             <div className="mt-2 flex items-center gap-2">
               <RatingStars rating={formState.rating} />
               <span className="text-xs text-muted-foreground">
                 {formState.rating
-                  ? `${formState.rating.toFixed(1)}/5`
-                  : "Rate every category to calculate"}
+                  ? t("provider.reviews.dialog.overallScore", {
+                      score: formState.rating.toFixed(1),
+                    })
+                  : t("provider.reviews.dialog.rateAllCategories")}
               </span>
             </div>
             <p className="text-xs text-muted-foreground">
-              Automatically averaged from Communication, Clarity, Payment, and
-              Professionalism ratings.
+              {t("provider.reviews.dialog.overallComputedHint")}
             </p>
           </div>
 
           <div>
-            <Label>Feedback</Label>
+            <Label>{t("provider.reviews.dialog.feedback")}</Label>
             <Textarea
               rows={4}
-              placeholder="Describe your experience working with this company."
+              placeholder={t("provider.reviews.dialog.feedbackPlaceholder")}
               value={formState.content}
               onChange={(event) => onChange({ content: event.target.value })}
             />
@@ -1043,10 +1111,14 @@ function ReviewDialog({
               type="button"
               onClick={() => onOpenChange(false)}
             >
-              Cancel
+              {t("provider.reviews.dialog.cancel")}
             </Button>
             <Button type="submit" disabled={disableSubmit}>
-              {isSubmitting ? "Saving..." : mode === "edit" ? "Save" : "Submit"}
+              {isSubmitting
+                ? t("provider.reviews.dialog.saving")
+                : mode === "edit"
+                  ? t("provider.reviews.dialog.save")
+                  : t("provider.reviews.dialog.submit")}
             </Button>
           </DialogFooter>
         </form>
@@ -1072,13 +1144,15 @@ function ReplyDialog({
   onSubmit: () => void;
   isSubmitting: boolean;
 }) {
+  const { t } = useI18n();
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Reply to review</DialogTitle>
+          <DialogTitle>{t("provider.reviews.replyDialog.title")}</DialogTitle>
           <DialogDescription>
-            Respond publicly to the company&apos;s feedback.
+            {t("provider.reviews.replyDialog.description")}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
@@ -1087,17 +1161,19 @@ function ReplyDialog({
           </div>
           <Textarea
             rows={4}
-            placeholder="Write your reply..."
+            placeholder={t("provider.reviews.replyDialog.placeholder")}
             value={replyContent}
             onChange={(event) => onReplyContentChange(event.target.value)}
           />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("provider.reviews.replyDialog.cancel")}
           </Button>
           <Button onClick={onSubmit} disabled={isSubmitting || !replyContent}>
-            {isSubmitting ? "Posting..." : "Post reply"}
+            {isSubmitting
+              ? t("provider.reviews.replyDialog.posting")
+              : t("provider.reviews.replyDialog.post")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -1114,13 +1190,17 @@ function RatingInput({
   value: number;
   onChange: (value: number) => void;
 }) {
+  const { t } = useI18n();
+
   return (
     <div>
       <Label className="flex items-center justify-between">{label}</Label>
       <div className="mt-2 flex items-center gap-2">
         <RatingStars rating={value} interactive onSelect={onChange} />
         <span className="text-xs text-muted-foreground">
-          {value ? `${value}/5` : "Not rated"}
+          {value
+            ? t("provider.reviews.rating.valueOutOfFive", { n: value })
+            : t("provider.reviews.rating.notRated")}
         </span>
       </div>
     </div>

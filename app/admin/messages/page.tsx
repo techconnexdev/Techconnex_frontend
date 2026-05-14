@@ -22,6 +22,9 @@ import { AdminLayout } from "@/components/admin-layout";
 import { ReportConversationDialog } from "@/components/messages/ReportConversationDialog";
 import Link from "next/link";
 import Image from "next/image";
+import { useI18n } from "@/contexts/I18nProvider";
+import { useToast } from "@/hooks/use-toast";
+import { TranslatedMessageText } from "@/components/messages/TranslatedMessageText";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -61,6 +64,8 @@ type Message = {
 };
 
 export default function AdminMessagesPage() {
+  const { t, locale } = useI18n();
+  const { toast } = useToast();
   const searchParams = useSearchParams();
   const userIdParam = searchParams.get("userId");
   const projectIdParam = searchParams.get("projectId");
@@ -80,11 +85,13 @@ export default function AdminMessagesPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const selectedChatRef = useRef<string | null>(null);
   const [showAttachmentPicker, setShowAttachmentPicker] = useState(false);
+  const [attachmentUploading, setAttachmentUploading] = useState(false);
   const [pendingAttachmentUrl, setPendingAttachmentUrl] = useState<
     string | null
   >(null);
   const [showConversationsList, setShowConversationsList] = useState(true);
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
+  const intlLocale = locale === "id" ? "id-ID" : locale === "ar" ? "ar" : "en-US";
 
   // Get user data and token on mount
   useEffect(() => {
@@ -97,9 +104,14 @@ export default function AdminMessagesPage() {
         setUser(userFromStorage);
       } catch (error) {
         console.error("Error loading auth data:", error);
+        toast({
+          title: t("admin.users.toast.errorTitle"),
+          description: t("admin.messages.toast.loadAuthError"),
+          variant: "destructive",
+        });
       }
     }
-  }, []);
+  }, [t, toast]);
 
   const currentUserId = user?.id as string | undefined;
 
@@ -125,7 +137,11 @@ export default function AdminMessagesPage() {
 
     newSocket.on("message_error", (error: { error: string }) => {
       console.error("❌ Message sending failed:", error.error);
-      alert(`Failed to send message: ${error.error}`);
+      alert(
+        t("admin.messages.alert.sendFailed", {
+          error: error.error,
+        })
+      );
       setMessages((prev) => prev.filter((msg) => msg.id.startsWith("temp-")));
     });
 
@@ -254,7 +270,7 @@ export default function AdminMessagesPage() {
     return () => {
       newSocket.close();
     };
-  }, [token, currentUserId]);
+  }, [token, currentUserId, t]);
 
   // Fetch conversations list
   const fetchConversations = useCallback(async () => {
@@ -279,10 +295,15 @@ export default function AdminMessagesPage() {
     } catch (error) {
       console.error("❌ Error fetching conversations:", error);
       setConversations([]);
+      toast({
+        title: t("admin.users.toast.errorTitle"),
+        description: t("admin.messages.toast.loadConversationsFailed"),
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, t, toast]);
 
   // Fetch messages for a specific conversation
   const fetchMessages = useCallback(
@@ -293,8 +314,7 @@ export default function AdminMessagesPage() {
       try {
         if (!skipLoadingCheck) setLoading(true);
 
-        // Always fetch conversation messages with the other user
-        const url = `${API_URL}/messages?otherUserId=${otherUserId}`;
+        const url = `${API_URL}/messages?otherUserId=${otherUserId}&translate=0`;
 
         const response = await fetch(url, {
           headers: {
@@ -329,11 +349,27 @@ export default function AdminMessagesPage() {
         }
       } catch (error) {
         console.error("Error fetching messages:", error);
+        toast({
+          title: t("admin.users.toast.errorTitle"),
+          description: t("admin.messages.toast.loadMessagesFailed"),
+          variant: "destructive",
+        });
       } finally {
         if (!skipLoadingCheck) setLoading(false);
       }
     },
-    [token, projectIdParam, loading]
+    [token, projectIdParam, loading, t, toast]
+  );
+
+  const handleMessageTranslated = useCallback(
+    (messageId: string, newContent: string) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId ? { ...m, content: newContent } : m,
+        ),
+      );
+    },
+    [],
   );
 
   // Load conversations on mount
@@ -392,25 +428,40 @@ export default function AdminMessagesPage() {
     event: React.ChangeEvent<HTMLInputElement>
   ) => {
     const file = event.target.files?.[0];
-    if (!file || !token || !socket || !selectedChat) return;
+    const resetFileInput = () => {
+      event.target.value = "";
+    };
 
-    const formData = new FormData();
-    formData.append("file", file);
-
-    const res = await fetch(`${API_URL}/messages/upload`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-      body: formData,
-    });
-
-    const data = await res.json();
-    if (!data.success) {
-      alert("File upload failed");
+    if (!file || !token || !socket || !selectedChat) {
+      resetFileInput();
       return;
     }
 
-    setPendingAttachmentUrl(data.fileUrl);
-    setShowAttachmentPicker(true);
+    setAttachmentUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch(`${API_URL}/messages/upload`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!data.success) {
+        alert(t("admin.messages.alert.uploadFailed"));
+        return;
+      }
+
+      setPendingAttachmentUrl(data.fileUrl);
+      setShowAttachmentPicker(true);
+    } catch {
+      alert(t("admin.messages.alert.uploadFailed"));
+    } finally {
+      setAttachmentUploading(false);
+      resetFileInput();
+    }
   };
 
   const sendAttachmentMessage = (projectId?: string) => {
@@ -433,7 +484,11 @@ export default function AdminMessagesPage() {
       messageData,
       (response: { success?: boolean; error?: string }) => {
         if (!response?.success) {
-          alert("Failed to send file: " + response.error);
+          alert(
+            t("admin.messages.alert.sendFileFailed", {
+              error: response.error || t("admin.messages.toast.genericError"),
+            })
+          );
         }
       }
     );
@@ -495,7 +550,11 @@ export default function AdminMessagesPage() {
             setMessages((prev) =>
               prev.filter((msg) => msg.id !== optimisticMessage.id)
             );
-            alert("Failed to send message: " + response?.error);
+            alert(
+              t("admin.messages.alert.sendFailed", {
+                error: response?.error || t("admin.messages.toast.genericError"),
+              })
+            );
           }
         }
       );
@@ -522,9 +581,14 @@ export default function AdminMessagesPage() {
         );
       } catch (error) {
         console.error("Error marking messages as read:", error);
+        toast({
+          title: t("admin.users.toast.errorTitle"),
+          description: t("admin.messages.toast.markReadFailed"),
+          variant: "destructive",
+        });
       }
     },
-    [token]
+    [token, t, toast]
   );
 
   // Auto-mark messages as read when they become visible
@@ -560,7 +624,7 @@ export default function AdminMessagesPage() {
     return (
       <AdminLayout>
         <div className="flex items-center justify-center h-64">
-          <p className="text-gray-500">Please log in to view messages</p>
+          <p className="text-gray-500">{t("admin.messages.authRequired")}</p>
         </div>
       </AdminLayout>
     );
@@ -578,20 +642,22 @@ export default function AdminMessagesPage() {
           <Card className="h-full flex flex-col">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center justify-between text-base md:text-lg">
-                <span>Messages</span>
+                <span>{t("admin.messages.title")}</span>
                 <Badge
                   variant={isConnected ? "default" : "secondary"}
                   className={`text-xs ${
                     isConnected ? "bg-green-500" : "bg-gray-500"
                   }`}
                 >
-                  {isConnected ? "Online" : "Offline"}
+                  {isConnected
+                    ? t("admin.messages.status.online")
+                    : t("admin.messages.status.offline")}
                 </Badge>
               </CardTitle>
               <div className="relative mt-2">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <Input
-                  placeholder="Search conversations..."
+                  placeholder={t("admin.messages.searchPlaceholder")}
                   className="pl-10 text-sm"
                 />
               </div>
@@ -657,7 +723,7 @@ export default function AdminMessagesPage() {
                               <span className="text-xs text-gray-500">
                                 {new Date(
                                   conversation.lastMessageAt
-                                ).toLocaleTimeString([], {
+                                ).toLocaleTimeString(intlLocale, {
                                   hour: "2-digit",
                                   minute: "2-digit",
                                 })}
@@ -670,7 +736,8 @@ export default function AdminMessagesPage() {
                             </div>
                           </div>
                           <p className="text-xs md:text-sm text-gray-600 line-clamp-2">
-                            {conversation.lastMessage || "No messages yet"}
+                            {conversation.lastMessage ||
+                              t("admin.messages.lastMessagePlaceholder")}
                           </p>
                         </div>
                       </div>
@@ -680,7 +747,7 @@ export default function AdminMessagesPage() {
               )}
               {conversations.length === 0 && !loading && (
                 <div className="text-center py-8 text-gray-500 text-sm">
-                  No conversations yet
+                  {t("admin.messages.empty.noConversations")}
                 </div>
               )}
             </CardContent>
@@ -745,8 +812,8 @@ export default function AdminMessagesPage() {
                         <div className="flex items-center gap-2">
                           <p className="text-xs text-gray-500">
                             {selectedConversation.online
-                              ? "Online"
-                              : "Last seen recently"}
+                              ? t("admin.messages.onlineStatus.online")
+                              : t("admin.messages.onlineStatus.lastSeen")}
                           </p>
                           {selectedConversation.role && (
                             <Badge
@@ -773,7 +840,7 @@ export default function AdminMessagesPage() {
                 ) : (
                   <div className="text-center w-full py-4">
                     <p className="text-gray-500 text-sm md:text-base">
-                      Select a conversation to start chatting
+                      {t("admin.messages.empty.selectConversation")}
                     </p>
                   </div>
                 )}
@@ -790,7 +857,7 @@ export default function AdminMessagesPage() {
                 <>
                   {messages.length === 0 && selectedChat && (
                     <p className="text-center text-gray-400 text-sm mt-8">
-                      No messages yet. Start the conversation!
+                      {t("admin.messages.empty.noMessages")}
                     </p>
                   )}
 
@@ -842,7 +909,7 @@ export default function AdminMessagesPage() {
                                       >
                                         <Image
                                           src={fileUrl}
-                                          alt="Attachment"
+                                          alt={t("admin.messages.attachment.alt")}
                                           width={200}
                                           height={200}
                                           className="rounded-lg max-w-[150px] md:max-w-[200px] border object-contain"
@@ -892,14 +959,37 @@ export default function AdminMessagesPage() {
                                     href={`/admin/projects/${message.attachments[0]}`}
                                     className="mt-2 inline-block text-xs font-medium text-blue-600 hover:underline"
                                   >
-                                    View Project
+                                    {t("admin.messages.actions.viewProject")}
                                   </a>
                                 )}
                               </div>
                             ) : (
-                              <p className="text-xs md:text-sm break-words">
-                                {message.content}
-                              </p>
+                              <TranslatedMessageText
+                                messageId={message.id}
+                                content={message.content}
+                                isOwn={isOwn}
+                                targetLocale={locale}
+                                token={token}
+                                translateLabel={t(
+                                  "messages.translate.translate",
+                                )}
+                                translatingLabel={t(
+                                  "messages.translate.translating",
+                                )}
+                                onContentReplaced={handleMessageTranslated}
+                                onTranslateFailed={(reason) =>
+                                  toast({
+                                    title: t("admin.users.toast.errorTitle"),
+                                    description:
+                                      reason?.trim() ||
+                                      t("messages.translate.failed"),
+                                    variant: "destructive",
+                                  })
+                                }
+                                className={
+                                  isOwn ? "text-white" : "text-gray-900"
+                                }
+                              />
                             )}
                             <p
                               className={`text-[10px] md:text-xs mt-1 ${
@@ -907,7 +997,7 @@ export default function AdminMessagesPage() {
                               }`}
                             >
                               {new Date(message.createdAt).toLocaleTimeString(
-                                [],
+                                intlLocale,
                                 {
                                   hour: "2-digit",
                                   minute: "2-digit",
@@ -932,15 +1022,36 @@ export default function AdminMessagesPage() {
             {/* Input */}
             {selectedChat && (
               <div className="border-t p-2 md:p-4 relative">
+                {attachmentUploading && (
+                  <div
+                    className="mb-2 flex items-center gap-2 rounded-md border border-blue-100 bg-blue-50/80 px-3 py-2 text-xs text-blue-900 md:text-sm"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    <Loader2 className="h-4 w-4 shrink-0 animate-spin text-blue-600" />
+                    <span>Uploading file…</span>
+                  </div>
+                )}
                 <div className="flex items-end gap-1 md:gap-2">
                   <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
                     <Button
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 md:h-10 md:w-10"
+                      disabled={attachmentUploading}
+                      aria-busy={attachmentUploading}
+                      aria-label={
+                        attachmentUploading
+                          ? "Uploading attachment"
+                          : "Attach file"
+                      }
                       onClick={() => fileInputRef.current?.click()}
                     >
-                      <Paperclip className="w-4 h-4 md:w-5 md:h-5" />
+                      {attachmentUploading ? (
+                        <Loader2 className="w-4 h-4 md:w-5 md:h-5 animate-spin text-blue-600" />
+                      ) : (
+                        <Paperclip className="w-4 h-4 md:w-5 md:h-5" />
+                      )}
                     </Button>
                     <input
                       type="file"
@@ -952,7 +1063,7 @@ export default function AdminMessagesPage() {
 
                   <div className="flex-1 min-w-0">
                     <Textarea
-                      placeholder="Type your message..."
+                      placeholder={t("admin.messages.input.placeholder")}
                       value={newMessage}
                       onChange={(e) => setNewMessage(e.target.value)}
                       className="min-h-[36px] md:min-h-[40px] max-h-24 md:max-h-32 resize-none text-sm md:text-base"
@@ -975,14 +1086,14 @@ export default function AdminMessagesPage() {
                 {showAttachmentPicker && (
                   <div className="absolute bottom-14 md:bottom-16 left-2 md:left-4 bg-white border rounded-lg p-2 shadow-lg z-10 w-[calc(100%-1rem)] md:w-64">
                     <div className="p-2 text-sm text-gray-700">
-                      File uploaded. Send now?
+                      {t("admin.messages.attach.prompt")}
                     </div>
                     <div className="p-2 border-t">
                       <Button
                         onClick={() => sendAttachmentMessage()}
                         className="w-full"
                       >
-                        Send File
+                        {t("admin.messages.attach.sendFile")}
                       </Button>
                     </div>
                   </div>

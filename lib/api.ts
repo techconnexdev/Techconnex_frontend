@@ -1,6 +1,22 @@
 // lib/api.ts
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+const DEFAULT_PROFILE_AVATAR_URL =
+  "https://api.dicebear.com/9.x/personas/svg?seed=default-user&backgroundType=transparent";
+
+/** Deterministic placeholder when a profile photo URL is missing or fails to load. */
+export function getDicebearPersonasSvgUrl(seed: string): string {
+  const s = encodeURIComponent((seed || "user").slice(0, 120));
+  return `https://api.dicebear.com/9.x/personas/svg?seed=${s}&backgroundType=transparent`;
+}
+
+/** True when the profile has a real stored image (aligned with empty handling in `getProfileImageUrl`). */
+export function hasStoredProfilePhoto(imageUrl: string | null | undefined): boolean {
+  const v = (imageUrl ?? "").trim();
+  if (!v || v === "null" || v === "undefined") return false;
+  if (v.includes("/placeholder.svg")) return false;
+  return true;
+}
 
 /**
  * Get the full URL for a profile image
@@ -9,9 +25,18 @@ export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost
  * @returns Full URL to the image
  */
 export function getProfileImageUrl(imageUrl: string | null | undefined): string {
-  if (!imageUrl) {
-    return "/placeholder.svg?height=96&width=96";
+  const normalizedImageUrl = (imageUrl || "").trim();
+
+  if (
+    !normalizedImageUrl ||
+    normalizedImageUrl === "null" ||
+    normalizedImageUrl === "undefined" ||
+    normalizedImageUrl.includes("/placeholder.svg")
+  ) {
+    return DEFAULT_PROFILE_AVATAR_URL;
   }
+
+  imageUrl = normalizedImageUrl;
 
   // If it's already a full URL (R2 public URL or http/https), return as is
   if (imageUrl.startsWith("http://") || imageUrl.startsWith("https://")) {
@@ -625,6 +650,7 @@ export async function createProject(projectData: {
   category: string;
   budgetMin: number;
   budgetMax: number;
+  currencyCode: string;
   timeline: string;
   priority: string;
   skills: string[];
@@ -813,11 +839,27 @@ export async function getProviderOpportunities(params?: {
   return data;
 }
 
-export async function getProviderRecommendedOpportunities() {
+export async function getProviderRecommendedOpportunities(locale?: string) {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : undefined;
   if (!token) throw new Error("Not authenticated");
 
-  const res = await fetch(`${API_BASE}/provider/opportunities/recommended`, {
+  const localeFromStorage = (() => {
+    if (typeof window === "undefined") return "";
+    try {
+      const raw = localStorage.getItem("user");
+      if (!raw) return "";
+      const parsed = JSON.parse(raw) as { settings?: { locale?: string } };
+      return typeof parsed?.settings?.locale === "string"
+        ? parsed.settings.locale
+        : "";
+    } catch {
+      return "";
+    }
+  })();
+  const lang = (locale || localeFromStorage || "").trim();
+  const query = lang ? `?lang=${encodeURIComponent(lang)}` : "";
+
+  const res = await fetch(`${API_BASE}/provider/opportunities/recommended${query}`, {
     method: "GET",
     headers: {
       "Authorization": `Bearer ${token}`,
@@ -843,7 +885,43 @@ export async function getProviderOpportunityById(opportunityId: string) {
   });
   
   const data = await res.json();
-  if (!res.ok) throw new Error(data?.message || "Failed to fetch opportunity");
+  if (!res.ok) {
+    const err = new Error(data?.message || "Failed to fetch opportunity") as Error & {
+      status?: number;
+      code?: string;
+      projectId?: string;
+    };
+    err.status = res.status;
+    if (typeof data?.code === "string") err.code = data.code;
+    if (typeof data?.projectId === "string") err.projectId = data.projectId;
+    throw err;
+  }
+  return data;
+}
+
+export async function generateProviderOpportunityAiDraft(
+  opportunityId: string,
+  payload: {
+    processPreference?: string;
+    bidAmount?: string;
+    timelineAmount?: string;
+    timelineUnit?: "day" | "week" | "month" | "";
+  },
+) {
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : undefined;
+  if (!token) throw new Error("Not authenticated");
+
+  const res = await fetch(`${API_BASE}/provider/opportunities/${opportunityId}/ai-draft`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload || {}),
+  });
+
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.message || "Failed to generate AI draft");
   return data;
 }
 
@@ -974,11 +1052,16 @@ export async function getCompanyProjectRequests(params?: {
 }
 
 /** Fetch AI explanation for why a bid is a good fit (for hover in Bids tab). */
-export async function getBidExplanation(proposalId: string): Promise<{ success: boolean; explanation?: string }> {
+export async function getBidExplanation(
+  proposalId: string,
+  locale?: string,
+): Promise<{ success: boolean; explanation?: string }> {
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : undefined;
   if (!token) throw new Error("Not authenticated");
+  const lang = String(locale || "").trim();
+  const query = lang ? `?lang=${encodeURIComponent(lang)}` : "";
   const res = await fetch(
-    `${API_BASE}/company/project-requests/${proposalId}/bid-explanation`,
+    `${API_BASE}/company/project-requests/${proposalId}/bid-explanation${query}`,
     {
       method: "GET",
       headers: { Authorization: `Bearer ${token}` },
@@ -1189,6 +1272,30 @@ export async function getProviderProjectById(id: string) {
   
   const data = await res.json();
   if (!res.ok) throw new Error(data?.message || "Failed to fetch project");
+  return data;
+}
+
+export async function generateProviderProjectMilestonesAiDraft(
+  projectId: string,
+  payload: {
+    processPreference?: string;
+    bidAmount?: string;
+    timelineAmount?: string;
+    timelineUnit?: "day" | "week" | "month" | "";
+  },
+) {
+  const token = typeof window !== "undefined" ? localStorage.getItem("token") : undefined;
+  if (!token) throw new Error("Not authenticated");
+  const res = await fetch(`${API_BASE}/provider/projects/${projectId}/milestones/ai-draft`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload || {}),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.message || "Failed to generate AI milestones");
   return data;
 }
 
@@ -1531,13 +1638,17 @@ export async function approveProviderMilestones(projectId: string) {
 
 // Provider search API functions
 /** Fetch AI-recommended providers. When serviceRequestId is set, returns top 5 for that opportunity only (same algorithm everywhere). */
-export async function getRecommendedProviders(serviceRequestId?: string) {
+export async function getRecommendedProviders(
+  serviceRequestId?: string,
+  locale?: string,
+) {
   const token = getToken();
   if (!token) throw new Error("Not authenticated");
 
-  const url = serviceRequestId
-    ? `${API_BASE}/providers/recommended?serviceRequestId=${encodeURIComponent(serviceRequestId)}`
-    : `${API_BASE}/providers/recommended`;
+  const params = new URLSearchParams();
+  if (serviceRequestId) params.append("serviceRequestId", serviceRequestId);
+  if (locale && locale.trim()) params.append("lang", locale.trim());
+  const url = `${API_BASE}/providers/recommended${params.toString() ? `?${params.toString()}` : ""}`;
   const res = await fetch(url, {
     method: "GET",
     headers: {
@@ -2315,6 +2426,23 @@ export async function activateUser(userId: string) {
   return data;
 }
 
+export async function restoreDeletedUser(userId: string) {
+  const token = getToken();
+  if (!token) throw new Error("Not authenticated");
+
+  const res = await fetch(`${API_BASE}/admin/users/${userId}/restore`, {
+    method: "PATCH",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error || "Failed to restore account");
+  return data;
+}
+
 export async function updateAdminUser(userId: string, updateData: Record<string, unknown>) {
   const token = getToken();
   if (!token) throw new Error("Not authenticated");
@@ -2963,12 +3091,27 @@ export async function deleteAdminSupportReference(documentId: string) {
   return data;
 }
 
-export async function simulateDisputePayout(disputeId: string, refundAmount: number, releaseAmount: number, resolution?: string, bankTransferRefImage?: File) {
+export async function simulateDisputePayout(
+  disputeId: string,
+  refundAmount: number,
+  releaseAmount: number,
+  resolution?: string,
+  bankTransferRefImage?: File,
+  payoutOverride?: {
+    bankName: string;
+    accountNumber: string;
+    accountName?: string;
+  }
+) {
   const token = getToken();
   if (!token) throw new Error("Not authenticated");
 
-  // Use FormData if there's an image, otherwise use JSON
-  const useFormData = bankTransferRefImage !== undefined;
+  // Use FormData if there's an image or payout override fields, otherwise use JSON
+  const useFormData =
+    bankTransferRefImage !== undefined ||
+    Boolean(
+      payoutOverride?.bankName?.trim() && payoutOverride?.accountNumber?.trim()
+    );
 
   let body: FormData | string;
   const headers: HeadersInit = {
@@ -2983,10 +3126,29 @@ export async function simulateDisputePayout(disputeId: string, refundAmount: num
     if (bankTransferRefImage) {
       body.append("bankTransferRefImage", bankTransferRefImage);
     }
+    if (payoutOverride?.bankName?.trim() && payoutOverride?.accountNumber?.trim()) {
+      body.append("payoutBankName", payoutOverride.bankName.trim());
+      body.append("payoutAccountNumber", payoutOverride.accountNumber.trim());
+      if (payoutOverride.accountName?.trim()) {
+        body.append("payoutAccountName", payoutOverride.accountName.trim());
+      }
+    }
     // Don't set Content-Type for FormData - browser will set it with boundary
   } else {
     (headers as Record<string, string>)["Content-Type"] = "application/json";
-    body = JSON.stringify({ refundAmount, releaseAmount, resolution: resolution || "" });
+    const payload: Record<string, unknown> = {
+      refundAmount,
+      releaseAmount,
+      resolution: resolution || "",
+    };
+    if (payoutOverride?.bankName?.trim() && payoutOverride?.accountNumber?.trim()) {
+      payload.payoutBankName = payoutOverride.bankName.trim();
+      payload.payoutAccountNumber = payoutOverride.accountNumber.trim();
+      if (payoutOverride.accountName?.trim()) {
+        payload.payoutAccountName = payoutOverride.accountName.trim();
+      }
+    }
+    body = JSON.stringify(payload);
   }
 
   const res = await fetch(`${API_BASE}/admin/disputes/${disputeId}/payout`, {
@@ -2997,6 +3159,31 @@ export async function simulateDisputePayout(disputeId: string, refundAmount: num
   
   const data = await res.json();
   if (!res.ok) throw new Error(data?.error || "Failed to simulate payout");
+  return data;
+}
+
+export async function manualResolveDispute(
+  disputeId: string,
+  body: {
+    resolution?: string;
+    customerPayoutNote?: string;
+    providerPayoutNote?: string;
+  }
+) {
+  const token = getToken();
+  if (!token) throw new Error("Not authenticated");
+
+  const res = await fetch(`${API_BASE}/admin/disputes/${disputeId}/manual-resolve`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error || "Failed to manually resolve dispute");
   return data;
 }
 
@@ -3015,6 +3202,25 @@ export async function redoMilestone(disputeId: string, resolution?: string) {
   
   const data = await res.json();
   if (!res.ok) throw new Error(data?.error || "Failed to redo milestone");
+  return data;
+}
+
+/** Project-level dispute (no milestone): close dispute and set project back to IN_PROGRESS */
+export async function redoProject(disputeId: string, resolution?: string) {
+  const token = getToken();
+  if (!token) throw new Error("Not authenticated");
+
+  const res = await fetch(`${API_BASE}/admin/disputes/${disputeId}/redo-project`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ resolution: resolution || "" }),
+  });
+
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error || "Failed to redo project");
   return data;
 }
 
@@ -3054,6 +3260,38 @@ export async function getAdminProjectStats() {
   
   const data = await res.json();
   if (!res.ok) throw new Error(data?.error || "Failed to fetch project stats");
+  return data;
+}
+
+export async function createAdminProject(payload: {
+  title: string;
+  description?: string;
+  category?: string;
+  budgetMin?: number;
+  budgetMax?: number;
+  skills?: string[];
+  timeline?: string;
+  requirements?: string;
+  deliverables?: string;
+  status?: string;
+  currencyCode?: string;
+  customerId: string;
+  providerId: string;
+}) {
+  const token = getToken();
+  if (!token) throw new Error("Not authenticated");
+
+  const res = await fetch(`${API_BASE}/admin/projects`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error || "Failed to create project");
   return data;
 }
 
@@ -3566,13 +3804,19 @@ export async function createReviewReply(reviewId: string, content: string, isPro
   return data;
 }
 
-export async function getProviderAiDrafts(referenceIds?: string[]) {
+export async function getProviderAiDrafts(
+  referenceIds?: string[],
+  locale?: string,
+) {
   const token = getToken();
   if (!token) throw new Error("Not authenticated");
 
   const params = new URLSearchParams();
   if (referenceIds && referenceIds.length > 0) {
     params.append("referenceIds", referenceIds.join(","));
+  }
+  if (locale && locale.trim()) {
+    params.append("lang", locale.trim());
   }
 
   const res = await fetch(`${API_BASE}/providers/ai-drafts${params.toString() ? `?${params.toString()}` : ""}`, {
@@ -3588,13 +3832,16 @@ export async function getProviderAiDrafts(referenceIds?: string[]) {
   return data;
 }
 
-export async function getCompanyAiDrafts(referenceIds?: string[]) {
+export async function getCompanyAiDrafts(referenceIds?: string[], locale?: string) {
   const token = getToken();
   if (!token) throw new Error("Not authenticated");
 
   const params = new URLSearchParams();
   if (referenceIds && referenceIds.length > 0) {
     params.append("referenceIds", referenceIds.join(","));
+  }
+  if (locale && locale.trim()) {
+    params.append("lang", locale.trim());
   }
 
   const res = await fetch(`${API_BASE}/companies/ai-drafts${params.toString() ? `?${params.toString()}` : ""}`, {
@@ -3610,13 +3857,16 @@ export async function getCompanyAiDrafts(referenceIds?: string[]) {
   return data;
 }
 
-export async function getServiceRequestAiDrafts(referenceIds?: string[]) {
+export async function getServiceRequestAiDrafts(referenceIds?: string[], locale?: string) {
   const token = getToken();
   if (!token) throw new Error("Not authenticated");
 
   const params = new URLSearchParams();
   if (referenceIds && referenceIds.length > 0) {
     params.append("referenceIds", referenceIds.join(","));
+  }
+  if (locale && locale.trim()) {
+    params.append("lang", locale.trim());
   }
 
   const res = await fetch(`${API_BASE}/provider/opportunities/ai-drafts${params.toString() ? `?${params.toString()}` : ""}`, {
@@ -3637,6 +3887,14 @@ export async function getAdminPayments(filters?: {
   search?: string;
   status?: string;
   method?: string;
+  /** ISO date string YYYY-MM-DD */
+  dateFrom?: string;
+  /** ISO date string YYYY-MM-DD */
+  dateTo?: string;
+  /** Match customer or provider name/email (partial) */
+  participant?: string;
+  /** `ready-to-transfer` | `normal` — narrows by escrow/milestone rules */
+  transfer?: string;
   page?: number;
   limit?: number;
   sortBy?: string;
@@ -3649,6 +3907,10 @@ export async function getAdminPayments(filters?: {
   if (filters?.search) params.append("search", filters.search);
   if (filters?.status) params.append("status", filters.status);
   if (filters?.method) params.append("method", filters.method);
+  if (filters?.dateFrom) params.append("dateFrom", filters.dateFrom);
+  if (filters?.dateTo) params.append("dateTo", filters.dateTo);
+  if (filters?.participant) params.append("participant", filters.participant);
+  if (filters?.transfer) params.append("transfer", filters.transfer);
   if (filters?.page) params.append("page", filters.page.toString());
   if (filters?.limit) params.append("limit", filters.limit.toString());
   if (filters?.sortBy) params.append("sortBy", filters.sortBy);
@@ -3667,11 +3929,17 @@ export async function getAdminPayments(filters?: {
   return data;
 }
 
-export async function getAdminPaymentStats() {
+export async function getAdminPaymentStats(displayCurrency?: string) {
   const token = getToken();
   if (!token) throw new Error("Not authenticated");
 
-  const res = await fetch(`${API_BASE}/admin/payments/stats`, {
+  const code = (displayCurrency || "").trim().toUpperCase();
+  const qs =
+    /^[A-Z]{3}$/.test(code) && code !== "MYR"
+      ? `?currency=${encodeURIComponent(code)}`
+      : "";
+
+  const res = await fetch(`${API_BASE}/admin/payments/stats${qs}`, {
     method: "GET",
     headers: {
       "Authorization": `Bearer ${token}`,
@@ -3940,5 +4208,28 @@ export async function getUnreadMessageCount() {
     success: boolean;
     count: number;
   };
+}
+
+/** Registration: send 6-digit OTP via Twilio WhatsApp (requires server Twilio env). */
+export async function sendWhatsAppOtp(phone: string) {
+  const res = await fetch(`${API_BASE}/auth/send-whatsapp-otp`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ phone }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error || "Failed to send WhatsApp code");
+  return data as { success: boolean; sent: boolean };
+}
+
+export async function verifyWhatsAppOtp(phone: string, otp: string) {
+  const res = await fetch(`${API_BASE}/auth/verify-whatsapp-otp`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ phone, otp }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error || "Verification failed");
+  return data as { success: boolean; verified: boolean };
 }
 

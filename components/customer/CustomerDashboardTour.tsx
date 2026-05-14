@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/contexts/I18nProvider";
 
 const DEFAULT_STORAGE_KEY_PREFIX = "customer-dashboard-tour-done";
 
@@ -20,62 +21,41 @@ function getStorageKey(prefix: string): string {
   }
 }
 
+/** Fired on the window when a tour is finished or skipped (detail.storageKeyPrefix). */
+export const TECHCONNEX_TOUR_COMPLETED_EVENT = "techconnex-tour-completed";
+
+export type TechConnexTourCompletedDetail = {
+  storageKeyPrefix: string;
+};
+
+/** Same completion check the tour uses (per-user localStorage key). */
+export function isCustomerAreaTourCompleted(storageKeyPrefix: string): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    return localStorage.getItem(getStorageKey(storageKeyPrefix)) === "true";
+  } catch {
+    return true;
+  }
+}
+
 export type TourStep = {
   target: string; // selector for the element, e.g. [data-tour-step="0"]
   title: string;
   content: string;
 };
 
-const DEFAULT_STEPS: TourStep[] = [
-  {
-    target: '[data-tour-step="0"]',
-    title: "Welcome to your Dashboard",
-    content:
-      "This is your home base. Most areas will be empty at first. As you create projects and work with providers, your stats and lists will fill in here.",
-  },
-  {
-    target: '[data-tour-step="1"]',
-    title: "Start by creating a project",
-    content:
-      "To get started, click here to create a project. Providers will then be able to find your project and send you proposals.",
-  },
-  {
-    target: '[data-tour-step="2"]',
-    title: "Stats cards",
-    content:
-      "These numbers will update as you use the platform: Active projects (current work), Completed (finished projects), Total spent (payments made), and your average rating from provider reviews. All start at zero for new users.",
-  },
-  {
-    target: '[data-tour-step="3"]',
-    title: "Recent projects list",
-    content:
-      "Your projects will appear here. For now it may be empty. Once you create projects, you can click any row to view details or hover over a project to see suggested providers on the right.",
-  },
-  {
-    target: '[data-tour-step="4"]',
-    title: "Recommended providers",
-    content:
-      "This area shows provider suggestions when you hover over a project in the list. Until you create and hover over a project, it will stay empty.",
-  },
-  {
-    target: '[data-tour-step="5"]',
-    title: "Navigation menu",
-    content:
-      "Use this menu to go to Projects, Find Providers, Messages, Billing, and other sections. The Dashboard always shows this overview.",
-  },
-];
-
 const GAP = 12;
 const ARROW_SIZE = 8;
 const SPOTLIGHT_PADDING = 8;
 
 export function CustomerDashboardTour({
-  steps = DEFAULT_STEPS,
+  steps,
   storageKeyPrefix = DEFAULT_STORAGE_KEY_PREFIX,
 }: {
-  steps?: TourStep[];
+  steps: TourStep[];
   storageKeyPrefix?: string;
 }) {
+  const { t } = useI18n();
   const [stepIndex, setStepIndex] = useState<number | null>(null);
   const [position, setPosition] = useState<{
     top: number;
@@ -103,6 +83,11 @@ export function CustomerDashboardTour({
     setStepIndex(null);
     setPosition(null);
     setSpotlightRect(null);
+    window.dispatchEvent(
+      new CustomEvent(TECHCONNEX_TOUR_COMPLETED_EVENT, {
+        detail: { storageKeyPrefix } satisfies TechConnexTourCompletedDetail,
+      }),
+    );
   }, [storageKeyPrefix]);
 
   const startTour = useCallback(() => {
@@ -111,14 +96,12 @@ export function CustomerDashboardTour({
   }, [isCompleted]);
 
   const goNext = useCallback(() => {
-    setStepIndex((i) => {
-      if (i === null || i >= steps.length - 1) {
-        completeTour();
-        return null;
-      }
-      return i + 1;
-    });
-  }, [steps.length, completeTour]);
+    if (stepIndex === null || stepIndex >= steps.length - 1) {
+      completeTour();
+      return;
+    }
+    setStepIndex(stepIndex + 1);
+  }, [completeTour, stepIndex, steps.length]);
 
   const goBack = useCallback(() => {
     setStepIndex((i) => (i === null || i <= 0 ? 0 : i - 1));
@@ -130,10 +113,10 @@ export function CustomerDashboardTour({
 
   // On mount: show tour only if not completed (after a short delay so DOM is ready)
   useEffect(() => {
-    const t = setTimeout(() => {
+    const tourStartTimer = setTimeout(() => {
       if (!isCompleted()) setStepIndex(0);
     }, 500);
-    return () => clearTimeout(t);
+    return () => clearTimeout(tourStartTimer);
   }, [isCompleted]);
 
   // Position popup and spotlight overlay
@@ -151,17 +134,39 @@ export function CustomerDashboardTour({
       return;
     }
 
-    const el = document.querySelector(step.target);
     const popup = popupRef.current;
-    if (!el || !popup) {
+    if (!popup) {
       setPosition(null);
       setSpotlightRect(null);
       return;
     }
 
     const updatePosition = () => {
-      const rect = el.getBoundingClientRect();
-      const popupRect = popup.getBoundingClientRect();
+      const targetEl = document.querySelector(step.target);
+      const popupEl = popupRef.current;
+      if (!popupEl) return;
+
+      const popupRect = popupEl.getBoundingClientRect();
+      const maxLeft = window.innerWidth - popupRect.width - 16;
+      const minLeft = 16;
+
+      // Target missing (e.g. skeleton / conditional UI) or not measurable yet
+      if (!targetEl) {
+        if (popupRect.width < 1 || popupRect.height < 1) return;
+        const left = window.innerWidth / 2 - popupRect.width / 2;
+        const clampedLeft = Math.min(maxLeft, Math.max(minLeft, left));
+        const top = window.innerHeight / 2 - popupRect.height / 2;
+        const clampedTop = Math.max(16, top);
+        setPosition({
+          top: clampedTop,
+          left: clampedLeft,
+          hideArrow: true,
+        });
+        setSpotlightRect(null);
+        return;
+      }
+
+      const rect = targetEl.getBoundingClientRect();
       const hasVisibleTarget = rect.width > 0 && rect.height > 0;
 
       // Update spotlight cutout for visible targets (clamped to viewport)
@@ -176,8 +181,6 @@ export function CustomerDashboardTour({
       } else {
         setSpotlightRect(null);
       }
-      const maxLeft = window.innerWidth - popupRect.width - 16;
-      const minLeft = 16;
 
       if (!hasVisibleTarget) {
         const left = window.innerWidth / 2 - popupRect.width / 2;
@@ -347,7 +350,7 @@ export function CustomerDashboardTour({
           size="icon"
           className="h-9 w-9 flex-shrink-0 text-gray-500 hover:text-gray-700"
           onClick={skip}
-          aria-label="Skip tour"
+          aria-label={t("customer.tour.skipAria")}
         >
           <X className="h-5 w-5" />
         </Button>
@@ -366,7 +369,7 @@ export function CustomerDashboardTour({
           onClick={skip}
           className="text-base"
         >
-          Skip
+          {t("customer.tour.skip")}
         </Button>
         <div className="flex items-center gap-2">
           {!isFirst && (
@@ -378,7 +381,7 @@ export function CustomerDashboardTour({
               className="text-base"
             >
               <ChevronLeft className="h-4 w-4 mr-1" />
-              Back
+              {t("customer.tour.back")}
             </Button>
           )}
           <Button
@@ -387,7 +390,7 @@ export function CustomerDashboardTour({
             onClick={goNext}
             className="text-base"
           >
-            {isLast ? "Finish" : "Next"}
+            {isLast ? t("customer.tour.finish") : t("customer.tour.next")}
             {!isLast && <ChevronRight className="h-5 w-5 ml-1" />}
           </Button>
         </div>
@@ -479,4 +482,45 @@ export function CustomerDashboardTour({
       {createPortal(popupContent, document.body)}
     </>
   );
+}
+
+export function CustomerDashboardHomeTour() {
+  const { t } = useI18n();
+  const steps = useMemo<TourStep[]>(
+    () => [
+      {
+        target: '[data-tour-step="0"]',
+        title: t("customer.dashboard.tour.step0.title"),
+        content: t("customer.dashboard.tour.step0.content"),
+      },
+      {
+        target: '[data-tour-step="1"]',
+        title: t("customer.dashboard.tour.step1.title"),
+        content: t("customer.dashboard.tour.step1.content"),
+      },
+      {
+        target: '[data-tour-step="2"]',
+        title: t("customer.dashboard.tour.step2.title"),
+        content: t("customer.dashboard.tour.step2.content"),
+      },
+      {
+        target: '[data-tour-step="3"]',
+        title: t("customer.dashboard.tour.step3.title"),
+        content: t("customer.dashboard.tour.step3.content"),
+      },
+      {
+        target: '[data-tour-step="4"]',
+        title: t("customer.dashboard.tour.step4.title"),
+        content: t("customer.dashboard.tour.step4.content"),
+      },
+      {
+        target: '[data-tour-step="5"]',
+        title: t("customer.dashboard.tour.step5.title"),
+        content: t("customer.dashboard.tour.step5.content"),
+      },
+    ],
+    [t],
+  );
+
+  return <CustomerDashboardTour steps={steps} />;
 }

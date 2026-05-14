@@ -42,6 +42,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Search, Flag, Loader2, MoreHorizontal, MessageSquare, Bell, UserX } from "lucide-react";
 import { AdminLayout } from "@/components/admin-layout";
 import { useToast } from "@/hooks/use-toast";
+import { useI18n } from "@/contexts/I18nProvider";
 import {
   getAdminConversationReports,
   getAdminConversationReportStats,
@@ -50,7 +51,7 @@ import {
   suspendUser,
 } from "@/lib/api";
 import Link from "next/link";
-import { REPORT_REASONS } from "@/components/messages/ReportConversationDialog";
+import type { MessageKey } from "@/lib/i18n/messages";
 
 type ConversationReport = {
   id: string;
@@ -83,6 +84,7 @@ type ReportStats = {
 };
 
 export default function AdminConversationReportsPage() {
+  const { t } = useI18n();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [reports, setReports] = useState<ConversationReport[]>([]);
@@ -111,16 +113,18 @@ export default function AdminConversationReportsPage() {
       }
     } catch (error: unknown) {
       const errorMessage =
-        error instanceof Error ? error.message : "Failed to load reports";
+        error instanceof Error
+          ? error.message
+          : t("admin.conversationReports.toast.loadFailed");
       toast({
-        title: "Error",
+        title: t("admin.conversationReports.toast.errorTitle"),
         description: errorMessage,
         variant: "destructive",
       });
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, searchQuery, toast]);
+  }, [statusFilter, searchQuery, toast, t]);
 
   const loadStats = useCallback(async () => {
     try {
@@ -143,9 +147,16 @@ export default function AdminConversationReportsPage() {
     return () => clearTimeout(timer);
   }, [searchQuery, loadReports]);
 
+  const REPORT_REASON_I18N: Record<string, MessageKey> = {
+    OUTSOURCE_OFF_PLATFORM: "customer.messages.report.reason.OUTSOURCE_OFF_PLATFORM",
+    SPAM_IRRELEVANT: "customer.messages.report.reason.SPAM_IRRELEVANT",
+    HARASSMENT_INAPPROPRIATE: "customer.messages.report.reason.HARASSMENT_INAPPROPRIATE",
+    FRAUD_IMPERSONATION: "customer.messages.report.reason.FRAUD_IMPERSONATION",
+  };
+
   const getReasonLabel = (reason: string) => {
-    const found = REPORT_REASONS.find((r) => r.value === reason);
-    return found ? found.label : reason;
+    const key = REPORT_REASON_I18N[reason];
+    return key ? t(key) : reason;
   };
 
   const getStatusColor = (status: string) => {
@@ -161,17 +172,31 @@ export default function AdminConversationReportsPage() {
     }
   };
 
+  const statusLabel = (status: string) => {
+    const upper = status?.toUpperCase?.() || "";
+    if (upper === "PENDING" || upper === "REVIEWED" || upper === "RESOLVED") {
+      return t(`admin.conversationReports.status.${upper}` as MessageKey);
+    }
+    return t("admin.conversationReports.status.UNKNOWN", { status });
+  };
+
   const handleStatusChange = async (reportId: string, status: string) => {
     try {
       setActionLoading(reportId);
       await updateConversationReportStatus(reportId, status);
-      toast({ title: "Success", description: "Report status updated" });
+      toast({
+        title: t("admin.conversationReports.toast.successTitle"),
+        description: t("admin.conversationReports.toast.statusUpdated"),
+      });
       loadReports();
       loadStats();
     } catch (e) {
       toast({
-        title: "Error",
-        description: e instanceof Error ? e.message : "Failed to update status",
+        title: t("admin.conversationReports.toast.errorTitle"),
+        description:
+          e instanceof Error
+            ? e.message
+            : t("admin.conversationReports.toast.updateStatusFailed"),
         variant: "destructive",
       });
     } finally {
@@ -183,12 +208,20 @@ export default function AdminConversationReportsPage() {
     try {
       setActionLoading(report.id);
       await suspendUser(report.reported.id);
-      toast({ title: "Success", description: `Suspended ${report.reported.name}` });
+      toast({
+        title: t("admin.conversationReports.toast.successTitle"),
+        description: t("admin.conversationReports.toast.suspended", {
+          name: report.reported.name,
+        }),
+      });
       loadReports();
     } catch (e) {
       toast({
-        title: "Error",
-        description: e instanceof Error ? e.message : "Failed to suspend user",
+        title: t("admin.conversationReports.toast.errorTitle"),
+        description:
+          e instanceof Error
+            ? e.message
+            : t("admin.conversationReports.toast.suspendFailed"),
         variant: "destructive",
       });
     } finally {
@@ -202,7 +235,7 @@ export default function AdminConversationReportsPage() {
       userId: report.reported.id,
       name: report.reported.name,
     });
-    setNotifyTitle("Regarding your reported conversation");
+    setNotifyTitle(t("admin.conversationReports.notify.defaultTitle"));
     setNotifyContent("");
     setNotifyOpen(true);
   };
@@ -216,13 +249,19 @@ export default function AdminConversationReportsPage() {
         title: notifyTitle.trim(),
         content: notifyContent.trim(),
       });
-      toast({ title: "Success", description: "Notification sent" });
+      toast({
+        title: t("admin.conversationReports.toast.successTitle"),
+        description: t("admin.conversationReports.toast.notificationSent"),
+      });
       setNotifyOpen(false);
       setNotifyTarget(null);
     } catch (e) {
       toast({
-        title: "Error",
-        description: e instanceof Error ? e.message : "Failed to send notification",
+        title: t("admin.conversationReports.toast.errorTitle"),
+        description:
+          e instanceof Error
+            ? e.message
+            : t("admin.conversationReports.toast.notificationFailed"),
         variant: "destructive",
       });
     } finally {
@@ -237,10 +276,10 @@ export default function AdminConversationReportsPage() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">
-              Message Reports
+              {t("admin.conversationReports.page.title")}
             </h1>
             <p className="text-gray-600">
-              Review reports of suspicious or inappropriate conversations
+              {t("admin.conversationReports.page.subtitle")}
             </p>
           </div>
         </div>
@@ -251,7 +290,7 @@ export default function AdminConversationReportsPage() {
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium text-gray-600">
-                  Total Reports
+                  {t("admin.conversationReports.stats.totalReports")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -261,7 +300,7 @@ export default function AdminConversationReportsPage() {
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium text-gray-600">
-                  Pending
+                  {t("admin.conversationReports.stats.pending")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -273,7 +312,7 @@ export default function AdminConversationReportsPage() {
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium text-gray-600">
-                  Reviewed / Resolved
+                  {t("admin.conversationReports.stats.reviewedResolved")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -288,7 +327,9 @@ export default function AdminConversationReportsPage() {
         {/* Filters */}
         <Card>
           <CardHeader className="p-4 sm:p-6">
-            <CardTitle className="text-lg sm:text-xl">Filters</CardTitle>
+            <CardTitle className="text-lg sm:text-xl">
+              {t("admin.conversationReports.filters.title")}
+            </CardTitle>
           </CardHeader>
           <CardContent className="p-4 sm:p-6 pt-0">
             <div className="flex flex-col gap-4">
@@ -296,7 +337,7 @@ export default function AdminConversationReportsPage() {
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                   <Input
-                    placeholder="Search by reporter or reported user name/email..."
+                    placeholder={t("admin.conversationReports.filters.searchPlaceholder")}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="pl-10 text-sm sm:text-base"
@@ -313,25 +354,25 @@ export default function AdminConversationReportsPage() {
                     value="all"
                     className="text-xs sm:text-sm w-full sm:w-auto"
                   >
-                    All Status
+                    {t("admin.conversationReports.filters.allStatus")}
                   </TabsTrigger>
                   <TabsTrigger
                     value="PENDING"
                     className="text-xs sm:text-sm w-full sm:w-auto"
                   >
-                    Pending
+                    {t("admin.conversationReports.filters.pending")}
                   </TabsTrigger>
                   <TabsTrigger
                     value="REVIEWED"
                     className="text-xs sm:text-sm w-full sm:w-auto"
                   >
-                    Reviewed
+                    {t("admin.conversationReports.filters.reviewed")}
                   </TabsTrigger>
                   <TabsTrigger
                     value="RESOLVED"
                     className="text-xs sm:text-sm w-full sm:w-auto"
                   >
-                    Resolved
+                    {t("admin.conversationReports.filters.resolved")}
                   </TabsTrigger>
                 </TabsList>
               </Tabs>
@@ -344,10 +385,12 @@ export default function AdminConversationReportsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Flag className="h-5 w-5 text-amber-500" />
-              Conversation Reports
+              {t("admin.conversationReports.table.title")}
             </CardTitle>
             <CardDescription>
-              {reports.length} report(s) found
+              {t("admin.conversationReports.table.found", {
+                count: reports.length,
+              })}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -358,19 +401,21 @@ export default function AdminConversationReportsPage() {
             ) : reports.length === 0 ? (
               <div className="text-center py-12">
                 <Flag className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-500">No reports found</p>
+                <p className="text-gray-500">
+                  {t("admin.conversationReports.table.empty")}
+                </p>
               </div>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Reporter</TableHead>
-                    <TableHead>Reported User</TableHead>
-                    <TableHead>Reason</TableHead>
-                    <TableHead>Details</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead>{t("admin.conversationReports.table.col.reporter")}</TableHead>
+                    <TableHead>{t("admin.conversationReports.table.col.reportedUser")}</TableHead>
+                    <TableHead>{t("admin.conversationReports.table.col.reason")}</TableHead>
+                    <TableHead>{t("admin.conversationReports.table.col.details")}</TableHead>
+                    <TableHead>{t("admin.conversationReports.table.col.status")}</TableHead>
+                    <TableHead>{t("admin.conversationReports.table.col.date")}</TableHead>
+                    <TableHead className="text-right">{t("admin.conversationReports.table.col.actions")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -405,14 +450,15 @@ export default function AdminConversationReportsPage() {
                       </TableCell>
                       <TableCell>
                         <span className="text-sm text-gray-600 line-clamp-2 max-w-[200px]">
-                          {report.additionalDetails || "—"}
+                          {report.additionalDetails ||
+                            t("admin.conversationReports.table.emDash")}
                         </span>
                       </TableCell>
                       <TableCell>
                         <Badge
                           className={getStatusColor(report.status)}
                         >
-                          {report.status}
+                          {statusLabel(report.status)}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-sm text-gray-500">
@@ -439,12 +485,12 @@ export default function AdminConversationReportsPage() {
                               <Link
                                 href={`/admin/conversation-reports/${report.id}`}
                               >
-                                View conversation
+                                {t("admin.conversationReports.actions.viewConversation")}
                               </Link>
                             </DropdownMenuItem>
                             <DropdownMenuSub>
                               <DropdownMenuSubTrigger>
-                                Change status
+                                {t("admin.conversationReports.actions.changeStatus")}
                               </DropdownMenuSubTrigger>
                               <DropdownMenuSubContent>
                                 {["PENDING", "REVIEWED", "RESOLVED"].map(
@@ -456,7 +502,7 @@ export default function AdminConversationReportsPage() {
                                       }
                                       disabled={report.status === s}
                                     >
-                                      {s}
+                                      {statusLabel(s)}
                                     </DropdownMenuItem>
                                   )
                                 )}
@@ -467,21 +513,21 @@ export default function AdminConversationReportsPage() {
                               className="text-red-600 focus:text-red-600"
                             >
                               <UserX className="h-4 w-4 mr-2" />
-                              Suspend reported user
+                              {t("admin.conversationReports.actions.suspendReportedUser")}
                             </DropdownMenuItem>
                             <DropdownMenuItem asChild>
                               <Link
                                 href={`/admin/messages?userId=${report.reported.id}&name=${encodeURIComponent(report.reported.name)}`}
                               >
                                 <MessageSquare className="h-4 w-4 mr-2" />
-                                Message user
+                                {t("admin.conversationReports.actions.messageUser")}
                               </Link>
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => openNotifyDialog(report)}
                             >
                               <Bell className="h-4 w-4 mr-2" />
-                              Send notification
+                              {t("admin.conversationReports.actions.sendNotification")}
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -498,29 +544,39 @@ export default function AdminConversationReportsPage() {
         <Dialog open={notifyOpen} onOpenChange={setNotifyOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Send notification</DialogTitle>
+              <DialogTitle>
+                {t("admin.conversationReports.notify.title")}
+              </DialogTitle>
               <DialogDescription>
-                Send a notification to {notifyTarget?.name || "the reported user"}
+                {t("admin.conversationReports.notify.description", {
+                  name:
+                    notifyTarget?.name ||
+                    t("admin.conversationReports.notify.fallbackName"),
+                })}
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
-                <Label htmlFor="notify-title">Title</Label>
+                <Label htmlFor="notify-title">
+                  {t("admin.conversationReports.notify.fieldTitle")}
+                </Label>
                 <Input
                   id="notify-title"
                   value={notifyTitle}
                   onChange={(e) => setNotifyTitle(e.target.value)}
-                  placeholder="Notification title"
+                  placeholder={t("admin.conversationReports.notify.titlePlaceholder")}
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="notify-content">Message</Label>
+                <Label htmlFor="notify-content">
+                  {t("admin.conversationReports.notify.fieldMessage")}
+                </Label>
                 <Textarea
                   id="notify-content"
                   className="min-h-[100px]"
                   value={notifyContent}
                   onChange={(e) => setNotifyContent(e.target.value)}
-                  placeholder="Notification message"
+                  placeholder={t("admin.conversationReports.notify.messagePlaceholder")}
                 />
               </div>
             </div>
@@ -529,7 +585,7 @@ export default function AdminConversationReportsPage() {
                 variant="outline"
                 onClick={() => setNotifyOpen(false)}
               >
-                Cancel
+                {t("admin.conversationReports.notify.cancel")}
               </Button>
               <Button
                 onClick={handleSendNotification}
@@ -542,7 +598,7 @@ export default function AdminConversationReportsPage() {
                 {actionLoading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  "Send"
+                  t("admin.conversationReports.notify.send")
                 )}
               </Button>
             </DialogFooter>

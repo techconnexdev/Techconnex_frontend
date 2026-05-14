@@ -3,13 +3,13 @@ import LegalPageLayout from "@/components/legal/LegalPageLayout";
 import TermsOfServiceContent from "@/components/legal/TermsOfServiceContent";
 
 export const metadata: Metadata = {
-  title: "Terms of Service | TechConnex",
+  title: "Syarat Layanan | Terms of Service | TechConnex",
   description:
-    "Terms of Service governing your access to and use of TechConnex, an ICT services platform connecting companies with service providers.",
+    "Syarat Layanan yang mengatur akses dan penggunaan TechConnex, platform layanan ICT yang menghubungkan perusahaan dengan penyedia layanan.",
   openGraph: {
-    title: "Terms of Service | TechConnex",
+    title: "Syarat Layanan | Terms of Service | TechConnex",
     description:
-      "Terms of Service governing your access to and use of TechConnex.",
+      "Syarat Layanan TechConnex untuk akses dan penggunaan platform.",
     url: "https://techconnex.vip/terms",
   },
   robots: { index: true, follow: true },

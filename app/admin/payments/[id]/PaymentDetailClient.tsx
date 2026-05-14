@@ -46,6 +46,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import Image from "next/image";
+import { convertWithSnapshot, type FxRatesMap } from "@/lib/fx-snapshot";
+import { useI18n } from "@/contexts/I18nProvider";
+import {
+  milestoneStatusLabel,
+  paymentMethodLabel,
+  paymentStatusLabel,
+} from "@/components/admin/payments/payment-i18n-maps";
 
 type PaymentDetail = {
   id: string;
@@ -65,11 +72,15 @@ type PaymentDetail = {
     id: string;
     title: string;
     description: string;
+    currencyCode?: string;
+    fxSnapshotRatesJson?: FxRatesMap | null;
     customer: {
       id: string;
       name: string;
       email: string;
       phone?: string;
+      isVerified?: boolean;
+      kycStatus?: string;
       customerProfile?: {
         profileImageUrl?: string;
         industry?: string;
@@ -81,6 +92,7 @@ type PaymentDetail = {
         showEmail: boolean;
         showPhone: boolean;
         allowMessages: boolean;
+        preferredCurrency?: string;
       };
     };
     provider: {
@@ -88,6 +100,8 @@ type PaymentDetail = {
       name: string;
       email: string;
       phone?: string;
+      isVerified?: boolean;
+      kycStatus?: string;
       providerProfile?: {
         profileImageUrl?: string;
         major?: string;
@@ -109,6 +123,7 @@ type PaymentDetail = {
         showEmail: boolean;
         showPhone: boolean;
         allowMessages: boolean;
+        preferredCurrency?: string;
       };
     };
   };
@@ -133,7 +148,10 @@ export default function PaymentDetailClient({
   paymentId: string;
 }) {
   const router = useRouter();
+  const { t, locale } = useI18n();
   const { toast } = useToast();
+  const intlLocale =
+    locale === "id" ? "id-ID" : locale === "ar" ? "ar" : "en-US";
   const [payment, setPayment] = useState<PaymentDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
@@ -152,12 +170,20 @@ export default function PaymentDetailClient({
       if (response.success) {
         setPayment(response.data);
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Failed to fetch payment:", error);
+      toast({
+        title: t("admin.users.toast.errorTitle"),
+        description:
+          error instanceof Error
+            ? error.message
+            : t("admin.payments.detail.toast.loadFailed"),
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
-  }, [paymentId]);
+  }, [paymentId, t, toast]);
 
   useEffect(() => {
     fetchPayment();
@@ -189,15 +215,21 @@ export default function PaymentDetailClient({
         !validTypes.includes(file.type) &&
         !validExtensions.includes(fileExt)
       ) {
-        alert(
-          "Invalid file type. Only PDF and image files (JPG, PNG, WEBP, GIF) are allowed."
-        );
+        toast({
+          title: t("admin.users.toast.errorTitle"),
+          description: t("admin.payments.detail.alert.invalidFile"),
+          variant: "destructive",
+        });
         return;
       }
 
       // Validate file size (10MB)
       if (file.size > 10 * 1024 * 1024) {
-        alert("File size exceeds 10MB limit.");
+        toast({
+          title: t("admin.users.toast.errorTitle"),
+          description: t("admin.payments.detail.alert.fileTooLarge"),
+          variant: "destructive",
+        });
         return;
       }
 
@@ -230,14 +262,20 @@ export default function PaymentDetailClient({
       !payment?.project?.provider?.providerProfile?.payoutMethods ||
       payment.project.provider.providerProfile.payoutMethods.length === 0
     ) {
-      alert(
-        "Cannot proceed: Provider has no payout method configured. Please contact the provider to add their payment details."
-      );
+      toast({
+        title: t("admin.users.toast.errorTitle"),
+        description: t("admin.payments.detail.alert.noPayoutMethod"),
+        variant: "destructive",
+      });
       return;
     }
 
     if (!transferRef.trim() && !transferProofFile) {
-      alert("Please enter a transfer reference or upload a proof document");
+      toast({
+        title: t("admin.users.toast.errorTitle"),
+        description: t("admin.payments.detail.alert.refOrProofRequired"),
+        variant: "destructive",
+      });
       return;
     }
 
@@ -246,10 +284,13 @@ export default function PaymentDetailClient({
       const response = await confirmAdminBankTransfer(
         paymentId,
         transferRef.trim() || "",
-        transferProofFile
+        transferProofFile,
       );
       if (response.success) {
-        alert("Bank transfer confirmed successfully");
+        toast({
+          title: t("admin.payments.detail.toast.successTitle"),
+          description: t("admin.payments.detail.toast.confirmSuccess"),
+        });
         setShowConfirmDialog(false);
         setTransferRef("");
         setTransferProofFile(null);
@@ -264,8 +305,12 @@ export default function PaymentDetailClient({
       const errorMessage =
         error instanceof Error
           ? error.message
-          : "Failed to confirm bank transfer";
-      alert(errorMessage);
+          : t("admin.payments.detail.toast.confirmFailed");
+      toast({
+        title: t("admin.users.toast.errorTitle"),
+        description: errorMessage,
+        variant: "destructive",
+      });
     } finally {
       setConfirming(false);
     }
@@ -289,7 +334,7 @@ export default function PaymentDetailClient({
     payment?.status === "ESCROWED" && payment?.milestone?.status === "APPROVED";
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString("en-US", {
+    return new Date(dateString).toLocaleString(intlLocale, {
       year: "numeric",
       month: "long",
       day: "numeric",
@@ -297,6 +342,55 @@ export default function PaymentDetailClient({
       minute: "2-digit",
     });
   };
+
+  const formatMoney = (amount: number, currency?: string) => {
+    const code = String(currency || "MYR")
+      .trim()
+      .toUpperCase();
+    try {
+      return new Intl.NumberFormat(intlLocale, {
+        style: "currency",
+        currency: code,
+      }).format(Number(amount || 0));
+    } catch {
+      return `${code} ${Number(amount || 0).toLocaleString(intlLocale)}`;
+    }
+  };
+
+  /** Charged / settlement currency: payment row (synced from Stripe on escrow) beats project default. */
+  const originalCurrency = (
+    payment?.currency ||
+    payment?.project?.currencyCode ||
+    "MYR"
+  )
+    .toString()
+    .trim()
+    .toUpperCase();
+  const providerCurrency = (
+    payment?.project?.provider?.settings?.preferredCurrency ||
+    originalCurrency ||
+    "MYR"
+  )
+    .toString()
+    .trim()
+    .toUpperCase();
+  const providerReceiveInProviderCurrency =
+    payment && providerCurrency !== originalCurrency
+      ? convertWithSnapshot({
+          amount: Number(payment.providerAmount || 0),
+          fromCurrencyCode: originalCurrency,
+          toCurrencyCode: providerCurrency,
+          ratesMap: payment.project?.fxSnapshotRatesJson ?? null,
+        })
+      : null;
+  const isCustomerVerified =
+    payment?.project?.customer?.isVerified === true ||
+    String(payment?.project?.customer?.kycStatus || "").toLowerCase() ===
+      "verified";
+  const isProviderVerified =
+    payment?.project?.provider?.isVerified === true ||
+    String(payment?.project?.provider?.kycStatus || "").toLowerCase() ===
+      "verified";
 
   const handleDownloadReceipt = async () => {
     try {
@@ -306,26 +400,29 @@ export default function PaymentDetailClient({
           : undefined;
       if (!token) {
         toast({
-          title: "Error",
-          description: "Not authenticated",
+          title: t("admin.users.toast.errorTitle"),
+          description: t("admin.payments.detail.toast.notAuthenticated"),
           variant: "destructive",
         });
         return;
       }
 
       const res = await fetch(
-        `${API_BASE}/admin/payments/${paymentId}/receipt`,
+        `${API_BASE}/admin/payments/${paymentId}/receipt?lang=${encodeURIComponent(locale)}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
-        }
+        },
       );
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.message || "Failed to get receipt URL");
+        throw new Error(
+          errorData.message ||
+            t("admin.payments.detail.toast.receiptUrlFailed"),
+        );
       }
 
       const data = await res.json();
@@ -334,14 +431,18 @@ export default function PaymentDetailClient({
         // Navigate to the R2 URL (opens in new tab/window)
         window.open(data.downloadUrl, "_blank");
       } else {
-        throw new Error("Invalid response from server");
+        throw new Error(
+          t("admin.payments.detail.toast.invalidReceiptResponse"),
+        );
       }
     } catch (error: unknown) {
       console.error(error);
       const errorMessage =
-        error instanceof Error ? error.message : "Failed to download receipt";
+        error instanceof Error
+          ? error.message
+          : t("admin.payments.detail.toast.receiptFailed");
       toast({
-        title: "Error downloading receipt",
+        title: t("admin.payments.detail.toast.receiptErrorTitle"),
         description: errorMessage,
         variant: "destructive",
       });
@@ -352,7 +453,9 @@ export default function PaymentDetailClient({
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
-        <span className="ml-2 text-gray-600">Loading payment details...</span>
+        <span className="ml-2 text-gray-600">
+          {t("admin.payments.detail.loading")}
+        </span>
       </div>
     );
   }
@@ -362,13 +465,13 @@ export default function PaymentDetailClient({
       <div className="text-center py-12">
         <AlertCircle className="w-12 h-12 mx-auto text-gray-400 mb-4" />
         <h2 className="text-xl font-semibold text-gray-900 mb-2">
-          Payment Not Found
+          {t("admin.payments.detail.notFoundTitle")}
         </h2>
         <p className="text-gray-600 mb-4">
-          The payment you&apos;re looking for doesn&apos;t exist.
+          {t("admin.payments.detail.notFoundBody")}
         </p>
         <Button onClick={() => router.push("/admin/payments")}>
-          Back to Payments
+          {t("admin.payments.detail.backToList")}
         </Button>
       </div>
     );
@@ -388,17 +491,19 @@ export default function PaymentDetailClient({
           </Button>
           <div>
             <h1 className="text-3xl font-bold text-gray-900">
-              Payment Details
+              {t("admin.payments.detail.headerTitle")}
             </h1>
             <p className="text-gray-600">
-              Transaction ID: {payment.id.slice(0, 8)}
+              {t("admin.payments.detail.transactionId", {
+                id: payment.id.slice(0, 8),
+              })}
             </p>
           </div>
         </div>
         <div className="flex gap-3">
           <Button variant="outline" onClick={handleDownloadReceipt}>
             <Receipt className="w-4 h-4 mr-2" />
-            Download Receipt
+            {t("admin.payments.detail.downloadReceipt")}
           </Button>
           {isReadyToTransfer && (
             <Button
@@ -406,7 +511,7 @@ export default function PaymentDetailClient({
               className="bg-blue-600 hover:bg-blue-700"
             >
               <CheckCircle2 className="w-4 h-4 mr-2" />
-              Confirm Bank Transfer
+              {t("admin.payments.detail.confirmBankTransfer")}
             </Button>
           )}
         </div>
@@ -421,11 +526,10 @@ export default function PaymentDetailClient({
                 <CheckCircle2 className="w-5 h-5 text-blue-600" />
                 <div>
                   <p className="font-semibold text-blue-900">
-                    Ready for Bank Transfer
+                    {t("admin.payments.detail.readyBanner.title")}
                   </p>
                   <p className="text-sm text-blue-700">
-                    This payment is escrowed and the milestone is approved. You
-                    can now process the bank transfer.
+                    {t("admin.payments.detail.readyBanner.body")}
                   </p>
                 </div>
               </div>
@@ -439,7 +543,7 @@ export default function PaymentDetailClient({
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-green-900">
                   <CreditCard className="w-5 h-5" />
-                  Transfer To Provider Account
+                  {t("admin.payments.detail.transferCard.title")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -464,7 +568,9 @@ export default function PaymentDetailClient({
                           <div className="space-y-2 text-sm">
                             <div className="grid grid-cols-2 gap-4">
                               <div>
-                                <p className="text-gray-500">Bank Name</p>
+                                <p className="text-gray-500">
+                                  {t("admin.payments.detail.field.bankName")}
+                                </p>
                                 <p className="font-semibold text-gray-900">
                                   {method.bankName}
                                 </p>
@@ -472,7 +578,9 @@ export default function PaymentDetailClient({
                               {method.accountNumber && (
                                 <div>
                                   <p className="text-gray-500">
-                                    Account Number
+                                    {t(
+                                      "admin.payments.detail.field.accountNumber",
+                                    )}
                                   </p>
                                   <p className="font-semibold text-gray-900 font-mono">
                                     {method.accountNumber}
@@ -482,7 +590,9 @@ export default function PaymentDetailClient({
                               {method.accountHolder && (
                                 <div>
                                   <p className="text-gray-500">
-                                    Account Holder
+                                    {t(
+                                      "admin.payments.detail.field.accountHolder",
+                                    )}
                                   </p>
                                   <p className="font-semibold text-gray-900">
                                     {method.accountHolder}
@@ -494,7 +604,9 @@ export default function PaymentDetailClient({
                         )}
                         {method.accountEmail && (
                           <div className="mt-2">
-                            <p className="text-gray-500 text-sm">Email</p>
+                            <p className="text-gray-500 text-sm">
+                              {t("admin.payments.detail.field.email")}
+                            </p>
                             <p className="font-semibold text-gray-900">
                               {method.accountEmail}
                             </p>
@@ -502,7 +614,9 @@ export default function PaymentDetailClient({
                         )}
                         {method.walletId && (
                           <div className="mt-2">
-                            <p className="text-gray-500 text-sm">Wallet ID</p>
+                            <p className="text-gray-500 text-sm">
+                              {t("admin.payments.detail.field.walletId")}
+                            </p>
                             <p className="font-semibold text-gray-900 font-mono">
                               {method.walletId}
                             </p>
@@ -514,13 +628,11 @@ export default function PaymentDetailClient({
                             .length > 1 &&
                           index === 0 && (
                             <p className="text-xs text-gray-500 mt-2 italic">
-                              Note: Multiple payout methods available. Please
-                              use the first/default method or contact provider
-                              for preferred method.
+                              {t("admin.payments.detail.payoutMultipleNote")}
                             </p>
                           )}
                       </div>
-                    )
+                    ),
                   )}
                 </div>
               </CardContent>
@@ -532,12 +644,10 @@ export default function PaymentDetailClient({
                   <AlertCircle className="w-5 h-5 text-orange-600 mt-0.5 flex-shrink-0" />
                   <div className="flex-1">
                     <p className="font-semibold text-orange-900 mb-1">
-                      No Payout Method Available
+                      {t("admin.payments.detail.noPayoutTitle")}
                     </p>
                     <p className="text-sm text-orange-700 mb-3">
-                      The provider has not added any payout method. Please
-                      contact them to provide their bank account or payment
-                      details before processing the transfer.
+                      {t("admin.payments.detail.noPayoutBody")}
                     </p>
                     <Button
                       variant="outline"
@@ -545,22 +655,22 @@ export default function PaymentDetailClient({
                       onClick={() => {
                         const avatar = getProfileImageUrl(
                           payment.project.provider.providerProfile
-                            ?.profileImageUrl
+                            ?.profileImageUrl,
                         );
                         router.push(
                           `/admin/messages?userId=${
                             payment.project.provider.id
                           }&name=${encodeURIComponent(
-                            payment.project.provider.name
+                            payment.project.provider.name,
                           )}&avatar=${encodeURIComponent(avatar)}&projectId=${
                             payment.project.id
-                          }&paymentId=${payment.id}`
+                          }&paymentId=${payment.id}`,
                         );
                       }}
                       className="border-orange-300 text-orange-700 hover:bg-orange-100"
                     >
                       <MessageSquare className="w-4 h-4 mr-2" />
-                      Contact Provider
+                      {t("admin.payments.detail.contactProvider")}
                     </Button>
                   </div>
                 </div>
@@ -576,69 +686,101 @@ export default function PaymentDetailClient({
           {/* Payment Information */}
           <Card>
             <CardHeader>
-              <CardTitle>Payment Information</CardTitle>
-              <CardDescription>Transaction details and status</CardDescription>
+              <CardTitle>
+                {t("admin.payments.detail.paymentInfo.title")}
+              </CardTitle>
+              <CardDescription>
+                {t("admin.payments.detail.paymentInfo.description")}
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm text-gray-500">Amount</p>
+                  <p className="text-sm text-gray-500">
+                    {t("admin.payments.detail.field.amount")}
+                  </p>
                   <p className="text-2xl font-bold">
-                    RM{payment.amount.toLocaleString()}
+                    {formatMoney(payment.amount, originalCurrency)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500">Status</p>
+                  <p className="text-sm text-gray-500">
+                    {t("admin.payments.detail.field.status")}
+                  </p>
                   <Badge
                     className={
                       payment.status === "TRANSFERRED"
                         ? "bg-green-100 text-green-800"
                         : payment.status === "ESCROWED"
-                        ? "bg-blue-100 text-blue-800"
-                        : payment.status === "RELEASED"
-                        ? "bg-purple-100 text-purple-800"
-                        : "bg-gray-100 text-gray-800"
+                          ? "bg-blue-100 text-blue-800"
+                          : payment.status === "RELEASED"
+                            ? "bg-purple-100 text-purple-800"
+                            : "bg-gray-100 text-gray-800"
                     }
                   >
-                    {payment.status}
+                    {paymentStatusLabel(payment.status, t)}
                   </Badge>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500">Platform Fee</p>
+                  <p className="text-sm text-gray-500">
+                    {t("admin.payments.detail.field.platformFee")}
+                  </p>
                   <p className="text-lg font-semibold">
-                    RM{payment.platformFeeAmount.toLocaleString()}
+                    {formatMoney(payment.platformFeeAmount, originalCurrency)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500">Provider Amount</p>
+                  <p className="text-sm text-gray-500">
+                    {t("admin.payments.detail.field.providerAmount")}
+                  </p>
                   <p className="text-lg font-semibold text-green-600">
-                    RM{payment.providerAmount.toLocaleString()}
+                    {formatMoney(payment.providerAmount, originalCurrency)}
+                  </p>
+                  {providerReceiveInProviderCurrency != null && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      {t("admin.payments.detail.providerReceives", {
+                        amount: formatMoney(
+                          providerReceiveInProviderCurrency,
+                          providerCurrency,
+                        ),
+                      })}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">
+                    {t("admin.payments.detail.field.paymentMethod")}
+                  </p>
+                  <p className="text-lg">
+                    {paymentMethodLabel(payment.method, t)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-500">Payment Method</p>
-                  <p className="text-lg">{payment.method}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Created At</p>
+                  <p className="text-sm text-gray-500">
+                    {t("admin.payments.detail.field.createdAt")}
+                  </p>
                   <p className="text-sm">{formatDate(payment.createdAt)}</p>
                 </div>
                 {payment.escrowedAt && (
                   <div>
-                    <p className="text-sm text-gray-500">Escrowed At</p>
+                    <p className="text-sm text-gray-500">
+                      {t("admin.payments.detail.field.escrowedAt")}
+                    </p>
                     <p className="text-sm">{formatDate(payment.escrowedAt)}</p>
                   </div>
                 )}
                 {payment.releasedAt && (
                   <div>
-                    <p className="text-sm text-gray-500">Released At</p>
+                    <p className="text-sm text-gray-500">
+                      {t("admin.payments.detail.field.releasedAt")}
+                    </p>
                     <p className="text-sm">{formatDate(payment.releasedAt)}</p>
                   </div>
                 )}
                 {payment.bankTransferRef && (
                   <div>
                     <p className="text-sm text-gray-500 mb-1">
-                      Transfer Reference / Proof
+                      {t("admin.payments.detail.field.transferRefProof")}
                     </p>
                     {payment.bankTransferRef.startsWith("http://") ||
                     payment.bankTransferRef.startsWith("https://") ? (
@@ -653,7 +795,7 @@ export default function PaymentDetailClient({
                           className="flex items-center gap-2"
                         >
                           <ExternalLink className="w-4 h-4" />
-                          View File
+                          {t("admin.payments.detail.viewFile")}
                         </Button>
                       </a>
                     ) : (
@@ -671,7 +813,9 @@ export default function PaymentDetailClient({
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle>Project Information</CardTitle>
+                <CardTitle>
+                  {t("admin.payments.detail.project.title")}
+                </CardTitle>
                 <Button
                   variant="outline"
                   size="sm"
@@ -680,22 +824,28 @@ export default function PaymentDetailClient({
                   }
                 >
                   <FolderOpen className="w-4 h-4 mr-2" />
-                  View Project
+                  {t("admin.payments.detail.project.viewProject")}
                 </Button>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <p className="text-sm text-gray-500">Project Title</p>
+                <p className="text-sm text-gray-500">
+                  {t("admin.payments.detail.project.projectTitle")}
+                </p>
                 <p className="text-lg font-semibold">{payment.project.title}</p>
               </div>
               <div>
-                <p className="text-sm text-gray-500">Description</p>
+                <p className="text-sm text-gray-500">
+                  {t("admin.payments.detail.project.description")}
+                </p>
                 <p className="text-sm">{payment.project.description}</p>
               </div>
               <Separator />
               <div>
-                <p className="text-sm text-gray-500">Milestone</p>
+                <p className="text-sm text-gray-500">
+                  {t("admin.payments.detail.project.milestone")}
+                </p>
                 <p className="text-lg font-semibold">
                   {payment.milestone.title}
                 </p>
@@ -710,10 +860,15 @@ export default function PaymentDetailClient({
                         : "bg-gray-100 text-gray-800"
                     }
                   >
-                    {payment.milestone.status}
+                    {milestoneStatusLabel(payment.milestone.status, t)}
                   </Badge>
                   <span className="text-sm text-gray-500">
-                    Amount: RM{payment.milestone.amount.toLocaleString()}
+                    {t("admin.payments.detail.project.amountLine", {
+                      amount: formatMoney(
+                        payment.milestone.amount,
+                        originalCurrency,
+                      ),
+                    })}
                   </span>
                 </div>
               </div>
@@ -788,7 +943,7 @@ export default function PaymentDetailClient({
               <div className="flex items-center justify-between">
                 <CardTitle className="flex items-center gap-2">
                   <Building2 className="w-5 h-5" />
-                  Customer
+                  {t("admin.payments.detail.customer.title")}
                 </CardTitle>
                 <div className="flex gap-2">
                   <Button
@@ -797,21 +952,21 @@ export default function PaymentDetailClient({
                     onClick={() => {
                       const avatar = getProfileImageUrl(
                         payment.project.customer.customerProfile
-                          ?.profileImageUrl
+                          ?.profileImageUrl,
                       );
                       router.push(
                         `/admin/messages?userId=${
                           payment.project.customer.id
                         }&name=${encodeURIComponent(
-                          payment.project.customer.name
+                          payment.project.customer.name,
                         )}&avatar=${encodeURIComponent(avatar)}&projectId=${
                           payment.project.id
-                        }&paymentId=${payment.id}`
+                        }&paymentId=${payment.id}`,
                       );
                     }}
                   >
                     <MessageSquare className="w-4 h-4 mr-2" />
-                    Contact
+                    {t("admin.payments.detail.contact")}
                   </Button>
                   <Button
                     variant="outline"
@@ -821,7 +976,7 @@ export default function PaymentDetailClient({
                     }
                   >
                     <ExternalLink className="w-4 h-4 mr-2" />
-                    View Profile
+                    {t("admin.payments.detail.viewProfile")}
                   </Button>
                 </div>
               </div>
@@ -831,7 +986,7 @@ export default function PaymentDetailClient({
                 <Avatar className="w-12 h-12">
                   <AvatarImage
                     src={getProfileImageUrl(
-                      payment.project.customer.customerProfile?.profileImageUrl
+                      payment.project.customer.customerProfile?.profileImageUrl,
                     )}
                   />
                   <AvatarFallback>
@@ -842,6 +997,19 @@ export default function PaymentDetailClient({
                   <p className="font-semibold">
                     {payment.project.customer.name}
                   </p>
+                  <div className="mt-1">
+                    <Badge
+                      className={
+                        isCustomerVerified
+                          ? "bg-green-100 text-green-800"
+                          : "bg-amber-100 text-amber-800"
+                      }
+                    >
+                      {isCustomerVerified
+                        ? t("admin.payments.detail.verifiedCustomer")
+                        : t("admin.payments.detail.unverifiedCustomer")}
+                    </Badge>
+                  </div>
                   {payment.project.customer.customerProfile?.industry && (
                     <p className="text-sm text-gray-500">
                       {payment.project.customer.customerProfile.industry}
@@ -853,7 +1021,9 @@ export default function PaymentDetailClient({
               <div className="space-y-2 text-sm">
                 {payment.project.customer.settings?.showEmail && (
                   <div>
-                    <p className="text-gray-500">Email</p>
+                    <p className="text-gray-500">
+                      {t("admin.payments.detail.field.email")}
+                    </p>
                     <p className="font-medium">
                       {payment.project.customer.email}
                     </p>
@@ -862,7 +1032,9 @@ export default function PaymentDetailClient({
                 {payment.project.customer.settings?.showPhone &&
                   payment.project.customer.phone && (
                     <div>
-                      <p className="text-gray-500">Phone</p>
+                      <p className="text-gray-500">
+                        {t("admin.payments.detail.field.phone")}
+                      </p>
                       <p className="font-medium">
                         {payment.project.customer.phone}
                       </p>
@@ -870,7 +1042,9 @@ export default function PaymentDetailClient({
                   )}
                 {payment.project.customer.customerProfile?.location && (
                   <div>
-                    <p className="text-gray-500">Location</p>
+                    <p className="text-gray-500">
+                      {t("admin.payments.detail.field.location")}
+                    </p>
                     <p className="font-medium">
                       {payment.project.customer.customerProfile.location}
                     </p>
@@ -878,7 +1052,9 @@ export default function PaymentDetailClient({
                 )}
                 {payment.project.customer.customerProfile?.website && (
                   <div>
-                    <p className="text-gray-500">Website</p>
+                    <p className="text-gray-500">
+                      {t("admin.payments.detail.field.website")}
+                    </p>
                     <a
                       href={payment.project.customer.customerProfile.website}
                       target="_blank"
@@ -899,7 +1075,7 @@ export default function PaymentDetailClient({
               <div className="flex items-center justify-between">
                 <CardTitle className="flex items-center gap-2">
                   <User className="w-5 h-5" />
-                  Provider
+                  {t("admin.payments.detail.provider.title")}
                 </CardTitle>
                 <div className="flex gap-2">
                   <Button
@@ -913,15 +1089,15 @@ export default function PaymentDetailClient({
                         `/admin/messages?userId=${
                           payment.project.provider.id
                         }&name=${encodeURIComponent(
-                          payment.project.provider.name
+                          payment.project.provider.name,
                         )}&avatar=${encodeURIComponent(avatar)}&projectId=${
                           payment.project.id
-                        }&paymentId=${payment.id}`
+                        }&paymentId=${payment.id}`,
                       );
                     }}
                   >
                     <MessageSquare className="w-4 h-4 mr-2" />
-                    Contact
+                    {t("admin.payments.detail.contact")}
                   </Button>
                   <Button
                     variant="outline"
@@ -931,7 +1107,7 @@ export default function PaymentDetailClient({
                     }
                   >
                     <ExternalLink className="w-4 h-4 mr-2" />
-                    View Profile
+                    {t("admin.payments.detail.viewProfile")}
                   </Button>
                 </div>
               </div>
@@ -941,7 +1117,7 @@ export default function PaymentDetailClient({
                 <Avatar className="w-12 h-12">
                   <AvatarImage
                     src={getProfileImageUrl(
-                      payment.project.provider.providerProfile?.profileImageUrl
+                      payment.project.provider.providerProfile?.profileImageUrl,
                     )}
                   />
                   <AvatarFallback>
@@ -952,6 +1128,19 @@ export default function PaymentDetailClient({
                   <p className="font-semibold">
                     {payment.project.provider.name}
                   </p>
+                  <div className="mt-1">
+                    <Badge
+                      className={
+                        isProviderVerified
+                          ? "bg-green-100 text-green-800"
+                          : "bg-amber-100 text-amber-800"
+                      }
+                    >
+                      {isProviderVerified
+                        ? t("admin.payments.detail.verifiedProvider")
+                        : t("admin.payments.detail.unverifiedProvider")}
+                    </Badge>
+                  </div>
                   {payment.project.provider.providerProfile?.major && (
                     <p className="text-sm text-gray-500">
                       {payment.project.provider.providerProfile.major}
@@ -963,7 +1152,9 @@ export default function PaymentDetailClient({
               <div className="space-y-2 text-sm">
                 {payment.project.provider.settings?.showEmail && (
                   <div>
-                    <p className="text-gray-500">Email</p>
+                    <p className="text-gray-500">
+                      {t("admin.payments.detail.field.email")}
+                    </p>
                     <p className="font-medium">
                       {payment.project.provider.email}
                     </p>
@@ -972,7 +1163,9 @@ export default function PaymentDetailClient({
                 {payment.project.provider.settings?.showPhone &&
                   payment.project.provider.phone && (
                     <div>
-                      <p className="text-gray-500">Phone</p>
+                      <p className="text-gray-500">
+                        {t("admin.payments.detail.field.phone")}
+                      </p>
                       <p className="font-medium">
                         {payment.project.provider.phone}
                       </p>
@@ -980,7 +1173,9 @@ export default function PaymentDetailClient({
                   )}
                 {payment.project.provider.providerProfile?.location && (
                   <div>
-                    <p className="text-gray-500">Location</p>
+                    <p className="text-gray-500">
+                      {t("admin.payments.detail.field.location")}
+                    </p>
                     <p className="font-medium">
                       {payment.project.provider.providerProfile.location}
                     </p>
@@ -989,9 +1184,15 @@ export default function PaymentDetailClient({
                 {typeof payment.project.provider.providerProfile?.hourlyRate ===
                   "number" && (
                   <div>
-                    <p className="text-gray-500">Hourly Rate</p>
+                    <p className="text-gray-500">
+                      {t("admin.payments.detail.field.hourlyRate")}
+                    </p>
                     <p className="font-medium">
-                      RM{payment.project.provider.providerProfile.hourlyRate}/hr
+                      {formatMoney(
+                        payment.project.provider.providerProfile.hourlyRate,
+                        providerCurrency,
+                      )}
+                      {t("admin.payments.detail.perHour")}
                     </p>
                   </div>
                 )}
@@ -1004,7 +1205,7 @@ export default function PaymentDetailClient({
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <CreditCard className="w-5 h-5" />
-                Payout Methods
+                {t("admin.payments.detail.payoutMethods.title")}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -1026,39 +1227,60 @@ export default function PaymentDetailClient({
                         {method.bankName && (
                           <div className="space-y-1 text-sm">
                             <p className="text-gray-500">
-                              Bank: {method.bankName}
+                              {t(
+                                "admin.payments.detail.payoutMethods.bankLine",
+                                {
+                                  name: method.bankName,
+                                },
+                              )}
                             </p>
                             {method.accountNumber && (
                               <p className="text-gray-500">
-                                Account: {method.accountNumber}
+                                {t(
+                                  "admin.payments.detail.payoutMethods.accountLine",
+                                  { number: method.accountNumber },
+                                )}
                               </p>
                             )}
                             {method.accountHolder && (
                               <p className="text-gray-500">
-                                Holder: {method.accountHolder}
+                                {t(
+                                  "admin.payments.detail.payoutMethods.holderLine",
+                                  { name: method.accountHolder },
+                                )}
                               </p>
                             )}
                           </div>
                         )}
                         {method.accountEmail && (
                           <p className="text-sm text-gray-500">
-                            Email: {method.accountEmail}
+                            {t(
+                              "admin.payments.detail.payoutMethods.emailLine",
+                              {
+                                email: method.accountEmail,
+                              },
+                            )}
                           </p>
                         )}
                         {method.walletId && (
                           <p className="text-sm text-gray-500">
-                            Wallet: {method.walletId}
+                            {t(
+                              "admin.payments.detail.payoutMethods.walletLine",
+                              {
+                                id: method.walletId,
+                              },
+                            )}
                           </p>
                         )}
                       </div>
-                    )
+                    ),
                   )}
                 </div>
               ) : (
                 <div className="text-center py-6">
                   <AlertCircle className="w-8 h-8 text-gray-400 mx-auto mb-2" />
                   <p className="text-sm text-gray-500 mb-3">
-                    No payout methods configured
+                    {t("admin.payments.detail.payoutMethods.none")}
                   </p>
                   <Button
                     variant="outline"
@@ -1071,15 +1293,15 @@ export default function PaymentDetailClient({
                         `/admin/messages?userId=${
                           payment.project.provider.id
                         }&name=${encodeURIComponent(
-                          payment.project.provider.name
+                          payment.project.provider.name,
                         )}&avatar=${encodeURIComponent(avatar)}&projectId=${
                           payment.project.id
-                        }&paymentId=${payment.id}`
+                        }&paymentId=${payment.id}`,
                       );
                     }}
                   >
                     <MessageSquare className="w-4 h-4 mr-2" />
-                    Contact Provider
+                    {t("admin.payments.detail.contactProvider")}
                   </Button>
                 </div>
               )}
@@ -1092,10 +1314,11 @@ export default function PaymentDetailClient({
       <Dialog open={showConfirmDialog} onOpenChange={handleDialogClose}>
         <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0">
           <DialogHeader className="px-6 pt-6 pb-4 border-b flex-shrink-0">
-            <DialogTitle className="text-xl">Confirm Bank Transfer</DialogTitle>
+            <DialogTitle className="text-xl">
+              {t("admin.payments.detail.dialog.title")}
+            </DialogTitle>
             <DialogDescription>
-              Upload a proof document (PDF or image) or enter a transfer
-              reference number to confirm this payment has been transferred.
+              {t("admin.payments.detail.dialog.description")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-6 py-4 px-6 overflow-y-auto flex-1">
@@ -1104,14 +1327,26 @@ export default function PaymentDetailClient({
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-blue-900">
-                    Amount to Transfer
+                    {t("admin.payments.detail.dialog.amountToTransfer")}
                   </p>
                   <p className="text-2xl font-bold text-blue-900 mt-1">
-                    RM {payment.providerAmount.toLocaleString()}
+                    {formatMoney(payment.providerAmount, originalCurrency)}
                   </p>
+                  {providerReceiveInProviderCurrency != null && (
+                    <p className="text-xs text-blue-800 mt-1">
+                      {t("admin.payments.detail.dialog.providerCurrency", {
+                        amount: formatMoney(
+                          providerReceiveInProviderCurrency,
+                          providerCurrency,
+                        ),
+                      })}
+                    </p>
+                  )}
                 </div>
                 <div className="text-right">
-                  <p className="text-xs text-blue-700">Payment ID</p>
+                  <p className="text-xs text-blue-700">
+                    {t("admin.payments.detail.dialog.paymentId")}
+                  </p>
                   <p className="text-xs font-mono text-blue-900">
                     {payment.id.slice(0, 8)}...
                   </p>
@@ -1125,7 +1360,7 @@ export default function PaymentDetailClient({
               0 ? (
               <div>
                 <label className="text-sm font-medium mb-2 block">
-                  Transfer To Provider Account
+                  {t("admin.payments.detail.dialog.transferToLabel")}
                 </label>
                 <div className="space-y-3">
                   {payment.project.provider.providerProfile.payoutMethods.map(
@@ -1148,7 +1383,9 @@ export default function PaymentDetailClient({
                           <div className="space-y-2 text-sm">
                             <div className="grid grid-cols-2 gap-4">
                               <div>
-                                <p className="text-gray-500">Bank Name</p>
+                                <p className="text-gray-500">
+                                  {t("admin.payments.detail.field.bankName")}
+                                </p>
                                 <p className="font-semibold text-gray-900">
                                   {method.bankName}
                                 </p>
@@ -1156,7 +1393,9 @@ export default function PaymentDetailClient({
                               {method.accountNumber && (
                                 <div>
                                   <p className="text-gray-500">
-                                    Account Number
+                                    {t(
+                                      "admin.payments.detail.field.accountNumber",
+                                    )}
                                   </p>
                                   <p className="font-semibold text-gray-900 font-mono">
                                     {method.accountNumber}
@@ -1166,7 +1405,9 @@ export default function PaymentDetailClient({
                               {method.accountHolder && (
                                 <div className="col-span-2">
                                   <p className="text-gray-500">
-                                    Account Holder
+                                    {t(
+                                      "admin.payments.detail.field.accountHolder",
+                                    )}
                                   </p>
                                   <p className="font-semibold text-gray-900">
                                     {method.accountHolder}
@@ -1178,7 +1419,9 @@ export default function PaymentDetailClient({
                         )}
                         {method.accountEmail && (
                           <div className="mt-2">
-                            <p className="text-gray-500 text-sm">Email</p>
+                            <p className="text-gray-500 text-sm">
+                              {t("admin.payments.detail.field.email")}
+                            </p>
                             <p className="font-semibold text-gray-900">
                               {method.accountEmail}
                             </p>
@@ -1186,14 +1429,16 @@ export default function PaymentDetailClient({
                         )}
                         {method.walletId && (
                           <div className="mt-2">
-                            <p className="text-gray-500 text-sm">Wallet ID</p>
+                            <p className="text-gray-500 text-sm">
+                              {t("admin.payments.detail.field.walletId")}
+                            </p>
                             <p className="font-semibold text-gray-900 font-mono">
                               {method.walletId}
                             </p>
                           </div>
                         )}
                       </div>
-                    )
+                    ),
                   )}
                 </div>
               </div>
@@ -1203,11 +1448,10 @@ export default function PaymentDetailClient({
                   <AlertCircle className="w-5 h-5 text-orange-600 mt-0.5 flex-shrink-0" />
                   <div className="flex-1">
                     <p className="font-semibold text-orange-900 mb-1">
-                      No Payout Method Available
+                      {t("admin.payments.detail.dialog.noPayoutInDialogTitle")}
                     </p>
                     <p className="text-sm text-orange-700 mb-3">
-                      The provider has not added any payout method. Please
-                      contact them before processing the transfer.
+                      {t("admin.payments.detail.dialog.noPayoutInDialogBody")}
                     </p>
                     <Button
                       variant="outline"
@@ -1215,23 +1459,23 @@ export default function PaymentDetailClient({
                       onClick={() => {
                         const avatar = getProfileImageUrl(
                           payment.project.provider.providerProfile
-                            ?.profileImageUrl
+                            ?.profileImageUrl,
                         );
                         router.push(
                           `/admin/messages?userId=${
                             payment.project.provider.id
                           }&name=${encodeURIComponent(
-                            payment.project.provider.name
+                            payment.project.provider.name,
                           )}&avatar=${encodeURIComponent(avatar)}&projectId=${
                             payment.project.id
-                          }&paymentId=${payment.id}`
+                          }&paymentId=${payment.id}`,
                         );
                         setShowConfirmDialog(false);
                       }}
                       className="border-orange-300 text-orange-700 hover:bg-orange-100"
                     >
                       <MessageSquare className="w-4 h-4 mr-2" />
-                      Contact Provider
+                      {t("admin.payments.detail.contactProvider")}
                     </Button>
                   </div>
                 </div>
@@ -1244,17 +1488,19 @@ export default function PaymentDetailClient({
                 htmlFor="transferRef"
                 className="text-sm font-medium mb-2 block"
               >
-                Transfer Reference (Optional if uploading proof)
+                {t("admin.payments.detail.dialog.transferRefLabel")}
               </label>
               <Input
                 id="transferRef"
                 value={transferRef}
                 onChange={(e) => setTransferRef(e.target.value)}
-                placeholder="e.g., TRF-2024-001234"
+                placeholder={t(
+                  "admin.payments.detail.dialog.transferRefPlaceholder",
+                )}
                 className="mt-1"
               />
               <p className="text-xs text-gray-500 mt-1">
-                Enter the bank transfer reference number if available
+                {t("admin.payments.detail.dialog.transferRefHint")}
               </p>
             </div>
 
@@ -1264,7 +1510,7 @@ export default function PaymentDetailClient({
                 htmlFor="transferProof"
                 className="text-sm font-medium mb-2 block"
               >
-                Upload Transfer Proof
+                {t("admin.payments.detail.dialog.uploadProofLabel")}
               </label>
               <div className="space-y-3">
                 {!transferProofFile ? (
@@ -1274,10 +1520,10 @@ export default function PaymentDetailClient({
                   >
                     <Upload className="w-8 h-8 mx-auto text-gray-400 mb-2" />
                     <p className="text-sm font-medium text-gray-700">
-                      Click to upload proof document
+                      {t("admin.payments.detail.dialog.uploadCta")}
                     </p>
                     <p className="text-xs text-gray-500 mt-1">
-                      PDF or Image (JPG, PNG, WEBP, GIF) up to 10MB
+                      {t("admin.payments.detail.dialog.uploadFormats")}
                     </p>
                   </div>
                 ) : (
@@ -1288,7 +1534,7 @@ export default function PaymentDetailClient({
                           <div className="w-16 h-16 rounded border overflow-hidden">
                             <Image
                               src={transferProofPreview}
-                              alt="Preview"
+                              alt={t("admin.payments.detail.dialog.previewAlt")}
                               width={64}
                               height={64}
                               className="w-full h-full object-cover"
@@ -1339,7 +1585,7 @@ export default function PaymentDetailClient({
                     className="w-full"
                   >
                     <Upload className="w-4 h-4 mr-2" />
-                    Change File
+                    {t("admin.payments.detail.dialog.changeFile")}
                   </Button>
                 )}
               </div>
@@ -1348,10 +1594,20 @@ export default function PaymentDetailClient({
             {/* Info Note */}
             <div className="bg-gray-50 border border-gray-200 p-3 rounded-lg">
               <p className="text-xs text-gray-600">
-                <strong>Note:</strong> Either provide a transfer reference or
-                upload a proof document. The uploaded file will be saved as the
-                transfer reference.
+                <strong>{t("admin.payments.detail.dialog.noteTitle")}</strong>{" "}
+                {t("admin.payments.detail.dialog.noteBody")}
               </p>
+              <p className="text-xs text-gray-600 mt-2">
+                <strong>
+                  {t("admin.payments.detail.dialog.complianceTitle")}
+                </strong>{" "}
+                {t("admin.payments.detail.dialog.complianceBody")}
+              </p>
+              {!isProviderVerified && (
+                <p className="text-xs text-amber-700 mt-1">
+                  {t("admin.payments.detail.dialog.providerUnverified")}
+                </p>
+              )}
             </div>
           </div>
           <DialogFooter className="px-6 pb-6 pt-4 border-t flex-shrink-0">
@@ -1360,7 +1616,7 @@ export default function PaymentDetailClient({
               onClick={() => handleDialogClose(false)}
               disabled={confirming}
             >
-              Cancel
+              {t("admin.payments.detail.dialog.cancel")}
             </Button>
             <Button
               onClick={handleConfirmTransfer}
@@ -1376,12 +1632,12 @@ export default function PaymentDetailClient({
               {confirming ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Confirming...
+                  {t("admin.payments.detail.dialog.confirming")}
                 </>
               ) : (
                 <>
                   <CheckCircle2 className="w-4 h-4 mr-2" />
-                  Confirm Transfer
+                  {t("admin.payments.detail.dialog.confirm")}
                 </>
               )}
             </Button>

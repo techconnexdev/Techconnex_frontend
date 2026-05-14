@@ -5,6 +5,8 @@ import { Button } from "../ui/button";
 import MenuIcon from "@/public/assets/icon-menu.svg";
 import Image from "next/image";
 import Link from "next/link";
+import { useI18n } from "@/contexts/I18nProvider";
+import { LanguageSwitcher } from "./LanguageSwitcher";
 
 function getDashboardHref(): string | null {
   if (typeof window === "undefined") return null;
@@ -24,10 +26,19 @@ function getDashboardHref(): string | null {
 }
 
 const Header = () => {
+  const { t } = useI18n();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [dashboardHref, setDashboardHref] = useState<string | null>(null);
   const pathname = usePathname();
   const isHomePage = pathname === "/";
+  const navItems = [
+    { id: "about", label: "Video" },
+    { id: "showcase", label: "Showcase" },
+    { id: "steps", label: "Steps" },
+    { id: "features", label: "Features" },
+    { id: "ai-intelligence", label: "Intelligence" },
+    // { id: "get-started", label: "Get Started" },
+  ] as const;
 
   useEffect(() => {
     setDashboardHref(getDashboardHref());
@@ -50,6 +61,12 @@ const Header = () => {
   };
 
   const handleNavClick = (sectionId: string) => {
+    if (sectionId === "showcase") {
+      setIsMobileMenuOpen(false);
+      window.location.href = "/showcase";
+      return;
+    }
+
     if (isHomePage) {
       scrollToSection(sectionId);
     } else {
@@ -61,76 +78,68 @@ const Header = () => {
 
 
   return (
-    <header className="py-4 border-b border-blue-700/15 md:border-none sticky top-0 z-10">
-      <div className="absolute inset-0 backdrop-blur -z-10 md:hidden"></div>
+    <header className="py-4 border-b border-blue-700/15 lg:border-none relative z-10">
+      <div className="absolute inset-0 backdrop-blur -z-10 lg:hidden"></div>
       <div className="container">
-        <div className="flex justify-between items-center md:border border-blue-700/15 md:p-2.5 rounded-xl max-w-4xl mx-auto relative">
-          <div className="absolute inset-0 backdrop-blur -z-10 hidden md:block"></div>
+        <div className="relative mx-auto flex max-w-6xl items-center justify-between rounded-xl lg:border border-blue-700/15 lg:p-2.5">
+          <div className="absolute inset-0 backdrop-blur -z-10 hidden lg:block"></div>
 
           <Link href="/" className="flex items-center shrink-0">
             <Image
               src="/logo.png"
-              alt="TechConnex"
+              alt={t("home.header.logoAlt")}
               width={40}
               height={40}
               className="h-10 w-10 rounded-xl object-contain"
             />
           </Link>
 
-          <div className="hidden md:block">
-            <nav className="flex gap-8 text-sm">
-            <button
-                onClick={() => handleNavClick("about")}
-                className="text-black/70 hover:text-black transition cursor-pointer"
-              >
-                About
-              </button>
-              <button
-                onClick={() => handleNavClick("features")}
-                className="text-black/70 hover:text-black transition cursor-pointer"
-              >
-                Features
-              </button>
-              <button
-                onClick={() => handleNavClick("ai-intelligence")}
-                className="text-black/70 hover:text-black transition cursor-pointer"
-              >
-                AI Intelligence
-              </button>
-              <button
-                onClick={() => handleNavClick("milestones")}
-                className="text-black/70 hover:text-black transition cursor-pointer"
-              >
-                Milestones
-              </button>
-              <button
-                onClick={() => handleNavClick("showcase")}
-                className="text-black/70 hover:text-black transition cursor-pointer"
-              >
-                Showcase
-              </button>
+          <div className="hidden lg:block">
+            <nav className="flex gap-6 text-sm xl:gap-8">
+              {navItems.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => handleNavClick(item.id)}
+                  className="group relative px-2 py-1.5 text-black/70 hover:text-[#185df9] transition-colors duration-200 cursor-pointer"
+                >
+                  <span>{item.label}</span>
+                  <span className="pointer-events-none absolute -bottom-[2px] left-0 h-[2px] w-full origin-left scale-x-0 rounded-full bg-[#2D6DFC] transition-transform duration-300 ease-out group-hover:scale-x-100" />
+                </button>
+              ))}
             </nav>
           </div>
-          <div className="flex gap-4 items-center">
-            {dashboardHref ? (
-              <Link href={dashboardHref}>
-                <Button>Dashboard</Button>
-              </Link>
-            ) : (
-              <>
-                <Link href="/auth/login">
-                  <Button variant="ghost">Sign in</Button>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <LanguageSwitcher />
+            <div className="hidden lg:flex lg:items-center lg:gap-3">
+              {dashboardHref ? (
+                <Link href={dashboardHref}>
+                  <Button className="transition-all duration-200 hover:translate-y-[-1px] hover:shadow-md">
+                    {t("home.header.dashboard")}
+                  </Button>
                 </Link>
-                <Link href="/auth/register">
-                  <Button>Register</Button>
-                </Link>
-              </>
-            )}
+              ) : (
+                <>
+                  <Link href="/auth/login">
+                    <Button
+                      variant="ghost"
+                      className="transition-all duration-200 hover:bg-blue-50 hover:text-[#185df9]"
+                    >
+                      {t("home.header.signIn")}
+                    </Button>
+                  </Link>
+                  <Link href="/auth/register">
+                    <Button className="transition-all duration-200 hover:translate-y-[-1px] hover:shadow-md">
+                      {t("home.header.register")}
+                    </Button>
+                  </Link>
+                </>
+              )}
+            </div>
             <button
               type="button"
               onClick={() => setIsMobileMenuOpen((prev) => !prev)}
-              className="md:hidden p-0 border-0 bg-transparent cursor-pointer"
-              aria-label="Toggle menu"
+              className="lg:hidden inline-flex h-10 w-10 items-center justify-center rounded-lg border border-blue-700/20 bg-white/70 p-0 text-black transition-colors duration-200 hover:bg-white"
+              aria-label={t("home.header.menuToggle")}
               aria-expanded={isMobileMenuOpen}
             >
               <Image
@@ -138,7 +147,7 @@ const Header = () => {
                 alt="menu"
                 width={20}
                 height={20}
-                className="invert"
+                className="h-5 w-5 invert"
               />
             </button>
           </div>
@@ -146,51 +155,44 @@ const Header = () => {
 
         {/* Mobile menu panel - same nav as desktop, visible only when toggled */}
         {isMobileMenuOpen && (
-          <div className="md:hidden absolute left-0 right-0 top-full mt-0 border-b border-blue-700/15 bg-white/95 backdrop-blur py-4 px-4 z-20">
+          <div className="lg:hidden absolute left-4 right-4 top-full z-20 mt-2 rounded-xl border border-blue-700/15 bg-white/95 px-4 py-4 shadow-lg backdrop-blur">
             <nav className="flex flex-col gap-2 text-sm">
-              <button
-                onClick={() => handleNavClick("about")}
-                className="text-left py-2 text-black/70 hover:text-black transition cursor-pointer"
-              >
-                About
-              </button>
-              <button
-                onClick={() => handleNavClick("features")}
-                className="text-left py-2 text-black/70 hover:text-black transition cursor-pointer"
-              >
-                Features
-              </button>
-              <button
-                onClick={() => handleNavClick("ai-intelligence")}
-                className="text-left py-2 text-black/70 hover:text-black transition cursor-pointer"
-              >
-                AI Intelligence
-              </button>
-              <button
-                onClick={() => handleNavClick("milestones")}
-                className="text-left py-2 text-black/70 hover:text-black transition cursor-pointer"
-              >
-                Milestones
-              </button>
-              <button
-                onClick={() => handleNavClick("showcase")}
-                className="text-left py-2 text-black/70 hover:text-black transition cursor-pointer"
-              >
-                Showcase
-              </button>
-              <button
-                onClick={() => handleNavClick("video")}
-                className="text-left py-2 text-black/70 hover:text-black transition cursor-pointer"
-              >
-                Video
-              </button>
-              <button
-                onClick={() => handleNavClick("talent")}
-                className="text-left py-2 text-black/70 hover:text-black transition cursor-pointer"
-              >
-                Talent
-              </button>
+              {navItems.map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => handleNavClick(item.id)}
+                  className="group relative px-2 py-2 text-left text-black/70 hover:text-[#185df9] transition-colors duration-200 cursor-pointer"
+                >
+                  <span>{item.label}</span>
+                  <span className="pointer-events-none absolute bottom-1 left-2 right-2 h-[2px] origin-left scale-x-0 rounded-full bg-[#2D6DFC] transition-transform duration-300 ease-out group-hover:scale-x-100" />
+                </button>
+              ))}
             </nav>
+            <div className="mt-4 grid grid-cols-2 gap-2 border-t border-blue-700/10 pt-4">
+              {dashboardHref ? (
+                <Link href={dashboardHref} onClick={() => setIsMobileMenuOpen(false)}>
+                  <Button className="w-full transition-all duration-200">
+                    {t("home.header.dashboard")}
+                  </Button>
+                </Link>
+              ) : (
+                <>
+                  <Link href="/auth/login" onClick={() => setIsMobileMenuOpen(false)}>
+                    <Button
+                      variant="ghost"
+                      className="w-full transition-all duration-200 hover:bg-blue-50 hover:text-[#185df9]"
+                    >
+                      {t("home.header.signIn")}
+                    </Button>
+                  </Link>
+                  <Link href="/auth/register" onClick={() => setIsMobileMenuOpen(false)}>
+                    <Button className="w-full transition-all duration-200">
+                      {t("home.header.register")}
+                    </Button>
+                  </Link>
+                </>
+              )}
+            </div>
           </div>
         )}
       </div>

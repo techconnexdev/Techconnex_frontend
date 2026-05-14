@@ -10,13 +10,14 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
+import { useI18n } from "@/contexts/I18nProvider";
 
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Required percentage (e.g. 40 or 50) */
   requiredPercent: number;
-  /** Action description, e.g. "contact users" or "submit proposals" */
+  /** Localized action phrase from t(), e.g. submit proposals */
   actionLabel: string;
 };
 
@@ -27,6 +28,7 @@ export function ProfileCompletionGateModal({
   actionLabel,
 }: Props) {
   const router = useRouter();
+  const { t } = useI18n();
 
   const handleCompleteNow = () => {
     onOpenChange(false);
@@ -37,21 +39,23 @@ export function ProfileCompletionGateModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Complete your profile</DialogTitle>
+          <DialogTitle>{t("provider.profileCompletion.gate.title")}</DialogTitle>
           <DialogDescription>
-            Complete your profile to at least {requiredPercent}% to{" "}
-            {actionLabel}.
+            {t("provider.profileCompletion.gate.description", {
+              percent: requiredPercent,
+              action: actionLabel,
+            })}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter className="flex gap-2 sm:gap-0">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("provider.profile.cancel")}
           </Button>
           <Button
             onClick={handleCompleteNow}
             className="bg-blue-600 hover:bg-blue-700"
           >
-            👉 Complete Now
+            {t("provider.profileCompletion.gate.completeNow")}
           </Button>
         </DialogFooter>
       </DialogContent>

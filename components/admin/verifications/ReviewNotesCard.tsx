@@ -1,5 +1,6 @@
 "use client"
 
+import { useI18n } from "@/contexts/I18nProvider"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 
@@ -9,6 +10,7 @@ interface ReviewNotesCardProps {
 }
 
 export function ReviewNotesCard({ reviewNotes, onNotesChange }: ReviewNotesCardProps) {
+  const { t } = useI18n()
   return (
     <Card>
       <CardHeader className="px-4 sm:px-6 pt-4 sm:pt-6">
@@ -16,7 +18,7 @@ export function ReviewNotesCard({ reviewNotes, onNotesChange }: ReviewNotesCardP
       </CardHeader>
       <CardContent className="px-4 sm:px-6 pb-4 sm:pb-6">
         <Textarea
-          placeholder="Add your review notes here..."
+          placeholder={t("admin.verifications.reviewNotes.placeholder")}
           value={reviewNotes}
           onChange={(e) => onNotesChange(e.target.value)}
           className="min-h-[100px] text-sm sm:text-base"

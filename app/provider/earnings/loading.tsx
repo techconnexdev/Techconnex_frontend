@@ -1,3 +1,5 @@
+import { ProviderEarningsPageSkeleton } from "@/components/provider/ProviderEarningsSkeletons";
+
 export default function Loading() {
-  return null
+  return <ProviderEarningsPageSkeleton loadingLabel="Loading earnings" />;
 }

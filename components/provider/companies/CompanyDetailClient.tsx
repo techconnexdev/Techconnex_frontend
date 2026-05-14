@@ -75,6 +75,14 @@ import {
 } from "@/lib/timeline-utils";
 import { formatBidAmountDisplay, parseBidAmountInput } from "@/lib/utils";
 import { toast } from "@/lib/toast";
+import { useI18n } from "@/contexts/I18nProvider";
+
+const formatCurrencyAmount = (amount: number, currencyCode: string = "MYR") =>
+  new Intl.NumberFormat("en-MY", {
+    style: "currency",
+    currency: currencyCode,
+    maximumFractionDigits: 2,
+  }).format(amount || 0);
 
 type Milestone = {
   sequence: number;
@@ -101,6 +109,7 @@ type TransformedOpportunity = {
   budget: string;
   budgetMin: number;
   budgetMax: number;
+  currencyCode: string;
   timeline: string;
   originalTimeline: string | null;
   originalTimelineInDays: number;
@@ -124,7 +133,9 @@ export default function CompanyDetailClient({
   company: Company;
   reviews: Review[];
 }) {
+  const { t } = useI18n();
   const [saved, setSaved] = useState<boolean>(!!company.saved);
+  const [profilePhotoDialogOpen, setProfilePhotoDialogOpen] = useState(false);
 
   // Reviews filtering and pagination
   const [sortBy, setSortBy] = useState<SortOption>("newest");
@@ -269,13 +280,23 @@ export default function CompanyDetailClient({
               title: String(opp.title || ""),
               description: String(opp.description || ""),
               fullDescription: String(opp.description || ""),
-              budget: `RM ${
-                (opp.budgetMin as number)?.toLocaleString() || 0
-              } - RM ${(opp.budgetMax as number)?.toLocaleString() || 0}`,
-              budgetMin: (opp.budgetMin as number) || 0,
-              budgetMax: (opp.budgetMax as number) || 0,
+              budget: `${formatCurrencyAmount(
+                Number(opp.displayBudgetMin ?? opp.budgetMin ?? 0),
+                String(opp.displayCurrencyCode || opp.currencyCode || "MYR"),
+              )} - ${formatCurrencyAmount(
+                Number(opp.displayBudgetMax ?? opp.budgetMax ?? 0),
+                String(opp.displayCurrencyCode || opp.currencyCode || "MYR"),
+              )}`,
+              budgetMin:
+                Number(opp.displayBudgetMin ?? opp.budgetMin ?? 0) || 0,
+              budgetMax:
+                Number(opp.displayBudgetMax ?? opp.budgetMax ?? 0) || 0,
+              currencyCode: String(
+                opp.displayCurrencyCode || opp.currencyCode || "MYR",
+              ),
               timeline:
-                formatTimeline(opp.timeline as string) || "Not specified",
+                formatTimeline(opp.timeline as string) ||
+                t("customer.dashboard.timelineNotSpecified"),
               originalTimeline: (opp.timeline as string) || null,
               originalTimelineInDays: (() => {
                 if (!opp.timeline) return 0;
@@ -339,7 +360,7 @@ export default function CompanyDetailClient({
     try {
       const { userId, token } = getUserAndToken();
       if (!userId || !token) {
-        alert("Please login to save companies");
+        toast.error(t("provider.companies.toast.loginToSave"));
         return;
       }
 
@@ -393,7 +414,9 @@ export default function CompanyDetailClient({
                 saved ? "fill-current" : ""
               }`}
             />{" "}
-            {saved ? "Saved" : "Save"}
+            {saved
+              ? t("provider.companies.detail.saved")
+              : t("provider.companies.detail.save")}
           </Button>
         </div>
       </div>
@@ -402,12 +425,31 @@ export default function CompanyDetailClient({
       <Card>
         <CardContent className="p-4 sm:p-6">
           <div className="flex items-start gap-3 sm:gap-5">
-            <Avatar className="w-16 h-16 sm:w-20 sm:h-20 flex-shrink-0">
-              <AvatarImage src={getProfileImageUrl(company.avatar)} />
-              <AvatarFallback>
-                <Building2 className="w-8 h-8 sm:w-10 sm:h-10" />
-              </AvatarFallback>
-            </Avatar>
+            {company.avatar?.trim() ? (
+              <button
+                type="button"
+                onClick={() => setProfilePhotoDialogOpen(true)}
+                className="shrink-0 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 cursor-pointer"
+                aria-label={t("provider.companies.detail.viewLogoAria")}
+              >
+                <Avatar className="w-16 h-16 sm:w-20 sm:h-20 pointer-events-none">
+                  <AvatarImage
+                    src={getProfileImageUrl(company.avatar)}
+                    alt=""
+                  />
+                  <AvatarFallback>
+                    <Building2 className="w-8 h-8 sm:w-10 sm:h-10" />
+                  </AvatarFallback>
+                </Avatar>
+              </button>
+            ) : (
+              <Avatar className="w-16 h-16 sm:w-20 sm:h-20 flex-shrink-0">
+                <AvatarImage src={getProfileImageUrl(company.avatar)} alt="" />
+                <AvatarFallback>
+                  <Building2 className="w-8 h-8 sm:w-10 sm:h-10" />
+                </AvatarFallback>
+              </Avatar>
+            )}
             <div className="flex-1 min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-xl sm:text-2xl font-bold break-words">
@@ -416,13 +458,13 @@ export default function CompanyDetailClient({
                 {company.verified && (
                   <Badge className="bg-green-100 text-green-800 text-xs shrink-0">
                     <CheckCircle2 className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
-                    Verified
+                    {t("provider.companies.detail.verified")}
                   </Badge>
                 )}
                 {!company.verified && (
                   <Badge className="bg-gray-100 text-gray-700 border-gray-300 text-xs shrink-0">
                     <AlertTriangle className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
-                    Not Verified
+                    {t("provider.companies.badge.notVerified")}
                   </Badge>
                 )}
               </div>
@@ -432,7 +474,10 @@ export default function CompanyDetailClient({
               <div className="mt-2 flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-600">
                 <span className="flex items-center gap-1">
                   <Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-yellow-400 fill-current flex-shrink-0" />
-                  <b>{company.rating}</b> ({company.reviewCount} reviews)
+                  <b>{company.rating}</b>{" "}
+                  {t("provider.companies.detail.reviewsCount", {
+                    n: company.reviewCount,
+                  })}
                 </span>
                 <span className="flex items-center gap-1">
                   <MapPin className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
@@ -440,20 +485,30 @@ export default function CompanyDetailClient({
                 </span>
                 <span className="flex items-center gap-1">
                   <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
-                  {company.projectsPosted} projects posted
+                  {t("provider.companies.detail.projectsPostedLine", {
+                    n: company.projectsPosted,
+                  })}
                 </span>
                 {company.establishedYear && (
                   <span className="flex items-center gap-1">
                     <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
-                    Est. {company.establishedYear}
+                    {t("provider.companies.detail.estYear", {
+                      year: company.establishedYear,
+                    })}
                   </span>
                 )}
                 {company.employeeCount && (
-                  <span>{company.employeeCount} employees</span>
+                  <span>
+                    {t("provider.companies.detail.employeesLine", {
+                      n: company.employeeCount,
+                    })}
+                  </span>
                 )}
                 <span className="flex items-center gap-1">
                   <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
-                  Member since {company.memberSince}
+                  {t("provider.companies.detail.memberSince", {
+                    value: company.memberSince,
+                  })}
                 </span>
               </div>
             </div>
@@ -489,14 +544,14 @@ export default function CompanyDetailClient({
           <Card>
             <CardHeader className="p-4 sm:p-6">
               <CardTitle className="text-lg sm:text-xl">
-                Company Information
+                {t("provider.companies.detail.companyInformation")}
               </CardTitle>
             </CardHeader>
             <CardContent className="p-4 sm:p-6 space-y-3 sm:space-y-4">
               {company.mission && (
                 <div>
                   <h4 className="font-semibold text-sm sm:text-base mb-2">
-                    Mission
+                    {t("provider.companies.detail.mission")}
                   </h4>
                   <p className="text-sm sm:text-base text-gray-700 break-words">
                     {company.mission}
@@ -506,7 +561,7 @@ export default function CompanyDetailClient({
               {company.values && company.values.length > 0 && (
                 <div>
                   <h4 className="font-semibold text-sm sm:text-base mb-2">
-                    Values
+                    {t("provider.companies.detail.values")}
                   </h4>
                   <div className="flex flex-wrap gap-1.5 sm:gap-2">
                     {company.values.map((value) => (
@@ -525,7 +580,7 @@ export default function CompanyDetailClient({
                 company.categoriesHiringFor.length > 0 && (
                   <div>
                     <h4 className="font-semibold text-sm sm:text-base mb-2">
-                      Categories Hiring For
+                      {t("provider.companies.detail.categoriesHiringFor")}
                     </h4>
                     <div className="flex flex-wrap gap-1.5 sm:gap-2">
                       {company.categoriesHiringFor.map((category) => (
@@ -543,17 +598,19 @@ export default function CompanyDetailClient({
               {company.employeeCount && (
                 <div>
                   <h4 className="font-semibold text-sm sm:text-base mb-2">
-                    Employee Count
+                    {t("provider.companies.detail.employeeCount")}
                   </h4>
                   <p className="text-sm sm:text-base text-gray-700">
-                    {company.employeeCount.toLocaleString()} employees
+                    {t("provider.companies.detail.employeesFormatted", {
+                      n: company.employeeCount,
+                    })}
                   </p>
                 </div>
               )}
               {company.establishedYear && (
                 <div>
                   <h4 className="font-semibold text-sm sm:text-base mb-2">
-                    Established
+                    {t("provider.companies.detail.established")}
                   </h4>
                   <p className="text-sm sm:text-base text-gray-700">
                     {company.establishedYear}
@@ -568,10 +625,10 @@ export default function CompanyDetailClient({
             <Card>
               <CardHeader className="p-4 sm:p-6">
                 <CardTitle className="text-lg sm:text-xl">
-                  Media Gallery
+                  {t("provider.companies.detail.mediaGallery")}
                 </CardTitle>
                 <CardDescription className="text-xs sm:text-sm">
-                  Company images and visual content
+                  {t("provider.companies.detail.mediaGalleryDesc")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-4 sm:p-6">
@@ -586,7 +643,9 @@ export default function CompanyDetailClient({
                         {isImageUrl(url) ? (
                           <MediaImage
                             src={url}
-                            alt={`Company media ${index + 1}`}
+                            alt={t("provider.companies.detail.mediaAlt", {
+                              n: index + 1,
+                            })}
                             className="w-full h-full"
                             onClick={() => openLightbox(index)}
                           />
@@ -602,7 +661,10 @@ export default function CompanyDetailClient({
                           className="text-xs text-gray-600 truncate"
                           title={url}
                         >
-                          {url.split("/").pop() || `Media ${index + 1}`}
+                          {url.split("/").pop() ||
+                            t("provider.companies.detail.mediaFileFallback", {
+                              n: index + 1,
+                            })}
                         </p>
                       </div>
                     </div>
@@ -615,9 +677,11 @@ export default function CompanyDetailClient({
           {/* Reviews */}
           <Card>
             <CardHeader className="p-4 sm:p-6">
-              <CardTitle className="text-lg sm:text-xl">Reviews</CardTitle>
+              <CardTitle className="text-lg sm:text-xl">
+                {t("provider.companies.detail.reviews")}
+              </CardTitle>
               <CardDescription className="text-xs sm:text-sm">
-                Reviews given by this company
+                {t("provider.companies.detail.reviewsDesc")}
               </CardDescription>
             </CardHeader>
             <CardContent className="p-4 sm:p-6">
@@ -627,13 +691,25 @@ export default function CompanyDetailClient({
                   <div className="flex justify-end">
                     <Select value={sortBy} onValueChange={handleSortChange}>
                       <SelectTrigger className="w-full sm:w-[180px] text-xs sm:text-sm">
-                        <SelectValue placeholder="Sort by" />
+                        <SelectValue
+                          placeholder={t(
+                            "provider.companies.detail.sortReviews.placeholder",
+                          )}
+                        />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="newest">Newest First</SelectItem>
-                        <SelectItem value="oldest">Oldest First</SelectItem>
-                        <SelectItem value="highest">Highest Rating</SelectItem>
-                        <SelectItem value="lowest">Lowest Rating</SelectItem>
+                        <SelectItem value="newest">
+                          {t("provider.companies.detail.sortReviews.newest")}
+                        </SelectItem>
+                        <SelectItem value="oldest">
+                          {t("provider.companies.detail.sortReviews.oldest")}
+                        </SelectItem>
+                        <SelectItem value="highest">
+                          {t("provider.companies.detail.sortReviews.highest")}
+                        </SelectItem>
+                        <SelectItem value="lowest">
+                          {t("provider.companies.detail.sortReviews.lowest")}
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -725,7 +801,9 @@ export default function CompanyDetailClient({
                   )}
                 </div>
               ) : (
-                <p className="text-gray-600">No reviews yet</p>
+                <p className="text-gray-600">
+                  {t("provider.companies.detail.noReviews")}
+                </p>
               )}
             </CardContent>
           </Card>
@@ -738,7 +816,7 @@ export default function CompanyDetailClient({
               <Card>
                 <CardHeader className="p-4 sm:p-6">
                   <CardTitle className="text-base sm:text-lg">
-                    Preferred Contract Types
+                    {t("provider.companies.detail.preferredContractTypes")}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="p-4 sm:p-6 flex flex-wrap gap-1.5 sm:gap-2">
@@ -755,7 +833,7 @@ export default function CompanyDetailClient({
             <Card>
               <CardHeader className="p-4 sm:p-6">
                 <CardTitle className="text-base sm:text-lg">
-                  Languages
+                  {t("provider.companies.detail.languages")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-4 sm:p-6 flex flex-wrap gap-1.5 sm:gap-2">
@@ -773,16 +851,18 @@ export default function CompanyDetailClient({
             <Card>
               <CardHeader className="p-4 sm:p-6">
                 <CardTitle className="text-base sm:text-lg">
-                  Contact Information
+                  {t("provider.companies.detail.contactInformation")}
                 </CardTitle>
                 <CardDescription className="text-xs sm:text-sm">
-                  Direct contact details
+                  {t("provider.companies.detail.contactDesc")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-4 sm:p-6 space-y-2.5 sm:space-y-3 text-xs sm:text-sm">
                 {company.email && (
                   <div>
-                    <p className="text-gray-500">Email</p>
+                    <p className="text-gray-500">
+                      {t("provider.companies.detail.email")}
+                    </p>
                     <a
                       href={`mailto:${company.email}`}
                       className="font-medium text-blue-600 active:text-blue-800 sm:hover:underline break-all"
@@ -793,7 +873,9 @@ export default function CompanyDetailClient({
                 )}
                 {company.phone && (
                   <div>
-                    <p className="text-gray-500">Phone</p>
+                    <p className="text-gray-500">
+                      {t("provider.companies.detail.phone")}
+                    </p>
                     <a
                       href={`tel:${company.phone}`}
                       className="font-medium text-blue-600 active:text-blue-800 sm:hover:underline"
@@ -810,16 +892,18 @@ export default function CompanyDetailClient({
           <Card>
             <CardHeader className="p-4 sm:p-6">
               <CardTitle className="text-base sm:text-lg">
-                Additional Information
+                {t("provider.companies.detail.additionalInformation")}
               </CardTitle>
               <CardDescription className="text-xs sm:text-sm">
-                Company preferences and details
+                {t("provider.companies.detail.additionalDesc")}
               </CardDescription>
             </CardHeader>
             <CardContent className="p-4 sm:p-6 space-y-3 text-xs sm:text-sm">
               {company.remotePolicy && (
                 <div>
-                  <p className="text-gray-500">Remote Policy</p>
+                  <p className="text-gray-500">
+                    {t("provider.companies.detail.remotePolicy")}
+                  </p>
                   <p className="font-medium break-words">
                     {company.remotePolicy}
                   </p>
@@ -827,7 +911,9 @@ export default function CompanyDetailClient({
               )}
               {company.hiringFrequency && (
                 <div>
-                  <p className="text-gray-500">Hiring Frequency</p>
+                  <p className="text-gray-500">
+                    {t("provider.companies.detail.hiringFrequency")}
+                  </p>
                   <p className="font-medium capitalize break-words">
                     {company.hiringFrequency}
                   </p>
@@ -835,7 +921,9 @@ export default function CompanyDetailClient({
               )}
               {company.averageBudgetRange && (
                 <div>
-                  <p className="text-gray-500">Average Budget Range</p>
+                  <p className="text-gray-500">
+                    {t("provider.companies.detail.averageBudgetRange")}
+                  </p>
                   <p className="font-medium break-words">
                     {company.averageBudgetRange}
                   </p>
@@ -845,7 +933,9 @@ export default function CompanyDetailClient({
                 Array.isArray(company.socialLinks) &&
                 company.socialLinks.length > 0 && (
                   <div>
-                    <p className="text-gray-500">Social Links</p>
+                    <p className="text-gray-500">
+                      {t("provider.companies.detail.socialLinks")}
+                    </p>
                     <div className="flex flex-wrap gap-2 mt-1">
                       {company.socialLinks.map(
                         (link: string, index: number) => (
@@ -874,11 +964,10 @@ export default function CompanyDetailClient({
       <Card>
         <CardHeader className="p-4 sm:p-6">
           <CardTitle className="text-lg sm:text-xl">
-            Open Opportunities
+            {t("provider.companies.detail.openOpportunities")}
           </CardTitle>
           <CardDescription className="text-xs sm:text-sm">
-            Available projects from this company that you can submit proposals
-            for
+            {t("provider.companies.detail.openOpportunitiesDesc")}
           </CardDescription>
         </CardHeader>
         <CardContent className="p-4 sm:p-6">
@@ -886,17 +975,17 @@ export default function CompanyDetailClient({
             <div className="flex items-center justify-center py-8 sm:py-12">
               <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin text-gray-400" />
               <span className="ml-2 text-sm sm:text-base text-gray-600">
-                Loading opportunities...
+                {t("provider.companies.detail.loadingOpportunities")}
               </span>
             </div>
           ) : opportunities.length === 0 ? (
             <div className="text-center py-8 sm:py-12">
               <Building2 className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-4 text-gray-300" />
               <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
-                No open opportunities
+                {t("provider.companies.detail.noOpenOpportunitiesTitle")}
               </h3>
               <p className="text-sm sm:text-base text-gray-600">
-                This company doesn&apos;t have any open projects at the moment.
+                {t("provider.companies.detail.noOpenOpportunitiesBody")}
               </p>
             </div>
           ) : (
@@ -916,13 +1005,13 @@ export default function CompanyDetailClient({
                           {opp.priority === "High" && (
                             <Badge className="bg-red-100 text-red-800 text-xs shrink-0">
                               <Clock className="w-3 h-3 mr-1" />
-                              Urgent
+                              {t("provider.opportunities.urgent")}
                             </Badge>
                           )}
                           {opp.hasSubmitted && (
                             <Badge className="bg-green-100 text-green-800 text-xs shrink-0">
                               <CheckCircle2 className="w-3 h-3 mr-1" />
-                              Submitted
+                              {t("provider.opportunities.submitted")}
                             </Badge>
                           )}
                         </div>
@@ -948,7 +1037,9 @@ export default function CompanyDetailClient({
                       <div className="text-left sm:text-right">
                         <div className="flex items-center text-xs sm:text-sm text-gray-500">
                           <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 flex-shrink-0" />
-                          {opp.proposals} proposals
+                          {t("provider.dashboard.opportunity.proposalsN", {
+                            n: opp.proposals,
+                          })}
                         </div>
                         <p className="text-xs text-gray-400">
                           {opp.postedTime}
@@ -968,7 +1059,9 @@ export default function CompanyDetailClient({
                       ))}
                       {opp.skills.length > 6 && (
                         <Badge variant="secondary" className="text-xs">
-                          +{opp.skills.length - 6} more
+                          {t("provider.companies.detail.moreSkills", {
+                            n: opp.skills.length - 6,
+                          })}
                         </Badge>
                       )}
                     </div>
@@ -982,7 +1075,7 @@ export default function CompanyDetailClient({
                           setIsProposalModalOpen(true);
                           setProposalData({
                             coverLetter: "",
-                            bidAmount: "",
+                            bidAmount: String(opp.budgetMin ?? ""),
                             timelineAmount: "",
                             timelineUnit: "",
                             milestones: [],
@@ -996,12 +1089,12 @@ export default function CompanyDetailClient({
                         {opp.hasSubmitted ? (
                           <>
                             <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                            Already Submitted
+                            {t("provider.opportunities.details.alreadySubmitted")}
                           </>
                         ) : (
                           <>
                             <ThumbsUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                            Submit Proposal
+                            {t("provider.opportunities.proposal.title")}
                           </>
                         )}
                       </Button>
@@ -1019,10 +1112,12 @@ export default function CompanyDetailClient({
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle className="text-lg sm:text-xl">
-              Submit Proposal
+              {t("provider.opportunities.proposal.title")}
             </DialogTitle>
             <DialogDescription className="text-xs sm:text-sm">
-              Submit your proposal for &quot;{selectedOpportunity?.title}&quot;
+              {t("provider.opportunities.proposal.subtitle", {
+                title: selectedOpportunity?.title ?? "",
+              })}
             </DialogDescription>
           </DialogHeader>
 
@@ -1031,13 +1126,18 @@ export default function CompanyDetailClient({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div>
                 <Label htmlFor="bidAmount" className="text-xs sm:text-sm">
-                  Your Bid Amount (RM) *
+                  {t("provider.opportunities.proposal.bidLabel", {
+                    currency:
+                      selectedOpportunity?.currencyCode || "MYR",
+                  })}
                 </Label>
                 <Input
                   id="bidAmount"
                   type="text"
                   inputMode="decimal"
-                  placeholder="15,000.00"
+                  placeholder={t(
+                    "provider.opportunities.proposal.bidPlaceholder",
+                  )}
                   value={formatBidAmountDisplay(proposalData.bidAmount)}
                   onChange={(e) =>
                     setProposalData((prev) => ({
@@ -1057,20 +1157,29 @@ export default function CompanyDetailClient({
                   </p>
                 )}
                 <p className="text-xs text-gray-500 mt-1 break-words">
-                  Client budget range: RM{" "}
-                  {selectedOpportunity?.budgetMin?.toLocaleString() || "0"} - RM{" "}
-                  {selectedOpportunity?.budgetMax?.toLocaleString() || "0"}
+                  Suggested range:{" "}
+                  {formatCurrencyAmount(
+                    selectedOpportunity?.budgetMin ?? 0,
+                    selectedOpportunity?.currencyCode || "MYR",
+                  )}{" "}
+                  -{" "}
+                  {formatCurrencyAmount(
+                    selectedOpportunity?.budgetMax ?? 0,
+                    selectedOpportunity?.currencyCode || "MYR",
+                  )}
                 </p>
               </div>
               <div>
                 <Label htmlFor="timeline" className="text-xs sm:text-sm">
-                  Delivery Timeline *
+                  {t("provider.opportunities.proposal.deliveryTimeline")}
                 </Label>
                 <div className="flex flex-col sm:flex-row gap-2">
                   <Input
                     id="timelineAmount"
                     type="number"
-                    placeholder="e.g. 2"
+                    placeholder={t(
+                      "provider.opportunities.proposal.timelineAmountPh",
+                    )}
                     min="1"
                     value={proposalData.timelineAmount}
                     onChange={(e) =>
@@ -1101,12 +1210,22 @@ export default function CompanyDetailClient({
                           : ""
                       }`}
                     >
-                      <SelectValue placeholder="Unit" />
+                      <SelectValue
+                        placeholder={t(
+                          "provider.opportunities.proposal.unitPlaceholder",
+                        )}
+                      />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="day">Day(s)</SelectItem>
-                      <SelectItem value="week">Week(s)</SelectItem>
-                      <SelectItem value="month">Month(s)</SelectItem>
+                      <SelectItem value="day">
+                        {t("provider.opportunities.proposal.day")}
+                      </SelectItem>
+                      <SelectItem value="week">
+                        {t("provider.opportunities.proposal.week")}
+                      </SelectItem>
+                      <SelectItem value="month">
+                        {t("provider.opportunities.proposal.month")}
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1121,10 +1240,11 @@ export default function CompanyDetailClient({
                   </p>
                 )}
                 <p className="text-xs text-gray-500 mt-1 break-words">
-                  Company timeline:{" "}
-                  {selectedOpportunity?.originalTimeline
-                    ? formatTimeline(selectedOpportunity.originalTimeline)
-                    : "Not specified"}
+                  {t("provider.opportunities.proposal.companyTimeline", {
+                    value: selectedOpportunity?.originalTimeline
+                      ? formatTimeline(selectedOpportunity.originalTimeline)
+                      : t("customer.dashboard.timelineNotSpecified"),
+                  })}
                 </p>
               </div>
             </div>
@@ -1132,11 +1252,13 @@ export default function CompanyDetailClient({
             {/* Cover Letter */}
             <div>
               <Label htmlFor="coverLetter" className="text-xs sm:text-sm">
-                Cover Letter *
+                {t("provider.opportunities.proposal.coverLetter")}
               </Label>
               <Textarea
                 id="coverLetter"
-                placeholder="Introduce yourself and explain why you're the best fit for this project..."
+                placeholder={t(
+                  "provider.opportunities.proposal.coverPlaceholder",
+                )}
                 className={`min-h-[120px] text-sm sm:text-base ${
                   proposalErrors.coverLetter
                     ? "border-red-500 focus-visible:ring-red-500"
@@ -1161,7 +1283,8 @@ export default function CompanyDetailClient({
             <div>
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0 mb-2">
                 <Label className="text-xs sm:text-sm">
-                  Project Milestones <span className="text-red-500">*</span>
+                  {t("provider.opportunities.proposal.milestonesLabel")}{" "}
+                  <span className="text-red-500">*</span>
                 </Label>
                 <Button
                   type="button"
@@ -1184,7 +1307,7 @@ export default function CompanyDetailClient({
                   }}
                   className="w-full sm:w-auto text-xs sm:text-sm"
                 >
-                  + Add Milestone
+                  {t("provider.opportunities.proposal.addMilestone")}
                 </Button>
               </div>
               {proposalData.milestones.length === 0 && (
@@ -1196,7 +1319,7 @@ export default function CompanyDetailClient({
                   }`}
                 >
                   {proposalErrors.milestones ||
-                    "At least one milestone is required."}
+                    t("provider.companies.proposal.milestonesHintSimple")}
                 </p>
               )}
               <div className="space-y-3">
@@ -1206,7 +1329,7 @@ export default function CompanyDetailClient({
                       <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
                         <div className="sm:col-span-1">
                           <label className="text-xs sm:text-sm font-medium">
-                            Seq
+                            {t("provider.opportunities.proposal.seq")}
                           </label>
                           <Input
                             type="number"
@@ -1217,7 +1340,7 @@ export default function CompanyDetailClient({
                         </div>
                         <div className="sm:col-span-12 md:col-span-4">
                           <label className="text-xs sm:text-sm font-medium">
-                            Title
+                            {t("provider.companies.proposal.titleLabel")}
                           </label>
                           <Input
                             value={m.title}
@@ -1237,7 +1360,8 @@ export default function CompanyDetailClient({
                         </div>
                         <div className="sm:col-span-12 md:col-span-3">
                           <label className="text-xs sm:text-sm font-medium">
-                            Amount (RM)
+                            Amount (
+                            {selectedOpportunity?.currencyCode || "MYR"})
                           </label>
                           <Input
                             type="number"
@@ -1258,7 +1382,7 @@ export default function CompanyDetailClient({
                         </div>
                         <div className="sm:col-span-12 md:col-span-4">
                           <label className="text-xs sm:text-sm font-medium">
-                            Due Date
+                            {t("provider.companies.proposal.dueDate")}
                           </label>
                           <Input
                             type="date"
@@ -1280,7 +1404,7 @@ export default function CompanyDetailClient({
                       </div>
                       <div>
                         <label className="text-xs sm:text-sm font-medium">
-                          Description
+                          {t("provider.companies.proposal.descriptionLabel")}
                         </label>
                         <Textarea
                           rows={2}
@@ -1314,7 +1438,7 @@ export default function CompanyDetailClient({
                           }}
                           className="text-xs sm:text-sm"
                         >
-                          Remove
+                          {t("provider.opportunities.proposal.remove")}
                         </Button>
                       </div>
                     </CardContent>
@@ -1331,7 +1455,7 @@ export default function CompanyDetailClient({
             {/* Attachments */}
             <div>
               <Label className="text-xs sm:text-sm">
-                Attachments (Optional)
+                {t("provider.opportunities.proposal.attachments")}
               </Label>
               <div className="border-2 border-dashed rounded-lg p-4 sm:p-6 text-center">
                 <input
@@ -1340,12 +1464,18 @@ export default function CompanyDetailClient({
                   onChange={(e) => {
                     const files = Array.from(e.target.files || []);
                     if (files.length + proposalData.attachments.length > 3) {
-                      toast.error("You can only upload up to 3 files");
+                      toast.error(
+                        t("provider.opportunities.toast.maxAttachments"),
+                      );
                       return;
                     }
                     for (const file of files) {
                       if (file.size > 10 * 1024 * 1024) {
-                        toast.error(`"${file.name}" is larger than 10 MB`);
+                        toast.error(
+                          t("provider.opportunities.toast.fileTooLarge", {
+                            name: file.name,
+                          }),
+                        );
                         return;
                       }
                     }
@@ -1362,10 +1492,10 @@ export default function CompanyDetailClient({
                 <label htmlFor="file-upload" className="cursor-pointer">
                   <Paperclip className="w-6 h-6 sm:w-8 sm:h-8 mx-auto text-gray-400 mb-2" />
                   <p className="text-xs sm:text-sm text-gray-600">
-                    Click to upload portfolio, resume, or relevant documents
+                    {t("provider.opportunities.proposal.uploadHint")}
                   </p>
                   <p className="text-xs text-gray-500 mt-1">
-                    PDF, DOC, DOCX, TXT, JPG, PNG (Max 10MB each, Max 3 files)
+                    {t("provider.companies.proposal.uploadTypesShort")}
                   </p>
                 </label>
               </div>
@@ -1393,7 +1523,7 @@ export default function CompanyDetailClient({
                         }}
                         className="text-xs sm:text-sm flex-shrink-0"
                       >
-                        Remove
+                        {t("provider.opportunities.proposal.remove")}
                       </Button>
                     </div>
                   ))}
@@ -1408,7 +1538,7 @@ export default function CompanyDetailClient({
               onClick={() => setIsProposalModalOpen(false)}
               className="w-full sm:w-auto text-xs sm:text-sm"
             >
-              Cancel
+              {t("provider.opportunities.proposal.cancel")}
             </Button>
             <Button
               onClick={async () => {
@@ -1426,15 +1556,9 @@ export default function CompanyDetailClient({
                   isNaN(bidAmountNum) ||
                   bidAmountNum <= 0
                 ) {
-                  errors.bidAmount =
-                    "Bid amount is required and must be positive";
-                } else if (selectedOpportunity) {
-                  if (
-                    bidAmountNum < selectedOpportunity.budgetMin ||
-                    bidAmountNum > selectedOpportunity.budgetMax
-                  ) {
-                    errors.bidAmount = `Bid amount must be between RM ${selectedOpportunity.budgetMin.toLocaleString()} and RM ${selectedOpportunity.budgetMax.toLocaleString()}`;
-                  }
+                  errors.bidAmount = t(
+                    "provider.companies.proposal.validation.bidRequiredPositive",
+                  );
                 }
 
                 const timelineAmountNum = Number(proposalData.timelineAmount);
@@ -1443,51 +1567,52 @@ export default function CompanyDetailClient({
                   isNaN(timelineAmountNum) ||
                   timelineAmountNum <= 0
                 ) {
-                  errors.timelineAmount = "Timeline amount is required";
+                  errors.timelineAmount = t(
+                    "provider.companies.proposal.validation.timelineAmountShort",
+                  );
                 }
                 if (!proposalData.timelineUnit) {
-                  errors.timelineUnit = "Timeline unit is required";
-                } else if (
-                  selectedOpportunity &&
-                  selectedOpportunity.originalTimelineInDays > 0
-                ) {
-                  const providerTimelineInDays = timelineToDays(
-                    timelineAmountNum,
-                    proposalData.timelineUnit,
+                  errors.timelineUnit = t(
+                    "provider.companies.proposal.validation.timelineUnitShort",
                   );
-                  if (
-                    providerTimelineInDays >
-                    selectedOpportunity.originalTimelineInDays
-                  ) {
-                    errors.timelineAmount = `Your timeline must be equal to or less than the company's timeline (${formatTimeline(
-                      selectedOpportunity.originalTimeline,
-                    )})`;
-                  }
                 }
 
                 if (
                   !proposalData.coverLetter ||
                   proposalData.coverLetter.trim().length < 20
                 ) {
-                  errors.coverLetter =
-                    "Cover letter must be at least 20 characters";
+                  errors.coverLetter = t(
+                    "provider.companies.proposal.validation.coverLetterShort",
+                  );
                 }
 
                 if (proposalData.milestones.length === 0) {
-                  errors.milestones = "At least one milestone is required";
+                  errors.milestones = t(
+                    "provider.companies.proposal.validation.milestonesRequiredShort",
+                  );
                 } else {
                   const sumMilestones = proposalData.milestones.reduce(
                     (sum, m) => sum + (Number(m.amount) || 0),
                     0,
                   );
                   if (bidAmountNum > 0 && sumMilestones !== bidAmountNum) {
-                    errors.milestones = `Total of milestones (RM ${sumMilestones}) must equal your bid amount (RM ${bidAmountNum})`;
+                    const cur =
+                      selectedOpportunity?.currencyCode || "MYR";
+                    errors.milestones = t(
+                      "provider.opportunities.validation.milestoneSumBid",
+                      {
+                        sum: formatCurrencyAmount(sumMilestones, cur),
+                        bid: formatCurrencyAmount(bidAmountNum, cur),
+                      },
+                    );
                   }
                 }
 
                 setProposalErrors(errors);
                 if (Object.keys(errors).length > 0) {
-                  toast.error("Please fix the errors before submitting");
+                  toast.error(
+                    t("provider.companies.proposal.validation.fixBeforeSubmit"),
+                  );
                   return;
                 }
 
@@ -1499,7 +1624,9 @@ export default function CompanyDetailClient({
                   );
 
                   if (!selectedOpportunity) {
-                    toast.error("No opportunity selected");
+                    toast.error(
+                      t("provider.companies.proposal.toast.noOpportunitySelected"),
+                    );
                     return;
                   }
 
@@ -1540,7 +1667,9 @@ export default function CompanyDetailClient({
 
                   const response = await sendProposal(formData);
                   if (response.success) {
-                    toast.success("Proposal submitted successfully!");
+                    toast.success(
+                      t("provider.opportunities.toast.proposalSuccess"),
+                    );
                     setIsProposalModalOpen(false);
                     if (selectedOpportunity) {
                       setOpportunities((prev) =>
@@ -1589,16 +1718,39 @@ export default function CompanyDetailClient({
               {submittingProposal ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 animate-spin" />
-                  Submitting...
+                  {t("provider.opportunities.proposal.submitting")}
                 </>
               ) : (
                 <>
                   <Send className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                  Submit Proposal
+                  {t("provider.opportunities.proposal.title")}
                 </>
               )}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={profilePhotoDialogOpen}
+        onOpenChange={setProfilePhotoDialogOpen}
+      >
+        <DialogContent className="max-w-[min(100vw-1rem,56rem)] p-2 sm:p-4 border bg-background">
+          <DialogTitle className="sr-only">
+            {t("provider.companies.detail.logoDialogTitle", {
+              name: company.name,
+            })}
+          </DialogTitle>
+          <div className="flex max-h-[85vh] items-center justify-center overflow-auto">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={getProfileImageUrl(company.avatar)}
+              alt={t("provider.companies.detail.logoAlt", {
+                name: company.name,
+              })}
+              className="max-h-[85vh] w-auto max-w-full rounded-lg object-contain"
+            />
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -1647,7 +1799,9 @@ export default function CompanyDetailClient({
                   <div className="relative w-full h-full max-w-full max-h-[70vh] flex items-center justify-center">
                     <Image
                       src={getMediaUrl(company.mediaGallery[currentImageIndex])}
-                      alt={`Company media ${currentImageIndex + 1}`}
+                      alt={t("provider.companies.detail.mediaAlt", {
+                        n: currentImageIndex + 1,
+                      })}
                       fill
                       className="object-contain rounded-lg bg-white"
                       unoptimized

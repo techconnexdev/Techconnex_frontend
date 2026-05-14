@@ -14,8 +14,10 @@ import { getUserFriendlyErrorMessage } from "@/lib/errors";
 import { toast } from "@/lib/toast";
 import { useProviderCompletion, CONTACT_REQUIRED } from "@/contexts/ProviderCompletionContext";
 import { ProfileCompletionGateModal } from "@/components/provider/ProfileCompletionGateModal";
+import { useI18n } from "@/contexts/I18nProvider";
 
 export default function CompanyCard({ company }: { company: Company }) {
+  const { t } = useI18n();
   const router = useRouter();
   const { canContact } = useProviderCompletion();
   const [contactGateOpen, setContactGateOpen] = useState(false);
@@ -55,7 +57,7 @@ export default function CompanyCard({ company }: { company: Company }) {
     try {
       const { userId, token } = getUserAndToken();
       if (!userId || !token) {
-        alert("Please login to save companies");
+        toast.error(t("provider.companies.toast.loginToSave"));
         return;
       }
 
@@ -128,7 +130,7 @@ export default function CompanyCard({ company }: { company: Company }) {
               {!company.verified && (
                 <Badge className="bg-gray-100 text-gray-700 border-gray-300 text-xs shrink-0">
                   <AlertTriangle className="w-3 h-3 mr-1" />
-                  Not Verified
+                  {t("provider.companies.badge.notVerified")}
                 </Badge>
               )}
             </div>
@@ -168,18 +170,24 @@ export default function CompanyCard({ company }: { company: Company }) {
 
         <div className="grid grid-cols-2 gap-3 sm:gap-4 text-xs sm:text-sm">
           <div>
-            <p className="text-gray-500">Projects Posted</p>
+            <p className="text-gray-500">
+              {t("provider.companies.card.projectsPosted")}
+            </p>
             <p className="font-semibold">{company.projectsPosted}</p>
           </div>
           {company.establishedYear && (
             <div>
-              <p className="text-gray-500">Established</p>
+              <p className="text-gray-500">
+                {t("provider.companies.card.established")}
+              </p>
               <p className="font-semibold">{company.establishedYear}</p>
             </div>
           )}
           {company.employeeCount && (
             <div>
-              <p className="text-gray-500">Employees</p>
+              <p className="text-gray-500">
+                {t("provider.companies.card.employees")}
+              </p>
               <p className="font-semibold">{company.employeeCount}</p>
             </div>
           )}
@@ -187,7 +195,9 @@ export default function CompanyCard({ company }: { company: Company }) {
 
         <div className="flex items-center justify-between text-xs sm:text-sm">
           <span className="text-gray-500 break-words">
-            Member since {company.memberSince}
+            {t("provider.companies.card.memberSince", {
+              value: company.memberSince,
+            })}
           </span>
         </div>
 
@@ -227,7 +237,7 @@ export default function CompanyCard({ company }: { company: Company }) {
                     <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600" />
                   </div>
                   <p className="text-xs sm:text-sm font-semibold text-blue-900">
-                    About this company
+                    {t("provider.companies.card.aiAbout")}
                   </p>
                   <button
                     onClick={() => setExpanded(false)}
@@ -285,7 +295,7 @@ export default function CompanyCard({ company }: { company: Company }) {
               onClick={handleContact}
             >
               <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-              Contact
+              {t("provider.companies.card.contact")}
             </Button>
           )}
           <div className="flex gap-2">
@@ -312,7 +322,7 @@ export default function CompanyCard({ company }: { company: Company }) {
                 className="w-full border-gray-300 text-gray-700 hover:bg-gray-50 text-xs sm:text-sm"
               >
                 <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                View Profile
+                {t("provider.companies.card.viewProfile")}
               </Button>
             </Link>
           </div>
@@ -323,7 +333,7 @@ export default function CompanyCard({ company }: { company: Company }) {
       open={contactGateOpen}
       onOpenChange={setContactGateOpen}
       requiredPercent={CONTACT_REQUIRED}
-      actionLabel="contact users"
+      actionLabel={t("provider.projects.gate.contactUsers")}
     />
   </>
   );

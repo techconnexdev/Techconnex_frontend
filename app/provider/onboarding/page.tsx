@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
@@ -18,7 +18,6 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { ProviderLayout } from "@/components/provider-layout";
 import {
   FileText,
   Target,
@@ -54,17 +53,11 @@ import { getUserFriendlyErrorMessage } from "@/lib/errors";
 import { useToast } from "@/hooks/use-toast";
 import { setOnboardingCompleted } from "@/components/provider/ProviderOnboardingPromptDialog";
 import { useProviderCompletion } from "@/contexts/ProviderCompletionContext";
+import { useI18n } from "@/contexts/I18nProvider";
+import { PREFERRED_CURRENCY_OPTIONS } from "@/lib/currency-options";
 import { Switch } from "@/components/ui/switch";
 
 const ONBOARDING_MAX_COMPLETION = 50; // Don't show form if profile is already > 50% complete
-
-const STEPS = [
-  { id: 1, title: "Profile & CV", icon: FileText },
-  { id: 2, title: "Skills & Experience", icon: Target },
-  { id: 3, title: "Portfolio & Links", icon: Link2 },
-  { id: 4, title: "Certifications", icon: Award },
-  { id: 5, title: "Review & Summary", icon: CheckCircle2 },
-];
 
 const MALAYSIAN_STATES = [
   "Kuala Lumpur", "Selangor", "Penang", "Johor", "Perak", "Kedah",
@@ -98,7 +91,18 @@ type CertForm = { name: string; issuer: string; issuedDate: string; serialNumber
 export default function ProviderOnboardingPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const { t } = useI18n();
   const { refetch: refetchCompletion } = useProviderCompletion();
+  const STEPS = useMemo(
+    () => [
+      { id: 1, title: t("provider.onboarding.steps.profileCv"), icon: FileText },
+      { id: 2, title: t("provider.onboarding.steps.skillsExperience"), icon: Target },
+      { id: 3, title: t("provider.onboarding.steps.portfolioLinks"), icon: Link2 },
+      { id: 4, title: t("provider.onboarding.steps.certifications"), icon: Award },
+      { id: 5, title: t("provider.onboarding.steps.reviewSummary"), icon: CheckCircle2 },
+    ],
+    [t],
+  );
   const [completion, setCompletion] = useState(0);
   const [completionLoading, setCompletionLoading] = useState(true);
   const [step, setStep] = useState(1);
@@ -116,6 +120,7 @@ export default function ProviderOnboardingPage() {
   const [customSkill, setCustomSkill] = useState("");
   const [yearsExperience, setYearsExperience] = useState<string>("");
   const [hourlyRate, setHourlyRate] = useState<string>("");
+  const [pricingCurrency, setPricingCurrency] = useState<string>("MYR");
   const [availability, setAvailability] = useState<string>("available");
   const [workPreference, setWorkPreference] = useState<string>("remote");
   const [languages, setLanguages] = useState<string[]>([]);
@@ -134,6 +139,10 @@ export default function ProviderOnboardingPage() {
   const [isProcessingCV, setIsProcessingCV] = useState(false);
   const [cvExtractedData, setCvExtractedData] = useState<Record<string, unknown> | null>(null);
   const [showAIResults, setShowAIResults] = useState(false);
+
+  const progress = (step / STEPS.length) * 100;
+  const currentStep = STEPS[step - 1];
+  const StepIcon = currentStep.icon;
 
   // Fetch profile completion on mount to decide whether to show onboarding form or gate
   useEffect(() => {
@@ -176,6 +185,11 @@ export default function ProviderOnboardingPage() {
           setSkills(Array.isArray(p.skills) ? (p.skills as string[]) : []);
           setYearsExperience(String(p.yearsExperience ?? ""));
           setHourlyRate(String(p.hourlyRate ?? ""));
+          setPricingCurrency(
+            String(
+              (p as { preferredCurrency?: string }).preferredCurrency || "MYR",
+            ),
+          );
           setAvailability((p.availability as string) || "available");
           setWorkPreference((p.workPreference as string) || "remote");
           setLanguages(Array.isArray(p.languages) ? (p.languages as string[]) : []);
@@ -205,7 +219,7 @@ export default function ProviderOnboardingPage() {
         }
       } catch {
         toast({
-          title: "Error",
+          title: t("provider.onboarding.toast.errorTitle"),
           description: getUserFriendlyErrorMessage(
             undefined,
             "provider onboarding load profile",
@@ -217,7 +231,7 @@ export default function ProviderOnboardingPage() {
       }
     };
     load();
-  }, [toast]);
+  }, [toast, t]);
 
   useEffect(() => {
     setFieldErrors({});
@@ -267,10 +281,10 @@ export default function ProviderOnboardingPage() {
 
   const validateStep1 = (): Record<string, string> => {
     const err: Record<string, string> = {};
-    if (!major.trim()) err.major = "Professional title is required.";
-    if (bio.trim().length > 0 && bio.trim().length < 10) err.bio = "Bio must be at least 10 characters.";
+    if (!major.trim()) err.major = t("provider.onboarding.error.majorRequired");
+    if (bio.trim().length > 0 && bio.trim().length < 10) err.bio = t("provider.onboarding.error.bioMin");
     const locVal = location === OTHER_LOCATION ? customLocation.trim() : location;
-    if (!locVal) err.location = "Please select or enter your location.";
+    if (!locVal) err.location = t("provider.onboarding.error.locationRequired");
     setFieldErrors(err);
     return err;
   };
@@ -278,7 +292,7 @@ export default function ProviderOnboardingPage() {
   const saveStep1 = async () => {
     if (!validateStep(1)) {
       validateStep1();
-      setError("Please fill in all required fields before proceeding.");
+      setError(t("provider.onboarding.error.fillRequired"));
       return;
     }
     setError("");
@@ -301,7 +315,7 @@ export default function ProviderOnboardingPage() {
 
   const validateStep2 = (): Record<string, string> => {
     const err: Record<string, string> = {};
-    if (skills.length === 0) err.skills = "Select or add at least one skill.";
+    if (skills.length === 0) err.skills = t("provider.onboarding.error.skillsRequired");
     setFieldErrors(err);
     return err;
   };
@@ -309,7 +323,7 @@ export default function ProviderOnboardingPage() {
   const saveStep2 = async () => {
     if (!validateStep(2)) {
       validateStep2();
-      setError("Please fill in all required fields before proceeding.");
+      setError(t("provider.onboarding.error.fillRequired"));
       return;
     }
     setError("");
@@ -323,6 +337,7 @@ export default function ProviderOnboardingPage() {
         availability: availability || undefined,
         workPreference: workPreference || undefined,
         languages: Array.isArray(languages) ? [...languages] : [],
+        preferredCurrency: pricingCurrency,
       });
       setStep(3);
     } catch (e) {
@@ -348,20 +363,20 @@ export default function ProviderOnboardingPage() {
 
   const addCertification = () => {
     if (!certForm.name.trim() || !certForm.issuer.trim()) {
-      setFieldErrors((p) => ({ ...p, cert: "Name and issuer are required." }));
+      setFieldErrors((p) => ({ ...p, cert: t("provider.onboarding.error.certNameIssuer") }));
       return;
     }
     if (!certForm.issuedDate.trim()) {
-      setFieldErrors((p) => ({ ...p, cert: "Please select a valid issue date." }));
+      setFieldErrors((p) => ({ ...p, cert: t("provider.onboarding.error.certDate") }));
       return;
     }
     if (!isValidIssueDate(certForm.issuedDate)) {
-      const msg = "Please provide a valid issue date (e.g. YYYY-MM-DD).";
+      const msg = t("provider.onboarding.error.certDateFormat");
       setFieldErrors((p) => ({ ...p, cert: msg, issuedDate: msg }));
       return;
     }
     if (!hasSerialOrLink(certForm)) {
-      setFieldErrors((p) => ({ ...p, cert: "At least one of serial number or verification link is required." }));
+      setFieldErrors((p) => ({ ...p, cert: t("provider.onboarding.error.certSerialOrLink") }));
       return;
     }
     setNewCertifications((prev) => [...prev, { ...certForm }]);
@@ -378,16 +393,16 @@ export default function ProviderOnboardingPage() {
   const handleSaveEditedCertification = () => {
     if (editingCertIndex === null || !editCertification) return;
     if (!editCertification.issuedDate.trim()) {
-      setFieldErrors((p) => ({ ...p, cert: "Please select a valid issue date." }));
+      setFieldErrors((p) => ({ ...p, cert: t("provider.onboarding.error.certDate") }));
       return;
     }
     if (!isValidIssueDate(editCertification.issuedDate)) {
-      const msg = "Please provide a valid issue date (e.g. YYYY-MM-DD).";
+      const msg = t("provider.onboarding.error.certDateFormat");
       setFieldErrors((p) => ({ ...p, cert: msg, issuedDate: msg }));
       return;
     }
     if (!hasSerialOrLink(editCertification)) {
-      setFieldErrors((p) => ({ ...p, cert: "At least one of serial number or verification link is required." }));
+      setFieldErrors((p) => ({ ...p, cert: t("provider.onboarding.error.certSerialOrLink") }));
       return;
     }
     setNewCertifications((prev) =>
@@ -401,14 +416,14 @@ export default function ProviderOnboardingPage() {
 
   const saveStep4 = async () => {
     if (!validateStep(4)) {
-      setFieldErrors({ cert: "Each certification must have a serial number or verification link." });
-      setError("Please fill in all required fields before proceeding.");
+      setFieldErrors({ cert: t("provider.onboarding.error.certEachLink") });
+      setError(t("provider.onboarding.error.fillRequired"));
       return;
     }
     const invalidDateCert = newCertifications.find((c) => !c.issuedDate?.trim() || !isValidIssueDate(c.issuedDate));
     if (invalidDateCert) {
-      setError("Please provide a valid issue date (e.g. YYYY-MM-DD) for each certification. Edit the certification with the invalid date.");
-      setFieldErrors({ cert: "One or more certifications have an invalid issue date." });
+      setError(t("provider.onboarding.error.certInvalidDates"));
+      setFieldErrors({ cert: t("provider.onboarding.error.certInvalidDateSummary") });
       return;
     }
     setError("");
@@ -446,7 +461,10 @@ export default function ProviderOnboardingPage() {
       }
     }
     await refetchCompletion();
-    toast({ title: "Profile complete", description: "You're all set for better visibility and AI recommendations." });
+    toast({
+      title: t("provider.onboarding.toast.finishTitle"),
+      description: t("provider.onboarding.toast.finishDesc"),
+    });
     router.push("/provider/dashboard");
   };
 
@@ -457,9 +475,9 @@ export default function ProviderOnboardingPage() {
   };
 
   const addCustomSkill = () => {
-    const t = customSkill.trim();
-    if (t && !skills.includes(t)) {
-      setSkills((prev) => [...prev, t]);
+    const trimmed = customSkill.trim();
+    if (trimmed && !skills.includes(trimmed)) {
+      setSkills((prev) => [...prev, trimmed]);
       setCustomSkill("");
       setFieldErrors((p) => ({ ...p, skills: "" }));
         setError("");
@@ -477,9 +495,9 @@ export default function ProviderOnboardingPage() {
   };
 
   const addCustomLanguage = () => {
-    const t = customLanguage.trim();
-    if (t && !languages.includes(t)) {
-      setLanguages((prev) => [...prev, t]);
+    const trimmed = customLanguage.trim();
+    if (trimmed && !languages.includes(trimmed)) {
+      setLanguages((prev) => [...prev, trimmed]);
       setCustomLanguage("");
     }
   };
@@ -538,7 +556,7 @@ export default function ProviderOnboardingPage() {
           name: (c.name as string) || "",
           issuer: (c.issuer as string) || "",
           issuedDate: (c.issuedDate as string) || "",
-          serialNumber: serial.trim() ? serial : url.trim() ? "" : "From CV",
+          serialNumber: serial.trim() ? serial : url.trim() ? "" : t("provider.onboarding.fromCv"),
           sourceUrl: url.trim() || "",
         };
       });
@@ -550,13 +568,21 @@ export default function ProviderOnboardingPage() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.type !== "application/pdf") {
-      toast({ title: "Invalid file", description: "Only PDF files are allowed for CV.", variant: "destructive" });
+      toast({
+        title: t("provider.onboarding.toast.invalidFile"),
+        description: t("provider.onboarding.toast.pdfOnly"),
+        variant: "destructive",
+      });
       e.target.value = "";
       return;
     }
     const maxSize = 50 * 1024 * 1024;
     if (file.size > maxSize) {
-      toast({ title: "File too large", description: "Maximum size is 50 MB.", variant: "destructive" });
+      toast({
+        title: t("provider.onboarding.toast.fileTooLargeTitle"),
+        description: t("provider.onboarding.toast.fileTooLarge"),
+        variant: "destructive",
+      });
       e.target.value = "";
       return;
     }
@@ -595,12 +621,15 @@ export default function ProviderOnboardingPage() {
         setCvExtractedData(data);
         setShowAIResults(true);
       } else {
-        toast({ title: "CV uploaded", description: "Your CV has been saved. You can fill the form manually." });
+        toast({
+          title: t("provider.onboarding.toast.cvUploadedTitle"),
+          description: t("provider.onboarding.toast.cvUploadedDesc"),
+        });
       }
       await apiUploadResume(key, uploadResult.url);
     } catch (err) {
       toast({
-        title: "Error",
+        title: t("provider.onboarding.toast.errorTitle"),
         description: getUserFriendlyErrorMessage(
           err,
           "provider onboarding resume upload",
@@ -627,66 +656,65 @@ export default function ProviderOnboardingPage() {
     if (cvExtractedData) {
       applyCvExtractedData(cvExtractedData);
       setShowAIResults(false);
-      toast({ title: "Applied", description: "Profile fields filled from your CV. You can edit any field." });
+      toast({
+        title: t("provider.onboarding.toast.appliedTitle"),
+        description: t("provider.onboarding.toast.appliedDesc"),
+      });
     }
   };
-
-  const progress = (step / STEPS.length) * 100;
-  const currentStep = STEPS[step - 1];
-  const StepIcon = currentStep.icon;
 
   // While completion is loading, show spinner to avoid flashing the form then the gate
   if (completionLoading) {
     return (
-      <ProviderLayout>
+      
         <div className="flex items-center justify-center min-h-[400px]">
           <Loader2 className="w-10 h-10 animate-spin text-gray-400" />
         </div>
-      </ProviderLayout>
+      
     );
   }
 
   // Profile already > 50% complete — onboarding form not needed; direct to profile to edit
   if (completion > ONBOARDING_MAX_COMPLETION) {
     return (
-      <ProviderLayout>
+      
         <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 flex items-center justify-center p-6">
           <div className="w-full max-w-lg">
             <Card className="bg-white/80 backdrop-blur-sm border-white/20 shadow-xl">
               <CardHeader>
                 <CardTitle className="text-xl font-bold text-gray-900 flex items-center gap-2">
                   <CheckCircle2 className="w-6 h-6 text-green-600" />
-                  Onboarding no longer available
+                  {t("provider.onboarding.gate.title")}
                 </CardTitle>
                 <CardDescription className="text-gray-600">
-                  Your profile is already in good shape. This onboarding flow is for new users with minimal profile data.
+                  {t("provider.onboarding.gate.description")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className="text-sm text-gray-700">
-                  Go to your profile page to modify or add missing fields.
+                  {t("provider.onboarding.gate.body")}
                 </p>
                 <Button
                   onClick={() => router.push("/provider/profile")}
                   className="w-full bg-blue-600 hover:bg-blue-700"
                 >
-                  Go to profile page
+                  {t("provider.onboarding.gate.goProfile")}
                 </Button>
                 <div className="text-center">
                   <Link href="/provider/dashboard" className="text-sm text-gray-600 hover:text-gray-900">
-                    Back to dashboard
+                    {t("provider.onboarding.gate.backDashboard")}
                   </Link>
                 </div>
               </CardContent>
             </Card>
           </div>
         </div>
-      </ProviderLayout>
+      
     );
   }
 
   return (
-    <ProviderLayout>
+    <>
       {loading ? (
         <div className="flex items-center justify-center min-h-[400px]">
           <Loader2 className="w-10 h-10 animate-spin text-gray-400" />
@@ -715,7 +743,7 @@ export default function ProviderOnboardingPage() {
             <div className="text-center mb-6">
               <Link href="/provider/dashboard" className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 text-sm">
                 <ChevronLeft className="w-4 h-4" />
-                Back to dashboard
+                {t("provider.onboarding.backDashboard")}
               </Link>
             </div>
 
@@ -723,19 +751,19 @@ export default function ProviderOnboardingPage() {
               <CardHeader className="text-center">
                 <CardTitle className="text-2xl font-bold text-gray-900 flex items-center justify-center gap-2">
                   <Sparkles className="w-6 h-6 text-blue-600" />
-                  Complete your profile
+                  {t("provider.onboarding.title")}
                 </CardTitle>
                 <CardDescription className="text-gray-600">
-                  Unlock visibility and AI recommendations — about 5–10 minutes
+                  {t("provider.onboarding.subtitle")}
                 </CardDescription>
 
                 <div className="mt-6">
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-sm font-medium text-gray-700">
-                      Step {step} of {STEPS.length}
+                      {t("provider.onboarding.stepProgress", { current: step, total: STEPS.length })}
                     </span>
                     <span className="text-sm text-gray-500">
-                      {Math.round(progress)}% Complete
+                      {t("provider.onboarding.percentComplete", { pct: Math.round(progress) })}
                     </span>
                   </div>
                   <Progress value={progress} className="h-2" />
@@ -787,24 +815,24 @@ export default function ProviderOnboardingPage() {
             {step === 1 && (
               <>
                 <div className="space-y-2">
-                  <Label htmlFor="major">Professional title / Major</Label>
+                  <Label htmlFor="major">{t("provider.onboarding.step1.majorLabel")}</Label>
                   <Input
                     id="major"
-                    placeholder="e.g. Full Stack Developer, UI/UX Designer, Data Scientist..."
+                    placeholder={t("provider.onboarding.step1.majorPlaceholder")}
                     className={`bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500 ${fieldErrors.major ? "border-red-500" : ""}`}
                     value={major}
                     onChange={(e) => { setMajor(e.target.value); setFieldErrors((p) => ({ ...p, major: "" })); setError(""); }}
                   />
                   {fieldErrors.major && <p className="text-xs text-red-600">{fieldErrors.major}</p>}
-                  <p className="text-xs text-gray-500">Your professional title or major specialization</p>
+                  <p className="text-xs text-gray-500">{t("provider.onboarding.step1.majorHint")}</p>
                 </div>
 
                 {/* CV Upload — same structure as old provider registration */}
                 <div className="space-y-2 border-t pt-6">
                   <div className="flex items-center justify-between flex-wrap gap-2">
-                    <Label htmlFor="onboarding-cv">Resume (PDF only)</Label>
+                    <Label htmlFor="onboarding-cv">{t("provider.onboarding.step1.resumeLabel")}</Label>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-gray-600">Analyze with AI</span>
+                      <span className="text-sm text-gray-600">{t("provider.onboarding.step1.analyzeAi")}</span>
                       <Switch
                         checked={analyzeCvWithAI}
                         onCheckedChange={setAnalyzeCvWithAI}
@@ -813,7 +841,7 @@ export default function ProviderOnboardingPage() {
                     </div>
                   </div>
                   <p className="text-sm text-gray-600">
-                    Upload your CV to get AI-powered assistance filling out your profile
+                    {t("provider.onboarding.step1.resumeHelp")}
                   </p>
                   <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center bg-white/50 hover:border-blue-400 transition-colors">
                     <input
@@ -829,10 +857,14 @@ export default function ProviderOnboardingPage() {
                         <div>
                           <div className="w-10 h-10 mx-auto mb-4 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
                           <p className="text-lg font-medium text-blue-600 mb-2">
-                            {analyzeCvWithAI ? "AI is analyzing your resume..." : "Uploading..."}
+                            {analyzeCvWithAI
+                              ? t("provider.onboarding.step1.processingAi")
+                              : t("provider.onboarding.step1.processingUpload")}
                           </p>
                           <p className="text-sm text-gray-500">
-                            {analyzeCvWithAI ? "This will help fill your profile automatically" : "Saving your CV..."}
+                            {analyzeCvWithAI
+                              ? t("provider.onboarding.step1.processingHintAi")
+                              : t("provider.onboarding.step1.processingHintSave")}
                           </p>
                         </div>
                       ) : (
@@ -841,35 +873,37 @@ export default function ProviderOnboardingPage() {
                           {(resumeFile || resumeUploadedKey) ? (
                             <div>
                               <p className="text-lg font-medium text-green-600 mb-2">
-                                {resumeFile ? resumeFile.name : "Resume on file"}
+                                {resumeFile
+                                  ? t("provider.onboarding.step1.resumeFileName", { name: resumeFile.name })
+                                  : t("provider.onboarding.step1.resumeOnFile")}
                               </p>
-                              <p className="text-sm text-gray-500 mb-2">Click to change file</p>
+                              <p className="text-sm text-gray-500 mb-2">{t("provider.onboarding.step1.clickChange")}</p>
                               {showAIResults && cvExtractedData && (
                                 <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg inline-block">
                                   <div className="flex items-center justify-center gap-2">
                                     <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />
                                     <span className="text-green-700 font-medium text-sm">
-                                      Resume uploaded & AI processed! Review below.
+                                      {t("provider.onboarding.step1.aiProcessedBanner")}
                                     </span>
                                   </div>
                                 </div>
                               )}
                               {resumeUploadedKey && !showAIResults && !analyzeCvWithAI && (
                                 <div className="mt-4 p-3 bg-gray-100 border border-gray-200 rounded-lg inline-block">
-                                  <span className="text-gray-700 text-sm">CV saved. Fill the form manually.</span>
+                                  <span className="text-gray-700 text-sm">{t("provider.onboarding.step1.cvSavedManual")}</span>
                                 </div>
                               )}
                             </div>
                           ) : (
                             <div>
-                              <p className="text-lg font-medium text-gray-600 mb-2">Upload your resume</p>
-                              <p className="text-sm text-gray-500 mb-4">PDF only, max 50MB</p>
+                              <p className="text-lg font-medium text-gray-600 mb-2">{t("provider.onboarding.step1.uploadPrompt")}</p>
+                              <p className="text-sm text-gray-500 mb-4">{t("provider.onboarding.step1.pdfMax")}</p>
                               {analyzeCvWithAI && (
                                 <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg mb-4 max-w-sm mx-auto">
                                   <div className="flex items-center justify-center gap-2">
                                     <Zap className="w-5 h-5 text-blue-600 shrink-0" />
                                     <span className="text-blue-700 font-medium text-sm">
-                                      AI will auto-fill your profile from your CV!
+                                      {t("provider.onboarding.step1.aiAutofillBanner")}
                                     </span>
                                   </div>
                                 </div>
@@ -883,7 +917,9 @@ export default function ProviderOnboardingPage() {
                   {(resumeFile || resumeUploadedKey) && !isProcessingCV && (
                     <div className="flex justify-center">
                       <Button type="button" variant="ghost" size="sm" onClick={removeResume}>
-                        {resumeUploadedKey && !resumeFile ? "Replace CV" : "Remove CV"}
+                        {resumeUploadedKey && !resumeFile
+                          ? t("provider.onboarding.step1.replaceCv")
+                          : t("provider.onboarding.step1.removeCv")}
                       </Button>
                     </div>
                   )}
@@ -905,26 +941,28 @@ export default function ProviderOnboardingPage() {
                     <div className="p-6 border-2 border-blue-200 rounded-lg bg-blue-50 space-y-4">
                       <div className="flex items-center gap-2">
                         <Zap className="w-6 h-6 text-blue-600 shrink-0" />
-                        <h3 className="text-lg font-semibold text-blue-900">AI Extracted Information</h3>
+                        <h3 className="text-lg font-semibold text-blue-900">{t("provider.onboarding.aiExtracted.title")}</h3>
                       </div>
-                      <p className="text-sm text-blue-800">Review what we found. Apply to fill your profile or skip to type manually.</p>
+                      <p className="text-sm text-blue-800">{t("provider.onboarding.aiExtracted.intro")}</p>
 
                       <div className="space-y-4">
                         {majorVal && (
                           <div>
-                            <Label className="text-sm font-medium text-blue-800">Title / Major</Label>
+                            <Label className="text-sm font-medium text-blue-800">{t("provider.onboarding.aiExtracted.titleMajor")}</Label>
                             <p className="text-sm text-blue-700 bg-white/50 p-2 rounded border mt-1">{majorVal}</p>
                           </div>
                         )}
                         {bioVal && (
                           <div>
-                            <Label className="text-sm font-medium text-blue-800">Professional Summary</Label>
+                            <Label className="text-sm font-medium text-blue-800">{t("provider.onboarding.aiExtracted.summary")}</Label>
                             <p className="text-sm text-blue-700 bg-white/50 p-3 rounded border mt-1">{bioVal}</p>
                           </div>
                         )}
                         {skillsVal && skillsVal.length > 0 && (
                           <div>
-                            <Label className="text-sm font-medium text-blue-800">Skills ({skillsVal.length})</Label>
+                            <Label className="text-sm font-medium text-blue-800">
+                              {t("provider.onboarding.aiExtracted.skills", { count: skillsVal.length })}
+                            </Label>
                             <div className="flex flex-wrap gap-2 mt-2">
                               {skillsVal.map((s, i) => (
                                 <Badge key={i} className="bg-blue-600 text-white">{s}</Badge>
@@ -934,7 +972,9 @@ export default function ProviderOnboardingPage() {
                         )}
                         {languagesVal && languagesVal.length > 0 && (
                           <div>
-                            <Label className="text-sm font-medium text-blue-800">Languages ({languagesVal.length})</Label>
+                            <Label className="text-sm font-medium text-blue-800">
+                              {t("provider.onboarding.aiExtracted.languages", { count: languagesVal.length })}
+                            </Label>
                             <div className="flex flex-wrap gap-2 mt-2">
                               {languagesVal.map((l, i) => (
                                 <Badge key={i} className="bg-green-600 text-white">{l}</Badge>
@@ -945,26 +985,28 @@ export default function ProviderOnboardingPage() {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           {yearsExp && (
                             <div>
-                              <Label className="text-sm font-medium text-blue-800">Experience</Label>
+                              <Label className="text-sm font-medium text-blue-800">{t("provider.onboarding.aiExtracted.experience")}</Label>
                               <p className="text-sm text-blue-700">{yearsExp}</p>
                             </div>
                           )}
                           {hourlyRateVal && (
                             <div>
-                              <Label className="text-sm font-medium text-blue-800">Suggested Rate</Label>
-                              <p className="text-sm text-blue-700">RM {hourlyRateVal}/hour</p>
+                              <Label className="text-sm font-medium text-blue-800">{t("provider.onboarding.aiExtracted.suggestedRate")}</Label>
+                              <p className="text-sm text-blue-700">
+                                {t("provider.onboarding.aiExtracted.rateValue", { rate: hourlyRateVal })}
+                              </p>
                             </div>
                           )}
                         </div>
                         {locationVal && (
                           <div>
-                            <Label className="text-sm font-medium text-blue-800">Location</Label>
+                            <Label className="text-sm font-medium text-blue-800">{t("provider.onboarding.aiExtracted.location")}</Label>
                             <p className="text-sm text-blue-700 bg-white/50 p-2 rounded border mt-1">{locationVal}</p>
                           </div>
                         )}
                         {portfolioUrlsVal && portfolioUrlsVal.length > 0 && (
                           <div>
-                            <Label className="text-sm font-medium text-blue-800">Portfolio Links</Label>
+                            <Label className="text-sm font-medium text-blue-800">{t("provider.onboarding.aiExtracted.portfolioLinks")}</Label>
                             <ul className="list-disc pl-5 text-sm text-blue-700 mt-1 space-y-1">
                               {portfolioUrlsVal.map((url, i) => (
                                 <li key={i}>
@@ -976,7 +1018,7 @@ export default function ProviderOnboardingPage() {
                         )}
                         {websiteVal && (
                           <div>
-                            <Label className="text-sm font-medium text-blue-800">Website</Label>
+                            <Label className="text-sm font-medium text-blue-800">{t("provider.onboarding.aiExtracted.website")}</Label>
                             <p className="text-sm text-blue-700">
                               <a href={ensureAbsoluteUrl(websiteVal)} target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-900">{websiteVal}</a>
                             </p>
@@ -984,12 +1026,16 @@ export default function ProviderOnboardingPage() {
                         )}
                         {certsVal && certsVal.length > 0 && (
                           <div>
-                            <Label className="text-sm font-medium text-blue-800">Certifications</Label>
+                            <Label className="text-sm font-medium text-blue-800">{t("provider.onboarding.aiExtracted.certifications")}</Label>
                             <div className="space-y-2 mt-2">
                               {certsVal.map((c, i) => (
                                 <div key={i} className="text-sm text-blue-700 bg-white/50 p-3 rounded border">
                                   <p><span className="font-medium">{String(c.name || "")}</span> — {String(c.issuer || "")}{c.issuedDate ? ` (${String(c.issuedDate)})` : ""}</p>
-                                  {(c.serialNumber as string) && <p className="text-xs mt-1 text-blue-800">Serial: {String(c.serialNumber)}</p>}
+                                  {(c.serialNumber as string) && (
+                                    <p className="text-xs mt-1 text-blue-800">
+                                      {t("provider.onboarding.aiExtracted.serial", { serial: String(c.serialNumber) })}
+                                    </p>
+                                  )}
                                 </div>
                               ))}
                             </div>
@@ -1000,22 +1046,22 @@ export default function ProviderOnboardingPage() {
                       <div className="flex flex-wrap gap-3 pt-2">
                         <Button onClick={confirmApplyCvData} className="bg-blue-600 hover:bg-blue-700 text-white">
                           <CheckCircle2 className="w-4 h-4 mr-2" />
-                          Apply This Information
+                          {t("provider.onboarding.aiExtracted.apply")}
                         </Button>
                         <Button onClick={() => setShowAIResults(false)} variant="outline" className="bg-white/50">
-                          Skip & Fill Manually
+                          {t("provider.onboarding.aiExtracted.skipManual")}
                         </Button>
                       </div>
-                      <p className="text-xs text-blue-600">You can review and edit all fields in this form and the next steps.</p>
+                      <p className="text-xs text-blue-600">{t("provider.onboarding.aiExtracted.footerHint")}</p>
                     </div>
                   );
                 })()}
 
                 <div className="space-y-2">
-                  <Label htmlFor="bio">Professional Bio (min 10 characters)</Label>
+                  <Label htmlFor="bio">{t("provider.onboarding.step1.bioLabel")}</Label>
                   <Textarea
                     id="bio"
-                    placeholder="Tell clients about your experience, expertise, and what makes you unique..."
+                    placeholder={t("provider.onboarding.step1.bioPlaceholder")}
                     className={`bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500 min-h-[120px] resize-none ${fieldErrors.bio ? "border-red-500" : ""}`}
                     maxLength={500}
                     value={bio}
@@ -1023,10 +1069,10 @@ export default function ProviderOnboardingPage() {
                     rows={4}
                   />
                   {fieldErrors.bio && <p className="text-xs text-red-600">{fieldErrors.bio}</p>}
-                  <p className="text-xs text-gray-500">{bio.length}/500 characters</p>
+                  <p className="text-xs text-gray-500">{t("provider.onboarding.step1.charCount", { count: bio.length })}</p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="location">Location (State)</Label>
+                  <Label htmlFor="location">{t("provider.onboarding.step1.locationLabel")}</Label>
                   <div className="relative">
                     <MapPin className="absolute left-3 top-3 h-4 w-4 text-gray-400 z-10 pointer-events-none" />
                     <Select
@@ -1039,13 +1085,13 @@ export default function ProviderOnboardingPage() {
                       }}
                     >
                       <SelectTrigger className={`pl-10 bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500 ${fieldErrors.location ? "border-red-500" : ""}`}>
-                        <SelectValue placeholder="Select your state or Other" />
+                        <SelectValue placeholder={t("provider.onboarding.step1.locationPlaceholder")} />
                       </SelectTrigger>
                       <SelectContent>
                         {MALAYSIAN_STATES.map((s) => (
                           <SelectItem key={s} value={s}>{s}</SelectItem>
                         ))}
-                        <SelectItem value={OTHER_LOCATION}>{OTHER_LOCATION}</SelectItem>
+                        <SelectItem value={OTHER_LOCATION}>{t("provider.onboarding.location.otherOption")}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1053,7 +1099,7 @@ export default function ProviderOnboardingPage() {
                     <div className="pt-1">
                       <Input
                         id="customLocation"
-                        placeholder="Enter your location (e.g. city or country)"
+                        placeholder={t("provider.onboarding.step1.customLocationPlaceholder")}
                         className={`bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500 ${fieldErrors.location ? "border-red-500" : ""}`}
                         value={customLocation}
                         onChange={(e) => { setCustomLocation(e.target.value); setFieldErrors((p) => ({ ...p, location: "" })); setError(""); }}
@@ -1063,13 +1109,13 @@ export default function ProviderOnboardingPage() {
                   {fieldErrors.location && <p className="text-xs text-red-600">{fieldErrors.location}</p>}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="website">Website / Portfolio URL</Label>
+                  <Label htmlFor="website">{t("provider.onboarding.step1.websiteLabel")}</Label>
                   <div className="relative">
                     <Globe className="absolute left-3 top-3 h-4 w-4 text-gray-400 z-10 pointer-events-none" />
                     <Input
                       id="website"
                       type="url"
-                      placeholder="https://your-website.com"
+                      placeholder={t("provider.onboarding.step1.websitePlaceholder")}
                       className="pl-10 bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                       value={website}
                       onChange={(e) => setWebsite(e.target.value)}
@@ -1082,13 +1128,13 @@ export default function ProviderOnboardingPage() {
             {step === 2 && (
               <>
                 <div className="space-y-4">
-                  <Label>Technical Skills (select at least one)</Label>
+                  <Label>{t("provider.onboarding.step2.skillsLabel")}</Label>
                   {fieldErrors.skills && <p className="text-xs text-red-600">{fieldErrors.skills}</p>}
                   <div className="flex gap-2">
                     <Input
                       value={customSkill}
                       onChange={(e) => setCustomSkill(e.target.value)}
-                      placeholder="Type a skill and press Add"
+                      placeholder={t("provider.onboarding.step2.skillInputPlaceholder")}
                       className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                       onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addCustomSkill())}
                     />
@@ -1098,7 +1144,9 @@ export default function ProviderOnboardingPage() {
                   </div>
                   {skills.length > 0 && (
                     <div className="space-y-2">
-                      <Label className="text-sm font-medium">Selected Skills ({skills.length})</Label>
+                      <Label className="text-sm font-medium">
+                        {t("provider.onboarding.step2.selectedSkills", { count: skills.length })}
+                      </Label>
                       <div className="flex flex-wrap gap-2 p-3 border rounded-lg bg-white/50 max-h-32 overflow-y-auto">
                         {skills.map((skill) => (
                           <Badge key={skill} className="bg-blue-600 hover:bg-blue-700 text-white pr-1">
@@ -1116,7 +1164,7 @@ export default function ProviderOnboardingPage() {
                     </div>
                   )}
                   <div className="space-y-2">
-                    <Label className="text-sm font-medium">Popular Skills (click to add)</Label>
+                    <Label className="text-sm font-medium">{t("provider.onboarding.step2.popularSkills")}</Label>
                     <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-3 border rounded-lg bg-white/50">
                       {POPULAR_SKILLS.filter((s) => !skills.includes(s)).map((s) => (
                         <Badge
@@ -1134,12 +1182,12 @@ export default function ProviderOnboardingPage() {
 
                 {/* Languages Section */}
                 <div className="space-y-4">
-                  <Label>Languages</Label>
+                  <Label>{t("provider.onboarding.step2.languagesLabel")}</Label>
                   <div className="flex gap-2">
                     <Input
                       value={customLanguage}
                       onChange={(e) => setCustomLanguage(e.target.value)}
-                      placeholder="Type a language and press Add"
+                      placeholder={t("provider.onboarding.step2.languageInputPlaceholder")}
                       className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                       onKeyDown={(e) =>
                         e.key === "Enter" && (e.preventDefault(), addCustomLanguage())
@@ -1152,7 +1200,7 @@ export default function ProviderOnboardingPage() {
                   {languages.length > 0 && (
                     <div className="space-y-2">
                       <Label className="text-sm font-medium">
-                        Selected Languages ({languages.length})
+                        {t("provider.onboarding.step2.selectedLanguages", { count: languages.length })}
                       </Label>
                       <div className="flex flex-wrap gap-2 p-3 border rounded-lg bg-white/50">
                         {languages.map((language) => (
@@ -1175,7 +1223,7 @@ export default function ProviderOnboardingPage() {
                   )}
                   <div className="space-y-2">
                     <Label className="text-sm font-medium">
-                      Common Languages (click to add)
+                      {t("provider.onboarding.step2.commonLanguages")}
                     </Label>
                     <div className="flex flex-wrap gap-2 p-3 border rounded-lg bg-white/50">
                       {COMMON_LANGUAGES.filter((l) => !languages.includes(l)).map((language) => (
@@ -1194,26 +1242,26 @@ export default function ProviderOnboardingPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="experience">Years of Experience</Label>
+                    <Label htmlFor="experience">{t("provider.onboarding.step2.yearsExperience")}</Label>
                     <Input
                       id="experience"
                       type="number"
                       min={0}
                       max={50}
-                      placeholder="e.g. 5"
+                      placeholder={t("provider.onboarding.step2.yearsPlaceholder")}
                       className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                       value={yearsExperience}
                       onChange={(e) => setYearsExperience(e.target.value)}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="hourlyRate">Hourly Rate (RM)</Label>
+                    <Label htmlFor="hourlyRate">{t("provider.onboarding.step2.hourlyRate")}</Label>
                     <Input
                       id="hourlyRate"
                       type="number"
                       min={10}
                       max={1000}
-                      placeholder="e.g. 100"
+                      placeholder={t("provider.onboarding.step2.ratePlaceholder")}
                       className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                       value={hourlyRate}
                       onChange={(e) => setHourlyRate(e.target.value)}
@@ -1221,30 +1269,52 @@ export default function ProviderOnboardingPage() {
                   </div>
                 </div>
 
+                <div className="space-y-2">
+                  <Label>{t("provider.profile.pricingCurrency")}</Label>
+                  <Select
+                    value={pricingCurrency}
+                    onValueChange={setPricingCurrency}
+                  >
+                    <SelectTrigger className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PREFERRED_CURRENCY_OPTIONS.map((code) => (
+                        <SelectItem key={code} value={code}>
+                          {code}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-gray-600">
+                    {t("provider.profile.pricingCurrencyHint")}
+                  </p>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Availability</Label>
+                    <Label>{t("provider.profile.availability")}</Label>
                     <Select value={availability} onValueChange={setAvailability}>
                       <SelectTrigger className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500">
-                        <SelectValue placeholder="Select availability" />
+                        <SelectValue placeholder={t("provider.onboarding.step2.availabilityPlaceholder")} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="available">Available</SelectItem>
-                        <SelectItem value="busy">Busy</SelectItem>
-                        <SelectItem value="unavailable">Unavailable</SelectItem>
+                        <SelectItem value="available">{t("provider.profile.availability.available")}</SelectItem>
+                        <SelectItem value="busy">{t("provider.profile.availability.busy")}</SelectItem>
+                        <SelectItem value="unavailable">{t("provider.profile.availability.unavailable")}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Work Preference</Label>
+                    <Label>{t("provider.profile.workPreference")}</Label>
                     <Select value={workPreference} onValueChange={setWorkPreference}>
                       <SelectTrigger className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500">
-                        <SelectValue placeholder="Select preference" />
+                        <SelectValue placeholder={t("provider.onboarding.step2.workPrefPlaceholder")} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="remote">Remote</SelectItem>
-                        <SelectItem value="onsite">On-site</SelectItem>
-                        <SelectItem value="hybrid">Hybrid</SelectItem>
+                        <SelectItem value="remote">{t("provider.profile.workPref.remote")}</SelectItem>
+                        <SelectItem value="onsite">{t("provider.profile.workPref.onsite")}</SelectItem>
+                        <SelectItem value="hybrid">{t("provider.profile.workPref.hybrid")}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1255,14 +1325,14 @@ export default function ProviderOnboardingPage() {
             {step === 3 && (
               <>
                 <div className="space-y-4">
-                  <Label>Portfolio URLs</Label>
+                  <Label>{t("provider.onboarding.step3.urlsLabel")}</Label>
                   <p className="text-sm text-gray-600">
-                    Add links to your GitHub, LinkedIn, or other professional profiles
+                    {t("provider.onboarding.step3.urlsHelp")}
                   </p>
                   <div className="flex gap-2">
                     <Input
                       type="url"
-                      placeholder="https://github.com/yourusername"
+                      placeholder={t("provider.onboarding.step3.urlPlaceholder")}
                       className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500 flex-1"
                       value={newPortfolioLink}
                       onChange={(e) => setNewPortfolioLink(e.target.value)}
@@ -1274,7 +1344,9 @@ export default function ProviderOnboardingPage() {
                   </div>
                   {portfolioLinks.length > 0 && (
                     <div className="space-y-2">
-                      <Label className="text-sm font-medium">Portfolio Links ({portfolioLinks.length})</Label>
+                      <Label className="text-sm font-medium">
+                        {t("provider.onboarding.step3.linksHeading", { count: portfolioLinks.length })}
+                      </Label>
                       <div className="space-y-2">
                         {portfolioLinks.map((url, i) => (
                           <div
@@ -1304,13 +1376,13 @@ export default function ProviderOnboardingPage() {
                   {portfolioLinks.length === 0 && (
                     <div className="text-center py-8 text-gray-500 border-2 border-dashed border-gray-200 rounded-lg">
                       <Globe className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                      <p>No portfolio links added yet</p>
-                      <p className="text-sm">Add links to showcase your work and professional profiles</p>
+                      <p>{t("provider.onboarding.step3.emptyTitle")}</p>
+                      <p className="text-sm">{t("provider.onboarding.step3.emptyHint")}</p>
                     </div>
                   )}
                 </div>
                 <div className="space-y-4">
-                  <Label className="text-sm font-medium">Popular Platforms</Label>
+                  <Label className="text-sm font-medium">{t("provider.onboarding.step3.platformsTitle")}</Label>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {[
                       { name: "GitHub", placeholder: "https://github.com/username" },
@@ -1342,32 +1414,32 @@ export default function ProviderOnboardingPage() {
                   <div className="flex items-start gap-2">
                     <Award className="w-5 h-5 text-blue-600 mt-0.5 shrink-0" />
                     <div>
-                      <p className="text-sm text-blue-800 font-medium">Why add certifications?</p>
+                      <p className="text-sm text-blue-800 font-medium">{t("provider.onboarding.step4.whyTitle")}</p>
                       <p className="text-sm text-blue-700">
-                        Certifications help build trust with clients and showcase your expertise. You can add more later in your profile.
+                        {t("provider.onboarding.step4.whyBody")}
                       </p>
                     </div>
                   </div>
                 </div>
 
                 <div className="space-y-4 p-4 border rounded-lg bg-white/50">
-                  <h3 className="font-medium text-gray-900">Add Certification</h3>
+                  <h3 className="font-medium text-gray-900">{t("provider.onboarding.step4.formTitle")}</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="certName">Certification Name</Label>
+                      <Label htmlFor="certName">{t("provider.onboarding.step4.certName")}</Label>
                       <Input
                         id="certName"
-                        placeholder="e.g. AWS Certified Solutions Architect"
+                        placeholder={t("provider.onboarding.step4.certNamePh")}
                         className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                         value={certForm.name}
                         onChange={(e) => setCertForm((c) => ({ ...c, name: e.target.value }))}
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="certIssuer">Issuing Organization</Label>
+                      <Label htmlFor="certIssuer">{t("provider.onboarding.step4.issuer")}</Label>
                       <Input
                         id="certIssuer"
-                        placeholder="e.g. Amazon Web Services"
+                        placeholder={t("provider.onboarding.step4.issuerPh")}
                         className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                         value={certForm.issuer}
                         onChange={(e) => setCertForm((c) => ({ ...c, issuer: e.target.value }))}
@@ -1376,7 +1448,7 @@ export default function ProviderOnboardingPage() {
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="certDate">Issue Date</Label>
+                      <Label htmlFor="certDate">{t("provider.onboarding.step4.issueDate")}</Label>
                       <Input
                         id="certDate"
                         type="date"
@@ -1390,10 +1462,10 @@ export default function ProviderOnboardingPage() {
                       {fieldErrors.issuedDate && <p className="text-xs text-red-600">{fieldErrors.issuedDate}</p>}
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="certSerial">Serial Number</Label>
+                      <Label htmlFor="certSerial">{t("provider.onboarding.step4.serial")}</Label>
                       <Input
                         id="certSerial"
-                        placeholder="e.g. ABC-123-XYZ"
+                        placeholder={t("provider.onboarding.step4.serialPh")}
                         className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                         value={certForm.serialNumber || ""}
                         onChange={(e) => { setCertForm((c) => ({ ...c, serialNumber: e.target.value })); setFieldErrors((p) => ({ ...p, cert: "" })); }}
@@ -1401,16 +1473,16 @@ export default function ProviderOnboardingPage() {
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="certLink">Verification Link</Label>
+                    <Label htmlFor="certLink">{t("provider.onboarding.step4.verifyLink")}</Label>
                     <Input
                       id="certLink"
                       type="url"
-                      placeholder="https://verify.issuer.com/cert/ABC-123"
+                      placeholder={t("provider.onboarding.step4.verifyLinkPh")}
                       className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                       value={certForm.sourceUrl || ""}
                       onChange={(e) => { setCertForm((c) => ({ ...c, sourceUrl: e.target.value })); setFieldErrors((p) => ({ ...p, cert: "" })); }}
                     />
-                    <p className="text-xs text-gray-500">At least one of serial number or verification link is required.</p>
+                    <p className="text-xs text-gray-500">{t("provider.onboarding.step4.serialOrLinkHint")}</p>
                   </div>
                   {fieldErrors.cert && <p className="text-xs text-red-600">{fieldErrors.cert}</p>}
                   <Button
@@ -1425,14 +1497,16 @@ export default function ProviderOnboardingPage() {
                     }
                   >
                     <Award className="w-4 h-4 mr-2" />
-                    Add Certification
+                    {t("provider.onboarding.step4.addButton")}
                   </Button>
                 </div>
 
                 {(certifications.length > 0 || newCertifications.length > 0) && (
                   <div className="space-y-4">
                     <h3 className="font-medium text-gray-900">
-                      Your Certifications ({certifications.length + newCertifications.length})
+                      {t("provider.onboarding.step4.yourCerts", {
+                        count: certifications.length + newCertifications.length,
+                      })}
                     </h3>
                     <div className="space-y-3">
                       {certifications.map((c, i) => (
@@ -1445,16 +1519,21 @@ export default function ProviderOnboardingPage() {
                                 <Building2 className="w-4 h-4" /> {c.issuer}
                               </p>
                               <p className="text-sm text-gray-600 flex items-center gap-1 mt-1">
-                                <Calendar className="w-4 h-4" /> {c.issuedDate ? new Date(c.issuedDate).toLocaleDateString() : "—"}
+                                <Calendar className="w-4 h-4" />{" "}
+                                {c.issuedDate ? new Date(c.issuedDate).toLocaleDateString() : t("provider.onboarding.review.dash")}
                               </p>
-                              {c.serialNumber && <p className="text-sm text-gray-500 mt-1">Serial: {c.serialNumber}</p>}
+                              {c.serialNumber && (
+                                <p className="text-sm text-gray-500 mt-1">
+                                  {t("provider.onboarding.step4.serialLabel", { serial: c.serialNumber })}
+                                </p>
+                              )}
                               {c.sourceUrl && (
                                 <a href={ensureAbsoluteUrl(c.sourceUrl)} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm mt-1 inline-block">
-                                  Verify Certificate ↗
+                                  {t("provider.onboarding.step4.verifyCert")}
                                 </a>
                               )}
                             </div>
-                            <span className="text-xs text-gray-500">Saved</span>
+                            <span className="text-xs text-gray-500">{t("provider.onboarding.step4.saved")}</span>
                           </div>
                         </div>
                       ))}
@@ -1469,12 +1548,17 @@ export default function ProviderOnboardingPage() {
                                   <Building2 className="w-4 h-4" /> {c.issuer}
                                 </p>
                                 <p className="text-sm text-gray-600 flex items-center gap-1 mt-1">
-                                  <Calendar className="w-4 h-4" /> {c.issuedDate ? new Date(c.issuedDate).toLocaleDateString() : "—"}
+                                  <Calendar className="w-4 h-4" />{" "}
+                                  {c.issuedDate ? new Date(c.issuedDate).toLocaleDateString() : t("provider.onboarding.review.dash")}
                                 </p>
-                                {c.serialNumber && <p className="text-sm text-gray-500 mt-1">Serial: {c.serialNumber}</p>}
+                                {c.serialNumber && (
+                                  <p className="text-sm text-gray-500 mt-1">
+                                    {t("provider.onboarding.step4.serialLabel", { serial: c.serialNumber })}
+                                  </p>
+                                )}
                                 {c.sourceUrl && (
                                   <a href={ensureAbsoluteUrl(c.sourceUrl)} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm mt-1 inline-block">
-                                    Verify Certificate ↗
+                                    {t("provider.onboarding.step4.verifyCert")}
                                   </a>
                                 )}
                               </div>
@@ -1484,7 +1568,7 @@ export default function ProviderOnboardingPage() {
                                 type="button"
                                 onClick={() => handleEditCertification(i)}
                                 className="text-blue-600 hover:text-blue-800 p-1"
-                                title="Edit"
+                                title={t("provider.onboarding.step4.editTitleAttr")}
                               >
                                 <Edit className="w-4 h-4" />
                               </button>
@@ -1492,7 +1576,7 @@ export default function ProviderOnboardingPage() {
                                 type="button"
                                 onClick={() => setNewCertifications((p) => p.filter((_, j) => j !== i))}
                                 className="text-red-500 hover:text-red-700 p-1"
-                                title="Remove"
+                                title={t("provider.onboarding.step4.removeTitleAttr")}
                               >
                                 <X className="w-4 h-4" />
                               </button>
@@ -1506,20 +1590,20 @@ export default function ProviderOnboardingPage() {
                 {certifications.length === 0 && newCertifications.length === 0 && (
                   <div className="text-center py-8 text-gray-500">
                     <Award className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                    <p>No certifications added yet</p>
-                    <p className="text-sm">Add your professional certifications to stand out to clients</p>
+                    <p>{t("provider.onboarding.step4.emptyTitle")}</p>
+                    <p className="text-sm">{t("provider.onboarding.step4.emptyHint")}</p>
                   </div>
                 )}
 
                 {editCertification && (
                   <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
                     <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg">
-                      <h3 className="text-lg font-semibold mb-4">Edit Certification</h3>
+                      <h3 className="text-lg font-semibold mb-4">{t("provider.onboarding.step4.editModalTitle")}</h3>
                       <div className="space-y-3">
                         <div className="space-y-1">
-                          <Label>Certification Name</Label>
+                          <Label>{t("provider.onboarding.step4.certName")}</Label>
                           <Input
-                            placeholder="Certification Name"
+                            placeholder={t("provider.onboarding.step4.editNamePh")}
                             className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                             value={editCertification.name}
                             onChange={(e) =>
@@ -1528,9 +1612,9 @@ export default function ProviderOnboardingPage() {
                           />
                         </div>
                         <div className="space-y-1">
-                          <Label>Issuer</Label>
+                          <Label>{t("provider.onboarding.step4.issuer")}</Label>
                           <Input
-                            placeholder="Issuer"
+                            placeholder={t("provider.onboarding.step4.editIssuerPh")}
                             className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                             value={editCertification.issuer}
                             onChange={(e) =>
@@ -1539,7 +1623,7 @@ export default function ProviderOnboardingPage() {
                           />
                         </div>
                         <div className="space-y-1">
-                          <Label>Issue Date</Label>
+                          <Label>{t("provider.onboarding.step4.issueDate")}</Label>
                           <Input
                             type="date"
                             className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
@@ -1552,9 +1636,9 @@ export default function ProviderOnboardingPage() {
                           {fieldErrors.issuedDate && <p className="text-xs text-red-600">{fieldErrors.issuedDate}</p>}
                         </div>
                         <div className="space-y-1">
-                          <Label>Serial Number</Label>
+                          <Label>{t("provider.onboarding.step4.serial")}</Label>
                           <Input
-                            placeholder="Serial Number"
+                            placeholder={t("provider.onboarding.step4.serial")}
                             className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                             value={editCertification.serialNumber || ""}
                             onChange={(e) =>
@@ -1563,17 +1647,17 @@ export default function ProviderOnboardingPage() {
                           />
                         </div>
                         <div className="space-y-1">
-                          <Label>Verification Link</Label>
+                          <Label>{t("provider.onboarding.step4.verifyLink")}</Label>
                           <Input
                             type="url"
-                            placeholder="https://verify.issuer.com/cert/..."
+                            placeholder={t("provider.onboarding.step4.editVerifyPh")}
                             className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                             value={editCertification.sourceUrl || ""}
                             onChange={(e) =>
                               setEditCertification((prev) => prev ? { ...prev, sourceUrl: e.target.value } : null)
                             }
                           />
-                          <p className="text-xs text-gray-500">At least one of serial number or verification link is required.</p>
+                          <p className="text-xs text-gray-500">{t("provider.onboarding.step4.serialOrLinkHint")}</p>
                         </div>
                       </div>
                       <div className="flex justify-end gap-3 mt-6">
@@ -1585,10 +1669,10 @@ export default function ProviderOnboardingPage() {
                             setFieldErrors((p) => ({ ...p, cert: "", issuedDate: "" }));
                           }}
                         >
-                          Cancel
+                          {t("provider.profile.cancel")}
                         </Button>
                         <Button className="bg-blue-600 hover:bg-blue-700" onClick={handleSaveEditedCertification}>
-                          Save Changes
+                          {t("provider.onboarding.step4.saveChanges")}
                         </Button>
                       </div>
                     </div>
@@ -1600,54 +1684,68 @@ export default function ProviderOnboardingPage() {
             {step === 5 && (
               <div className="space-y-6">
                 <p className="text-sm text-gray-600">
-                  Review your profile summary. You can edit anything later in your Profile page.
+                  {t("provider.onboarding.review.intro")}
                 </p>
                 <div className="p-4 border rounded-lg bg-white/50 space-y-4">
                   <div>
-                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Title / Major</dt>
-                    <dd className="mt-1 font-medium text-gray-900">{major || "—"}</dd>
+                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">{t("provider.onboarding.review.titleMajor")}</dt>
+                    <dd className="mt-1 font-medium text-gray-900">{major || t("provider.onboarding.review.dash")}</dd>
                   </div>
                   <div>
-                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Professional Bio</dt>
-                    <dd className="mt-1 text-sm text-gray-700 line-clamp-3">{bio || "—"}</dd>
+                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">{t("provider.onboarding.review.bio")}</dt>
+                    <dd className="mt-1 text-sm text-gray-700 line-clamp-3">{bio || t("provider.onboarding.review.dash")}</dd>
                   </div>
                   <div>
-                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Location</dt>
-                    <dd className="mt-1 text-gray-900">{(location === OTHER_LOCATION ? customLocation : location) || "—"}</dd>
+                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">{t("provider.onboarding.review.location")}</dt>
+                    <dd className="mt-1 text-gray-900">
+                      {(location === OTHER_LOCATION ? customLocation : location) || t("provider.onboarding.review.dash")}
+                    </dd>
                   </div>
                   <div>
-                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Website</dt>
+                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">{t("provider.onboarding.review.website")}</dt>
                     <dd className="mt-1 text-gray-900">
                       {website ? (
                         <a href={ensureAbsoluteUrl(website)} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{website}</a>
-                      ) : "—"}
+                      ) : t("provider.onboarding.review.dash")}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Skills</dt>
+                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">{t("provider.onboarding.review.skills")}</dt>
                     <dd className="mt-1 flex flex-wrap gap-1.5">
-                      {skills.length > 0 ? skills.map((s) => <Badge key={s} variant="secondary" className="text-xs">{s}</Badge>) : "—"}
+                      {skills.length > 0 ? skills.map((s) => <Badge key={s} variant="secondary" className="text-xs">{s}</Badge>) : t("provider.onboarding.review.dash")}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Languages</dt>
+                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">{t("provider.onboarding.review.languages")}</dt>
                     <dd className="mt-1 flex flex-wrap gap-1.5">
-                      {languages.length > 0 ? languages.map((l) => <Badge key={l} variant="secondary" className="text-xs">{l}</Badge>) : "—"}
+                      {languages.length > 0 ? languages.map((l) => <Badge key={l} variant="secondary" className="text-xs">{l}</Badge>) : t("provider.onboarding.review.dash")}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Experience & Rate</dt>
+                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">{t("provider.onboarding.review.experienceRate")}</dt>
                     <dd className="mt-1 text-gray-900">
-                      {yearsExperience ? `${yearsExperience} years` : "—"} {hourlyRate ? ` · RM ${hourlyRate}/hr` : ""}
+                      {yearsExperience && hourlyRate
+                        ? t("provider.onboarding.review.yearsRate", { years: yearsExperience, rate: hourlyRate })
+                        : yearsExperience
+                          ? t("provider.onboarding.review.yearsOnly", { years: yearsExperience })
+                          : hourlyRate
+                            ? t("provider.onboarding.review.rateOnly", { rate: hourlyRate })
+                            : t("provider.onboarding.review.dash")}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Portfolio Links</dt>
-                    <dd className="mt-1 text-sm text-gray-700">{portfolioLinks.length > 0 ? portfolioLinks.length : "—"}</dd>
+                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">{t("provider.onboarding.review.portfolioLinks")}</dt>
+                    <dd className="mt-1 text-sm text-gray-700">
+                      {portfolioLinks.length > 0 ? portfolioLinks.length : t("provider.onboarding.review.dash")}
+                    </dd>
                   </div>
                   <div>
-                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">Certifications</dt>
-                    <dd className="mt-1 text-gray-900">{certifications.length + newCertifications.length || "—"}</dd>
+                    <dt className="text-xs font-medium text-gray-500 uppercase tracking-wide">{t("provider.onboarding.review.certifications")}</dt>
+                    <dd className="mt-1 text-gray-900">
+                      {certifications.length + newCertifications.length > 0
+                        ? certifications.length + newCertifications.length
+                        : t("provider.onboarding.review.dash")}
+                    </dd>
                   </div>
                 </div>
               </div>
@@ -1673,7 +1771,7 @@ export default function ProviderOnboardingPage() {
                     className="bg-transparent"
                   >
                     <ChevronLeft className="w-4 h-4 mr-2" />
-                    Previous
+                    {t("provider.onboarding.nav.previous")}
                   </Button>
                   {step < 5 ? (
                     <Button
@@ -1694,8 +1792,8 @@ export default function ProviderOnboardingPage() {
                           className="w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"
                         />
                       ) : null}
-                      Next
-                      <ChevronRight className="w-4 h-4 ml-2" />
+                      {saving ? t("provider.onboarding.nav.saving") : t("provider.onboarding.nav.next")}
+                      {!saving ? <ChevronRight className="w-4 h-4 ml-2" /> : null}
                     </Button>
                   ) : (
                     <Button
@@ -1704,7 +1802,7 @@ export default function ProviderOnboardingPage() {
                       className="bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 text-white"
                     >
                       <CheckCircle2 className="w-4 h-4 mr-2" />
-                      Finish & go to dashboard
+                      {t("provider.onboarding.nav.finish")}
                     </Button>
                   )}
                 </div>
@@ -1712,9 +1810,10 @@ export default function ProviderOnboardingPage() {
                 <div className="mt-6 text-center">
                   <p className="text-sm text-gray-600">
                     <Link href="/provider/profile" className="text-blue-600 hover:text-blue-700 font-medium">
-                      Edit full profile
+                      {t("provider.onboarding.footer.editProfile")}
                     </Link>
-                    {" "}anytime
+                    {" "}
+                    {t("provider.onboarding.footer.anytime")}
                   </p>
                 </div>
               </CardContent>
@@ -1722,6 +1821,6 @@ export default function ProviderOnboardingPage() {
           </motion.div>
         </div>
       )}
-    </ProviderLayout>
+    </>
   );
 }

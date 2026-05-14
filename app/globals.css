@@ -43,6 +43,11 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+html {
+  /* Keeps layout stable when body toggles overflow (e.g. hero intro lock) */
+  scrollbar-gutter: stable;
+}
+
 :root {
   --radius: 0.625rem;
   --background: oklch(1 0 0);
@@ -169,11 +174,9 @@
     @apply hidden;
   }
 
+  /* Compact band (e.g. trust logos); avoids huge dead space between homepage blocks */
   .section {
-    @apply py-8
-    
-    /* Responsive for medium screen */ 
-    md:py-16;
+    @apply py-6 md:py-10;
   }
 
   .section-head {
@@ -219,6 +222,20 @@
     object-cover;
   }
 
+  /* Hero — "Meaningful Connections." gradient shimmer */
+  @keyframes hero-gradient-flow {
+    0%   { background-position: 0% center; }
+    100% { background-position: 200% center; }
+  }
+  @keyframes hero-dot-pulse {
+    0%, 100% { transform: scale(0.6); opacity: 0; }
+    50%       { transform: scale(1.4); opacity: 0.75; }
+  }
+  .hero-gradient-flow-text {
+    background-size: 200% auto;
+    animation: hero-gradient-flow 6s linear infinite;
+  }
+
   /* Video section: slow pulse and ping */
   @keyframes pulse-slow {
     0%, 100% { opacity: 0.5; }
@@ -234,4 +251,9 @@
   .animate-ping-slow {
     animation: ping-slow 2.5s cubic-bezier(0, 0, 0.2, 1) infinite;
   }
+}
+
+/* Login: Google Sign-In iframe respects card width (GSI uses fixed pixel width) */
+.gsi-material-button-host iframe {
+  max-width: 100% !important;
 }

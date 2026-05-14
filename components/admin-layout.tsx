@@ -40,8 +40,13 @@ import {
 import {
   getNotificationCategory,
   DISPLAY_CATEGORIES,
-  CATEGORY_LABELS,
 } from "@/lib/notification-categories";
+import { NOTIFICATION_CATEGORY_I18N_KEYS } from "@/lib/app-layout-notification-categories";
+import {
+  formatNotificationTimestamp,
+  getLocalizedNotificationText,
+  notificationIntlLocale,
+} from "@/lib/notifications/notification-display-i18n";
 import {
   Dialog,
   DialogContent,
@@ -54,7 +59,11 @@ import {
 import { Badge as BadgeComponent } from "@/components/ui/badge";
 import { getUnreadMessageCount } from "@/lib/api";
 import BetaBanner from "@/components/BetaBanner";
+import { UserLocaleSync } from "@/components/UserLocaleSync";
+import { LanguageSwitcher } from "@/components/Homepage/LanguageSwitcher";
 import Image from "next/image";
+import { useI18n } from "@/contexts/I18nProvider";
+import type { MessageKey } from "@/lib/i18n/messages/en";
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -76,25 +85,73 @@ type Notification = {
   content: string;
   createdAt: string | number | Date;
   isRead?: boolean;
+  type?: string;
+  metadata?: unknown;
   [key: string]: unknown;
 };
 
-const NAV_ITEMS = [
-  { name: "Dashboard", href: "/admin/dashboard", icon: Home },
-  { name: "Users", href: "/admin/users", icon: Users },
-  { name: "Projects", href: "/admin/projects", icon: Briefcase },
-  { name: "Reviews", href: "/admin/reviews", icon: Star },
-  { name: "Verifications", href: "/admin/verifications", icon: Shield },
-  { name: "Disputes", href: "/admin/disputes", icon: AlertTriangle },
-  { name: "Payments", href: "/admin/payments", icon: DollarSign },
-  { name: "Messages", href: "/admin/messages", icon: MessageSquare },
-  { name: "AI Support", href: "/admin/support", icon: Headphones },
-  { name: "Message Reports", href: "/admin/conversation-reports", icon: Flag },
-  { name: "Reports", href: "/admin/reports", icon: BarChart3 },
-  { name: "Settings", href: "/admin/settings", icon: Settings },
+const ADMIN_NAV_ITEMS: ReadonlyArray<{
+  href: string;
+  icon: typeof Home;
+  labelKey: MessageKey;
+}> = [
+  {
+    href: "/admin/dashboard",
+    icon: Home,
+    labelKey: "admin.layout.nav.dashboard",
+  },
+  { href: "/admin/users", icon: Users, labelKey: "admin.layout.nav.users" },
+  {
+    href: "/admin/projects",
+    icon: Briefcase,
+    labelKey: "admin.layout.nav.projects",
+  },
+  { href: "/admin/reviews", icon: Star, labelKey: "admin.layout.nav.reviews" },
+  {
+    href: "/admin/verifications",
+    icon: Shield,
+    labelKey: "admin.layout.nav.verifications",
+  },
+  {
+    href: "/admin/disputes",
+    icon: AlertTriangle,
+    labelKey: "admin.layout.nav.disputes",
+  },
+  {
+    href: "/admin/payments",
+    icon: DollarSign,
+    labelKey: "admin.layout.nav.payments",
+  },
+  {
+    href: "/admin/messages",
+    icon: MessageSquare,
+    labelKey: "admin.layout.nav.messages",
+  },
+  {
+    href: "/admin/support",
+    icon: Headphones,
+    labelKey: "admin.layout.nav.aiSupport",
+  },
+  {
+    href: "/admin/conversation-reports",
+    icon: Flag,
+    labelKey: "admin.layout.nav.messageReports",
+  },
+  {
+    href: "/admin/reports",
+    icon: BarChart3,
+    labelKey: "admin.layout.nav.reports",
+  },
+  {
+    href: "/admin/settings",
+    icon: Settings,
+    labelKey: "admin.layout.nav.settings",
+  },
 ];
 
 export function AdminLayout({ children }: AdminLayoutProps) {
+  const { t, locale } = useI18n();
+  const intlLocale = notificationIntlLocale(locale);
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const router = useRouter();
@@ -105,6 +162,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   // Notifications state
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [notificationsLoading, setNotificationsLoading] = useState(true);
+  const [markingAllRead, setMarkingAllRead] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedNotification, setSelectedNotification] =
     useState<Notification | null>(null);
@@ -128,42 +186,42 @@ export function AdminLayout({ children }: AdminLayoutProps) {
 
   useEffect(() => {
     const verifyAdmin = async () => {
-      if (typeof window === "undefined") return;
+      try {
+        if (typeof window === "undefined") return;
 
-      const token = localStorage.getItem("token");
-      const userJson = localStorage.getItem("user");
+        const token = localStorage.getItem("token");
+        const userJson = localStorage.getItem("user");
 
-      if (!token) {
-        router.push("/auth/login");
-        return;
-      }
-
-      // Only admins can access admin routes
-      if (userJson) {
-        try {
-          const userData = JSON.parse(userJson);
-          const roles = Array.isArray(userData?.role)
-            ? userData.role
-            : userData?.role
-              ? [userData.role]
-              : [];
-          if (!roles.includes("ADMIN")) {
-            if (roles.includes("CUSTOMER")) {
-              router.push("/customer/dashboard");
-            } else if (roles.includes("PROVIDER")) {
-              router.push("/provider/dashboard");
-            } else {
-              router.push("/auth/login");
-            }
-            return;
-          }
-        } catch {
+        if (!token) {
           router.push("/auth/login");
           return;
         }
-      }
 
-      try {
+        // Only admins can access admin routes
+        if (userJson) {
+          try {
+            const userData = JSON.parse(userJson);
+            const roles = Array.isArray(userData?.role)
+              ? userData.role
+              : userData?.role
+                ? [userData.role]
+                : [];
+            if (!roles.includes("ADMIN")) {
+              if (roles.includes("CUSTOMER")) {
+                router.push("/customer/dashboard");
+              } else if (roles.includes("PROVIDER")) {
+                router.push("/provider/dashboard");
+              } else {
+                router.push("/auth/login");
+              }
+              return;
+            }
+          } catch {
+            router.push("/auth/login");
+            return;
+          }
+        }
+
         console.log("🔑 Token from localStorage:", token);
 
         const API_URL =
@@ -179,7 +237,6 @@ export function AdminLayout({ children }: AdminLayoutProps) {
         const data = await res.json();
         setProfile(data as AdminProfile);
       } catch {
-        // Token invalid or expired
         localStorage.removeItem("token");
         localStorage.removeItem("user");
         router.push("/auth/login");
@@ -188,7 +245,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       }
     };
 
-    verifyAdmin();
+    void verifyAdmin();
   }, [router]);
 
   // Fetch notifications for admin header
@@ -215,6 +272,10 @@ export function AdminLayout({ children }: AdminLayoutProps) {
 
   // Calculate unread notifications
   const unreadCount = notifications.filter((n) => !n.isRead).length;
+  const unreadNotificationIds = useMemo(
+    () => notifications.filter((n) => !n.isRead).map((n) => n.id),
+    [notifications],
+  );
 
   const notificationsByCategory = useMemo(() => {
     const map: Record<string, Notification[]> = {};
@@ -319,6 +380,38 @@ export function AdminLayout({ children }: AdminLayoutProps) {
     }
   };
 
+  const handleMarkAllAsRead = async () => {
+    if (markingAllRead || unreadNotificationIds.length === 0) return;
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+    const previousNotifications = notifications;
+
+    setMarkingAllRead(true);
+    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+
+    try {
+      const response = await fetch(`${API_URL}/notifications/read-bulk`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ ids: unreadNotificationIds }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to mark all notifications as read");
+      }
+    } catch (error) {
+      console.error("Failed to mark all notifications as read", error);
+      setNotifications(previousNotifications);
+    } finally {
+      setMarkingAllRead(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Mobile sidebar */}
@@ -354,9 +447,9 @@ export function AdminLayout({ children }: AdminLayoutProps) {
             </Button>
           </div>
           <nav className="flex-1 px-4 py-4 space-y-2">
-            {NAV_ITEMS.map((item) => (
+            {ADMIN_NAV_ITEMS.map((item) => (
               <Link
-                key={item.name}
+                key={item.href}
                 href={item.href}
                 className={`flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors relative ${
                   isActive(item.href)
@@ -366,8 +459,8 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                 onClick={() => setSidebarOpen(false)}
               >
                 <item.icon className="w-5 h-5 mr-3" />
-                {item.name}
-                {item.name === "Messages" && unreadMessageCount > 0 && (
+                {t(item.labelKey)}
+                {item.href === "/admin/messages" && unreadMessageCount > 0 && (
                   <BadgeComponent className="ml-auto bg-red-500 text-white text-xs min-w-[20px] h-5 flex items-center justify-center px-1.5">
                     {unreadMessageCount > 99 ? "99+" : unreadMessageCount}
                   </BadgeComponent>
@@ -396,9 +489,9 @@ export function AdminLayout({ children }: AdminLayoutProps) {
             </div>
           </div>
           <nav className="flex-1 px-4 py-4 space-y-2">
-            {NAV_ITEMS.map((item) => (
+            {ADMIN_NAV_ITEMS.map((item) => (
               <Link
-                key={item.name}
+                key={item.href}
                 href={item.href}
                 className={`flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors relative ${
                   isActive(item.href)
@@ -407,8 +500,8 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                 }`}
               >
                 <item.icon className="w-5 h-5 mr-3" />
-                {item.name}
-                {item.name === "Messages" && unreadMessageCount > 0 && (
+                {t(item.labelKey)}
+                {item.href === "/admin/messages" && unreadMessageCount > 0 && (
                   <BadgeComponent className="ml-auto bg-red-500 text-white text-xs min-w-[20px] h-5 flex items-center justify-center px-1.5">
                     {unreadMessageCount > 99 ? "99+" : unreadMessageCount}
                   </BadgeComponent>
@@ -440,6 +533,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
 
       {/* Main content */}
       <div className="lg:pl-64">
+        <UserLocaleSync />
         <BetaBanner />
         {/* Top header */}
         <header className="bg-white border-b border-gray-200 px-4 py-4">
@@ -466,6 +560,8 @@ export function AdminLayout({ children }: AdminLayoutProps) {
             </div>
 
             <div className="flex items-center space-x-4">
+              <LanguageSwitcher />
+
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="sm" className="relative">
@@ -478,12 +574,32 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="w-64" align="end" forceMount>
-                  <DropdownMenuLabel className="font-medium text-gray-900">
-                    Notifications
-                  </DropdownMenuLabel>
+                  <div className="flex items-center justify-between gap-2 px-2 py-1.5">
+                    <DropdownMenuLabel className="font-medium text-gray-900 p-0">
+                      {t("app.layout.notifications.title")}
+                    </DropdownMenuLabel>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={handleMarkAllAsRead}
+                      disabled={
+                        markingAllRead ||
+                        notificationsLoading ||
+                        unreadNotificationIds.length === 0
+                      }
+                    >
+                      {markingAllRead
+                        ? t("app.layout.notifications.marking")
+                        : t("app.layout.notifications.markAllRead")}
+                    </Button>
+                  </div>
                   <DropdownMenuSeparator />
                   {notificationsLoading ? (
-                    <DropdownMenuItem disabled>Loading...</DropdownMenuItem>
+                    <DropdownMenuItem disabled>
+                      {t("app.layout.notifications.loading")}
+                    </DropdownMenuItem>
                   ) : notifications.length > 0 ? (
                     DISPLAY_CATEGORIES.map(
                       (category) =>
@@ -491,7 +607,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                           <DropdownMenuSub key={category}>
                             <DropdownMenuSubTrigger>
                               <span className="font-medium">
-                                {CATEGORY_LABELS[category]}
+                                {t(NOTIFICATION_CATEGORY_I18N_KEYS[category])}
                               </span>
                               <span className="ml-auto text-xs text-muted-foreground">
                                 {notificationsByCategory[category].length}
@@ -501,7 +617,20 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                               className="w-80 max-h-[400px] overflow-y-auto"
                               sideOffset={4}
                             >
-                              {notificationsByCategory[category].map((n) => (
+                              {notificationsByCategory[category].map((n) => {
+                                const loc = getLocalizedNotificationText(
+                                  {
+                                    title: String(n.title),
+                                    content: String(n.content),
+                                    type:
+                                      typeof n.type === "string"
+                                        ? n.type
+                                        : undefined,
+                                    metadata: n.metadata,
+                                  },
+                                  t,
+                                );
+                                return (
                                 <DropdownMenuItem
                                   key={n.id}
                                   onClick={() => handleNotificationClick(n.id)}
@@ -509,24 +638,28 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                                 >
                                   <div className="flex flex-col space-y-1">
                                     <span className="font-medium">
-                                      {String(n.title)}
+                                      {loc.title}
                                     </span>
                                     <span className="text-xs text-muted-foreground">
-                                      {new Date(n.createdAt).toLocaleString()}
+                                      {formatNotificationTimestamp(
+                                        n.createdAt,
+                                        intlLocale,
+                                      )}
                                     </span>
                                     <span className="text-sm text-gray-600">
-                                      {String(n.content)}
+                                      {loc.content}
                                     </span>
                                   </div>
                                 </DropdownMenuItem>
-                              ))}
+                              );
+                              })}
                             </DropdownMenuSubContent>
                           </DropdownMenuSub>
                         ),
                     )
                   ) : (
                     <DropdownMenuItem disabled>
-                      No notifications
+                      {t("app.layout.notifications.empty")}
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuSeparator />
@@ -546,12 +679,14 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                             /\\/g,
                             "/",
                           )}`}
-                          alt={profile.name || "User"}
+                          alt={
+                            profile.name || t("app.layout.userMenu.avatarAlt")
+                          }
                         />
                       ) : (
                         <AvatarImage
                           src="/placeholder.svg?height=32&width=32"
-                          alt="User"
+                          alt={t("app.layout.userMenu.avatarAlt")}
                         />
                       )}
                       <AvatarFallback>
@@ -572,35 +707,38 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                     <div className="flex flex-col space-y-1">
                       <p className="text-sm font-medium leading-none">
                         {profileLoading
-                          ? "Loading..."
-                          : profile?.name || "Unknown User"}
+                          ? t("app.layout.mainLoading")
+                          : profile?.name ||
+                            t("app.layout.userMenu.unknownUser")}
                       </p>
                       <p className="text-xs leading-none text-muted-foreground">
-                        {profileLoading ? "Loading..." : profile?.email || "-"}
+                        {profileLoading
+                          ? t("app.layout.mainLoading")
+                          : profile?.email || "-"}
                       </p>
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => router.push("/admin/users")}>
                     <User className="mr-2 h-4 w-4" />
-                    <span>Users</span>
+                    <span>{t("admin.layout.userMenu.users")}</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => router.push("/admin/payments")}
                   >
                     <CreditCard className="mr-2 h-4 w-4" />
-                    <span>Payment</span>
+                    <span>{t("admin.layout.userMenu.payment")}</span>
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => router.push("/admin/settings")}
                   >
                     <Settings className="mr-2 h-4 w-4" />
-                    <span>Settings</span>
+                    <span>{t("app.layout.userMenu.settings")}</span>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleLogout}>
                     <LogOut className="mr-2 h-4 w-4" />
-                    <span>Log out</span>
+                    <span>{t("app.layout.userMenu.logOut")}</span>
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -614,7 +752,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
             <div className="flex items-center justify-center min-h-[400px]">
               <div className="text-center">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                <p className="text-gray-600">Loading...</p>
+                <p className="text-gray-600">{t("app.layout.mainLoading")}</p>
               </div>
             </div>
           ) : (
@@ -625,41 +763,79 @@ export function AdminLayout({ children }: AdminLayoutProps) {
 
       {/* Notification modal */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-w-lg p-6 mx-auto">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-semibold">
-              Notification
+        <DialogContent className="mx-auto max-w-xl overflow-hidden p-0">
+          <DialogHeader className="border-b bg-gradient-to-r from-blue-50 via-white to-indigo-50 p-6">
+            <DialogTitle className="flex items-center gap-2 text-lg font-semibold text-slate-900">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-700">
+                <Bell className="h-4 w-4" />
+              </span>
+              {t("app.layout.notificationModal.title")}
             </DialogTitle>
-            <DialogClose className="absolute right-4 top-4">
-              <X className="w-5 h-5" />
+            <DialogClose className="absolute right-4 top-4 rounded-full p-1 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900">
+              <X className="h-5 w-5" />
             </DialogClose>
           </DialogHeader>
-          <DialogDescription className="mt-4 text-sm text-gray-700">
-            {selectedNotification ? (
-              <div className="flex flex-col space-y-2">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-md font-medium">
-                    {String(selectedNotification.title)}
-                  </h3>
-                  <span className="text-xs text-muted-foreground">
-                    {new Date(selectedNotification.createdAt).toLocaleString()}
-                  </span>
+          <DialogDescription asChild>
+            <div className="p-6">
+              {selectedNotification ? (
+                <div className="space-y-4">
+                  <div className="rounded-lg border bg-slate-50/70 p-4">
+                    <div className="mb-2 flex items-start justify-between gap-4">
+                      <h3 className="text-base font-semibold text-slate-900">
+                        {
+                          getLocalizedNotificationText(
+                            {
+                              title: String(selectedNotification.title),
+                              content: String(selectedNotification.content),
+                              type:
+                                typeof selectedNotification.type === "string"
+                                  ? selectedNotification.type
+                                  : undefined,
+                              metadata: selectedNotification.metadata,
+                            },
+                            t,
+                          ).title
+                        }
+                      </h3>
+                      <span className="shrink-0 text-xs text-slate-500">
+                        {formatNotificationTimestamp(
+                          selectedNotification.createdAt,
+                          intlLocale,
+                        )}
+                      </span>
+                    </div>
+                    <p className="text-sm leading-6 text-slate-700">
+                      {
+                        getLocalizedNotificationText(
+                          {
+                            title: String(selectedNotification.title),
+                            content: String(selectedNotification.content),
+                            type:
+                              typeof selectedNotification.type === "string"
+                                ? selectedNotification.type
+                                : undefined,
+                            metadata: selectedNotification.metadata,
+                          },
+                          t,
+                        ).content
+                      }
+                    </p>
+                  </div>
                 </div>
-                <p className="text-sm">
-                  {String(selectedNotification.content)}
-                </p>
-              </div>
-            ) : (
-              "No notification details available."
-            )}
+              ) : (
+                <div className="rounded-lg border border-dashed bg-slate-50 p-4 text-sm text-slate-600">
+                  {t("app.layout.notificationModal.empty")}
+                </div>
+              )}
+            </div>
           </DialogDescription>
-          <DialogFooter className="mt-4">
+          <DialogFooter className="border-t bg-slate-50 px-6 py-4">
             <Button
               variant="default"
               onClick={() => setModalOpen(false)}
-              className="w-full"
+              className="w-full sm:w-auto"
             >
-              Close
+              {t("app.layout.notificationModal.close")}
             </Button>
           </DialogFooter>
         </DialogContent>

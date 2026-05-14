@@ -12,6 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -44,6 +45,12 @@ import {
   XCircle,
   TrendingUp,
   CheckCircle2,
+  Download,
+  CalendarRange,
+  User,
+  ChevronLeft,
+  ChevronRight,
+  Filter,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
@@ -51,6 +58,13 @@ import {
   getAdminPaymentStats,
   getProfileImageUrl,
 } from "@/lib/api";
+import { useI18n } from "@/contexts/I18nProvider";
+import { useToast } from "@/hooks/use-toast";
+import {
+  milestoneStatusLabel,
+  paymentMethodLabel,
+  paymentStatusLabel,
+} from "@/components/admin/payments/payment-i18n-maps";
 
 type Payment = {
   id: string;
@@ -68,6 +82,7 @@ type Payment = {
   project: {
     id: string;
     title: string;
+    currencyCode?: string;
     customer: {
       id: string;
       name: string;
@@ -89,6 +104,7 @@ type Payment = {
     id: string;
     title: string;
     status: string;
+    amount?: number;
   };
 };
 
@@ -97,9 +113,33 @@ type PaymentStats = {
   totalVolume?: number;
   totalFees?: number;
   totalRevenue?: number;
+  netWorth?: number;
   readyToTransfer?: number;
   failedPayments?: number;
+  /** ISO code used for monetary stats (after optional FX conversion). */
+  displayCurrency?: string;
+  /** True when live FX was unavailable and MYR amounts were returned. */
+  displayCurrencyFallback?: boolean;
 };
+
+function readAdminPreferredCurrency(): string {
+  if (typeof window === "undefined") return "MYR";
+  try {
+    const raw = localStorage.getItem("user");
+    const parsed = raw
+      ? (JSON.parse(raw) as {
+          settings?: { preferredCurrency?: string };
+        })
+      : null;
+    const code = String(parsed?.settings?.preferredCurrency || "")
+      .trim()
+      .toUpperCase();
+    if (/^[A-Z]{3}$/.test(code)) return code;
+  } catch {
+    /* ignore */
+  }
+  return "MYR";
+}
 
 const isReadyToTransfer = (payment: Payment) => {
   return (
@@ -108,13 +148,20 @@ const isReadyToTransfer = (payment: Payment) => {
 };
 
 export default function PaymentsClient() {
+  const { t, locale } = useI18n();
+  const { toast } = useToast();
   const router = useRouter();
+  const intlLocale =
+    locale === "id" ? "id-ID" : locale === "ar" ? "ar" : "en-US";
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [transferFilter, setTransferFilter] = useState("all");
-  const [allPayments, setAllPayments] = useState<Payment[]>([]);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [userFilter, setUserFilter] = useState("");
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
   const [stats, setStats] = useState<PaymentStats | null>(null);
   const [pagination, setPagination] = useState({
     total: 0,
@@ -124,7 +171,10 @@ export default function PaymentsClient() {
   });
 
   useEffect(() => {
-    fetchStats();
+    void fetchStats();
+    const onFocus = () => void fetchStats();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, []);
 
   const fetchPayments = useCallback(async () => {
@@ -133,6 +183,11 @@ export default function PaymentsClient() {
       const response = await getAdminPayments({
         search: searchQuery || undefined,
         status: statusFilter !== "all" ? statusFilter : undefined,
+        dateFrom: dateFrom || undefined,
+        dateTo: dateTo || undefined,
+        participant: userFilter.trim() || undefined,
+        transfer:
+          transferFilter !== "all" ? transferFilter : undefined,
         page: pagination.page,
         limit: pagination.limit,
         sortBy: "createdAt",
@@ -140,7 +195,7 @@ export default function PaymentsClient() {
       });
 
       if (response.success) {
-        setAllPayments(response.data || []);
+        setPayments(response.data || []);
         setPagination((prev) => response.pagination || prev);
       }
     } catch (error) {
@@ -148,18 +203,27 @@ export default function PaymentsClient() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, statusFilter, pagination.page, pagination.limit]);
+  }, [
+    searchQuery,
+    statusFilter,
+    dateFrom,
+    dateTo,
+    userFilter,
+    transferFilter,
+    pagination.page,
+    pagination.limit,
+  ]);
 
-  // Filter payments based on transfer status (client-side filtering)
   useEffect(() => {
-    if (transferFilter === "all") {
-      setPayments(allPayments);
-    } else if (transferFilter === "ready-to-transfer") {
-      setPayments(allPayments.filter((payment) => isReadyToTransfer(payment)));
-    } else if (transferFilter === "normal") {
-      setPayments(allPayments.filter((payment) => !isReadyToTransfer(payment)));
-    }
-  }, [transferFilter, allPayments]);
+    setPagination((prev) => (prev.page === 1 ? prev : { ...prev, page: 1 }));
+  }, [
+    searchQuery,
+    statusFilter,
+    dateFrom,
+    dateTo,
+    userFilter,
+    transferFilter,
+  ]);
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
@@ -171,7 +235,8 @@ export default function PaymentsClient() {
 
   const fetchStats = async () => {
     try {
-      const response = await getAdminPaymentStats();
+      const currency = readAdminPreferredCurrency();
+      const response = await getAdminPaymentStats(currency);
       if (response.success) {
         setStats(response.data);
       }
@@ -201,38 +266,201 @@ export default function PaymentsClient() {
     }
   };
 
-  const getMethodText = (method: string) => {
-    switch (method) {
-      case "STRIPE":
-        return "Stripe";
-      case "FPX":
-        return "FPX";
-      case "EWALLET":
-        return "E-Wallet";
-      default:
-        return method;
-    }
-  };
-
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
+    return new Date(dateString).toLocaleDateString(intlLocale, {
       year: "numeric",
       month: "short",
       day: "numeric",
     });
   };
 
+  const formatMoney = (amount: number, currency?: string) => {
+    const code = (currency || "MYR").toUpperCase();
+    try {
+      return new Intl.NumberFormat(intlLocale, {
+        style: "currency",
+        currency: code,
+      }).format(Number(amount || 0));
+    } catch {
+      return `${code} ${Number(amount || 0).toLocaleString(intlLocale)}`;
+    }
+  };
+
+  const getDisplayCurrency = (payment: Payment) => {
+    const paymentCurrency = String(payment.currency || "")
+      .trim()
+      .toUpperCase();
+    const projectCurrency = String(payment.project?.currencyCode || "")
+      .trim()
+      .toUpperCase();
+
+    // Payment row reflects what Stripe charged (updated on escrow). Prefer it for reporting.
+    if (paymentCurrency) return paymentCurrency;
+    return projectCurrency || "MYR";
+  };
+
+  const getPaymentBreakdown = (payment: Payment) => {
+    const milestoneAmount = Number(payment.milestone?.amount || 0);
+    if (milestoneAmount > 0) {
+      const gross = Number((milestoneAmount * 1.05).toFixed(2)); // customer pays +5%
+      const platformFee = Number((milestoneAmount * 0.1).toFixed(2)); // platform total 10%
+      const providerNet = Number((milestoneAmount * 0.95).toFixed(2)); // provider receives -5%
+      return { gross, platformFee, providerNet };
+    }
+    return {
+      gross: Number(payment.amount || 0),
+      platformFee: Number(payment.platformFeeAmount || 0),
+      providerNet: Number(payment.providerAmount || 0),
+    };
+  };
+
+  const buildExportQuery = () => ({
+    search: searchQuery || undefined,
+    status: statusFilter !== "all" ? statusFilter : undefined,
+    dateFrom: dateFrom || undefined,
+    dateTo: dateTo || undefined,
+    participant: userFilter.trim() || undefined,
+    transfer: transferFilter !== "all" ? transferFilter : undefined,
+    page: 1,
+    limit: 10000,
+    sortBy: "createdAt" as const,
+    sortOrder: "desc" as const,
+  });
+
+  const tableTotals = payments.reduce(
+    (acc, payment) => {
+      const displayCurrency = getDisplayCurrency(payment);
+      const amounts = getPaymentBreakdown(payment);
+      acc.gross += amounts.gross;
+      acc.fee += amounts.platformFee;
+      acc.net += amounts.providerNet;
+      acc.currency = displayCurrency;
+      return acc;
+    },
+    { gross: 0, fee: 0, net: 0, currency: "MYR" },
+  );
+
+  const exportPaymentsCsv = async () => {
+    try {
+      setExporting(true);
+      const response = await getAdminPayments(buildExportQuery());
+      const rows: Payment[] = response.success ? response.data || [] : [];
+      if (rows.length === 0) {
+        toast({
+          title: t("admin.payments.export.emptyTitle"),
+          description: t("admin.payments.export.emptyDescription"),
+          variant: "destructive",
+        });
+        return;
+      }
+      const header = [
+        "ID",
+        "Project",
+        "Customer",
+        "Provider",
+        "Gross Amount",
+        "Platform Fee",
+        "Provider Amount",
+        "Currency",
+        "Status",
+        "Method",
+        "Date",
+      ];
+      const lines = [
+        header.join(","),
+        ...rows.map((p) => {
+          const currency = getDisplayCurrency(p);
+          const amounts = getPaymentBreakdown(p);
+          const esc = (v: string | number | undefined | null) => {
+            const s = v == null ? "" : String(v);
+            return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+          };
+          return [
+            esc(p.id),
+            esc(p.project?.title),
+            esc(p.project?.customer?.name),
+            esc(p.project?.provider?.name),
+            esc(amounts.gross),
+            esc(amounts.platformFee),
+            esc(amounts.providerNet),
+            esc(currency),
+            esc(p.status),
+            esc(p.method),
+            esc(formatDate(p.createdAt)),
+          ].join(",");
+        }),
+      ];
+      const blob = new Blob(["\uFEFF", lines.join("\r\n")], {
+        type: "text/csv;charset=utf-8;",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-");
+      a.href = url;
+      a.download = `payments-export-filtered-${stamp}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({
+        title: t("admin.payments.export.successTitle"),
+        description: t("admin.payments.export.successDescription", {
+          count: rows.length,
+        }),
+      });
+    } catch (e) {
+      console.error(e);
+      toast({
+        title: t("admin.payments.export.errorTitle"),
+        description: t("admin.payments.export.errorDescription"),
+        variant: "destructive",
+      });
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const clearAllFilters = () => {
+    setSearchQuery("");
+    setStatusFilter("all");
+    setTransferFilter("all");
+    setDateFrom("");
+    setDateTo("");
+    setUserFilter("");
+  };
+
+  const hasActiveFilters =
+    Boolean(searchQuery.trim()) ||
+    statusFilter !== "all" ||
+    transferFilter !== "all" ||
+    Boolean(dateFrom) ||
+    Boolean(dateTo) ||
+    Boolean(userFilter.trim());
+
   return (
     <div className="space-y-8">
+      <div className="flex flex-col gap-2">
+        <h1 className="text-3xl font-bold text-gray-900">
+          {t("admin.payments.page.title")}
+        </h1>
+        <p className="text-gray-600">{t("admin.payments.page.subtitle")}</p>
+      </div>
+
       {/* Stats Cards */}
       {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+        <div className="space-y-2">
+          {stats.displayCurrencyFallback ? (
+            <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+              {t("admin.payments.stats.ratesNote", {
+                code: String(stats.displayCurrency || "MYR").toUpperCase(),
+              })}
+            </p>
+          ) : null}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600">
-                    Total Transactions
+                    {t("admin.payments.stats.totalTransactions")}
                   </p>
                   <p className="text-2xl font-bold text-gray-900">
                     {stats.totalPayments}
@@ -246,15 +474,37 @@ export default function PaymentsClient() {
           <Card>
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
-                <div>
+                <div className="min-w-0">
                   <p className="text-sm font-medium text-gray-600">
-                    Total Volume
+                    {t("admin.payments.stats.totalVolumeLabel")}
                   </p>
-                  <p className="text-2xl font-bold text-green-600">
-                    RM{((stats.totalVolume || 0) / 1000).toFixed(0)}K
+                  <p className="text-2xl font-bold text-green-600 truncate">
+                    {formatMoney(
+                      stats.totalVolume ?? 0,
+                      stats.displayCurrency || "MYR",
+                    )}
                   </p>
                 </div>
-                <DollarSign className="w-8 h-8 text-green-600" />
+                <DollarSign className="w-8 h-8 text-green-600 shrink-0" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-600">
+                    {t("admin.payments.stats.totalRevenue")}
+                  </p>
+                  <p className="text-2xl font-bold text-purple-600 truncate">
+                    {formatMoney(
+                      stats.totalRevenue ?? 0,
+                      stats.displayCurrency || "MYR",
+                    )}
+                  </p>
+                </div>
+                <TrendingUp className="w-8 h-8 text-purple-600 shrink-0" />
               </div>
             </CardContent>
           </Card>
@@ -264,23 +514,7 @@ export default function PaymentsClient() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600">
-                    Total Revenue
-                  </p>
-                  <p className="text-2xl font-bold text-purple-600">
-                    RM{(stats.totalRevenue || 0).toLocaleString()}
-                  </p>
-                </div>
-                <TrendingUp className="w-8 h-8 text-purple-600" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">
-                    Ready to Transfer
+                    {t("admin.payments.stats.readyToTransfer")}
                   </p>
                   <p className="text-2xl font-bold text-blue-600">
                     {stats.readyToTransfer}
@@ -295,7 +529,9 @@ export default function PaymentsClient() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Failed</p>
+                  <p className="text-sm font-medium text-gray-600">
+                    {t("admin.payments.stats.failed")}
+                  </p>
                   <p className="text-2xl font-bold text-red-600">
                     {stats.failedPayments}
                   </p>
@@ -305,50 +541,149 @@ export default function PaymentsClient() {
             </CardContent>
           </Card>
         </div>
+        </div>
       )}
 
       {/* Filters */}
       <Card>
-        <CardContent className="p-6">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex-1">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Filter className="w-5 h-5 text-gray-600" aria-hidden />
+            {t("admin.payments.filters.title")}
+          </CardTitle>
+          <CardDescription>{t("admin.payments.filters.description")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6 pt-2">
+          <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
+            <div className="space-y-2">
+              <Label htmlFor="payments-search">{t("admin.payments.filters.transactionSearchLabel")}</Label>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" />
                 <Input
-                  placeholder="Search transactions, users, or projects..."
+                  id="payments-search"
+                  placeholder={t("admin.payments.filters.searchPlaceholder")}
                   className="pl-10"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
+                  autoComplete="off"
                 />
               </div>
             </div>
-            <Select value={transferFilter} onValueChange={setTransferFilter}>
-              <SelectTrigger className="w-full sm:w-48">
-                <SelectValue placeholder="All Payments" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Payments</SelectItem>
-                <SelectItem value="ready-to-transfer">
-                  Ready to Transfer
-                </SelectItem>
-                <SelectItem value="normal">Normal</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-full sm:w-48">
-                <SelectValue placeholder="All Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="PENDING">Pending</SelectItem>
-                <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
-                <SelectItem value="ESCROWED">Escrowed</SelectItem>
-                <SelectItem value="RELEASED">Released</SelectItem>
-                <SelectItem value="TRANSFERRED">Transferred</SelectItem>
-                <SelectItem value="FAILED">Failed</SelectItem>
-                <SelectItem value="REFUNDED">Refunded</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="space-y-2">
+              <Label htmlFor="payments-user-filter">{t("admin.payments.filters.participantLabel")}</Label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" />
+                <Input
+                  id="payments-user-filter"
+                  placeholder={t("admin.payments.filters.participantPlaceholder")}
+                  className="pl-10"
+                  value={userFilter}
+                  onChange={(e) => setUserFilter(e.target.value)}
+                  autoComplete="off"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>{t("admin.payments.filters.statusLabel")}</Label>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder={t("admin.payments.filters.statusAll")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">
+                    {t("admin.payments.filters.statusAll")}
+                  </SelectItem>
+                  <SelectItem value="PENDING">
+                    {t("admin.payments.filters.status.PENDING")}
+                  </SelectItem>
+                  <SelectItem value="IN_PROGRESS">
+                    {t("admin.payments.filters.status.IN_PROGRESS")}
+                  </SelectItem>
+                  <SelectItem value="ESCROWED">
+                    {t("admin.payments.filters.status.ESCROWED")}
+                  </SelectItem>
+                  <SelectItem value="RELEASED">
+                    {t("admin.payments.filters.status.RELEASED")}
+                  </SelectItem>
+                  <SelectItem value="TRANSFERRED">
+                    {t("admin.payments.filters.status.TRANSFERRED")}
+                  </SelectItem>
+                  <SelectItem value="FAILED">
+                    {t("admin.payments.filters.status.FAILED")}
+                  </SelectItem>
+                  <SelectItem value="REFUNDED">
+                    {t("admin.payments.filters.status.REFUNDED")}
+                  </SelectItem>
+                  <SelectItem value="COMPLETED">
+                    {t("admin.payments.filters.status.COMPLETED")}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>{t("admin.payments.filters.transferLabel")}</Label>
+              <Select value={transferFilter} onValueChange={setTransferFilter}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder={t("admin.payments.filters.transferAll")} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">
+                    {t("admin.payments.filters.transferAll")}
+                  </SelectItem>
+                  <SelectItem value="ready-to-transfer">
+                    {t("admin.payments.filters.transferReady")}
+                  </SelectItem>
+                  <SelectItem value="normal">
+                    {t("admin.payments.filters.transferNormal")}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="rounded-lg border bg-muted/30 p-4 space-y-4">
+            <div className="flex items-center gap-2 text-sm font-medium text-gray-800">
+              <CalendarRange className="w-4 h-4 shrink-0" aria-hidden />
+              {t("admin.payments.filters.dateRangeHeading")}
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 lg:items-end">
+              <div className="space-y-2">
+                <Label htmlFor="payments-date-from">{t("admin.payments.filters.dateFrom")}</Label>
+                <Input
+                  id="payments-date-from"
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="payments-date-to">{t("admin.payments.filters.dateTo")}</Label>
+                <Input
+                  id="payments-date-to"
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                />
+              </div>
+              <div className="flex flex-wrap gap-2 sm:col-span-2 lg:justify-end lg:col-span-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void exportPaymentsCsv()}
+                  disabled={exporting}
+                >
+                  <Download className="w-4 h-4 mr-2 shrink-0" />
+                  {exporting
+                    ? t("admin.payments.export.exporting")
+                    : t("admin.payments.export.filtered")}
+                </Button>
+                {hasActiveFilters ? (
+                  <Button type="button" variant="ghost" onClick={clearAllFilters}>
+                    {t("admin.payments.filters.clearAll")}
+                  </Button>
+                ) : null}
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -356,36 +691,43 @@ export default function PaymentsClient() {
       {/* Payments Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Transactions ({pagination.total})</CardTitle>
-          <CardDescription>
-            Monitor all platform financial transactions
-          </CardDescription>
+          <CardTitle>
+            {t("admin.payments.table.title", {
+              count: pagination.total,
+            })}
+          </CardTitle>
+          <CardDescription>{t("admin.payments.table.description")}</CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (
             <div className="flex justify-center py-8">
-              <p className="text-gray-500">Loading payments...</p>
+              <p className="text-gray-500">{t("admin.payments.table.loading")}</p>
             </div>
           ) : payments.length === 0 ? (
             <div className="text-center py-8">
-              <p className="text-gray-500">No payments found</p>
+              <p className="text-gray-500">{t("admin.payments.table.empty")}</p>
             </div>
           ) : (
+            <>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Transaction</TableHead>
-                  <TableHead>Participants</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Method</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead>{t("admin.payments.table.col.transaction")}</TableHead>
+                  <TableHead>{t("admin.payments.table.col.participants")}</TableHead>
+                  <TableHead>{t("admin.payments.table.col.amount")}</TableHead>
+                  <TableHead>{t("admin.payments.table.col.status")}</TableHead>
+                  <TableHead>{t("admin.payments.table.col.method")}</TableHead>
+                  <TableHead>{t("admin.payments.table.col.date")}</TableHead>
+                  <TableHead className="text-right">
+                    {t("admin.payments.table.col.actions")}
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {payments.map((payment) => {
                   const readyToTransfer = isReadyToTransfer(payment);
+                  const displayCurrency = getDisplayCurrency(payment);
+                  const amounts = getPaymentBreakdown(payment);
                   return (
                     <TableRow
                       key={payment.id}
@@ -401,7 +743,7 @@ export default function PaymentsClient() {
                             </p>
                             {readyToTransfer && (
                               <Badge className="bg-blue-600 text-white">
-                                Ready to Transfer
+                                {t("admin.payments.badge.readyToTransfer")}
                               </Badge>
                             )}
                           </div>
@@ -452,47 +794,67 @@ export default function PaymentsClient() {
                       <TableCell>
                         <div>
                           <p className="font-medium">
-                            RM{payment.amount.toLocaleString()}
+                            {formatMoney(amounts.gross, displayCurrency)}
                           </p>
-                          {payment.platformFeeAmount > 0 && (
+                          {amounts.platformFee > 0 && (
                             <p className="text-sm text-gray-500">
-                              Fee: RM
-                              {payment.platformFeeAmount.toLocaleString()}
+                              {t("admin.payments.table.feeLine", {
+                                amount: formatMoney(
+                                  amounts.platformFee,
+                                  displayCurrency
+                                ),
+                              })}
                             </p>
                           )}
                           <p className="text-sm font-medium text-green-600">
-                            Net: RM{payment.providerAmount.toLocaleString()}
+                            {t("admin.payments.table.netLine", {
+                              amount: formatMoney(
+                                amounts.providerNet,
+                                displayCurrency
+                              ),
+                            })}
                           </p>
                         </div>
                       </TableCell>
                       <TableCell>
                         <Badge className={getStatusColor(payment.status)}>
-                          {payment.status}
+                          {paymentStatusLabel(payment.status, t)}
                         </Badge>
                         {payment.milestone && (
                           <p className="text-xs text-gray-500 mt-1">
-                            Milestone: {payment.milestone.status}
+                            {t("admin.payments.table.milestoneLine", {
+                              status: milestoneStatusLabel(
+                                payment.milestone.status,
+                                t
+                              ),
+                            })}
                           </p>
                         )}
                       </TableCell>
                       <TableCell>
                         <Badge variant="secondary">
-                          {getMethodText(payment.method)}
+                          {paymentMethodLabel(payment.method, t)}
                         </Badge>
                       </TableCell>
                       <TableCell>
                         <div>
                           <p className="text-sm">
-                            Created: {formatDate(payment.createdAt)}
+                            {t("admin.payments.table.created", {
+                              date: formatDate(payment.createdAt),
+                            })}
                           </p>
                           {payment.escrowedAt && (
                             <p className="text-xs text-gray-500">
-                              Escrowed: {formatDate(payment.escrowedAt)}
+                              {t("admin.payments.table.escrowed", {
+                                date: formatDate(payment.escrowedAt),
+                              })}
                             </p>
                           )}
                           {payment.releasedAt && (
                             <p className="text-xs text-gray-500">
-                              Released: {formatDate(payment.releasedAt)}
+                              {t("admin.payments.table.released", {
+                                date: formatDate(payment.releasedAt),
+                              })}
                             </p>
                           )}
                         </div>
@@ -505,14 +867,16 @@ export default function PaymentsClient() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                            <DropdownMenuLabel>
+                              {t("admin.payments.actions.label")}
+                            </DropdownMenuLabel>
                             <DropdownMenuItem
                               onClick={() =>
                                 router.push(`/admin/payments/${payment.id}`)
                               }
                             >
                               <Eye className="mr-2 h-4 w-4" />
-                              View Details
+                              {t("admin.payments.actions.viewDetails")}
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             {readyToTransfer && (
@@ -523,7 +887,7 @@ export default function PaymentsClient() {
                                 }
                               >
                                 <CheckCircle2 className="mr-2 h-4 w-4" />
-                                Process Transfer
+                                {t("admin.payments.actions.processTransfer")}
                               </DropdownMenuItem>
                             )}
                           </DropdownMenuContent>
@@ -532,8 +896,102 @@ export default function PaymentsClient() {
                     </TableRow>
                   );
                 })}
+                {payments.length > 0 && (
+                  <TableRow className="bg-gray-50 border-t-2">
+                    <TableCell colSpan={2}>
+                      <p className="font-semibold text-gray-900">
+                        {t("admin.payments.table.filteredTotals")}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {t("admin.payments.table.filteredTotalsHint")}
+                      </p>
+                    </TableCell>
+                    <TableCell>
+                      <div>
+                        <p className="font-semibold text-gray-900">
+                          {formatMoney(tableTotals.gross, tableTotals.currency)}
+                        </p>
+                        <p className="text-sm text-gray-600">
+                          {t("admin.payments.table.feeLine", {
+                            amount: formatMoney(
+                              tableTotals.fee,
+                              tableTotals.currency
+                            ),
+                          })}
+                        </p>
+                        <p className="text-sm font-semibold text-green-700">
+                          {t("admin.payments.table.netLine", {
+                            amount: formatMoney(
+                              tableTotals.net,
+                              tableTotals.currency
+                            ),
+                          })}
+                        </p>
+                      </div>
+                    </TableCell>
+                    <TableCell colSpan={4} />
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
+            {pagination.totalPages > 1 && pagination.total > 0 ? (
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t pt-4 mt-4">
+                <p className="text-sm text-gray-600">
+                  {t("admin.payments.pagination.summary", {
+                    from: Math.min(
+                      (pagination.page - 1) * pagination.limit + 1,
+                      pagination.total,
+                    ),
+                    to: Math.min(
+                      pagination.page * pagination.limit,
+                      pagination.total,
+                    ),
+                    total: pagination.total,
+                  })}
+                </p>
+                <div className="flex items-center gap-2 justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={pagination.page <= 1 || loading}
+                    onClick={() =>
+                      setPagination((p) => ({
+                        ...p,
+                        page: Math.max(1, p.page - 1),
+                      }))
+                    }
+                    aria-label={t("admin.payments.pagination.prev")}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <span className="text-sm text-gray-700 tabular-nums min-w-[5rem] text-center">
+                    {t("admin.payments.pagination.pageOf", {
+                      page: pagination.page,
+                      totalPages: pagination.totalPages,
+                    })}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={
+                      pagination.page >= pagination.totalPages || loading
+                    }
+                    onClick={() =>
+                      setPagination((p) => ({
+                        ...p,
+                        page: Math.min(p.totalPages, p.page + 1),
+                      }))
+                    }
+                    aria-label={t("admin.payments.pagination.next")}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+            </>
           )}
         </CardContent>
       </Card>

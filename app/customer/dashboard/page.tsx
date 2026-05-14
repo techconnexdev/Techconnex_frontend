@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -16,18 +17,12 @@ import {
   ChevronRight,
 } from "lucide-react";
 import Link from "next/link";
-import { CustomerLayout } from "@/components/customer-layout";
-import {
-  API_BASE_URL,
-  getCompanyProjects,
-  getCompanyProjectStats,
-  getProfileImageUrl,
-} from "@/lib/api";
+import { API_BASE_URL, getProfileImageUrl } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
 import { useRecommendedProviders } from "@/hooks/useRecommendedProviders";
 import { RecommendedProvidersList } from "@/components/customer/RecommendedProvidersList";
-import { CustomerDashboardTour } from "@/components/customer/CustomerDashboardTour";
+import { CustomerDashboardHomeTour } from "@/components/customer/CustomerDashboardTour";
 import type { RecommendedProvider } from "@/hooks/useRecommendedProviders";
 import { POST_PROJECT_REQUIRED } from "@/contexts/CustomerCompletionContext";
 import {
@@ -40,25 +35,26 @@ import {
 } from "@/components/ui/dialog";
 import { getUserFriendlyErrorMessage } from "@/lib/errors";
 import { FriendlyErrorState } from "@/components/FriendlyErrorState";
+import { useI18n } from "@/contexts/I18nProvider";
+import type { MessageKey } from "@/lib/i18n/messages";
+import { queryKeys } from "@/lib/query-keys";
+import {
+  fetchCustomerDashboardData,
+  type CustomerDashboardProject as Project,
+} from "@/lib/queries/customer-dashboard";
+import {
+  CustomerStatsCardsSkeleton,
+  CustomerDashboardRecentProjectsSkeleton,
+} from "@/components/customer/CustomerPageSkeletons";
 
-// Define Project type outside the component so it can be used in useState
-export type Project = {
-  id: string;
-  title: string;
-  provider?: string;
-  providerName?: string;
-  status: string;
-  progress?: number;
-  budget?: number;
-  deadline?: string;
-  avatar?: string;
-  createdAt?: string;
-  [key: string]: unknown; // for any extra fields
-};
+export type { Project };
 
 /** Right-panel content: recommended providers for a hovered project + View more link. */
 function RecommendationsPanel({ project }: { project: Project }) {
+  const { t } = useI18n();
   const { providers, loading, error } = useRecommendedProviders(project.id);
+  const maxVisibleProviders = 2;
+  const remainingProviders = Math.max(providers.length - maxVisibleProviders, 0);
   const router = useRouter();
   const handleContact = (provider: RecommendedProvider) => {
     router.push(
@@ -66,140 +62,108 @@ function RecommendationsPanel({ project }: { project: Project }) {
     );
   };
   return (
-    <div className="flex flex-col">
+    <div className="flex h-full flex-col">
       <p
         className="text-sm font-semibold text-gray-900 mb-2 truncate"
         title={project.title}
       >
-        Recommended for: {project.title}
+        {t("customer.dashboard.recommendedFor", { title: project.title })}
       </p>
-      <div className="min-h-0">
+      <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+        <p className="mb-2 text-xs text-gray-500">
+          {t("customer.dashboard.topMatchesHint", {
+            n: maxVisibleProviders,
+          })}
+        </p>
         <RecommendedProvidersList
-          providers={providers}
+          providers={providers.slice(0, maxVisibleProviders)}
           loading={loading}
           error={error}
           compact
           onContact={handleContact}
-          emptyMessage="No recommendations for this project."
+          emptyMessage={t("customer.dashboard.noRecommendations")}
         />
       </div>
-      <Link
-        href={`/customer/projects/${project.id}`}
-        className="mt-4 flex items-center justify-center gap-2 w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 hover:border-gray-300 transition-colors flex-shrink-0"
-      >
-        View more
-        <ChevronRight className="w-4 h-4" />
-      </Link>
+      <div className="mt-4 flex-shrink-0 border-t border-gray-100 pt-3">
+        {!loading && !error && remainingProviders > 0 ? (
+          <Link
+            href={`/customer/projects/${project.id}?focus=recommended-providers&from=dashboard`}
+            className="flex items-center justify-between rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-sm font-medium text-blue-700 hover:bg-blue-100 hover:border-blue-300 transition-colors"
+          >
+            <span>
+              {t("customer.dashboard.moreProviders", {
+                n: remainingProviders,
+              })}
+            </span>
+            <span className="inline-flex items-center gap-1">
+              {t("customer.dashboard.viewMore")}
+              <ChevronRight className="w-4 h-4" />
+            </span>
+          </Link>
+        ) : (
+          <Link
+            href={`/customer/projects/${project.id}?focus=recommended-providers&from=dashboard`}
+            className="flex items-center justify-center gap-2 w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-100 hover:border-gray-300 transition-colors"
+          >
+            {t("customer.dashboard.viewMore")}
+            <ChevronRight className="w-4 h-4" />
+          </Link>
+        )}
+      </div>
     </div>
   );
 }
 
 export default function CustomerDashboard() {
+  const { t, locale } = useI18n();
   const { toast } = useToast();
   const router = useRouter();
   const [gateModalOpen, setGateModalOpen] = useState(false);
   const [newProjectChecking, setNewProjectChecking] = useState(false);
-  const [stats, setStats] = useState<{
-    activeProjects: number;
-    completedProjects: number;
-    totalSpent: number;
-    rating: number | null;
-    reviewCount: number;
-  }>({
+  const {
+    data: dash,
+    isPending: projectsLoading,
+    error: dashboardQueryError,
+    refetch: refetchDashboard,
+  } = useQuery({
+    queryKey: queryKeys.customer.dashboard,
+    queryFn: fetchCustomerDashboardData,
+  });
+
+  const stats = dash?.stats ?? {
     activeProjects: 0,
     completedProjects: 0,
     totalSpent: 0,
     rating: null,
     reviewCount: 0,
-  });
-  // Use Project[] as the type for recentProjects
-  const [recentProjects, setRecentProjects] = useState<Project[]>([]);
-  const [projectsLoading, setProjectsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  };
+  const preferredCurrency = dash?.preferredCurrency ?? "MYR";
+  const recentProjects = dash?.recentProjects ?? [];
+  const error = dashboardQueryError
+    ? getUserFriendlyErrorMessage(dashboardQueryError, "customer dashboard")
+    : null;
+
   /** Project currently hovered (for showing recommended providers in right panel). */
   const [hoveredProject, setHoveredProject] = useState<Project | null>(null);
 
-  const fetchDashboardData = async () => {
-    try {
-      setError(null);
-      setProjectsLoading(true);
-
-      // Fetch project stats (inspired by provider dashboard)
-      const statsResponse = await getCompanyProjectStats();
-      if (statsResponse.success && statsResponse.stats) {
-        setStats({
-          activeProjects: statsResponse.stats.activeProjects || 0,
-          completedProjects: statsResponse.stats.completedProjects || 0,
-          totalSpent: statsResponse.stats.totalSpent || 0,
-          rating: statsResponse.stats.averageRating ?? null,
-          reviewCount: statsResponse.stats.reviewCount || 0,
-        });
-      } else {
-        setStats({
-          activeProjects: 0,
-          completedProjects: 0,
-          totalSpent: 0,
-          rating: null,
-          reviewCount: 0,
-        });
-      }
-
-      const projectsResponse = await getCompanyProjects({
-        page: 1,
-        limit: 3,
-      });
-      if (projectsResponse.success && projectsResponse.items) {
-        const mappedProjects = projectsResponse.items.map(
-          (project: Record<string, unknown>) => {
-            const provider = project.provider as
-              | Record<string, unknown>
-              | undefined;
-            return {
-              id: project.id,
-              title: project.title,
-              provider: provider?.name as string | undefined,
-              providerName: provider?.name as string | undefined,
-              status: (project.status as string)?.toLowerCase() || "pending",
-              progress: project.progress || 0,
-              budget: project.budgetMax,
-              deadline: project.timeline,
-              avatar: getProfileImageUrl(
-                (
-                  provider?.providerProfile as
-                    | Record<string, unknown>
-                    | undefined
-                )?.profileImageUrl as string | undefined,
-              ),
-              createdAt: project.createdAt,
-              category: project.category,
-              description: project.description,
-              type: project.type,
-            };
-          },
-        );
-        setRecentProjects(mappedProjects);
-      } else {
-        setRecentProjects([]);
-      }
-    } catch (error) {
-      const message = getUserFriendlyErrorMessage(
-        error,
-        "customer dashboard",
-      );
-      setError(message);
-      toast({
-        title: "Error",
-        description: message,
-        variant: "destructive",
-      });
-    } finally {
-      setProjectsLoading(false);
-    }
-  };
-
+  const lastToastError = useRef<string | null>(null);
   useEffect(() => {
-    fetchDashboardData();
-  }, [toast]);
+    if (!dashboardQueryError) {
+      lastToastError.current = null;
+      return;
+    }
+    const message = getUserFriendlyErrorMessage(
+      dashboardQueryError,
+      "customer dashboard",
+    );
+    if (lastToastError.current === message) return;
+    lastToastError.current = message;
+    toast({
+      title: t("customer.dashboard.errorToastTitle"),
+      description: message,
+      variant: "destructive",
+    });
+  }, [dashboardQueryError, t, toast]);
 
   const getStatusColor = (status: string, type?: string) => {
     // Handle ServiceRequest statuses
@@ -230,45 +194,41 @@ export default function CustomerDashboard() {
   };
 
   const getStatusText = (status: string, type?: string) => {
-    // Handle ServiceRequest statuses
     if (type === "ServiceRequest") {
-      switch (status) {
-        case "OPEN":
-          return "Open";
-        case "CLOSED":
-          return "Closed";
-        default:
-          return status;
-      }
+      if (status === "OPEN") return t("customer.dashboard.status.open");
+      if (status === "CLOSED") return t("customer.dashboard.status.closed");
+      return status;
     }
-
-    // Handle Project statuses
-    switch (status) {
-      case "COMPLETED":
-        return "Completed";
-      case "IN_PROGRESS":
-        return "In Progress";
-      case "DISPUTED":
-        return "Disputed";
-      case "CANCELLED":
-        return "Cancelled";
-      default:
-        return status;
-    }
+    const projectMap: Record<string, MessageKey> = {
+      COMPLETED: "customer.dashboard.status.completed",
+      IN_PROGRESS: "customer.dashboard.status.inProgress",
+      DISPUTED: "customer.dashboard.status.disputed",
+      CANCELLED: "customer.dashboard.status.cancelled",
+    };
+    const key = projectMap[status];
+    return key ? t(key) : status;
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-MY", {
-      style: "currency",
-      currency: "MYR",
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
+  const formatCurrency = (amount: number, currencyCode = "MYR") => {
+    const intlLocale =
+      locale === "ar" ? "ar" : locale === "id" ? "id-ID" : "en-MY";
+    try {
+      return new Intl.NumberFormat(intlLocale, {
+        style: "currency",
+        currency: String(currencyCode || "MYR").toUpperCase(),
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }).format(amount);
+    } catch {
+      return `${String(currencyCode || "MYR").toUpperCase()} ${Number(
+        amount || 0,
+      ).toLocaleString()}`;
+    }
   };
 
   return (
-    <CustomerLayout>
-      <CustomerDashboardTour />
+    <>
+      <CustomerDashboardHomeTour />
       <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
         {/* Header */}
         <div
@@ -277,11 +237,10 @@ export default function CustomerDashboard() {
         >
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-              Dashboard
+              {t("customer.dashboard.title")}
             </h1>
             <p className="text-sm sm:text-base text-gray-600 mt-1">
-              Welcome back! Here&apos;s what&apos;s happening with your
-              projects.
+              {t("customer.dashboard.heroSubtitle")}
             </p>
           </div>
           <Button
@@ -301,7 +260,7 @@ export default function CustomerDashboard() {
                 }
                 const res = await fetch(
                   `${API_BASE_URL}/company/profile/completion`,
-                  { headers: { Authorization: `Bearer ${token}` } }
+                  { headers: { Authorization: `Bearer ${token}` } },
                 );
                 const json = await res.json();
                 const data = json.data ?? json;
@@ -324,100 +283,111 @@ export default function CustomerDashboard() {
             }}
           >
             <Plus className="w-4 h-4 mr-2" />
-            {newProjectChecking ? "Checking…" : "New Project"}
+            {newProjectChecking
+              ? t("customer.dashboard.checking")
+              : t("customer.dashboard.newProject")}
           </Button>
         </div>
 
         {/* Stats Cards */}
-        <div
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 lg:gap-6"
-          data-tour-step="2"
-        >
-          <Card>
-            <CardContent className="p-4 sm:p-5 lg:p-6">
-              <div className="flex items-center justify-between">
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs sm:text-sm font-medium text-gray-600">
-                    Active Projects
-                  </p>
-                  <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">
-                    {stats.activeProjects}
-                  </p>
-                </div>
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
-                  <Briefcase className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-5 lg:p-6">
-              <div className="flex items-center justify-between">
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs sm:text-sm font-medium text-gray-600">
-                    Completed
-                  </p>
-                  <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">
-                    {stats.completedProjects}
-                  </p>
-                </div>
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
-                  <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-green-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-5 lg:p-6">
-              <div className="flex items-center justify-between">
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs sm:text-sm font-medium text-gray-600">
-                    Total Spent
-                  </p>
-                  <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1 break-words">
-                    RM{stats.totalSpent?.toLocaleString?.() ?? 0}
-                  </p>
-                </div>
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
-                  <DollarSign className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4 sm:p-5 lg:p-6">
-              <div className="flex items-center justify-between">
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs sm:text-sm font-medium text-gray-600">
-                    Avg Rating
-                  </p>
-                  <div className="flex items-center gap-1 mt-1">
-                    <p className="text-xl sm:text-2xl font-bold text-gray-900">
-                      {stats.rating !== null && stats.rating !== undefined
-                        ? stats.rating.toFixed(1)
-                        : stats.reviewCount > 0
-                          ? "0.0"
-                          : "-"}
+        {projectsLoading ? (
+          <div data-tour-step="2">
+            <CustomerStatsCardsSkeleton count={4} />
+          </div>
+        ) : (
+          <div
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 lg:gap-6"
+            data-tour-step="2"
+          >
+            <Card>
+              <CardContent className="p-4 sm:p-5 lg:p-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs sm:text-sm font-medium text-gray-600">
+                      {t("customer.dashboard.stats.activeProjects")}
                     </p>
-                    <Star className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-400 fill-current flex-shrink-0" />
+                    <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">
+                      {stats.activeProjects}
+                    </p>
                   </div>
-                  {stats.reviewCount > 0 && (
-                    <p className="text-xs text-gray-500 mt-1">
-                      ({stats.reviewCount}{" "}
-                      {stats.reviewCount === 1 ? "review" : "reviews"})
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
+                    <Briefcase className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4 sm:p-5 lg:p-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs sm:text-sm font-medium text-gray-600">
+                      {t("customer.dashboard.stats.completed")}
                     </p>
-                  )}
+                    <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">
+                      {stats.completedProjects}
+                    </p>
+                  </div>
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
+                    <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-green-600" />
+                  </div>
                 </div>
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-yellow-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
-                  <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-600" />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4 sm:p-5 lg:p-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs sm:text-sm font-medium text-gray-600">
+                      {t("customer.dashboard.stats.totalSpent")}
+                    </p>
+                    <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1 break-words">
+                      {formatCurrency(stats.totalSpent ?? 0, preferredCurrency)}
+                    </p>
+                  </div>
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
+                    <DollarSign className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600" />
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="p-4 sm:p-5 lg:p-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs sm:text-sm font-medium text-gray-600">
+                      {t("customer.dashboard.stats.avgRating")}
+                    </p>
+                    <div className="flex items-center gap-1 mt-1">
+                      <p className="text-xl sm:text-2xl font-bold text-gray-900">
+                        {stats.rating !== null && stats.rating !== undefined
+                          ? stats.rating.toFixed(1)
+                          : stats.reviewCount > 0
+                            ? "0.0"
+                            : "-"}
+                      </p>
+                      <Star className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-400 fill-current flex-shrink-0" />
+                    </div>
+                    {stats.reviewCount > 0 && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        ({stats.reviewCount}{" "}
+                        {stats.reviewCount === 1
+                          ? t("customer.dashboard.stats.review")
+                          : t("customer.dashboard.stats.reviews")}
+                        )
+                      </p>
+                    )}
+                  </div>
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-yellow-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
+                    <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-600" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
           {/* Recent Projects */}
@@ -426,7 +396,7 @@ export default function CustomerDashboard() {
               <CardHeader className="p-4 sm:p-6">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
                   <CardTitle className="text-lg sm:text-xl">
-                    Recent Projects
+                    {t("customer.dashboard.recentProjects")}
                   </CardTitle>
                   <Link href="/customer/projects" className="w-full sm:w-auto">
                     <Button
@@ -434,7 +404,7 @@ export default function CustomerDashboard() {
                       size="sm"
                       className="w-full sm:w-auto"
                     >
-                      View All
+                      {t("customer.dashboard.viewAll")}
                     </Button>
                   </Link>
                 </div>
@@ -442,18 +412,21 @@ export default function CustomerDashboard() {
               <CardContent className="p-4 sm:p-6">
                 <div className="space-y-3 sm:space-y-4">
                   {projectsLoading ? (
-                    <div className="text-center text-gray-500 py-6 sm:py-8 text-sm sm:text-base">
-                      Loading projects...
-                    </div>
+                    <CustomerDashboardRecentProjectsSkeleton
+                      loadingLabel={t("customer.dashboard.loadingProjects")}
+                      rowCount={4}
+                    />
                   ) : error ? (
                     <FriendlyErrorState
                       message={error}
-                      onRetry={fetchDashboardData}
+                      onRetry={() => {
+                        void refetchDashboard();
+                      }}
                       variant="block"
                     />
                   ) : recentProjects.length === 0 ? (
                     <div className="text-center text-gray-500 py-6 sm:py-8 text-sm sm:text-base">
-                      No recent projects found.
+                      {t("customer.dashboard.noProjects")}
                     </div>
                   ) : (
                     recentProjects.map((project) => {
@@ -509,8 +482,9 @@ export default function CustomerDashboard() {
                                   </Badge>
                                 ) : null}
                                 <span className="text-xs text-gray-500 whitespace-nowrap">
-                                  Timeline:{" "}
-                                  {project.deadline || "Not specified"}
+                                  {t("customer.dashboard.timeline")}:{" "}
+                                  {project.deadline ||
+                                    t("customer.dashboard.timelineNotSpecified")}
                                 </span>
                               </div>
                             </div>
@@ -518,7 +492,10 @@ export default function CustomerDashboard() {
                           <div className="text-left sm:text-right w-full sm:w-auto flex sm:flex-col items-start sm:items-end justify-between sm:justify-start gap-2 sm:gap-0">
                             <p className="font-semibold text-gray-900 text-sm sm:text-base">
                               {project.budget
-                                ? formatCurrency(project.budget)
+                                ? formatCurrency(
+                                    project.budget,
+                                    project.currencyCode || "MYR",
+                                  )
                                 : "-"}
                             </p>
                             {project.status === "IN_PROGRESS" && (
@@ -551,28 +528,28 @@ export default function CustomerDashboard() {
           </div>
 
           {/* Right panel: recommended providers for hovered project */}
-          <div className="hidden lg:block lg:self-start" data-tour-step="4">
-            <Card className="min-h-[200px] w-full">
+          <div
+            className="hidden lg:block lg:self-start lg:sticky lg:top-10"
+            data-tour-step="4"
+          >
+            <Card className="w-full h-[calc(100vh-2rem)] max-h-[860px] min-h-[420px]">
               <CardHeader className="p-4 sm:p-5">
                 <CardTitle className="text-base">
-                  Recommended providers
+                  {t("customer.dashboard.recommendedProvidersTitle")}
                 </CardTitle>
               </CardHeader>
-              <CardContent className="p-4 sm:p-5 pt-0">
+              <CardContent className="p-4 sm:p-5 pt-0 h-[calc(100%-4.5rem)] overflow-hidden">
                 {hoveredProject ? (
                   <RecommendationsPanel project={hoveredProject} />
                 ) : (
                   <div className="flex flex-col items-center justify-center py-8 px-4 text-center text-gray-500 text-sm min-h-[120px]">
                     <Briefcase className="w-10 h-10 text-gray-300 mb-3" />
-                    <p>
-                      Hover over a project in the list to see recommended
-                      providers here.
-                    </p>
+                    <p>{t("customer.dashboard.hoverHint")}</p>
                     {recentProjects.some(
                       (p) => p.type === "ServiceRequest",
                     ) ? null : (
                       <p className="mt-2 text-xs">
-                        Only service requests show recommendations.
+                        {t("customer.dashboard.onlyServiceRequests")}
                       </p>
                     )}
                   </div>
@@ -587,15 +564,16 @@ export default function CustomerDashboard() {
       <Dialog open={gateModalOpen} onOpenChange={setGateModalOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Complete your profile</DialogTitle>
+            <DialogTitle>{t("customer.dashboard.gate.title")}</DialogTitle>
             <DialogDescription>
-              Complete your profile to at least {POST_PROJECT_REQUIRED}% to
-              create projects.
+              {t("customer.dashboard.gate.description", {
+                percent: String(POST_PROJECT_REQUIRED),
+              })}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex gap-2 sm:gap-0">
             <Button variant="outline" onClick={() => setGateModalOpen(false)}>
-              Cancel
+              {t("customer.dashboard.gate.cancel")}
             </Button>
             <Button
               onClick={() => {
@@ -604,11 +582,11 @@ export default function CustomerDashboard() {
               }}
               className="bg-blue-600 hover:bg-blue-700"
             >
-              👉 Complete Now
+              {t("customer.dashboard.gate.completeNow")}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </CustomerLayout>
+    </>
   );
 }

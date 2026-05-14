@@ -17,20 +17,28 @@ import {
 } from "@/components/ui/card";
 import { Mail, ArrowLeft } from "lucide-react";
 import { getUserFriendlyErrorMessage } from "@/lib/errors";
+import { useI18n } from "@/contexts/I18nProvider";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
 export default function ForgotPasswordPage() {
+  const { t } = useI18n();
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  /** true = account found, false = no account for this email */
+  const [accountExists, setAccountExists] = useState<boolean | null>(null);
+  /** true = reset email was sent */
+  const [sent, setSent] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError("");
     setSuccess(false);
+    setAccountExists(null);
+    setSent(false);
 
     try {
       const res = await fetch(`${API_URL}/auth/forgot-password`, {
@@ -42,10 +50,12 @@ export default function ForgotPasswordPage() {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        throw new Error(data.error || "Something went wrong. Please try again.");
+        throw new Error(data.error || t("auth.forgotPassword.errorGeneric"));
       }
 
       setSuccess(true);
+      setAccountExists(data.accountExists !== false);
+      setSent(data.sent === true);
     } catch (err) {
       setError(getUserFriendlyErrorMessage(err, "auth forgot-password"));
     } finally {
@@ -76,13 +86,13 @@ export default function ForgotPasswordPage() {
           <Link href="/" className="inline-flex items-center space-x-2 group">
             <Image
               src="/logo.png"
-              alt="TechConnex"
+              alt={t("auth.logoAlt")}
               width={40}
               height={40}
               className="h-10 w-10 rounded-xl object-contain"
             />
             <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-              Techconnex
+              {t("auth.brandName")}
             </span>
           </Link>
         </div>
@@ -90,10 +100,10 @@ export default function ForgotPasswordPage() {
         <Card className="bg-white/80 backdrop-blur-sm border-white/20 shadow-xl">
           <CardHeader className="text-center">
             <CardTitle className="text-2xl font-bold text-gray-900">
-              Forgot password?
+              {t("auth.forgotPassword.title")}
             </CardTitle>
             <CardDescription className="text-gray-600">
-              Enter your email and we&apos;ll send you a link to reset your password.
+              {t("auth.forgotPassword.description")}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -104,22 +114,42 @@ export default function ForgotPasswordPage() {
             )}
             {success ? (
               <div className="space-y-4">
-                <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                  <p className="text-green-800 text-sm">
-                    If an account exists for that email, you&apos;ll receive a password reset link shortly. Check your inbox and spam folder.
-                  </p>
-                </div>
+                {accountExists === false ? (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                    <p className="text-amber-800 text-sm font-medium">
+                      {t("auth.forgotPassword.successNoAccount")}
+                    </p>
+                    <p className="text-amber-700 text-sm mt-1">
+                      {t("auth.forgotPassword.successNoAccountHint")}
+                    </p>
+                  </div>
+                ) : sent ? (
+                  <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                    <p className="text-green-800 text-sm">
+                      {t("auth.forgotPassword.successSent")}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                    <p className="text-amber-800 text-sm font-medium">
+                      {t("auth.forgotPassword.successNotSentTitle")}
+                    </p>
+                    <p className="text-amber-700 text-sm mt-1">
+                      {t("auth.forgotPassword.successNotSentBody")}
+                    </p>
+                  </div>
+                )}
                 <Button variant="outline" className="w-full" asChild>
                   <Link href="/auth/login" className="flex items-center justify-center gap-2">
                     <ArrowLeft className="h-4 w-4" />
-                    Back to sign in
+                    {t("auth.forgotPassword.backToSignIn")}
                   </Link>
                 </Button>
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email address</Label>
+                  <Label htmlFor="email">{t("auth.forgotPassword.emailLabel")}</Label>
                   <div className="relative">
                     <span className="absolute left-3 top-3 text-gray-400">
                       <Mail className="h-4 w-4" />
@@ -128,7 +158,7 @@ export default function ForgotPasswordPage() {
                       id="email"
                       name="email"
                       type="email"
-                      placeholder="Enter your email"
+                      placeholder={t("auth.forgotPassword.emailPlaceholder")}
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       className="pl-10 bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
@@ -148,7 +178,7 @@ export default function ForgotPasswordPage() {
                     {isLoading ? (
                       <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mx-auto block" />
                     ) : (
-                      "Send reset link"
+                      t("auth.forgotPassword.submit")
                     )}
                   </Button>
                 </motion.div>
@@ -162,7 +192,7 @@ export default function ForgotPasswordPage() {
                   className="text-sm text-gray-600 hover:text-blue-600 inline-flex items-center gap-1"
                 >
                   <ArrowLeft className="h-3 w-3" />
-                  Back to sign in
+                  {t("auth.forgotPassword.backToSignIn")}
                 </Link>
               </div>
             )}

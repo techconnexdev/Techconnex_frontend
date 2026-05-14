@@ -1,5 +1,4 @@
 // app/customer/profile/documents/[id]/page.tsx
-import { CustomerLayout } from "@/components/customer-layout";
 // ✅ import the type so the object is validated at compile time
 import type { DocumentDetail } from "@/components/customer/profile/documents/types";
 import DocumentDetailClient from "@/components/customer/profile/documents/DocumentDetailClient";
@@ -63,8 +62,8 @@ export default async function DocumentDetailPage({ params }: Props) {
   };
 
   return (
-    <CustomerLayout>
+    
       <DocumentDetailClient document={document} />
-    </CustomerLayout>
+    
   );
 }

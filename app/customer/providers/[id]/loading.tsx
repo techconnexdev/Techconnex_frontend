@@ -1,9 +1,7 @@
 import { Skeleton } from "@/components/ui/skeleton"
-import { CustomerLayout } from "@/components/customer-layout"
-
 export default function ProviderProfileLoading() {
   return (
-    <CustomerLayout>
+    
       <div className="space-y-8">
         {/* Cover Image Skeleton */}
         <Skeleton className="h-48 w-full rounded-lg" />
@@ -151,6 +149,6 @@ export default function ProviderProfileLoading() {
           </div>
         </div>
       </div>
-    </CustomerLayout>
+    
   )
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -49,7 +49,6 @@ import {
   ChevronDown,
   ListTodo,
 } from "lucide-react";
-import { ProviderLayout } from "@/components/provider-layout";
 import { ProviderProfileTour } from "@/components/provider/ProviderProfileTour";
 import {
   getProviderProfile,
@@ -79,12 +78,26 @@ import {
 import { getUserFriendlyErrorMessage } from "@/lib/errors";
 import { uploadFile } from "@/lib/upload";
 import { useToast } from "@/hooks/use-toast";
+import { useInvalidateProviderLayoutProfile } from "@/hooks/useInvalidateProviderLayoutProfile";
+import { useI18n } from "@/contexts/I18nProvider";
+import { PREFERRED_CURRENCY_OPTIONS } from "@/lib/currency-options";
+import { formatProviderMoney } from "@/lib/provider-currency-format";
 import { useRef } from "react";
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { useProviderCompletion } from "@/contexts/ProviderCompletionContext";
 import VerificationSection from "@/components/customer/profile/sections/VerificationSection";
 import { UploadedDocument } from "@/components/customer/profile/types";
+import { ProfileImageCropModal } from "@/components/provider/ProfileImageCropModal";
+import {
+  ProviderProfileCertificationsSkeleton,
+  ProviderProfilePageSkeleton,
+} from "@/components/provider/ProviderProfileSkeletons";
+import {
+  ProviderContactVerificationDialog,
+  type ContactVerifyNeeds,
+} from "@/components/provider/ProviderContactVerificationDialog";
+import { PhoneInputField } from "@/app/auth/register/components/PhoneInputField";
 
 type Props = Record<string, never>;
 
@@ -134,6 +147,9 @@ export default function ProviderProfilePage(_props: Props) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [profileCropOpen, setProfileCropOpen] = useState(false);
+  const [pendingProfileImageFile, setPendingProfileImageFile] =
+    useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const portfolioImageInputRef = useRef<HTMLInputElement>(null);
   const [uploadingPortfolioImage, setUploadingPortfolioImage] = useState(false);
@@ -157,6 +173,7 @@ export default function ProviderProfilePage(_props: Props) {
     preferredProjectDuration: string;
     workPreference: string;
     teamSize: number;
+    preferredCurrency: string;
   }>({
     name: "",
     email: "",
@@ -177,7 +194,9 @@ export default function ProviderProfilePage(_props: Props) {
     preferredProjectDuration: "",
     workPreference: "remote",
     teamSize: 1,
+    preferredCurrency: "MYR",
   });
+  const [fxSnapshotDate, setFxSnapshotDate] = useState<string | null>(null);
   const [profileStats, setProfileStats] = useState({
     rating: 0,
     totalReviews: 0,
@@ -193,8 +212,20 @@ export default function ProviderProfilePage(_props: Props) {
   const [completionSuggestions, setCompletionSuggestions] = useState<string[]>(
     [],
   );
-  /** Phone as saved on server; used to disable field only after save (not while typing). */
-  const [savedPhone, setSavedPhone] = useState("");
+  /** Server truth for email/phone when edit started (OTP flow matches company profile). */
+  const [contactSnapshot, setContactSnapshot] = useState({
+    email: "",
+    phone: "",
+  });
+  const [contactVerifyOpen, setContactVerifyOpen] = useState(false);
+  const [contactVerifyNeeds, setContactVerifyNeeds] =
+    useState<ContactVerifyNeeds>({
+      emailCurrent: false,
+      emailNew: false,
+      phoneCurrent: false,
+      phoneNew: false,
+    });
+  const contactProfileApi = useMemo(() => `${API_BASE}/provider/profile`, []);
   const [profileFormErrors, setProfileFormErrors] = useState<{
     name?: string;
     email?: string;
@@ -213,7 +244,26 @@ export default function ProviderProfilePage(_props: Props) {
     preferredProjectDuration?: string;
     teamSize?: string;
   }>({});
+  /** Server flag: WhatsApp / phone OTP completed (drives Settings → Notifications). */
+  const [phoneVerified, setPhoneVerified] = useState(false);
   const { toast } = useToast();
+  const invalidateLayoutProfile = useInvalidateProviderLayoutProfile();
+  const { t, locale } = useI18n();
+
+  const syncPhoneVerifiedToAuthStorage = useCallback((verified: boolean) => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = localStorage.getItem("user");
+      if (!raw) return;
+      const u = JSON.parse(raw) as Record<string, unknown>;
+      if (!u || typeof u !== "object") return;
+      u.phoneVerified = verified;
+      u.isPhoneVerified = verified;
+      localStorage.setItem("user", JSON.stringify(u));
+    } catch {
+      // ignore corrupt storage
+    }
+  }, []);
 
   // State for input fields (similar to registration form)
   const [customSkill, setCustomSkill] = useState("");
@@ -229,6 +279,11 @@ export default function ProviderProfilePage(_props: Props) {
   // State for portfolio items (external work)
   const [portfolioItems, setPortfolioItems] = useState<PortfolioItem[]>([]);
   const [loadingPortfolioItems, setLoadingPortfolioItems] = useState(false);
+  const [selectedPortfolioItem, setSelectedPortfolioItem] =
+    useState<PortfolioItem | null>(null);
+  const [portfolioItemToDelete, setPortfolioItemToDelete] =
+    useState<PortfolioItem | null>(null);
+  const [deletingPortfolioItem, setDeletingPortfolioItem] = useState(false);
   const [showPortfolioDialog, setShowPortfolioDialog] = useState(false);
   const [editingPortfolioIndex, setEditingPortfolioIndex] = useState<
     number | null
@@ -288,8 +343,7 @@ export default function ProviderProfilePage(_props: Props) {
   }, [searchParams]);
 
   // Provider is verified if at least one KYC document has approved status
-  const isProviderVerified =
-    docs.some((d) => d.status === "approved");
+  const isProviderVerified = docs.some((d) => d.status === "approved");
 
   // Load profile data on component mount
   useEffect(() => {
@@ -311,7 +365,15 @@ export default function ProviderProfilePage(_props: Props) {
         if (profileResponse.success) {
           const profile = profileResponse.data;
           const initialPhone = profile.user?.phone || "";
-          setSavedPhone(initialPhone);
+          const initialEmail = profile.user?.email || "";
+          setContactSnapshot({
+            email: String(initialEmail).trim(),
+            phone: String(initialPhone).trim(),
+          });
+          const verified = Boolean(profile.user?.phoneVerified);
+          setPhoneVerified(verified);
+          syncPhoneVerifiedToAuthStorage(verified);
+
           setProfileData({
             name: profile.user?.name || "",
             email: profile.user?.email || "",
@@ -332,7 +394,14 @@ export default function ProviderProfilePage(_props: Props) {
             preferredProjectDuration: profile.preferredProjectDuration || "",
             workPreference: profile.workPreference || "remote",
             teamSize: profile.teamSize || 1,
+            preferredCurrency:
+              (profile as { preferredCurrency?: string }).preferredCurrency ||
+              "MYR",
           });
+          setFxSnapshotDate(
+            (profile as { fxSnapshotDate?: string | null }).fxSnapshotDate ??
+              null,
+          );
 
           // Load portfolio links if available
           if (profile.portfolioLinks && Array.isArray(profile.portfolioLinks)) {
@@ -358,7 +427,7 @@ export default function ProviderProfilePage(_props: Props) {
         }
       } catch (error) {
         toast({
-          title: "Error",
+          title: t("provider.profile.toast.errorTitle"),
           description: getUserFriendlyErrorMessage(
             error,
             "provider profile load",
@@ -371,7 +440,7 @@ export default function ProviderProfilePage(_props: Props) {
     };
 
     loadProfileData();
-  }, [toast]);
+  }, [toast, t, syncPhoneVerifiedToAuthStorage]);
 
   // Load portfolio projects
   useEffect(() => {
@@ -384,7 +453,7 @@ export default function ProviderProfilePage(_props: Props) {
         }
       } catch (error) {
         toast({
-          title: "Error",
+          title: t("provider.profile.toast.errorTitle"),
           description: getUserFriendlyErrorMessage(
             error,
             "provider profile portfolio",
@@ -397,7 +466,7 @@ export default function ProviderProfilePage(_props: Props) {
     };
 
     loadPortfolio();
-  }, [toast]);
+  }, [toast, t]);
 
   // Load portfolio items (external work)
   useEffect(() => {
@@ -410,7 +479,7 @@ export default function ProviderProfilePage(_props: Props) {
         }
       } catch (error) {
         toast({
-          title: "Error",
+          title: t("provider.profile.toast.errorTitle"),
           description: getUserFriendlyErrorMessage(
             error,
             "provider profile portfolio items",
@@ -423,7 +492,7 @@ export default function ProviderProfilePage(_props: Props) {
     };
 
     loadPortfolioItems();
-  }, [toast]);
+  }, [toast, t]);
 
   // Load certifications
   useEffect(() => {
@@ -436,7 +505,7 @@ export default function ProviderProfilePage(_props: Props) {
         }
       } catch (error) {
         toast({
-          title: "Error",
+          title: t("provider.profile.toast.errorTitle"),
           description: getUserFriendlyErrorMessage(
             error,
             "provider profile certifications",
@@ -449,7 +518,7 @@ export default function ProviderProfilePage(_props: Props) {
     };
 
     loadCertifications();
-  }, [toast]);
+  }, [toast, t]);
 
   // Fetch profile and kyc documents client-side
   useEffect(() => {
@@ -532,25 +601,55 @@ export default function ProviderProfilePage(_props: Props) {
       : `https://${trimmed}`;
   };
 
-  // Save profile data
-  const handleSaveProfile = async () => {
-    // Validate before saving
-    if (!validateProfile()) {
+  /** Same idea as customer profile: open WhatsApp OTP for the phone already on the account. */
+  const handleVerifyCurrentPhone = () => {
+    if (!contactSnapshot.phone?.trim()) {
       toast({
-        title: "Validation Error",
-        description: "Please fix the errors in the form before saving",
+        title: t("provider.profile.toast.errorTitle"),
+        description: t("provider.profile.toast.noPhoneToVerify"),
         variant: "destructive",
       });
       return;
     }
+    setContactVerifyNeeds({
+      emailCurrent: false,
+      emailNew: false,
+      phoneCurrent: true,
+      phoneNew: false,
+    });
+    setContactVerifyOpen(true);
+  };
 
+  const computeContactVerifyNeeds = (): ContactVerifyNeeds | null => {
+    const emailChanged =
+      (profileData.email || "").trim().toLowerCase() !==
+      (contactSnapshot.email || "").trim().toLowerCase();
+    const phoneChanged =
+      (profileData.phone || "").trim() !== (contactSnapshot.phone || "").trim();
+    if (!emailChanged && !phoneChanged) return null;
+    return {
+      emailCurrent: emailChanged && !!contactSnapshot.email?.trim(),
+      emailNew: emailChanged,
+      phoneCurrent: phoneChanged && !!contactSnapshot.phone?.trim(),
+      phoneNew: phoneChanged,
+    };
+  };
+
+  const executeProfileSave = async () => {
     try {
       setSaving(true);
       const response = await upsertProviderProfile({
         bio: profileData.bio,
         major: profileData.major,
         location: profileData.location,
-        ...(profileData.phone != null && profileData.phone.trim() !== "" && { phone: profileData.phone.trim() }),
+        ...(profileData.email != null &&
+          profileData.email.trim() !== "" && {
+            email: profileData.email.trim(),
+          }),
+        ...(profileData.phone != null &&
+          profileData.phone.trim() !== "" && {
+            phone: profileData.phone.trim(),
+          }),
         hourlyRate: profileData.hourlyRate,
         availability: profileData.availability,
         languages: profileData.languages,
@@ -563,19 +662,26 @@ export default function ProviderProfilePage(_props: Props) {
         preferredProjectDuration: profileData.preferredProjectDuration,
         workPreference: profileData.workPreference,
         teamSize: profileData.teamSize,
+        preferredCurrency: profileData.preferredCurrency,
       });
 
       if (response.success) {
-        if (profileData.phone != null && profileData.phone.trim() !== "") {
-          setSavedPhone(profileData.phone.trim());
+        const payload = (response as { data?: { fxSnapshotDate?: string | null } })
+          .data;
+        if (payload?.fxSnapshotDate != null && payload.fxSnapshotDate !== "") {
+          setFxSnapshotDate(payload.fxSnapshotDate);
         }
+        setContactSnapshot({
+          email: (profileData.email || "").trim(),
+          phone: (profileData.phone || "").trim(),
+        });
+        invalidateLayoutProfile();
         toast({
-          title: "Success",
-          description: "Profile updated successfully",
+          title: t("provider.profile.toast.successTitle"),
+          description: t("provider.profile.toast.profileUpdated"),
         });
         setIsEditing(false);
-        setProfileFormErrors({}); // Clear errors on success
-        // Reload completion percentage and suggestions
+        setProfileFormErrors({});
         const completionResponse = await getProviderProfileCompletion();
         if (completionResponse.success) {
           setProfileCompletion(completionResponse.data.completion ?? 0);
@@ -587,17 +693,20 @@ export default function ProviderProfilePage(_props: Props) {
           (response as { message?: string }).message ||
           (response as { error?: string }).error;
         toast({
-          title: "Error",
-          description: msg || getUserFriendlyErrorMessage(undefined, "provider profile save"),
+          title: t("provider.profile.toast.errorTitle"),
+          description:
+            msg ||
+            getUserFriendlyErrorMessage(undefined, "provider profile save"),
           variant: "destructive",
         });
       }
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : String(error);
+      const message = error instanceof Error ? error.message : String(error);
       toast({
-        title: "Error",
-        description: message || getUserFriendlyErrorMessage(error, "provider profile save"),
+        title: t("provider.profile.toast.errorTitle"),
+        description:
+          message ||
+          getUserFriendlyErrorMessage(error, "provider profile save"),
         variant: "destructive",
       });
     } finally {
@@ -605,49 +714,74 @@ export default function ProviderProfilePage(_props: Props) {
     }
   };
 
-  // Validate profile form
+  const handleSaveProfile = async () => {
+    if (!validateProfile()) {
+      toast({
+        title: t("provider.profile.toast.validationTitle"),
+        description: t("provider.profile.toast.validationDesc"),
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const verifyNeeds = computeContactVerifyNeeds();
+    if (
+      verifyNeeds &&
+      (verifyNeeds.emailCurrent ||
+        verifyNeeds.emailNew ||
+        verifyNeeds.phoneCurrent ||
+        verifyNeeds.phoneNew)
+    ) {
+      setContactVerifyNeeds(verifyNeeds);
+      setContactVerifyOpen(true);
+      return;
+    }
+
+    await executeProfileSave();
+  };
+
+  // Validate profile form (format/consistency only — no “required field” / empty checks)
   const validateProfile = () => {
     const errors: typeof profileFormErrors = {};
 
-    // Name, email, and phone are not editable - no validation needed
-
-    // Bio validation (optional but if provided, should have minimum length)
-    if (profileData.bio.trim() && profileData.bio.trim().length < 10) {
-      errors.bio = "Bio should be at least 10 characters";
+    if (profileData.email.trim()) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(profileData.email.trim())) {
+        errors.email = t("provider.profile.validation.emailInvalid");
+      }
     }
 
-    // Hourly rate validation
+    // Hourly rate: disallow negative only
     if (profileData.hourlyRate < 0) {
-      errors.hourlyRate = "Hourly rate cannot be negative";
-    } else if (profileData.hourlyRate > 0 && profileData.hourlyRate < 1) {
-      errors.hourlyRate = "Hourly rate must be at least RM 1";
+      errors.hourlyRate = t("provider.profile.validation.hourlyNegative");
     }
 
-    // Website validation (optional but must be valid URL if provided)
+    // Website: optional; if provided, must parse as URL
     if (profileData.website.trim()) {
       try {
         const url = profileData.website.trim();
-        // Add protocol if missing
         const urlWithProtocol =
           url.startsWith("http://") || url.startsWith("https://")
             ? url
             : `https://${url}`;
         new URL(urlWithProtocol);
       } catch {
-        errors.website = "Please enter a valid website URL";
+        errors.website = t("provider.profile.validation.websiteInvalid");
       }
     }
 
-    // Portfolio links validation
-    if (profileData.portfolioLinks.length > 0) {
-      const invalidLinks = profileData.portfolioLinks.filter((link) => {
-        if (!link.trim()) return true;
+    // Portfolio links: validate URL format only for non-empty entries
+    const nonEmptyPortfolioLinks = profileData.portfolioLinks.filter((link) =>
+      link.trim(),
+    );
+    if (nonEmptyPortfolioLinks.length > 0) {
+      const invalidLinks = nonEmptyPortfolioLinks.filter((link) => {
         try {
-          const url = link.trim();
+          const trimmed = link.trim();
           const urlWithProtocol =
-            url.startsWith("http://") || url.startsWith("https://")
-              ? url
-              : `https://${url}`;
+            trimmed.startsWith("http://") || trimmed.startsWith("https://")
+              ? trimmed
+              : `https://${trimmed}`;
           new URL(urlWithProtocol);
           return false;
         } catch {
@@ -655,46 +789,37 @@ export default function ProviderProfilePage(_props: Props) {
         }
       });
       if (invalidLinks.length > 0) {
-        errors.portfolioLinks = "All portfolio links must be valid URLs";
+        errors.portfolioLinks = t(
+          "provider.profile.validation.portfolioLinksInvalid",
+        );
       }
     }
 
-    // Languages validation
-    if (profileData.languages.length === 0) {
-      errors.languages = "At least one language is required";
-    }
-
-    // Skills validation
-    if (profileData.skills.length === 0) {
-      errors.skills = "At least one skill is required";
-    }
-
-    // Years of experience validation
     if (profileData.yearsExperience < 0) {
-      errors.yearsExperience = "Years of experience cannot be negative";
+      errors.yearsExperience = t("provider.profile.validation.yearsNegative");
     }
 
-    // Budget validation
     if (profileData.minimumProjectBudget < 0) {
-      errors.minimumProjectBudget = "Minimum budget cannot be negative";
+      errors.minimumProjectBudget = t(
+        "provider.profile.validation.minBudgetNegative",
+      );
     }
     if (profileData.maximumProjectBudget < 0) {
-      errors.maximumProjectBudget = "Maximum budget cannot be negative";
+      errors.maximumProjectBudget = t(
+        "provider.profile.validation.maxBudgetNegative",
+      );
     }
     if (
       profileData.minimumProjectBudget > 0 &&
       profileData.maximumProjectBudget > 0 &&
       profileData.minimumProjectBudget > profileData.maximumProjectBudget
     ) {
-      errors.minimumProjectBudget =
-        "Minimum budget cannot exceed maximum budget";
-      errors.maximumProjectBudget =
-        "Maximum budget must be greater than minimum budget";
-    }
-
-    // Team size validation
-    if (profileData.teamSize < 1) {
-      errors.teamSize = "Team size must be at least 1";
+      errors.minimumProjectBudget = t(
+        "provider.profile.validation.minExceedsMax",
+      );
+      errors.maximumProjectBudget = t(
+        "provider.profile.validation.maxBelowMin",
+      );
     }
 
     setProfileFormErrors(errors);
@@ -843,9 +968,8 @@ export default function ProviderProfilePage(_props: Props) {
       new URL(urlWithProtocol);
     } catch {
       toast({
-        title: "Invalid URL",
-        description:
-          "Please enter a valid URL (e.g., https://github.com/username)",
+        title: t("provider.profile.toast.invalidUrlTitle"),
+        description: t("provider.profile.toast.invalidUrlDesc"),
         variant: "destructive",
       });
       return;
@@ -866,8 +990,8 @@ export default function ProviderProfilePage(_props: Props) {
       }
     } else {
       toast({
-        title: "Duplicate Link",
-        description: "This portfolio link has already been added",
+        title: t("provider.profile.toast.duplicateLinkTitle"),
+        description: t("provider.profile.toast.duplicateLinkDesc"),
         variant: "destructive",
       });
     }
@@ -884,42 +1008,49 @@ export default function ProviderProfilePage(_props: Props) {
     fileInputRef.current?.click();
   };
 
-  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
     if (!file.type.startsWith("image/")) {
       toast({
-        title: "Invalid file type",
-        description: "Please select an image file (JPEG, PNG, GIF, or WebP)",
+        title: t("provider.profile.toast.invalidImageTypeTitle"),
+        description: t("provider.profile.toast.invalidImageTypeDesc"),
         variant: "destructive",
       });
+      e.target.value = "";
       return;
     }
 
-    // Validate file size (5MB)
     if (file.size > 5 * 1024 * 1024) {
       toast({
-        title: "File too large",
-        description: "Please select an image smaller than 5MB",
+        title: t("provider.profile.toast.fileTooLargeTitle"),
+        description: t("provider.profile.toast.imageTooLargeDesc"),
         variant: "destructive",
       });
+      e.target.value = "";
       return;
     }
 
+    setPendingProfileImageFile(file);
+    setProfileCropOpen(true);
+    e.target.value = "";
+  };
+
+  const handleProfileImageCropConfirm = async (croppedFile: File) => {
+    setPendingProfileImageFile(null);
     setUploadingImage(true);
     try {
-      const result = await uploadProviderProfileImage(file);
+      const result = await uploadProviderProfileImage(croppedFile);
       setProfileData((prev) => ({
         ...prev,
         profileImageUrl: result.data.profileImageUrl,
       }));
+      invalidateLayoutProfile();
       toast({
-        title: "Success",
-        description: "Profile image uploaded successfully",
+        title: t("provider.profile.toast.successTitle"),
+        description: t("provider.profile.toast.profileImageUploaded"),
       });
-      // Reload completion percentage and suggestions
       const completionResponse = await getProviderProfileCompletion();
       if (completionResponse.success) {
         setProfileCompletion(completionResponse.data.completion ?? 0);
@@ -928,7 +1059,7 @@ export default function ProviderProfilePage(_props: Props) {
       }
     } catch (error: unknown) {
       toast({
-        title: "Upload failed",
+        title: t("provider.profile.toast.uploadFailedTitle"),
         description: getUserFriendlyErrorMessage(
           error,
           "provider profile image upload",
@@ -937,21 +1068,27 @@ export default function ProviderProfilePage(_props: Props) {
       });
     } finally {
       setUploadingImage(false);
-      // Reset file input
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
     }
+  };
+
+  const availabilityDisplayLabel = (value: string) => {
+    if (value === "busy") return t("provider.profile.availability.busy");
+    if (value === "unavailable")
+      return t("provider.profile.availability.unavailable");
+    return t("provider.profile.availability.available");
+  };
+
+  const workPrefDisplayLabel = (value: string) => {
+    if (value === "onsite") return t("provider.profile.workPref.onsite");
+    if (value === "hybrid") return t("provider.profile.workPref.hybrid");
+    return t("provider.profile.workPref.remote");
   };
 
   if (loading) {
     return (
-      <ProviderLayout>
-        <div className="flex items-center justify-center min-h-[400px]">
-          <Loader2 className="h-8 w-8 animate-spin" />
-          <span className="ml-2">Loading profile...</span>
-        </div>
-      </ProviderLayout>
+      <ProviderProfilePageSkeleton
+        loadingLabel={t("provider.profile.loading")}
+      />
     );
   }
 
@@ -967,8 +1104,8 @@ export default function ProviderProfilePage(_props: Props) {
     // Validate file type
     if (file.type !== "application/pdf") {
       toast({
-        title: "Invalid file type",
-        description: "Only PDF files are allowed for resumes",
+        title: t("provider.profile.toast.invalidImageTypeTitle"),
+        description: t("provider.profile.toast.resumePdfOnly"),
         variant: "destructive",
       });
       if (e.target) {
@@ -981,8 +1118,10 @@ export default function ProviderProfilePage(_props: Props) {
     const maxSize = 50 * 1024 * 1024; // 50 MB
     if (file.size > maxSize) {
       toast({
-        title: "File too large",
-        description: `Maximum file size is ${(maxSize / (1024 * 1024)).toFixed(0)} MB`,
+        title: t("provider.profile.toast.fileTooLargeTitle"),
+        description: t("provider.profile.toast.resumeMaxMb", {
+          mb: (maxSize / (1024 * 1024)).toFixed(0),
+        }),
         variant: "destructive",
       });
       if (e.target) {
@@ -1062,15 +1201,15 @@ export default function ProviderProfilePage(_props: Props) {
       if (response.success) {
         setResume(response.data);
         toast({
-          title: "Success",
-          description: "Resume uploaded successfully",
+          title: t("provider.profile.toast.successTitle"),
+          description: t("provider.profile.toast.resumeUploaded"),
         });
       } else {
         throw new Error(response.error || "Failed to save resume");
       }
     } catch (error: unknown) {
       toast({
-        title: "Upload failed",
+        title: t("provider.profile.toast.uploadFailedTitle"),
         description: getUserFriendlyErrorMessage(
           error,
           "provider profile resume upload",
@@ -1086,11 +1225,7 @@ export default function ProviderProfilePage(_props: Props) {
   };
 
   const handleDeleteResume = async () => {
-    if (
-      !confirm(
-        "Are you sure you want to delete your resume? This action cannot be undone.",
-      )
-    ) {
+    if (!confirm(t("provider.profile.confirm.deleteResume"))) {
       return;
     }
 
@@ -1099,12 +1234,12 @@ export default function ProviderProfilePage(_props: Props) {
       await deleteResume();
       setResume(null);
       toast({
-        title: "Success",
-        description: "Resume deleted successfully",
+        title: t("provider.profile.toast.successTitle"),
+        description: t("provider.profile.toast.resumeDeleted"),
       });
     } catch (error: unknown) {
       toast({
-        title: "Delete failed",
+        title: t("provider.profile.toast.deleteFailedTitle"),
         description: getUserFriendlyErrorMessage(
           error,
           "provider profile resume delete",
@@ -1124,7 +1259,7 @@ export default function ProviderProfilePage(_props: Props) {
       window.open(downloadUrl.downloadUrl, "_blank");
     } catch (error: unknown) {
       toast({
-        title: "Download failed",
+        title: t("provider.profile.toast.downloadFailedTitle"),
         description: getUserFriendlyErrorMessage(
           error,
           "provider profile resume download",
@@ -1168,23 +1303,22 @@ export default function ProviderProfilePage(_props: Props) {
     const errors: typeof certFormErrors = {};
 
     if (!certFormData.name.trim()) {
-      errors.name = "Certification name is required";
+      errors.name = t("provider.profile.validation.certNameRequired");
     }
 
     if (!certFormData.issuer.trim()) {
-      errors.issuer = "Issuing organization is required";
+      errors.issuer = t("provider.profile.validation.certIssuerRequired");
     }
 
     if (!certFormData.issuedDate) {
-      errors.issuedDate = "Issue date is required";
+      errors.issuedDate = t("provider.profile.validation.certDateRequired");
     }
 
     // At least one of serialNumber or sourceUrl must be provided
     if (!certFormData.serialNumber?.trim() && !certFormData.sourceUrl?.trim()) {
-      errors.serialNumber =
-        "At least one of serial number or verification link is required";
-      errors.sourceUrl =
-        "At least one of serial number or verification link is required";
+      const serialOrUrl = t("provider.profile.validation.certSerialOrUrl");
+      errors.serialNumber = serialOrUrl;
+      errors.sourceUrl = serialOrUrl;
     }
 
     setCertFormErrors(errors);
@@ -1212,8 +1346,8 @@ export default function ProviderProfilePage(_props: Props) {
         const response = await updateCertification(certId, certData);
         if (response.success) {
           toast({
-            title: "Success",
-            description: "Certification updated successfully",
+            title: t("provider.profile.toast.successTitle"),
+            description: t("provider.profile.toast.certUpdated"),
           });
           // Reload certifications
           const certsResponse = await getMyCertifications();
@@ -1233,8 +1367,8 @@ export default function ProviderProfilePage(_props: Props) {
         const response = await createCertification(certData);
         if (response.success) {
           toast({
-            title: "Success",
-            description: "Certification added successfully",
+            title: t("provider.profile.toast.successTitle"),
+            description: t("provider.profile.toast.certAdded"),
           });
           // Reload certifications
           const certsResponse = await getMyCertifications();
@@ -1261,7 +1395,7 @@ export default function ProviderProfilePage(_props: Props) {
       setEditingCertIndex(null);
     } catch (error: unknown) {
       toast({
-        title: "Error",
+        title: t("provider.profile.toast.errorTitle"),
         description: getUserFriendlyErrorMessage(
           error,
           "provider profile save certification",
@@ -1277,7 +1411,7 @@ export default function ProviderProfilePage(_props: Props) {
     const cert = certifications[index];
     if (!cert.id) return;
 
-    if (!confirm("Are you sure you want to delete this certification?")) {
+    if (!confirm(t("provider.profile.confirm.deleteCert"))) {
       return;
     }
 
@@ -1286,8 +1420,8 @@ export default function ProviderProfilePage(_props: Props) {
       const response = await deleteCertification(cert.id);
       if (response.success) {
         toast({
-          title: "Success",
-          description: "Certification deleted successfully",
+          title: t("provider.profile.toast.successTitle"),
+          description: t("provider.profile.toast.certDeleted"),
         });
         // Reload certifications
         const certsResponse = await getMyCertifications();
@@ -1304,7 +1438,7 @@ export default function ProviderProfilePage(_props: Props) {
       }
     } catch (error: unknown) {
       toast({
-        title: "Error",
+        title: t("provider.profile.toast.errorTitle"),
         description: getUserFriendlyErrorMessage(
           error,
           "provider profile delete certification",
@@ -1321,15 +1455,17 @@ export default function ProviderProfilePage(_props: Props) {
     const errors: typeof portfolioFormErrors = {};
 
     if (!portfolioFormData.title.trim()) {
-      errors.title = "Title is required";
+      errors.title = t("provider.profile.validation.portfolioTitleRequired");
     }
 
     if (!portfolioFormData.description.trim()) {
-      errors.description = "Description is required";
+      errors.description = t(
+        "provider.profile.validation.portfolioDescRequired",
+      );
     }
 
     if (!portfolioFormData.date) {
-      errors.date = "Date is required";
+      errors.date = t("provider.profile.validation.portfolioDateRequired");
     }
 
     setPortfolioFormErrors(errors);
@@ -1359,8 +1495,8 @@ export default function ProviderProfilePage(_props: Props) {
         const response = await updatePortfolioItem(itemId, portfolioData);
         if (response.success) {
           toast({
-            title: "Success",
-            description: "Portfolio item updated successfully",
+            title: t("provider.profile.toast.successTitle"),
+            description: t("provider.profile.toast.portfolioUpdated"),
           });
           // Reload portfolio items
           const itemsResponse = await getProviderPortfolioItems();
@@ -1380,8 +1516,8 @@ export default function ProviderProfilePage(_props: Props) {
         const response = await createPortfolioItem(portfolioData);
         if (response.success) {
           toast({
-            title: "Success",
-            description: "Portfolio item added successfully",
+            title: t("provider.profile.toast.successTitle"),
+            description: t("provider.profile.toast.portfolioAdded"),
           });
           // Reload portfolio items
           const itemsResponse = await getProviderPortfolioItems();
@@ -1412,7 +1548,7 @@ export default function ProviderProfilePage(_props: Props) {
       setEditingPortfolioIndex(null);
     } catch (error: unknown) {
       toast({
-        title: "Error",
+        title: t("provider.profile.toast.errorTitle"),
         description: getUserFriendlyErrorMessage(
           error,
           "provider profile save portfolio item",
@@ -1440,12 +1576,53 @@ export default function ProviderProfilePage(_props: Props) {
   const handleRemoveTechStack = (tech: string) => {
     setPortfolioFormData((prev) => ({
       ...prev,
-      techStack: prev.techStack.filter((t) => t !== tech),
+      techStack: prev.techStack.filter((entry) => entry !== tech),
     }));
   };
 
+  const handleConfirmDeletePortfolioItem = async () => {
+    if (!portfolioItemToDelete) return;
+
+    try {
+      setDeletingPortfolioItem(true);
+      await deletePortfolioItem(portfolioItemToDelete.id);
+      toast({
+        title: t("provider.profile.toast.successTitle"),
+        description: t("provider.profile.toast.portfolioDeleted"),
+      });
+
+      const itemsResponse = await getProviderPortfolioItems();
+      if (itemsResponse.success && itemsResponse.data) {
+        setPortfolioItems(itemsResponse.data);
+      }
+
+      try {
+        const completionResponse = await getProviderProfileCompletion();
+        if (completionResponse.success) {
+          setProfileCompletion(completionResponse.data.completion ?? 0);
+          setCompletionSuggestions(completionResponse.data.suggestions || []);
+        }
+        await refetchCompletion();
+      } catch (error) {
+        console.error("Failed to fetch completion:", error);
+      }
+    } catch (error: unknown) {
+      toast({
+        title: t("provider.profile.toast.errorTitle"),
+        description: getUserFriendlyErrorMessage(
+          error,
+          "provider profile delete portfolio item",
+        ),
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingPortfolioItem(false);
+      setPortfolioItemToDelete(null);
+    }
+  };
+
   return (
-    <ProviderLayout>
+    <>
       <ProviderProfileTour />
       <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
         {/* Header */}
@@ -1455,10 +1632,10 @@ export default function ProviderProfilePage(_props: Props) {
         >
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-              My Profile
+              {t("provider.profile.title")}
             </h1>
             <p className="text-sm sm:text-base text-gray-600 mt-1">
-              Manage your professional profile and showcase your expertise
+              {t("provider.profile.subtitle")}
             </p>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
@@ -1482,7 +1659,7 @@ export default function ProviderProfilePage(_props: Props) {
                 data-tour-step="1"
               >
                 <Edit className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                Edit Profile
+                {t("provider.profile.editProfile")}
               </Button>
             )}
           </div>
@@ -1497,7 +1674,10 @@ export default function ProviderProfilePage(_props: Props) {
           >
             <div className="flex flex-wrap items-center gap-3 min-w-0">
               <p className="text-sm text-amber-900">
-                <strong>Editing your profile.</strong> Update any section below (Basic info, rates, portfolio, skills, etc.) and click <strong>Save changes</strong> when done.
+                <strong>{t("provider.profile.editBanner.line1")}</strong>{" "}
+                {t("provider.profile.editBanner.line2")}{" "}
+                <strong>{t("provider.profile.editBanner.saveCta")}</strong>{" "}
+                {t("provider.profile.editBanner.whenDone")}
               </p>
               {profileCompletion < 100 && (
                 <DropdownMenu>
@@ -1508,7 +1688,7 @@ export default function ProviderProfilePage(_props: Props) {
                       className="border-amber-300 text-amber-900 hover:bg-amber-100 hover:text-amber-950"
                     >
                       <ListTodo className="w-3.5 h-3.5 mr-1.5" />
-                      View missing fields
+                      {t("provider.profile.viewMissing")}
                       <ChevronDown className="w-3.5 h-3.5 ml-1" />
                     </Button>
                   </DropdownMenuTrigger>
@@ -1518,10 +1698,10 @@ export default function ProviderProfilePage(_props: Props) {
                   >
                     <div className="px-3 py-2 border-b bg-muted/50">
                       <p className="text-sm font-semibold text-gray-900">
-                        Incomplete or missing
+                        {t("provider.profile.missing.title")}
                       </p>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        Complete these to increase your profile score
+                        {t("provider.profile.missing.hint")}
                       </p>
                     </div>
                     {completionSuggestions.length > 0 ? (
@@ -1538,7 +1718,7 @@ export default function ProviderProfilePage(_props: Props) {
                       </div>
                     ) : (
                       <div className="px-3 py-4 text-sm text-muted-foreground">
-                        Fill in all sections below (Overview, Portfolio, Skills, Verification) to complete your profile.
+                        {t("provider.profile.missing.emptyHint")}
                       </div>
                     )}
                   </DropdownMenuContent>
@@ -1552,24 +1732,25 @@ export default function ProviderProfilePage(_props: Props) {
                 onClick={() => {
                   setIsEditing(false);
                   setProfileFormErrors({});
+                  setProfileData((prev) => ({
+                    ...prev,
+                    email: contactSnapshot.email,
+                    phone: contactSnapshot.phone,
+                  }));
                 }}
               >
-                Cancel
+                {t("provider.profile.cancel")}
               </Button>
-              <Button
-                size="sm"
-                onClick={handleSaveProfile}
-                disabled={saving}
-              >
+              <Button size="sm" onClick={handleSaveProfile} disabled={saving}>
                 {saving ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Saving...
+                    {t("provider.profile.saving")}
                   </>
                 ) : (
                   <>
                     <CheckCircle className="w-4 h-4 mr-2" />
-                    Save changes
+                    {t("provider.profile.saveChanges")}
                   </>
                 )}
               </Button>
@@ -1595,7 +1776,9 @@ export default function ProviderProfilePage(_props: Props) {
               </span>
             </div>
             <span className="text-xs text-blue-700">
-              Profile incomplete — open the <strong>Profile</strong> menu in the top bar to see what to add.
+              {t("provider.profile.completion.hintPart1")}{" "}
+              <strong>{t("provider.profile.completion.profileWord")}</strong>{" "}
+              {t("provider.profile.completion.hintPart2")}
             </span>
           </div>
         )}
@@ -1609,10 +1792,10 @@ export default function ProviderProfilePage(_props: Props) {
           >
             <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0" />
             <span className="text-sm font-semibold text-amber-800">
-              Provider not verified
+              {t("provider.profile.verifyBanner.title")}
             </span>
             <span className="text-xs text-amber-700">
-              You cannot receive payouts until you are verified. Complete identity verification to build trust and unlock features. Click to go to Verification.
+              {t("provider.profile.verifyBanner.desc")}
             </span>
             <ChevronDown className="w-4 h-4 text-amber-600 rotate-[270deg] flex-shrink-0 ml-auto" />
           </button>
@@ -1629,25 +1812,25 @@ export default function ProviderProfilePage(_props: Props) {
               value="overview"
               className="text-xs sm:text-sm px-2 sm:px-4"
             >
-              Overview
+              {t("provider.profile.tabs.overview")}
             </TabsTrigger>
             <TabsTrigger
               value="portfolio"
               className="text-xs sm:text-sm px-2 sm:px-4"
             >
-              Portfolio
+              {t("provider.profile.tabs.portfolio")}
             </TabsTrigger>
             <TabsTrigger
               value="skills"
               className="text-xs sm:text-sm px-2 sm:px-4"
             >
-              Skills
+              {t("provider.profile.tabs.skills")}
             </TabsTrigger>
             <TabsTrigger
               value="verification"
               className="text-xs sm:text-sm px-2 sm:px-4"
             >
-              Verification
+              {t("provider.profile.tabs.verification")}
             </TabsTrigger>
           </TabsList>
 
@@ -1668,10 +1851,10 @@ export default function ProviderProfilePage(_props: Props) {
                 >
                   <CardHeader className="p-4 sm:p-6">
                     <CardTitle className="text-lg sm:text-xl flex items-center gap-2">
-                      Basic Information
+                      {t("provider.profile.basic.title")}
                       {isEditing && (
                         <span className="text-xs font-normal text-blue-700 bg-blue-100 px-2 py-0.5 rounded">
-                          Editable
+                          {t("provider.profile.basic.editable")}
                         </span>
                       )}
                     </CardTitle>
@@ -1726,7 +1909,7 @@ export default function ProviderProfilePage(_props: Props) {
                                   htmlFor="name"
                                   className="text-xs sm:text-sm"
                                 >
-                                  Full Name
+                                  {t("provider.profile.label.fullName")}
                                 </Label>
                                 <Input
                                   id="name"
@@ -1735,7 +1918,9 @@ export default function ProviderProfilePage(_props: Props) {
                                   className="bg-gray-50 text-sm sm:text-base"
                                 />
                                 <p className="text-xs text-gray-500 mt-1">
-                                  Contact support to change name
+                                  {t(
+                                    "provider.profile.hint.contactSupportName",
+                                  )}
                                 </p>
                               </div>
                               <div>
@@ -1743,18 +1928,25 @@ export default function ProviderProfilePage(_props: Props) {
                                   htmlFor="email"
                                   className="text-xs sm:text-sm"
                                 >
-                                  Email
+                                  {t("provider.profile.label.email")}
                                 </Label>
                                 <Input
                                   id="email"
                                   type="email"
                                   value={profileData.email}
-                                  disabled={true}
-                                  className="bg-gray-50 text-sm sm:text-base"
+                                  onChange={(e) =>
+                                    handleInputChange("email", e.target.value)
+                                  }
+                                  className={`text-sm sm:text-base ${profileFormErrors.email ? "border-red-500" : ""}`}
                                 />
                                 <p className="text-xs text-gray-500 mt-1">
-                                  Contact support to change email
+                                  {t("provider.profile.hint.emailVerifyOnSave")}
                                 </p>
+                                {profileFormErrors.email && (
+                                  <p className="text-xs text-red-600 mt-1">
+                                    {profileFormErrors.email}
+                                  </p>
+                                )}
                               </div>
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
@@ -1763,27 +1955,59 @@ export default function ProviderProfilePage(_props: Props) {
                                   htmlFor="phone"
                                   className="text-xs sm:text-sm"
                                 >
-                                  Phone
+                                  {t("provider.profile.label.phone")}
                                 </Label>
-                                <Input
-                                  id="phone"
-                                  value={profileData.phone}
-                                  disabled={!!(savedPhone && savedPhone.trim())}
-                                  onChange={(e) =>
-                                    handleInputChange("phone", e.target.value)
+                                <div
+                                  className={
+                                    profileFormErrors.phone
+                                      ? "mt-1 rounded-md ring-2 ring-red-500 ring-offset-1"
+                                      : "mt-1"
                                   }
-                                  placeholder={
-                                    savedPhone?.trim()
-                                      ? undefined
-                                      : "Add your phone number"
-                                  }
-                                  className={`text-sm sm:text-base ${savedPhone?.trim() ? "bg-gray-50" : ""} ${profileFormErrors.phone ? "border-red-500" : ""}`}
-                                />
+                                >
+                                  <PhoneInputField
+                                    id="phone"
+                                    label=""
+                                    value={profileData.phone || ""}
+                                    onChange={(phone) =>
+                                      handleInputChange("phone", phone ?? "")
+                                    }
+                                    placeholder={t(
+                                      "provider.profile.phone.placeholder",
+                                    )}
+                                  />
+                                </div>
                                 <p className="text-xs text-gray-500 mt-1">
-                                  {savedPhone?.trim()
-                                    ? "Contact support to change phone"
-                                    : "You can add your phone number once"}
+                                  {t("provider.profile.hint.phoneVerifyOnSave")}
                                 </p>
+                                {profileData.phone?.trim() && !phoneVerified ? (
+                                  profileData.phone.trim() ===
+                                    contactSnapshot.phone.trim() &&
+                                  contactSnapshot.phone.trim() ? (
+                                    <div className="flex flex-wrap items-center gap-2 mt-1">
+                                      <p className="text-xs text-amber-700">
+                                        {t(
+                                          "provider.profile.phone.notVerifiedPrompt",
+                                        )}
+                                      </p>
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-6 px-2 text-[11px]"
+                                        onClick={handleVerifyCurrentPhone}
+                                        disabled={contactVerifyOpen}
+                                      >
+                                        {t("provider.profile.phone.verify")}
+                                      </Button>
+                                    </div>
+                                  ) : (
+                                    <p className="text-xs text-amber-600 mt-1">
+                                      {t(
+                                        "provider.profile.hint.phoneNotVerifiedWhatsApp",
+                                      )}
+                                    </p>
+                                  )
+                                ) : null}
                                 {profileFormErrors.phone && (
                                   <p className="text-xs text-red-600 mt-1">
                                     {profileFormErrors.phone}
@@ -1795,7 +2019,7 @@ export default function ProviderProfilePage(_props: Props) {
                                   htmlFor="location"
                                   className="text-xs sm:text-sm"
                                 >
-                                  Location
+                                  {t("provider.profile.label.location")}
                                 </Label>
                                 <Input
                                   id="location"
@@ -1820,7 +2044,7 @@ export default function ProviderProfilePage(_props: Props) {
                                 htmlFor="major"
                                 className="text-xs sm:text-sm"
                               >
-                                Major/Title
+                                {t("provider.profile.label.major")}
                               </Label>
                               <Input
                                 id="major"
@@ -1828,7 +2052,9 @@ export default function ProviderProfilePage(_props: Props) {
                                 onChange={(e) =>
                                   handleInputChange("major", e.target.value)
                                 }
-                                placeholder="e.g., Full Stack Developer, UI/UX Designer..."
+                                placeholder={t(
+                                  "provider.profile.major.placeholder",
+                                )}
                                 className={`text-sm sm:text-base ${profileFormErrors.major ? "border-red-500" : ""}`}
                               />
                               {profileFormErrors.major && (
@@ -1842,7 +2068,7 @@ export default function ProviderProfilePage(_props: Props) {
                                 htmlFor="bio"
                                 className="text-xs sm:text-sm"
                               >
-                                Bio
+                                {t("provider.profile.label.bio")}
                               </Label>
                               <Textarea
                                 id="bio"
@@ -1850,7 +2076,9 @@ export default function ProviderProfilePage(_props: Props) {
                                 onChange={(e) =>
                                   handleInputChange("bio", e.target.value)
                                 }
-                                placeholder="Tell clients about your experience and expertise..."
+                                placeholder={t(
+                                  "provider.profile.bio.placeholder",
+                                )}
                                 rows={4}
                                 className={`text-sm sm:text-base ${profileFormErrors.bio ? "border-red-500" : ""}`}
                               />
@@ -1873,6 +2101,25 @@ export default function ProviderProfilePage(_props: Props) {
                               <p className="text-xs sm:text-base text-gray-500 break-words">
                                 {profileData.phone}
                               </p>
+                              {profileData.phone?.trim() && !phoneVerified ? (
+                                <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                                  <p className="text-xs text-amber-700">
+                                    {t(
+                                      "provider.profile.phone.notVerifiedPrompt",
+                                    )}
+                                  </p>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-6 px-2 text-[11px]"
+                                    onClick={handleVerifyCurrentPhone}
+                                    disabled={contactVerifyOpen}
+                                  >
+                                    {t("provider.profile.phone.verify")}
+                                  </Button>
+                                </div>
+                              ) : null}
                             </div>
                             <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-500">
                               <div className="flex items-center gap-1">
@@ -1884,11 +2131,14 @@ export default function ProviderProfilePage(_props: Props) {
                               <div className="flex items-center gap-1">
                                 <Star className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-yellow-400 fill-current flex-shrink-0" />
                                 {profileStats.rating} (
-                                {profileStats.totalReviews} reviews)
+                                {t("provider.profile.reviewsCount", {
+                                  count: profileStats.totalReviews,
+                                })}
+                                )
                               </div>
                               <div className="flex items-center gap-1">
                                 <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
-                                Joined Jan 2023
+                                {t("provider.profile.joinedSample")}
                               </div>
                               <div className="flex items-center gap-1">
                                 <CheckCircle
@@ -1900,8 +2150,10 @@ export default function ProviderProfilePage(_props: Props) {
                                         : "text-gray-400"
                                   }`}
                                 />
-                                <span className="capitalize">
-                                  {profileData.availability || "available"}
+                                <span>
+                                  {availabilityDisplayLabel(
+                                    profileData.availability || "available",
+                                  )}
                                 </span>
                               </div>
                             </div>
@@ -1915,7 +2167,7 @@ export default function ProviderProfilePage(_props: Props) {
                         {profileData.major && (
                           <div>
                             <Label className="text-xs sm:text-sm">
-                              Major/Title
+                              {t("provider.profile.label.major")}
                             </Label>
                             <p className="text-sm sm:text-base text-gray-600 mt-2 break-words">
                               {profileData.major}
@@ -1924,11 +2176,136 @@ export default function ProviderProfilePage(_props: Props) {
                         )}
                         <div>
                           <Label className="text-xs sm:text-sm">
-                            Professional Bio
+                            {t("provider.profile.professionalBio")}
                           </Label>
                           <p className="text-sm sm:text-base text-gray-600 mt-2 break-words">
-                            {profileData.bio || "No bio provided"}
+                            {profileData.bio || t("provider.profile.noBio")}
                           </p>
+                        </div>
+
+                        <div className="border-t border-gray-200 pt-5 mt-5 space-y-5">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                            {t("provider.profile.overview.pricingSummary")}
+                          </p>
+                          <div className="grid md:grid-cols-2 gap-4 sm:gap-6">
+                            <Card className="shadow-none border border-gray-100">
+                              <CardContent className="p-4 sm:p-5">
+                                <h3 className="font-semibold mb-3 text-sm sm:text-base">
+                                  {t("provider.profile.experiencePrefs.title")}
+                                </h3>
+                                <div className="space-y-3">
+                                  <div>
+                                    <p className="text-sm text-gray-600">
+                                      {t("provider.profile.yearsExperience")}
+                                    </p>
+                                    <p className="font-medium">
+                                      {t("provider.profile.experiencePrefs.years", {
+                                        n: profileData.yearsExperience,
+                                      })}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <p className="text-sm text-gray-600">
+                                      {t("provider.profile.hourlyRate")}
+                                    </p>
+                                    <p className="font-medium">
+                                      {t("customer.providers.detail.hourlyRateLine", {
+                                        rate: formatProviderMoney(
+                                          Number(profileData.hourlyRate) || 0,
+                                          profileData.preferredCurrency,
+                                          locale,
+                                        ),
+                                      })}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <p className="text-sm text-gray-600">
+                                      {t("provider.profile.availability")}
+                                    </p>
+                                    <p className="font-medium">
+                                      {availabilityDisplayLabel(
+                                        profileData.availability || "available",
+                                      )}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <p className="text-sm text-gray-600">
+                                      {t("provider.profile.pricingCurrency")}
+                                    </p>
+                                    <p className="font-medium font-mono">
+                                      {profileData.preferredCurrency}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <p className="text-sm text-gray-600">
+                                      {t("provider.profile.workPreference")}
+                                    </p>
+                                    <p className="font-medium">
+                                      {workPrefDisplayLabel(
+                                        profileData.workPreference,
+                                      )}
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <p className="text-sm text-gray-600">
+                                      {t("provider.profile.teamSize")}
+                                    </p>
+                                    <p className="font-medium">
+                                      {t("provider.profile.teamSizePeople", {
+                                        n: profileData.teamSize,
+                                      })}
+                                    </p>
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
+
+                            <Card className="shadow-none border border-gray-100">
+                              <CardContent className="p-4 sm:p-5">
+                                <h3 className="font-semibold mb-3 text-sm sm:text-base">
+                                  {t("provider.profile.projectPrefs.title")}
+                                </h3>
+                                <div className="space-y-3">
+                                  <div>
+                                    <p className="text-sm text-gray-600">
+                                      {t("provider.profile.budgetRange")}
+                                    </p>
+                                    <p className="font-medium">
+                                      {formatProviderMoney(
+                                        Number(profileData.minimumProjectBudget) ||
+                                          0,
+                                        profileData.preferredCurrency,
+                                        locale,
+                                      )}{" "}
+                                      –{" "}
+                                      {formatProviderMoney(
+                                        Number(profileData.maximumProjectBudget) ||
+                                          0,
+                                        profileData.preferredCurrency,
+                                        locale,
+                                      )}
+                                    </p>
+                                    {fxSnapshotDate ? (
+                                      <p className="text-xs text-gray-500 mt-1">
+                                        {t("provider.profile.pricingFxSnapshot", {
+                                          date: fxSnapshotDate,
+                                        })}
+                                      </p>
+                                    ) : null}
+                                  </div>
+                                  <div>
+                                    <p className="text-sm text-gray-600">
+                                      {t("provider.profile.preferredDurationLabel")}
+                                    </p>
+                                    <p className="font-medium">
+                                      {profileData.preferredProjectDuration ||
+                                        t("provider.profile.notSpecified")}
+                                    </p>
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          </div>
                         </div>
                       </>
                     )}
@@ -1940,7 +2317,7 @@ export default function ProviderProfilePage(_props: Props) {
                             htmlFor="hourlyRate"
                             className="text-xs sm:text-sm"
                           >
-                            Hourly Rate (RM)
+                            {t("provider.profile.hourlyRate")}
                           </Label>
                           <Input
                             id="hourlyRate"
@@ -1966,7 +2343,7 @@ export default function ProviderProfilePage(_props: Props) {
                             htmlFor="availability"
                             className="text-xs sm:text-sm"
                           >
-                            Availability
+                            {t("provider.profile.availability")}
                           </Label>
                           <Select
                             value={profileData.availability}
@@ -1979,14 +2356,47 @@ export default function ProviderProfilePage(_props: Props) {
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="available">
-                                Available
+                                {t("provider.profile.availability.available")}
                               </SelectItem>
-                              <SelectItem value="busy">Busy</SelectItem>
+                              <SelectItem value="busy">
+                                {t("provider.profile.availability.busy")}
+                              </SelectItem>
                               <SelectItem value="unavailable">
-                                Unavailable
+                                {t("provider.profile.availability.unavailable")}
                               </SelectItem>
                             </SelectContent>
                           </Select>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <Label
+                            htmlFor="pricingCurrency"
+                            className="text-xs sm:text-sm"
+                          >
+                            {t("provider.profile.pricingCurrency")}
+                          </Label>
+                          <Select
+                            value={profileData.preferredCurrency}
+                            onValueChange={(value) =>
+                              handleInputChange("preferredCurrency", value)
+                            }
+                          >
+                            <SelectTrigger
+                              id="pricingCurrency"
+                              className="text-sm sm:text-base"
+                            >
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {PREFERRED_CURRENCY_OPTIONS.map((code) => (
+                                <SelectItem key={code} value={code}>
+                                  {code}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {t("provider.profile.pricingCurrencyHint")}
+                          </p>
                         </div>
                       </div>
                     )}
@@ -1999,7 +2409,7 @@ export default function ProviderProfilePage(_props: Props) {
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
                       <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
                         <FileText className="w-4 h-4 sm:w-5 sm:h-5" />
-                        Resume
+                        {t("provider.profile.resume.title")}
                       </CardTitle>
                     </div>
                   </CardHeader>
@@ -2018,10 +2428,10 @@ export default function ProviderProfilePage(_props: Props) {
                             <FileText className="w-6 h-6 sm:w-8 sm:h-8 text-gray-400 flex-shrink-0" />
                             <div className="min-w-0 flex-1">
                               <p className="font-medium text-sm sm:text-base">
-                                Resume uploaded
+                                {t("provider.profile.resume.uploaded")}
                               </p>
                               <p className="text-xs sm:text-sm text-gray-500">
-                                Uploaded on{" "}
+                                {t("provider.profile.resume.uploadedOn")}{" "}
                                 {new Date(
                                   resume.uploadedAt,
                                 ).toLocaleDateString()}
@@ -2036,7 +2446,7 @@ export default function ProviderProfilePage(_props: Props) {
                               className="w-full sm:w-auto text-xs sm:text-sm"
                             >
                               <ExternalLink className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                              Download
+                              {t("provider.profile.resume.download")}
                             </Button>
                             {isEditing && (
                               <Button
@@ -2051,7 +2461,7 @@ export default function ProviderProfilePage(_props: Props) {
                                 ) : (
                                   <Upload className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                                 )}
-                                Replace
+                                {t("provider.profile.resume.replace")}
                               </Button>
                             )}
                             {isEditing && (
@@ -2067,7 +2477,7 @@ export default function ProviderProfilePage(_props: Props) {
                                 ) : (
                                   <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                                 )}
-                                Delete
+                                {t("provider.profile.resume.delete")}
                               </Button>
                             )}
                           </div>
@@ -2077,7 +2487,7 @@ export default function ProviderProfilePage(_props: Props) {
                       <div className="text-center py-6 sm:py-8">
                         <FileText className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-3 sm:mb-4 text-gray-300" />
                         <p className="text-sm sm:text-base text-gray-500 mb-3 sm:mb-4">
-                          No resume uploaded yet
+                          {t("provider.profile.resume.empty")}
                         </p>
                         {isEditing && (
                           <Button
@@ -2088,12 +2498,12 @@ export default function ProviderProfilePage(_props: Props) {
                             {uploadingResume ? (
                               <>
                                 <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 animate-spin" />
-                                Uploading...
+                                {t("provider.profile.resume.uploading")}
                               </>
                             ) : (
                               <>
                                 <Upload className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                                Upload Resume (PDF)
+                                {t("provider.profile.resume.uploadPdf")}
                               </>
                             )}
                           </Button>
@@ -2109,7 +2519,7 @@ export default function ProviderProfilePage(_props: Props) {
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
                       <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
                         <Award className="w-4 h-4 sm:w-5 sm:h-5" />
-                        Certifications
+                        {t("provider.profile.cert.title")}
                       </CardTitle>
                       {isEditing && (
                         <Button
@@ -2118,29 +2528,33 @@ export default function ProviderProfilePage(_props: Props) {
                           className="w-full sm:w-auto text-xs sm:text-sm"
                         >
                           <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                          Add Certification
+                          {t("provider.profile.cert.add")}
                         </Button>
                       )}
                     </div>
                   </CardHeader>
                   <CardContent className="p-4 sm:p-6">
                     {loadingCertifications ? (
-                      <div className="flex items-center justify-center py-6 sm:py-8">
-                        <Loader2 className="h-5 w-5 sm:h-6 sm:w-6 animate-spin text-gray-400" />
-                        <span className="ml-2 text-xs sm:text-sm text-gray-600">
-                          Loading certifications...
+                      <div
+                        className="py-2 sm:py-1"
+                        role="status"
+                        aria-busy="true"
+                        aria-live="polite"
+                      >
+                        <span className="sr-only">
+                          {t("provider.profile.cert.loading")}
                         </span>
+                        <ProviderProfileCertificationsSkeleton />
                       </div>
                     ) : certifications.length === 0 ? (
                       <div className="text-center py-6 sm:py-8 text-gray-500">
                         <Award className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-3 sm:mb-4 text-gray-300" />
                         <p className="text-sm sm:text-base">
-                          No certifications added yet
+                          {t("provider.profile.cert.empty")}
                         </p>
                         {isEditing && (
                           <p className="text-xs sm:text-sm mt-2">
-                            Click &quot;Add Certification&quot; to add your
-                            professional certifications
+                            {t("provider.profile.cert.emptyHint")}
                           </p>
                         )}
                       </div>
@@ -2168,16 +2582,17 @@ export default function ProviderProfilePage(_props: Props) {
                                   {cert.issuer}
                                 </p>
                                 <p className="text-xs text-gray-500">
-                                  Issued:{" "}
+                                  {t("provider.profile.cert.issued")}{" "}
                                   {cert.issuedDate
                                     ? new Date(
                                         cert.issuedDate,
                                       ).toLocaleDateString()
-                                    : "N/A"}
+                                    : t("provider.profile.cert.na")}
                                 </p>
                                 {cert.serialNumber && (
                                   <p className="text-xs text-gray-500 mt-1 break-words">
-                                    Serial: {cert.serialNumber}
+                                    {t("provider.profile.cert.serial")}{" "}
+                                    {cert.serialNumber}
                                   </p>
                                 )}
                                 {cert.sourceUrl && (
@@ -2187,7 +2602,7 @@ export default function ProviderProfilePage(_props: Props) {
                                     rel="noopener noreferrer"
                                     className="text-xs text-blue-600 active:text-blue-800 sm:hover:underline mt-1 inline-block break-all"
                                   >
-                                    Verify Certificate ↗
+                                    {t("provider.profile.cert.verifyLink")}
                                   </a>
                                 )}
                               </div>
@@ -2250,7 +2665,7 @@ export default function ProviderProfilePage(_props: Props) {
                 <Card>
                   <CardHeader className="p-4 sm:p-6">
                     <CardTitle className="text-base sm:text-lg">
-                      Contact Information
+                      {t("provider.profile.contact.title")}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="p-4 sm:p-6 space-y-3 sm:space-y-4">
@@ -2258,60 +2673,10 @@ export default function ProviderProfilePage(_props: Props) {
                       <>
                         <div>
                           <Label
-                            htmlFor="sidebar-email"
-                            className="text-xs sm:text-sm"
-                          >
-                            Email
-                          </Label>
-                          <Input
-                            id="sidebar-email"
-                            type="email"
-                            value={profileData.email}
-                            disabled={true}
-                            className="bg-gray-50 text-sm sm:text-base"
-                          />
-                          <p className="text-xs text-gray-500 mt-1">
-                            Contact support to change email
-                          </p>
-                        </div>
-                        <div>
-                          <Label
-                            htmlFor="sidebar-phone"
-                            className="text-xs sm:text-sm"
-                          >
-                            Phone
-                          </Label>
-                          <Input
-                            id="sidebar-phone"
-                            value={profileData.phone}
-                            disabled={!!(savedPhone && savedPhone.trim())}
-                            onChange={(e) =>
-                              handleInputChange("phone", e.target.value)
-                            }
-                            placeholder={
-                              savedPhone?.trim()
-                                ? undefined
-                                : "Add your phone number"
-                            }
-                            className={`text-sm sm:text-base ${savedPhone?.trim() ? "bg-gray-50" : ""} ${profileFormErrors.phone ? "border-red-500" : ""}`}
-                          />
-                          <p className="text-xs text-gray-500 mt-1">
-                            {savedPhone?.trim()
-                              ? "Contact support to change phone"
-                              : "You can add your phone number once"}
-                          </p>
-                          {profileFormErrors.phone && (
-                            <p className="text-xs text-red-600 mt-1">
-                              {profileFormErrors.phone}
-                            </p>
-                          )}
-                        </div>
-                        <div>
-                          <Label
                             htmlFor="sidebar-website"
                             className="text-xs sm:text-sm"
                           >
-                            Website
+                            {t("provider.profile.label.website")}
                           </Label>
                           <Input
                             id="sidebar-website"
@@ -2329,10 +2694,10 @@ export default function ProviderProfilePage(_props: Props) {
                         </div>
                         <div className="space-y-3 sm:space-y-4">
                           <Label className="text-xs sm:text-sm">
-                            Languages *
+                            {t("provider.profile.languages.label")}
                           </Label>
                           <p className="text-xs sm:text-sm text-gray-600">
-                            Add languages you can communicate in
+                            {t("provider.profile.languages.hint")}
                           </p>
                           {profileFormErrors.languages && (
                             <p className="text-xs text-red-600">
@@ -2346,7 +2711,9 @@ export default function ProviderProfilePage(_props: Props) {
                               onChange={(e) =>
                                 setCustomLanguage(e.target.value)
                               }
-                              placeholder="Type a language and press Add"
+                              placeholder={t(
+                                "provider.profile.languages.placeholder",
+                              )}
                               onKeyPress={(e) =>
                                 e.key === "Enter" &&
                                 (e.preventDefault(), handleAddCustomLanguage())
@@ -2366,8 +2733,9 @@ export default function ProviderProfilePage(_props: Props) {
                           {profileData.languages.length > 0 && (
                             <div className="space-y-2">
                               <Label className="text-xs sm:text-sm font-medium">
-                                Selected Languages (
-                                {profileData.languages.length})
+                                {t("provider.profile.languages.selected", {
+                                  count: profileData.languages.length,
+                                })}
                               </Label>
                               <div className="flex flex-wrap gap-1.5 sm:gap-2 p-2 sm:p-3 border rounded-lg bg-gray-50">
                                 {profileData.languages.map((language) => (
@@ -2393,7 +2761,7 @@ export default function ProviderProfilePage(_props: Props) {
 
                           <div className="space-y-2">
                             <Label className="text-xs sm:text-sm font-medium">
-                              Common Languages (click to add)
+                              {t("provider.profile.languages.common")}
                             </Label>
                             <div className="flex flex-wrap gap-1.5 sm:gap-2 p-2 sm:p-3 border rounded-lg bg-gray-50">
                               {commonLanguages
@@ -2421,23 +2789,7 @@ export default function ProviderProfilePage(_props: Props) {
                       <>
                         <div>
                           <p className="text-xs sm:text-sm text-gray-600">
-                            Email
-                          </p>
-                          <p className="font-medium text-sm sm:text-base break-words">
-                            {profileData.email}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs sm:text-sm text-gray-600">
-                            Phone
-                          </p>
-                          <p className="font-medium text-sm sm:text-base break-words">
-                            {profileData.phone}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs sm:text-sm text-gray-600">
-                            Website
+                            {t("provider.profile.label.website")}
                           </p>
                           {profileData.website ? (
                             <a
@@ -2451,13 +2803,13 @@ export default function ProviderProfilePage(_props: Props) {
                             </a>
                           ) : (
                             <p className="font-medium text-sm sm:text-base text-gray-500">
-                              No website provided
+                              {t("provider.profile.noWebsite")}
                             </p>
                           )}
                         </div>
                         <div>
                           <p className="text-xs sm:text-sm text-gray-600">
-                            Languages
+                            {t("provider.profile.label.languages")}
                           </p>
                           <div className="flex flex-wrap gap-1 mt-1">
                             {profileData.languages.map((language, index) => (
@@ -2471,7 +2823,7 @@ export default function ProviderProfilePage(_props: Props) {
                             ))}
                             {profileData.languages.length === 0 && (
                               <p className="text-gray-500 text-xs sm:text-sm">
-                                No languages specified
+                                {t("provider.profile.languages.none")}
                               </p>
                             )}
                           </div>
@@ -2485,15 +2837,14 @@ export default function ProviderProfilePage(_props: Props) {
                 <Card>
                   <CardHeader className="p-4 sm:p-6">
                     <CardTitle className="text-base sm:text-lg">
-                      Portfolio Links
+                      {t("provider.profile.portfolioLinks.title")}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="p-4 sm:p-6 space-y-3 sm:space-y-4">
                     {isEditing ? (
                       <>
                         <p className="text-xs sm:text-sm text-gray-600">
-                          Add links to your GitHub, LinkedIn, portfolio website,
-                          or other professional profiles
+                          {t("provider.profile.portfolioLinks.editHint")}
                         </p>
                         <div className="flex flex-col sm:flex-row gap-2">
                           <Input
@@ -2501,7 +2852,9 @@ export default function ProviderProfilePage(_props: Props) {
                             onChange={(e) =>
                               setNewPortfolioLink(e.target.value)
                             }
-                            placeholder="https://github.com/yourusername"
+                            placeholder={t(
+                              "provider.profile.portfolioLinks.placeholder",
+                            )}
                             type="url"
                             onKeyPress={(e) =>
                               e.key === "Enter" &&
@@ -2527,8 +2880,9 @@ export default function ProviderProfilePage(_props: Props) {
                         {profileData.portfolioLinks.length > 0 && (
                           <div className="space-y-2">
                             <Label className="text-xs sm:text-sm font-medium">
-                              Portfolio Links (
-                              {profileData.portfolioLinks.length})
+                              {t("provider.profile.portfolioLinks.selected", {
+                                count: profileData.portfolioLinks.length,
+                              })}
                             </Label>
                             <div className="space-y-2">
                               {profileData.portfolioLinks.map((url, index) => (
@@ -2563,12 +2917,12 @@ export default function ProviderProfilePage(_props: Props) {
                           <div className="text-center py-6 sm:py-8 text-gray-500 border-2 border-dashed border-gray-200 rounded-lg">
                             <Globe className="w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-3 sm:mb-4 text-gray-300" />
                             <p className="text-sm sm:text-base">
-                              No portfolio links added yet
+                              {t("provider.profile.portfolioLinks.emptyEdit")}
                             </p>
                             <p className="text-xs sm:text-sm mt-1">
-                              Add links to showcase your work and professional
-                              profiles (e.g., GitHub, LinkedIn, portfolio
-                              website)
+                              {t(
+                                "provider.profile.portfolioLinks.emptyEditHint",
+                              )}
                             </p>
                           </div>
                         )}
@@ -2590,7 +2944,7 @@ export default function ProviderProfilePage(_props: Props) {
                           ))
                         ) : (
                           <p className="text-gray-500 text-xs sm:text-sm">
-                            No portfolio links added
+                            {t("provider.profile.portfolioLinks.emptyView")}
                           </p>
                         )}
                       </div>
@@ -2609,10 +2963,10 @@ export default function ProviderProfilePage(_props: Props) {
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
                   <div>
                     <h2 className="text-xl sm:text-2xl font-bold">
-                      Projects Completed
+                      {t("provider.profile.projectsCompleted.title")}
                     </h2>
                     <p className="text-sm sm:text-base text-gray-600 mt-1">
-                      Projects you&apos;ve completed on this platform
+                      {t("provider.profile.projectsCompleted.subtitle")}
                     </p>
                   </div>
                 </div>
@@ -2621,7 +2975,7 @@ export default function ProviderProfilePage(_props: Props) {
                   <div className="flex items-center justify-center py-8 sm:py-12">
                     <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin text-gray-400" />
                     <span className="ml-2 text-sm sm:text-base text-gray-600">
-                      Loading projects...
+                      {t("provider.profile.projects.loading")}
                     </span>
                   </div>
                 ) : portfolioProjects.length === 0 ? (
@@ -2629,11 +2983,10 @@ export default function ProviderProfilePage(_props: Props) {
                     <CardContent className="p-8 sm:p-12 text-center">
                       <Award className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 text-gray-300" />
                       <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
-                        No completed projects yet
+                        {t("provider.profile.projects.emptyTitle")}
                       </h3>
                       <p className="text-sm sm:text-base text-gray-600">
-                        Your completed projects will appear here automatically
-                        once you finish working on them.
+                        {t("provider.profile.projects.emptyDesc")}
                       </p>
                     </CardContent>
                   </Card>
@@ -2650,7 +3003,8 @@ export default function ProviderProfilePage(_props: Props) {
                               <Award className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600" />
                             </div>
                             <Badge variant="secondary" className="text-xs">
-                              {project.category || "Project"}
+                              {project.category ||
+                                t("provider.profile.projectFallback")}
                             </Badge>
                           </div>
                         </div>
@@ -2659,7 +3013,8 @@ export default function ProviderProfilePage(_props: Props) {
                             {project.title}
                           </h3>
                           <p className="text-gray-600 text-xs sm:text-sm mb-3 line-clamp-2 break-words">
-                            {project.description || "No description provided"}
+                            {project.description ||
+                              t("provider.profile.noDescription")}
                           </p>
                           {project.technologies &&
                             project.technologies.length > 0 && (
@@ -2680,7 +3035,9 @@ export default function ProviderProfilePage(_props: Props) {
                                     variant="secondary"
                                     className="text-xs"
                                   >
-                                    +{project.technologies.length - 6} more
+                                    {t("provider.profile.moreTech", {
+                                      n: project.technologies.length - 6,
+                                    })}
                                   </Badge>
                                 )}
                               </div>
@@ -2714,9 +3071,11 @@ export default function ProviderProfilePage(_props: Props) {
               <div className="space-y-3 sm:space-y-4">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
                   <div>
-                    <h2 className="text-xl sm:text-2xl font-bold">Portfolio</h2>
+                    <h2 className="text-xl sm:text-2xl font-bold">
+                      {t("provider.profile.externalPortfolio.title")}
+                    </h2>
                     <p className="text-sm sm:text-base text-gray-600 mt-1">
-                      Showcase your work and studies done outside this platform
+                      {t("provider.profile.externalPortfolio.subtitle")}
                     </p>
                   </div>
                   {isEditing && (
@@ -2739,7 +3098,7 @@ export default function ProviderProfilePage(_props: Props) {
                       className="w-full sm:w-auto text-xs sm:text-sm"
                     >
                       <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                      Add Portfolio Item
+                      {t("provider.profile.externalPortfolio.addItem")}
                     </Button>
                   )}
                 </div>
@@ -2748,7 +3107,7 @@ export default function ProviderProfilePage(_props: Props) {
                   <div className="flex items-center justify-center py-8 sm:py-12">
                     <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin text-gray-400" />
                     <span className="ml-2 text-sm sm:text-base text-gray-600">
-                      Loading portfolio items...
+                      {t("provider.profile.externalPortfolio.loading")}
                     </span>
                   </div>
                 ) : portfolioItems.length === 0 ? (
@@ -2756,12 +3115,12 @@ export default function ProviderProfilePage(_props: Props) {
                     <CardContent className="p-8 sm:p-12 text-center">
                       <Globe className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 text-gray-300" />
                       <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
-                        No portfolio items yet
+                        {t("provider.profile.externalPortfolio.emptyTitle")}
                       </h3>
                       <p className="text-sm sm:text-base text-gray-600">
                         {isEditing
-                          ? "Add your external work, studies, or projects to showcase your experience."
-                          : "No portfolio items added yet."}
+                          ? t("provider.profile.externalPortfolio.emptyEdit")
+                          : t("provider.profile.externalPortfolio.emptyView")}
                       </p>
                     </CardContent>
                   </Card>
@@ -2770,7 +3129,16 @@ export default function ProviderProfilePage(_props: Props) {
                     {portfolioItems.map((item, index) => (
                       <Card
                         key={item.id}
-                        className="active:shadow-md sm:hover:shadow-lg transition-shadow"
+                        className="active:shadow-md sm:hover:shadow-lg transition-shadow cursor-pointer"
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setSelectedPortfolioItem(item)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setSelectedPortfolioItem(item);
+                          }
+                        }}
                       >
                         {item.imageUrl ? (
                           <div className="relative h-40 sm:h-48 overflow-hidden rounded-t-lg bg-gray-100">
@@ -2794,7 +3162,10 @@ export default function ProviderProfilePage(_props: Props) {
                                 return (
                                   <Image
                                     src={imageUrl}
-                                    alt={item.title || "Portfolio item"}
+                                    alt={
+                                      item.title ||
+                                      t("provider.profile.alt.portfolioItem")
+                                    }
                                     width={400}
                                     height={192}
                                     className="w-full h-full object-cover"
@@ -2811,7 +3182,7 @@ export default function ProviderProfilePage(_props: Props) {
                                       </div>
                                       <p className="text-xs text-gray-500 truncate max-w-[200px]">
                                         {normalizedUrl.split("/").pop() ||
-                                          "File"}
+                                          t("provider.profile.fileFallback")}
                                       </p>
                                     </div>
                                   </div>
@@ -2826,7 +3197,7 @@ export default function ProviderProfilePage(_props: Props) {
                                 <Globe className="w-6 h-6 sm:w-8 sm:h-8 text-green-600" />
                               </div>
                               <Badge variant="secondary" className="text-xs">
-                                Portfolio
+                                {t("provider.profile.portfolioBadge")}
                               </Badge>
                             </div>
                           </div>
@@ -2841,7 +3212,8 @@ export default function ProviderProfilePage(_props: Props) {
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() => {
+                                  onClick={(e) => {
+                                    e.stopPropagation();
                                     setPortfolioFormData({
                                       title: item.title,
                                       description: item.description || "",
@@ -2867,60 +3239,9 @@ export default function ProviderProfilePage(_props: Props) {
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  onClick={async () => {
-                                    if (
-                                      confirm(
-                                        "Are you sure you want to delete this portfolio item?",
-                                      )
-                                    ) {
-                                      try {
-                                        await deletePortfolioItem(item.id);
-                                        toast({
-                                          title: "Success",
-                                          description:
-                                            "Portfolio item deleted successfully",
-                                        });
-                                        // Reload portfolio items
-                                        const itemsResponse =
-                                          await getProviderPortfolioItems();
-                                        if (
-                                          itemsResponse.success &&
-                                          itemsResponse.data
-                                        ) {
-                                          setPortfolioItems(itemsResponse.data);
-                                        }
-                                        // Reload completion
-                                        try {
-                                          const completionResponse =
-                                            await getProviderProfileCompletion();
-                                          if (completionResponse.success) {
-                                            setProfileCompletion(
-                                              completionResponse.data
-                                                .completion ?? 0,
-                                            );
-                                            setCompletionSuggestions(
-                                              completionResponse.data
-                                                .suggestions || [],
-                                            );
-                                          }
-                                          await refetchCompletion();
-                                        } catch (error) {
-                                          console.error(
-                                            "Failed to fetch completion:",
-                                            error,
-                                          );
-                                        }
-                                      } catch (error: unknown) {
-                                        toast({
-                                          title: "Error",
-                                          description: getUserFriendlyErrorMessage(
-                                            error,
-                                            "provider profile delete portfolio item",
-                                          ),
-                                          variant: "destructive",
-                                        });
-                                      }
-                                    }
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    setPortfolioItemToDelete(item);
                                   }}
                                   className="text-xs sm:text-sm"
                                 >
@@ -2930,7 +3251,8 @@ export default function ProviderProfilePage(_props: Props) {
                             )}
                           </div>
                           <p className="text-gray-600 text-xs sm:text-sm mb-3 line-clamp-2 break-words">
-                            {item.description || "No description provided"}
+                            {item.description ||
+                              t("provider.profile.noDescription")}
                           </p>
                           {item.techStack && item.techStack.length > 0 && (
                             <div className="flex flex-wrap gap-1 mb-3">
@@ -2947,7 +3269,9 @@ export default function ProviderProfilePage(_props: Props) {
                                 ))}
                               {item.techStack.length > 6 && (
                                 <Badge variant="secondary" className="text-xs">
-                                  +{item.techStack.length - 6} more
+                                  {t("provider.profile.moreTech", {
+                                    n: item.techStack.length - 6,
+                                  })}
                                 </Badge>
                               )}
                             </div>
@@ -2970,8 +3294,9 @@ export default function ProviderProfilePage(_props: Props) {
                               target="_blank"
                               rel="noopener noreferrer"
                               className="text-xs sm:text-sm text-blue-600 active:text-blue-800 sm:hover:underline flex items-center gap-1"
+                              onClick={(e) => e.stopPropagation()}
                             >
-                              View Project
+                              {t("provider.profile.viewProject")}
                               <ExternalLink className="w-3 h-3 flex-shrink-0" />
                             </a>
                           )}
@@ -2984,16 +3309,144 @@ export default function ProviderProfilePage(_props: Props) {
             </div>
           </TabsContent>
 
+          <Dialog
+            open={Boolean(selectedPortfolioItem)}
+            onOpenChange={(open) => {
+              if (!open) setSelectedPortfolioItem(null);
+            }}
+          >
+            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
+              {selectedPortfolioItem && (
+                <>
+                  <DialogHeader>
+                    <DialogTitle className="text-lg sm:text-xl">
+                      {selectedPortfolioItem.title}
+                    </DialogTitle>
+                    <DialogDescription className="text-xs sm:text-sm">
+                      {t("provider.profile.dialog.portfolioDetails")}
+                    </DialogDescription>
+                  </DialogHeader>
+
+                  <div className="space-y-4">
+                    {selectedPortfolioItem.imageUrl && (
+                      <div className="overflow-hidden rounded-lg border bg-gray-50">
+                        {(() => {
+                          const imageUrl = getProfileImageUrl(
+                            selectedPortfolioItem.imageUrl,
+                          );
+                          const normalizedUrl =
+                            selectedPortfolioItem.imageUrl.replace(/\\/g, "/");
+                          const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(
+                            normalizedUrl,
+                          );
+
+                          return isImage ? (
+                            <Image
+                              src={imageUrl}
+                              alt={
+                                selectedPortfolioItem.title ||
+                                t("provider.profile.alt.portfolioItem")
+                              }
+                              width={1200}
+                              height={700}
+                              className="w-full max-h-[420px] object-contain"
+                              unoptimized
+                            />
+                          ) : (
+                            <div className="p-5 flex items-center gap-3">
+                              <FileText className="w-5 h-5 text-gray-500 flex-shrink-0" />
+                              <p className="text-sm text-gray-700 break-all">
+                                {normalizedUrl.split("/").pop() ||
+                                  t("provider.profile.dialog.attachmentLabel")}
+                              </p>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+
+                    <div className="rounded-lg border p-4 space-y-3">
+                      <div className="flex flex-wrap gap-4 text-xs sm:text-sm text-gray-600">
+                        {selectedPortfolioItem.client && (
+                          <span>{selectedPortfolioItem.client}</span>
+                        )}
+                        {selectedPortfolioItem.date && (
+                          <span className="inline-flex items-center gap-1">
+                            <Calendar className="w-3.5 h-3.5" />
+                            {new Date(
+                              selectedPortfolioItem.date,
+                            ).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap leading-6">
+                        {selectedPortfolioItem.description ||
+                          t("provider.profile.dialog.noDescriptionEnd")}
+                      </p>
+
+                      {selectedPortfolioItem.techStack &&
+                        selectedPortfolioItem.techStack.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {selectedPortfolioItem.techStack.map(
+                              (tech, techIndex) => (
+                                <Badge
+                                  key={`${tech}-${techIndex}`}
+                                  variant="secondary"
+                                  className="text-xs"
+                                >
+                                  {tech}
+                                </Badge>
+                              ),
+                            )}
+                          </div>
+                        )}
+                    </div>
+
+                    <div className="flex flex-wrap gap-3">
+                      {selectedPortfolioItem.imageUrl && (
+                        <a
+                          href={getProfileImageUrl(
+                            selectedPortfolioItem.imageUrl,
+                          )}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs sm:text-sm text-blue-600 hover:underline inline-flex items-center gap-1"
+                        >
+                          {t("provider.profile.dialog.openAttachment")}
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
+                      {selectedPortfolioItem.externalUrl && (
+                        <a
+                          href={ensureAbsoluteUrl(
+                            selectedPortfolioItem.externalUrl,
+                          )}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs sm:text-sm text-blue-600 hover:underline inline-flex items-center gap-1"
+                        >
+                          {t("provider.profile.dialog.viewExternal")}
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </DialogContent>
+          </Dialog>
+
           {/* Skills */}
           <TabsContent value="skills">
             <div className="space-y-4 sm:space-y-6">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
                 <div>
                   <h2 className="text-xl sm:text-2xl font-bold">
-                    Skills & Expertise
+                    {t("provider.profile.skills.title")}
                   </h2>
                   <p className="text-sm sm:text-base text-gray-600 mt-1">
-                    Showcase your technical skills and expertise
+                    {t("provider.profile.skills.subtitle")}
                   </p>
                 </div>
               </div>
@@ -3004,10 +3457,10 @@ export default function ProviderProfilePage(_props: Props) {
                     <div className="space-y-3 sm:space-y-4">
                       <div className="space-y-3 sm:space-y-4">
                         <Label className="text-xs sm:text-sm">
-                          Technical Skills *
+                          {t("provider.profile.skills.technicalLabel")}
                         </Label>
                         <p className="text-xs sm:text-sm text-gray-600">
-                          Add your technical skills and expertise
+                          {t("provider.profile.skills.technicalHint")}
                         </p>
                         {profileFormErrors.skills && (
                           <p className="text-xs text-red-600">
@@ -3019,7 +3472,9 @@ export default function ProviderProfilePage(_props: Props) {
                           <Input
                             value={customSkill}
                             onChange={(e) => setCustomSkill(e.target.value)}
-                            placeholder="Type a skill and press Add"
+                            placeholder={t(
+                              "provider.profile.skills.placeholder",
+                            )}
                             onKeyPress={(e) =>
                               e.key === "Enter" &&
                               (e.preventDefault(), handleAddCustomSkill())
@@ -3039,7 +3494,9 @@ export default function ProviderProfilePage(_props: Props) {
                         {profileData.skills.length > 0 && (
                           <div className="space-y-2">
                             <Label className="text-xs sm:text-sm font-medium">
-                              Selected Skills ({profileData.skills.length})
+                              {t("provider.profile.skills.selected", {
+                                count: profileData.skills.length,
+                              })}
                             </Label>
                             <div className="flex flex-wrap gap-1.5 sm:gap-2 p-2 sm:p-3 border rounded-lg bg-gray-50 max-h-32 overflow-y-auto">
                               {profileData.skills.map((skill) => (
@@ -3063,7 +3520,7 @@ export default function ProviderProfilePage(_props: Props) {
 
                         <div className="space-y-2">
                           <Label className="text-xs sm:text-sm font-medium">
-                            Popular Skills (click to add)
+                            {t("provider.profile.skills.popular")}
                           </Label>
                           <div className="flex flex-wrap gap-1.5 sm:gap-2 max-h-40 overflow-y-auto p-2 sm:p-3 border rounded-lg bg-gray-50">
                             {popularSkills
@@ -3089,7 +3546,7 @@ export default function ProviderProfilePage(_props: Props) {
                             htmlFor="yearsExperience"
                             className="text-xs sm:text-sm"
                           >
-                            Years of Experience
+                            {t("provider.profile.yearsExperience")}
                           </Label>
                           <Input
                             id="yearsExperience"
@@ -3115,7 +3572,7 @@ export default function ProviderProfilePage(_props: Props) {
                             htmlFor="workPreference"
                             className="text-xs sm:text-sm"
                           >
-                            Work Preference
+                            {t("provider.profile.workPreference")}
                           </Label>
                           <Select
                             value={profileData.workPreference}
@@ -3127,9 +3584,15 @@ export default function ProviderProfilePage(_props: Props) {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="remote">Remote</SelectItem>
-                              <SelectItem value="onsite">On-site</SelectItem>
-                              <SelectItem value="hybrid">Hybrid</SelectItem>
+                              <SelectItem value="remote">
+                                {t("provider.profile.workPref.remote")}
+                              </SelectItem>
+                              <SelectItem value="onsite">
+                                {t("provider.profile.workPref.onsite")}
+                              </SelectItem>
+                              <SelectItem value="hybrid">
+                                {t("provider.profile.workPref.hybrid")}
+                              </SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -3140,7 +3603,7 @@ export default function ProviderProfilePage(_props: Props) {
                             htmlFor="minimumProjectBudget"
                             className="text-xs sm:text-sm"
                           >
-                            Minimum Project Budget (RM)
+                            {t("provider.profile.minBudget")}
                           </Label>
                           <Input
                             id="minimumProjectBudget"
@@ -3166,7 +3629,7 @@ export default function ProviderProfilePage(_props: Props) {
                             htmlFor="maximumProjectBudget"
                             className="text-xs sm:text-sm"
                           >
-                            Maximum Project Budget (RM)
+                            {t("provider.profile.maxBudget")}
                           </Label>
                           <Input
                             id="maximumProjectBudget"
@@ -3194,7 +3657,7 @@ export default function ProviderProfilePage(_props: Props) {
                             htmlFor="preferredProjectDuration"
                             className="text-xs sm:text-sm"
                           >
-                            Preferred Project Duration
+                            {t("provider.profile.preferredDuration")}
                           </Label>
                           <Input
                             id="preferredProjectDuration"
@@ -3205,7 +3668,9 @@ export default function ProviderProfilePage(_props: Props) {
                                 e.target.value,
                               )
                             }
-                            placeholder="e.g., 1-3 months, 3-6 months..."
+                            placeholder={t(
+                              "provider.profile.durationPlaceholder",
+                            )}
                             className={`text-sm sm:text-base ${profileFormErrors.preferredProjectDuration ? "border-red-500" : ""}`}
                           />
                           {profileFormErrors.preferredProjectDuration && (
@@ -3219,7 +3684,7 @@ export default function ProviderProfilePage(_props: Props) {
                             htmlFor="teamSize"
                             className="text-xs sm:text-sm"
                           >
-                            Team Size
+                            {t("provider.profile.teamSize")}
                           </Label>
                           <Input
                             id="teamSize"
@@ -3248,7 +3713,9 @@ export default function ProviderProfilePage(_props: Props) {
                 <div className="space-y-4">
                   <Card>
                     <CardContent className="p-6">
-                      <h3 className="font-semibold mb-4">Technical Skills</h3>
+                      <h3 className="font-semibold mb-4">
+                        {t("provider.profile.skills.viewTitle")}
+                      </h3>
                       <div className="flex flex-wrap gap-2">
                         {profileData.skills.map((skill, index) => (
                           <Badge
@@ -3260,7 +3727,9 @@ export default function ProviderProfilePage(_props: Props) {
                           </Badge>
                         ))}
                         {profileData.skills.length === 0 && (
-                          <p className="text-gray-500">No skills added yet</p>
+                          <p className="text-gray-500">
+                            {t("provider.profile.skills.none")}
+                          </p>
                         )}
                       </div>
                     </CardContent>
@@ -3270,29 +3739,49 @@ export default function ProviderProfilePage(_props: Props) {
                     <Card>
                       <CardContent className="p-6">
                         <h3 className="font-semibold mb-4">
-                          Experience & Preferences
+                          {t("provider.profile.experiencePrefs.title")}
                         </h3>
                         <div className="space-y-3">
                           <div>
                             <p className="text-sm text-gray-600">
-                              Years of Experience
+                              {t("provider.profile.yearsExperience")}
                             </p>
                             <p className="font-medium">
-                              {profileData.yearsExperience} years
+                              {t("provider.profile.experiencePrefs.years", {
+                                n: profileData.yearsExperience,
+                              })}
                             </p>
                           </div>
                           <div>
                             <p className="text-sm text-gray-600">
-                              Work Preference
+                              {t("provider.profile.hourlyRate")}
                             </p>
-                            <p className="font-medium capitalize">
-                              {profileData.workPreference}
+                            <p className="font-medium">
+                              {t("customer.providers.detail.hourlyRateLine", {
+                                rate: formatProviderMoney(
+                                  Number(profileData.hourlyRate) || 0,
+                                  profileData.preferredCurrency,
+                                  locale,
+                                ),
+                              })}
                             </p>
                           </div>
                           <div>
-                            <p className="text-sm text-gray-600">Team Size</p>
+                            <p className="text-sm text-gray-600">
+                              {t("provider.profile.workPreference")}
+                            </p>
                             <p className="font-medium">
-                              {profileData.teamSize} person(s)
+                              {workPrefDisplayLabel(profileData.workPreference)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-600">
+                              {t("provider.profile.teamSize")}
+                            </p>
+                            <p className="font-medium">
+                              {t("provider.profile.teamSizePeople", {
+                                n: profileData.teamSize,
+                              })}
                             </p>
                           </div>
                         </div>
@@ -3302,25 +3791,41 @@ export default function ProviderProfilePage(_props: Props) {
                     <Card>
                       <CardContent className="p-6">
                         <h3 className="font-semibold mb-4">
-                          Project Preferences
+                          {t("provider.profile.projectPrefs.title")}
                         </h3>
                         <div className="space-y-3">
                           <div>
                             <p className="text-sm text-gray-600">
-                              Budget Range
+                              {t("provider.profile.budgetRange")}
                             </p>
                             <p className="font-medium">
-                              RM {profileData.minimumProjectBudget} - RM{" "}
-                              {profileData.maximumProjectBudget}
+                              {formatProviderMoney(
+                                Number(profileData.minimumProjectBudget) || 0,
+                                profileData.preferredCurrency,
+                                locale,
+                              )}{" "}
+                              –{" "}
+                              {formatProviderMoney(
+                                Number(profileData.maximumProjectBudget) || 0,
+                                profileData.preferredCurrency,
+                                locale,
+                              )}
                             </p>
+                            {fxSnapshotDate ? (
+                              <p className="text-xs text-gray-500 mt-1">
+                                {t("provider.profile.pricingFxSnapshot", {
+                                  date: fxSnapshotDate,
+                                })}
+                              </p>
+                            ) : null}
                           </div>
                           <div>
                             <p className="text-sm text-gray-600">
-                              Preferred Duration
+                              {t("provider.profile.preferredDurationLabel")}
                             </p>
                             <p className="font-medium">
                               {profileData.preferredProjectDuration ||
-                                "Not specified"}
+                                t("provider.profile.notSpecified")}
                             </p>
                           </div>
                         </div>
@@ -3348,11 +3853,11 @@ export default function ProviderProfilePage(_props: Props) {
             <DialogHeader>
               <DialogTitle className="text-lg sm:text-xl">
                 {editingCertIndex !== null
-                  ? "Edit Certification"
-                  : "Add Certification"}
+                  ? t("provider.profile.certDialog.editTitle")
+                  : t("provider.profile.certDialog.addTitle")}
               </DialogTitle>
               <DialogDescription className="text-xs sm:text-sm">
-                Add your professional certifications to showcase your expertise
+                {t("provider.profile.certDialog.description")}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-3 sm:space-y-4 py-3 sm:py-4">
@@ -3361,11 +3866,10 @@ export default function ProviderProfilePage(_props: Props) {
                   <AlertCircle className="w-5 h-5 text-blue-600 mr-2 mt-0.5 flex-shrink-0" />
                   <div>
                     <p className="text-sm text-blue-800 font-medium">
-                      Why add certifications?
+                      {t("provider.profile.certDialog.whyTitle")}
                     </p>
                     <p className="text-sm text-blue-700">
-                      Certifications help build trust with clients and showcase
-                      your expertise in specific technologies.
+                      {t("provider.profile.certDialog.whyBody")}
                     </p>
                   </div>
                 </div>
@@ -3373,10 +3877,14 @@ export default function ProviderProfilePage(_props: Props) {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="certName">Certification Name *</Label>
+                  <Label htmlFor="certName">
+                    {t("provider.profile.certDialog.nameLabel")}
+                  </Label>
                   <Input
                     id="certName"
-                    placeholder="e.g., AWS Certified Solutions Architect"
+                    placeholder={t(
+                      "provider.profile.certDialog.namePlaceholder",
+                    )}
                     value={certFormData.name}
                     onChange={(e) =>
                       setCertFormData((prev) => ({
@@ -3392,10 +3900,14 @@ export default function ProviderProfilePage(_props: Props) {
                   )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="certIssuer">Issuing Organization *</Label>
+                  <Label htmlFor="certIssuer">
+                    {t("provider.profile.certDialog.issuerLabel")}
+                  </Label>
                   <Input
                     id="certIssuer"
-                    placeholder="e.g., Amazon Web Services"
+                    placeholder={t(
+                      "provider.profile.certDialog.issuerPlaceholder",
+                    )}
                     value={certFormData.issuer}
                     onChange={(e) =>
                       setCertFormData((prev) => ({
@@ -3413,7 +3925,9 @@ export default function ProviderProfilePage(_props: Props) {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="certDate">Issue Date *</Label>
+                <Label htmlFor="certDate">
+                  {t("provider.profile.certDialog.dateLabel")}
+                </Label>
                 <Input
                   id="certDate"
                   type="date"
@@ -3434,10 +3948,14 @@ export default function ProviderProfilePage(_props: Props) {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="certSerial">Serial Number (optional*)</Label>
+                  <Label htmlFor="certSerial">
+                    {t("provider.profile.certDialog.serialLabel")}
+                  </Label>
                   <Input
                     id="certSerial"
-                    placeholder="e.g. ABC-123-XYZ"
+                    placeholder={t(
+                      "provider.profile.certDialog.serialPlaceholder",
+                    )}
                     value={certFormData.serialNumber}
                     onChange={(e) =>
                       setCertFormData((prev) => ({
@@ -3454,12 +3972,14 @@ export default function ProviderProfilePage(_props: Props) {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="certLink">
-                    Verification Link (optional*)
+                    {t("provider.profile.certDialog.linkLabel")}
                   </Label>
                   <Input
                     id="certLink"
                     type="url"
-                    placeholder="https://verify.issuer.com/cert/ABC-123"
+                    placeholder={t(
+                      "provider.profile.certDialog.linkPlaceholder",
+                    )}
                     value={certFormData.sourceUrl}
                     onChange={(e) =>
                       setCertFormData((prev) => ({
@@ -3474,8 +3994,7 @@ export default function ProviderProfilePage(_props: Props) {
                     </p>
                   )}
                   <p className="text-xs text-gray-500">
-                    *At least one of Serial Number or Verification Link is
-                    required.
+                    {t("provider.profile.certDialog.serialOrLinkHint")}
                   </p>
                 </div>
               </div>
@@ -3496,20 +4015,20 @@ export default function ProviderProfilePage(_props: Props) {
                   setCertFormErrors({});
                 }}
               >
-                Cancel
+                {t("provider.profile.cancel")}
               </Button>
               <Button onClick={handleSaveCertification} disabled={saving}>
                 {saving ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Saving...
+                    {t("provider.profile.saving")}
                   </>
                 ) : (
                   <>
                     <Award className="w-4 h-4 mr-2" />
                     {editingCertIndex !== null
-                      ? "Update Certification"
-                      : "Add Certification"}
+                      ? t("provider.profile.certDialog.update")
+                      : t("provider.profile.cert.add")}
                   </>
                 )}
               </Button>
@@ -3526,12 +4045,11 @@ export default function ProviderProfilePage(_props: Props) {
             <DialogHeader>
               <DialogTitle className="text-lg sm:text-xl">
                 {editingPortfolioIndex !== null
-                  ? "Edit Portfolio Item"
-                  : "Add Portfolio Item"}
+                  ? t("provider.profile.portfolioDialog.editTitle")
+                  : t("provider.profile.portfolioDialog.addTitle")}
               </DialogTitle>
               <DialogDescription className="text-xs sm:text-sm">
-                Add your external work, studies, or projects to showcase your
-                experience
+                {t("provider.profile.portfolioDialog.description")}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-3 sm:space-y-4 py-3 sm:py-4">
@@ -3540,13 +4058,10 @@ export default function ProviderProfilePage(_props: Props) {
                   <AlertCircle className="w-5 h-5 text-green-600 mr-2 mt-0.5 flex-shrink-0" />
                   <div>
                     <p className="text-sm text-green-800 font-medium">
-                      What is a Portfolio Item?
+                      {t("provider.profile.portfolioDialog.whatTitle")}
                     </p>
                     <p className="text-sm text-green-700">
-                      Portfolio items are work, studies, or projects you&apos;ve
-                      completed outside this platform. This is different from
-                      &quot;Projects Completed&quot; which shows your work done
-                      on this platform.
+                      {t("provider.profile.portfolioDialog.whatBody")}
                     </p>
                   </div>
                 </div>
@@ -3554,10 +4069,14 @@ export default function ProviderProfilePage(_props: Props) {
 
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="portfolioTitle">Title *</Label>
+                  <Label htmlFor="portfolioTitle">
+                    {t("provider.profile.portfolioDialog.titleLabel")}
+                  </Label>
                   <Input
                     id="portfolioTitle"
-                    placeholder="e.g., E-commerce Website for ABC Company"
+                    placeholder={t(
+                      "provider.profile.portfolioDialog.titlePlaceholder",
+                    )}
                     value={portfolioFormData.title}
                     onChange={(e) =>
                       setPortfolioFormData((prev) => ({
@@ -3574,10 +4093,14 @@ export default function ProviderProfilePage(_props: Props) {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="portfolioDescription">Description *</Label>
+                  <Label htmlFor="portfolioDescription">
+                    {t("provider.profile.portfolioDialog.descLabel")}
+                  </Label>
                   <Textarea
                     id="portfolioDescription"
-                    placeholder="Describe the project, your role, technologies used, and key achievements..."
+                    placeholder={t(
+                      "provider.profile.portfolioDialog.descPlaceholder",
+                    )}
                     value={portfolioFormData.description}
                     onChange={(e) =>
                       setPortfolioFormData((prev) => ({
@@ -3596,10 +4119,14 @@ export default function ProviderProfilePage(_props: Props) {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="portfolioClient">Client/Organization</Label>
+                    <Label htmlFor="portfolioClient">
+                      {t("provider.profile.portfolioDialog.clientLabel")}
+                    </Label>
                     <Input
                       id="portfolioClient"
-                      placeholder="e.g., ABC Company, University Name"
+                      placeholder={t(
+                        "provider.profile.portfolioDialog.clientPlaceholder",
+                      )}
                       value={portfolioFormData.client}
                       onChange={(e) =>
                         setPortfolioFormData((prev) => ({
@@ -3611,7 +4138,9 @@ export default function ProviderProfilePage(_props: Props) {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="portfolioDate">Date *</Label>
+                    <Label htmlFor="portfolioDate">
+                      {t("provider.profile.portfolioDialog.dateLabel")}
+                    </Label>
                     <Input
                       id="portfolioDate"
                       type="date"
@@ -3632,11 +4161,15 @@ export default function ProviderProfilePage(_props: Props) {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="portfolioTechStack">Technologies Used</Label>
+                  <Label htmlFor="portfolioTechStack">
+                    {t("provider.profile.portfolioDialog.techLabel")}
+                  </Label>
                   <div className="flex gap-2">
                     <Input
                       id="portfolioTechStack"
-                      placeholder="e.g., React, Node.js, MongoDB"
+                      placeholder={t(
+                        "provider.profile.portfolioDialog.techPlaceholder",
+                      )}
                       value={newTechStack}
                       onChange={(e) => setNewTechStack(e.target.value)}
                       onKeyPress={(e) =>
@@ -3675,12 +4208,16 @@ export default function ProviderProfilePage(_props: Props) {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="portfolioImage">Image/File</Label>
+                  <Label htmlFor="portfolioImage">
+                    {t("provider.profile.portfolioDialog.imageLabel")}
+                  </Label>
                   <div className="flex gap-2">
                     <Input
                       id="portfolioImageUrl"
                       type="text"
-                      placeholder="Image URL or upload a file"
+                      placeholder={t(
+                        "provider.profile.portfolioDialog.imageUrlPlaceholder",
+                      )}
                       value={portfolioFormData.imageUrl}
                       onChange={(e) =>
                         setPortfolioFormData((prev) => ({
@@ -3714,8 +4251,10 @@ export default function ProviderProfilePage(_props: Props) {
                       // Validate file size (10MB)
                       if (file.size > 10 * 1024 * 1024) {
                         toast({
-                          title: "File too large",
-                          description: "Please select a file smaller than 10MB",
+                          title: t("provider.profile.toast.fileTooLargeTitle"),
+                          description: t(
+                            "provider.profile.toast.portfolioFileTooLargeDesc",
+                          ),
                           variant: "destructive",
                         });
                         return;
@@ -3730,13 +4269,15 @@ export default function ProviderProfilePage(_props: Props) {
                             imageUrl: result.data.imageUrl,
                           }));
                           toast({
-                            title: "Success",
-                            description: "File uploaded successfully",
+                            title: t("provider.profile.toast.successTitle"),
+                            description: t(
+                              "provider.profile.toast.fileUploaded",
+                            ),
                           });
                         }
                       } catch (error: unknown) {
                         toast({
-                          title: "Upload failed",
+                          title: t("provider.profile.toast.uploadFailedTitle"),
                           description: getUserFriendlyErrorMessage(
                             error,
                             "provider profile portfolio image upload",
@@ -3754,8 +4295,7 @@ export default function ProviderProfilePage(_props: Props) {
                     className="hidden"
                   />
                   <p className="text-xs text-gray-500">
-                    Optional: Upload an image or file (JPG, PNG, GIF, WebP, PDF,
-                    DOC, DOCX) or enter a URL. Max 10MB.
+                    {t("provider.profile.portfolioDialog.imageHint")}
                   </p>
                   {portfolioFormData.imageUrl && (
                     <div className="mt-2">
@@ -3775,7 +4315,9 @@ export default function ProviderProfilePage(_props: Props) {
                           return (
                             <Image
                               src={imageUrl}
-                              alt="Portfolio preview"
+                              alt={t(
+                                "provider.profile.portfolioDialog.previewAlt",
+                              )}
                               width={400}
                               height={128}
                               className="w-full h-32 object-cover rounded-lg border bg-gray-100"
@@ -3787,7 +4329,8 @@ export default function ProviderProfilePage(_props: Props) {
                             <div className="p-2 border rounded-lg bg-gray-50 flex items-center gap-2">
                               <FileText className="w-5 h-5 text-gray-400" />
                               <p className="text-sm text-gray-600 truncate">
-                                {normalizedUrl.split("/").pop() || "File"}
+                                {normalizedUrl.split("/").pop() ||
+                                  t("provider.profile.fileFallback")}
                               </p>
                             </div>
                           );
@@ -3798,11 +4341,15 @@ export default function ProviderProfilePage(_props: Props) {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="portfolioExternalUrl">External Link</Label>
+                  <Label htmlFor="portfolioExternalUrl">
+                    {t("provider.profile.portfolioDialog.externalLabel")}
+                  </Label>
                   <Input
                     id="portfolioExternalUrl"
                     type="url"
-                    placeholder="https://example.com/project"
+                    placeholder={t(
+                      "provider.profile.portfolioDialog.externalPlaceholder",
+                    )}
                     value={portfolioFormData.externalUrl}
                     onChange={(e) =>
                       setPortfolioFormData((prev) => ({
@@ -3812,7 +4359,7 @@ export default function ProviderProfilePage(_props: Props) {
                     }
                   />
                   <p className="text-xs text-gray-500">
-                    Optional: Link to view the project (GitHub, live site, etc.)
+                    {t("provider.profile.portfolioDialog.externalHint")}
                   </p>
                 </div>
               </div>
@@ -3836,27 +4383,90 @@ export default function ProviderProfilePage(_props: Props) {
                   setPortfolioFormErrors({});
                 }}
               >
-                Cancel
+                {t("provider.profile.cancel")}
               </Button>
               <Button onClick={handleSavePortfolioItem} disabled={saving}>
                 {saving ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Saving...
+                    {t("provider.profile.saving")}
                   </>
                 ) : (
                   <>
                     <Plus className="w-4 h-4 mr-2" />
                     {editingPortfolioIndex !== null
-                      ? "Update Portfolio Item"
-                      : "Add Portfolio Item"}
+                      ? t("provider.profile.portfolioDialog.update")
+                      : t("provider.profile.externalPortfolio.addItem")}
                   </>
                 )}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <Dialog
+          open={Boolean(portfolioItemToDelete)}
+          onOpenChange={(open) => {
+            if (!open) setPortfolioItemToDelete(null);
+          }}
+        >
+          <DialogContent className="max-w-md p-4 sm:p-6">
+            <DialogHeader>
+              <DialogTitle className="text-lg sm:text-xl">
+                {t("provider.profile.deletePortfolio.title")}
+              </DialogTitle>
+              <DialogDescription className="text-xs sm:text-sm">
+                {t("provider.profile.deletePortfolio.desc", {
+                  title: portfolioItemToDelete?.title ?? "",
+                })}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button
+                variant="outline"
+                onClick={() => setPortfolioItemToDelete(null)}
+                disabled={deletingPortfolioItem}
+              >
+                {t("provider.profile.cancel")}
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleConfirmDeletePortfolioItem}
+                disabled={deletingPortfolioItem}
+                className="text-white"
+              >
+                {deletingPortfolioItem ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    {t("provider.profile.deleting")}
+                  </>
+                ) : (
+                  t("provider.profile.delete")
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <ProfileImageCropModal
+          open={profileCropOpen}
+          onOpenChange={setProfileCropOpen}
+          imageFile={pendingProfileImageFile}
+          onConfirm={handleProfileImageCropConfirm}
+          onCancel={() => setPendingProfileImageFile(null)}
+        />
+
+        <ProviderContactVerificationDialog
+          open={contactVerifyOpen}
+          onOpenChange={setContactVerifyOpen}
+          needs={contactVerifyNeeds}
+          contactSnapshot={contactSnapshot}
+          draftEmail={profileData.email}
+          draftPhone={profileData.phone}
+          apiBase={contactProfileApi}
+          onContinueSave={executeProfileSave}
+        />
       </div>
-    </ProviderLayout>
+    </>
   );
 }

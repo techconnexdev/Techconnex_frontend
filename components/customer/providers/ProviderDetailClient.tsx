@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -9,6 +9,7 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
@@ -30,12 +31,26 @@ import {
 } from "lucide-react";
 import type { Provider, PortfolioItem, Review } from "./types";
 import PortfolioGrid from "./sections/PortfolioGrid";
+import { CustomerProviderHourlyRate } from "./sections/CustomerProviderHourlyRate";
 import ReviewsList from "./sections/ReviewsList";
 import { useRouter } from "next/navigation";
-import { getProviderCompletedProjects, getProfileImageUrl, getResumeByUserId, getR2DownloadUrl } from "@/lib/api";
+import {
+  getProviderCompletedProjects,
+  getProfileImageUrl,
+  getResumeByUserId,
+  getR2DownloadUrl,
+} from "@/lib/api";
 import ProposalPopup from "./ProposalPopup";
 import { getUserFriendlyErrorMessage } from "@/lib/errors";
 import { useToast } from "@/hooks/use-toast";
+import { useI18n } from "@/contexts/I18nProvider";
+import { formatProviderMoney } from "@/lib/provider-currency-format";
+import {
+  convertWithSnapshot,
+  hasCurrencyInSnapshot,
+  normalizeCurrencyCode,
+  type FxRatesMap,
+} from "@/lib/fx-snapshot";
 
 const COLLAPSED_MAX_HEIGHT = 320;
 const COLLAPSED_MAX_HEIGHT_SIDEBAR = 280;
@@ -45,11 +60,15 @@ function CollapsibleSection({
   expanded,
   onToggle,
   maxHeight = COLLAPSED_MAX_HEIGHT,
+  showMoreLabel,
+  showLessLabel,
 }: {
   children: React.ReactNode;
   expanded: boolean;
   onToggle: () => void;
   maxHeight?: number;
+  showMoreLabel: string;
+  showLessLabel: string;
 }) {
   return (
     <div className="flex flex-col">
@@ -69,12 +88,12 @@ function CollapsibleSection({
         {expanded ? (
           <>
             <ChevronUp className="w-4 h-4" />
-            Show less
+            {showLessLabel}
           </>
         ) : (
           <>
             <ChevronDown className="w-4 h-4" />
-            Show more
+            {showMoreLabel}
           </>
         )}
       </Button>
@@ -86,30 +105,179 @@ export default function ProviderDetailClient({
   provider,
   portfolio,
   reviews,
+  viewerPreferredCurrency,
+  publicGuestMode = false,
 }: {
   provider: Provider;
   portfolio: PortfolioItem[];
   reviews: Review[];
+  /** Company user's Settings.preferredCurrency (from server); omit when logged out. */
+  viewerPreferredCurrency?: string;
+  /** Public showcase guest mode: hide direct contact/proposal actions. */
+  publicGuestMode?: boolean;
 }) {
+  const { t, locale } = useI18n();
+
+  const projectBudgetDisplay = useMemo(() => {
+    const pc = normalizeCurrencyCode(provider.preferredCurrency || "MYR");
+    const minV =
+      provider.minimumProjectBudget != null
+        ? Number(provider.minimumProjectBudget)
+        : null;
+    const maxV =
+      provider.maximumProjectBudget != null
+        ? Number(provider.maximumProjectBudget)
+        : null;
+
+    if (minV == null && maxV == null) return null;
+
+    const fmtProv = (n: number) => formatProviderMoney(n, pc, locale);
+
+    const primaryText =
+      minV != null && maxV != null
+        ? t("customer.providers.detail.budgetRange", {
+            min: fmtProv(minV),
+            max: fmtProv(maxV),
+          })
+        : minV != null
+          ? t("customer.providers.detail.budgetFrom", { min: fmtProv(minV) })
+          : maxV != null
+            ? t("customer.providers.detail.budgetUpTo", {
+                max: fmtProv(maxV),
+              })
+            : "—";
+
+    const vc = normalizeCurrencyCode(viewerPreferredCurrency || pc);
+    const ratesMap = provider.pricingFxSnapshotRatesJson as FxRatesMap;
+
+    if (!viewerPreferredCurrency || vc === pc) {
+      return {
+        primaryText,
+        secondaryText: null as string | null,
+        footnote: null as string | null,
+        conversionFailed: false,
+        showCaptions: false,
+        providerCode: pc,
+        viewerCode: vc,
+      };
+    }
+
+    if (
+      !ratesMap ||
+      !hasCurrencyInSnapshot(pc, ratesMap) ||
+      !hasCurrencyInSnapshot(vc, ratesMap)
+    ) {
+      return {
+        primaryText,
+        secondaryText: null,
+        footnote: null,
+        conversionFailed: true,
+        showCaptions: true,
+        providerCode: pc,
+        viewerCode: vc,
+      };
+    }
+
+    const cMin =
+      minV != null
+        ? convertWithSnapshot({
+            amount: minV,
+            fromCurrencyCode: pc,
+            toCurrencyCode: vc,
+            ratesMap,
+          })
+        : null;
+    const cMax =
+      maxV != null
+        ? convertWithSnapshot({
+            amount: maxV,
+            fromCurrencyCode: pc,
+            toCurrencyCode: vc,
+            ratesMap,
+          })
+        : null;
+
+    if ((minV != null && cMin == null) || (maxV != null && cMax == null)) {
+      return {
+        primaryText,
+        secondaryText: null,
+        footnote: null,
+        conversionFailed: true,
+        showCaptions: true,
+        providerCode: pc,
+        viewerCode: vc,
+      };
+    }
+
+    const fmtView = (n: number) => formatProviderMoney(n, vc, locale);
+
+    const secondaryText =
+      minV != null && maxV != null && cMin != null && cMax != null
+        ? t("customer.providers.detail.budgetRange", {
+            min: fmtView(cMin),
+            max: fmtView(cMax),
+          })
+        : minV != null && cMin != null
+          ? t("customer.providers.detail.budgetFrom", {
+              min: fmtView(cMin),
+            })
+          : maxV != null && cMax != null
+            ? t("customer.providers.detail.budgetUpTo", {
+                max: fmtView(cMax),
+              })
+            : null;
+
+    return {
+      primaryText,
+      secondaryText,
+      footnote: provider.pricingFxSnapshotDate ?? null,
+      conversionFailed: false,
+      showCaptions: true,
+      providerCode: pc,
+      viewerCode: vc,
+    };
+  }, [
+    provider.minimumProjectBudget,
+    provider.maximumProjectBudget,
+    provider.preferredCurrency,
+    provider.pricingFxSnapshotRatesJson,
+    provider.pricingFxSnapshotDate,
+    viewerPreferredCurrency,
+    locale,
+    t,
+  ]);
+
   const [saved, setSaved] = useState<boolean>(!!provider.saved);
-  const [portfolioProjects, setPortfolioProjects] = useState<Array<{
-    id: string;
-    title: string;
-    description?: string;
-    category?: string;
-    technologies?: string[];
-    client?: string;
-    completedDate?: string;
-  }>>([]);
+  const [portfolioProjects, setPortfolioProjects] = useState<
+    Array<{
+      id: string;
+      title: string;
+      description?: string;
+      category?: string;
+      technologies?: string[];
+      client?: string;
+      completedDate?: string;
+    }>
+  >([]);
   const [loadingPortfolio, setLoadingPortfolio] = useState(false);
   const [isProposalPopupOpen, setIsProposalPopupOpen] = useState(false);
-  const [resume, setResume] = useState<{ fileUrl: string; uploadedAt: string } | null>(null);
+  const [resume, setResume] = useState<{
+    fileUrl: string;
+    uploadedAt: string;
+  } | null>(null);
   const [portfolioExpanded, setPortfolioExpanded] = useState(false);
-  const [completedProjectsExpanded, setCompletedProjectsExpanded] = useState(false);
+  const [completedProjectsExpanded, setCompletedProjectsExpanded] =
+    useState(false);
   const [reviewsExpanded, setReviewsExpanded] = useState(false);
   const [certificationsExpanded, setCertificationsExpanded] = useState(false);
+  const [profilePhotoOpen, setProfilePhotoOpen] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
+  const dateLocale =
+    locale === "ar" ? "ar" : locale === "id" ? "id-ID" : "en-MY";
+
+  const profilePhotoSrc = getProfileImageUrl(provider.avatar);
+  const hasProfilePhoto = Boolean(provider.avatar?.trim());
 
   // Update saved state when provider prop changes (e.g., after refresh)
   useEffect(() => {
@@ -160,7 +328,7 @@ export default function ProviderDetailClient({
       window.open(downloadUrl.downloadUrl, "_blank");
     } catch (error: unknown) {
       toast({
-        title: "Download failed",
+        title: t("customer.providers.toast.downloadFailed"),
         description: getUserFriendlyErrorMessage(
           error,
           "customer provider detail resume download",
@@ -174,8 +342,8 @@ export default function ProviderDetailClient({
     const avatarUrl = getProfileImageUrl(provider.avatar);
     router.push(
       `/customer/messages?userId=${provider.id}&name=${encodeURIComponent(
-        provider.name
-      )}&avatar=${encodeURIComponent(avatarUrl)}`
+        provider.name,
+      )}&avatar=${encodeURIComponent(avatarUrl)}`,
     );
   };
   const getUserAndToken = () => {
@@ -193,7 +361,7 @@ export default function ProviderDetailClient({
     try {
       const { userId, token } = getUserAndToken();
       if (!userId || !token) {
-        alert("Please login to save providers");
+        alert(t("customer.providers.alert.loginToSave"));
         return;
       }
 
@@ -208,14 +376,14 @@ export default function ProviderDetailClient({
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`, // ✅ token added here
           },
-        }
+        },
       );
 
       if (response.ok) {
         setSaved(!saved);
       } else {
         toast({
-          title: "Error",
+          title: t("customer.providers.toast.errorTitle"),
           description: getUserFriendlyErrorMessage(
             undefined,
             "customer provider detail save",
@@ -225,7 +393,7 @@ export default function ProviderDetailClient({
       }
     } catch (error) {
       toast({
-        title: "Error",
+        title: t("customer.providers.toast.errorTitle"),
         description: getUserFriendlyErrorMessage(
           error,
           "customer provider detail save",
@@ -240,32 +408,45 @@ export default function ProviderDetailClient({
       {/* Back + Actions */}
       <div className="flex items-center justify-between">
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-          <Button
-            variant={saved ? "default" : "outline"}
-            onClick={handleSaveToggle}
-            className={`text-xs sm:text-sm w-full sm:w-auto ${
-              saved ? "bg-red-600 hover:bg-red-700 text-white" : ""
-            }`}
-          >
-            <Heart
-              className={`w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 ${
-                saved ? "fill-current" : ""
-              }`}
-            />{" "}
-            {saved ? "Saved" : "Save"}
-          </Button>
-
-          {provider.allowMessages !== false && (
+          {publicGuestMode ? (
             <Button
-              onClick={(e) => {
-                e.preventDefault(); // prevents Link from triggering navigation
-                handleContact(provider);
-              }}
+              onClick={() => router.push("/auth/login?role=customer")}
               className="text-xs sm:text-sm w-full sm:w-auto"
             >
-              <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-              Contact
+              Sign in to hire
             </Button>
+          ) : (
+            <>
+              <Button
+                variant={saved ? "default" : "outline"}
+                onClick={handleSaveToggle}
+                className={`text-xs sm:text-sm w-full sm:w-auto ${
+                  saved ? "bg-red-600 hover:bg-red-700 text-white" : ""
+                }`}
+              >
+                <Heart
+                  className={`w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 ${
+                    saved ? "fill-current" : ""
+                  }`}
+                />{" "}
+                {saved
+                  ? t("customer.providers.detail.saved")
+                  : t("customer.providers.detail.save")}
+              </Button>
+
+              {provider.allowMessages !== false && (
+                <Button
+                  onClick={(e) => {
+                    e.preventDefault(); // prevents Link from triggering navigation
+                    handleContact(provider);
+                  }}
+                  className="text-xs sm:text-sm w-full sm:w-auto"
+                >
+                  <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
+                  {t("customer.providers.detail.contact")}
+                </Button>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -274,12 +455,24 @@ export default function ProviderDetailClient({
       <Card>
         <CardContent className="p-4 sm:p-5 lg:p-6">
           <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-5">
-            <Avatar className="w-16 h-16 sm:w-18 sm:h-18 lg:w-20 lg:h-20 flex-shrink-0 mx-auto sm:mx-0">
-              <AvatarImage
-                src={getProfileImageUrl(provider.avatar)}
-              />
-              <AvatarFallback>{provider.name?.[0]}</AvatarFallback>
-            </Avatar>
+            {hasProfilePhoto ? (
+              <button
+                type="button"
+                onClick={() => setProfilePhotoOpen(true)}
+                className="mx-auto sm:mx-0 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 shrink-0 cursor-pointer"
+                aria-label={t("customer.providers.detail.profilePhotoAria")}
+              >
+                <Avatar className="w-16 h-16 sm:w-18 sm:h-18 lg:w-20 lg:h-20 pointer-events-none">
+                  <AvatarImage src={profilePhotoSrc} alt="" />
+                  <AvatarFallback>{provider.name?.[0]}</AvatarFallback>
+                </Avatar>
+              </button>
+            ) : (
+              <Avatar className="w-16 h-16 sm:w-18 sm:h-18 lg:w-20 lg:h-20 flex-shrink-0 mx-auto sm:mx-0">
+                <AvatarImage src={profilePhotoSrc} alt="" />
+                <AvatarFallback>{provider.name?.[0]}</AvatarFallback>
+              </Avatar>
+            )}
             <div className="flex-1 min-w-0 w-full sm:w-auto text-center sm:text-left">
               <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mb-1.5 sm:mb-1">
                 <h1 className="text-xl sm:text-2xl font-bold break-words">
@@ -288,23 +481,24 @@ export default function ProviderDetailClient({
                 {provider.verified && (
                   <Badge className="bg-green-100 text-green-800 text-xs">
                     <CheckCircle2 className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
-                    Verified
+                    {t("customer.providers.detail.verified")}
                   </Badge>
                 )}
                 {!provider.verified && (
                   <Badge className="bg-gray-100 text-gray-700 border-gray-300 text-xs">
                     <AlertTriangle className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
-                    Not Verified
+                    {t("customer.providers.detail.notVerified")}
                   </Badge>
                 )}
                 {provider.topRated && (
                   <Badge className="bg-yellow-100 text-yellow-800 text-xs">
-                    Top Rated
+                    {t("customer.providers.detail.topRated")}
                   </Badge>
                 )}
               </div>
               <p className="text-sm sm:text-base text-gray-600 break-words">
-                {provider.major || "ICT Professional"} • {provider.company}
+                {provider.major || t("customer.providers.defaultMajor")} •{" "}
+                {provider.company}
               </p>
               <div className="mt-2 flex flex-wrap items-center justify-center sm:justify-start gap-3 sm:gap-4 text-xs sm:text-sm text-gray-600">
                 <span className="flex items-center gap-1">
@@ -315,17 +509,20 @@ export default function ProviderDetailClient({
                   <MapPin className="w-3.5 h-3.5 sm:w-4 sm:h-4 flex-shrink-0" />
                   <span className="truncate">{provider.location}</span>
                 </span>
+                <div className="min-w-0 text-center sm:text-left">
+                  <CustomerProviderHourlyRate
+                    provider={provider}
+                    viewerPreferredCurrency={viewerPreferredCurrency}
+                    primaryClassName="text-xs sm:text-sm text-gray-600"
+                    secondaryClassName="text-xs sm:text-sm text-gray-600"
+                    captionClassName="text-[10px] sm:text-xs text-gray-500"
+                  />
+                </div>
                 <span className="whitespace-nowrap">
-                  RM{provider.hourlyRate}/hr
+                  {t("customer.providers.detail.completedJobsLine", {
+                    count: String(provider.completedJobs),
+                  })}
                 </span>
-                <span className="whitespace-nowrap">
-                  {provider.completedJobs} completed jobs
-                </span>
-                {provider.yearsExperience && provider.yearsExperience > 0 && (
-                  <span className="whitespace-nowrap">
-                    {provider.yearsExperience} years experience
-                  </span>
-                )}
                 <span className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                   {provider.languages?.map((l) => (
                     <Badge
@@ -363,9 +560,11 @@ export default function ProviderDetailClient({
         <div className="lg:col-span-2 space-y-4 sm:space-y-5 lg:space-y-6">
           <Card>
             <CardHeader className="p-4 sm:p-6">
-              <CardTitle className="text-base sm:text-lg">Portfolio</CardTitle>
+              <CardTitle className="text-base sm:text-lg">
+                {t("customer.providers.detail.portfolioTitle")}
+              </CardTitle>
               <CardDescription className="text-xs sm:text-sm">
-                Recent work and case studies
+                {t("customer.providers.detail.portfolioDesc")}
               </CardDescription>
             </CardHeader>
             <CardContent className="p-4 sm:p-6 pt-0">
@@ -373,6 +572,8 @@ export default function ProviderDetailClient({
                 expanded={portfolioExpanded}
                 onToggle={() => setPortfolioExpanded((v) => !v)}
                 maxHeight={COLLAPSED_MAX_HEIGHT}
+                showMoreLabel={t("customer.providers.detail.showMore")}
+                showLessLabel={t("customer.providers.detail.showLess")}
               >
                 <PortfolioGrid items={portfolio} />
               </CollapsibleSection>
@@ -383,10 +584,10 @@ export default function ProviderDetailClient({
           <Card>
             <CardHeader className="p-4 sm:p-6">
               <CardTitle className="text-base sm:text-lg">
-                Completed Projects
+                {t("customer.providers.detail.completedProjectsTitle")}
               </CardTitle>
               <CardDescription className="text-xs sm:text-sm">
-                Showcase of completed work
+                {t("customer.providers.detail.completedProjectsDesc")}
               </CardDescription>
             </CardHeader>
             <CardContent className="p-4 sm:p-6 pt-0">
@@ -394,23 +595,24 @@ export default function ProviderDetailClient({
                 expanded={completedProjectsExpanded}
                 onToggle={() => setCompletedProjectsExpanded((v) => !v)}
                 maxHeight={COLLAPSED_MAX_HEIGHT}
+                showMoreLabel={t("customer.providers.detail.showMore")}
+                showLessLabel={t("customer.providers.detail.showLess")}
               >
                 {loadingPortfolio ? (
                   <div className="flex items-center justify-center py-8 sm:py-12">
                     <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin text-gray-400" />
                     <span className="ml-2 text-xs sm:text-sm text-gray-600">
-                      Loading projects...
+                      {t("customer.providers.detail.loadingProjects")}
                     </span>
                   </div>
                 ) : portfolioProjects.length === 0 ? (
                   <div className="text-center py-8 sm:py-12 px-4">
                     <Globe className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 text-gray-300" />
                     <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
-                      No completed projects yet
+                      {t("customer.providers.detail.noCompletedTitle")}
                     </h3>
                     <p className="text-xs sm:text-sm text-gray-600">
-                      Completed projects will appear here automatically once the
-                      provider finishes working on them.
+                      {t("customer.providers.detail.noCompletedBody")}
                     </p>
                   </div>
                 ) : (
@@ -429,7 +631,8 @@ export default function ProviderDetailClient({
                               variant="secondary"
                               className="text-[10px] sm:text-xs"
                             >
-                              {project.category || "Project"}
+                              {project.category ||
+                                t("customer.providers.detail.projectFallback")}
                             </Badge>
                           </div>
                         </div>
@@ -438,7 +641,8 @@ export default function ProviderDetailClient({
                             {project.title}
                           </h3>
                           <p className="text-xs sm:text-sm text-gray-600 mb-2 sm:mb-3 line-clamp-2">
-                            {project.description || "No description provided"}
+                            {project.description ||
+                              t("customer.providers.detail.noDescription")}
                           </p>
                           {project.technologies &&
                             project.technologies.length > 0 && (
@@ -459,7 +663,11 @@ export default function ProviderDetailClient({
                                     variant="secondary"
                                     className="text-[10px] sm:text-xs"
                                   >
-                                    +{project.technologies.length - 6} more
+                                    {t("customer.providers.detail.moreTech", {
+                                      n: String(
+                                        project.technologies.length - 6,
+                                      ),
+                                    })}
                                   </Badge>
                                 )}
                               </div>
@@ -471,8 +679,8 @@ export default function ProviderDetailClient({
                             {project.completedDate && (
                               <span className="whitespace-nowrap">
                                 {new Date(
-                                  project.completedDate
-                                ).toLocaleDateString()}
+                                  project.completedDate,
+                                ).toLocaleDateString(dateLocale)}
                               </span>
                             )}
                           </div>
@@ -487,9 +695,11 @@ export default function ProviderDetailClient({
 
           <Card>
             <CardHeader className="p-4 sm:p-6">
-              <CardTitle className="text-base sm:text-lg">Reviews</CardTitle>
+              <CardTitle className="text-base sm:text-lg">
+                {t("customer.providers.detail.reviewsTitle")}
+              </CardTitle>
               <CardDescription className="text-xs sm:text-sm">
-                What clients say
+                {t("customer.providers.detail.reviewsDesc")}
               </CardDescription>
             </CardHeader>
             <CardContent className="p-4 sm:p-6 pt-0">
@@ -497,6 +707,8 @@ export default function ProviderDetailClient({
                 expanded={reviewsExpanded}
                 onToggle={() => setReviewsExpanded((v) => !v)}
                 maxHeight={COLLAPSED_MAX_HEIGHT}
+                showMoreLabel={t("customer.providers.detail.showMore")}
+                showLessLabel={t("customer.providers.detail.showLess")}
               >
                 <ReviewsList reviews={reviews} />
               </CollapsibleSection>
@@ -507,9 +719,11 @@ export default function ProviderDetailClient({
           {resume && (
             <Card>
               <CardHeader className="p-4 sm:p-6">
-                <CardTitle className="text-base sm:text-lg">Resume</CardTitle>
+                <CardTitle className="text-base sm:text-lg">
+                  {t("customer.providers.detail.resumeTitle")}
+                </CardTitle>
                 <CardDescription className="text-xs sm:text-sm">
-                  Provider&apos;s resume
+                  {t("customer.providers.detail.resumeDesc")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-4 sm:p-6 pt-0">
@@ -517,9 +731,15 @@ export default function ProviderDetailClient({
                   <div className="flex items-center gap-4">
                     <FileText className="w-8 h-8 text-gray-400" />
                     <div>
-                      <p className="font-medium text-sm sm:text-base">Resume</p>
+                      <p className="font-medium text-sm sm:text-base">
+                        {t("customer.providers.detail.resumeFileLabel")}
+                      </p>
                       <p className="text-xs sm:text-sm text-gray-500">
-                        Uploaded on {new Date(resume.uploadedAt).toLocaleDateString()}
+                        {t("customer.providers.detail.uploadedOn", {
+                          date: new Date(resume.uploadedAt).toLocaleDateString(
+                            dateLocale,
+                          ),
+                        })}
                       </p>
                     </div>
                   </div>
@@ -530,7 +750,7 @@ export default function ProviderDetailClient({
                     className="text-xs sm:text-sm"
                   >
                     <ExternalLink className="w-4 h-4 mr-2" />
-                    Download
+                    {t("customer.providers.detail.download")}
                   </Button>
                 </div>
               </CardContent>
@@ -543,30 +763,43 @@ export default function ProviderDetailClient({
           <Card>
             <CardHeader className="p-4 sm:p-6">
               <CardTitle className="text-base sm:text-lg">
-                Hire {provider.name.split(" ")[0]}
+                {t("customer.providers.detail.hireTitle", {
+                  name: provider.name.split(" ")[0] ?? provider.name,
+                })}
               </CardTitle>
               <CardDescription className="text-xs sm:text-sm">
-                Start a project or send a message
+                {t("customer.providers.detail.hireDesc")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2 sm:space-y-3 p-4 sm:p-6 pt-0">
-              <Button
-                onClick={() => setIsProposalPopupOpen(true)}
-                className="w-full text-xs sm:text-sm"
-              >
-                Request a Proposal
-              </Button>
-              {provider.allowMessages !== false && (
+              {publicGuestMode ? (
                 <Button
-                  variant="outline"
+                  onClick={() => router.push("/auth/login?role=customer")}
                   className="w-full text-xs sm:text-sm"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    handleContact(provider);
-                  }}
                 >
-                  Send Message
+                  Sign in to hire
                 </Button>
+              ) : (
+                <>
+                  <Button
+                    onClick={() => setIsProposalPopupOpen(true)}
+                    className="w-full text-xs sm:text-sm"
+                  >
+                    {t("customer.providers.detail.requestProposal")}
+                  </Button>
+                  {provider.allowMessages !== false && (
+                    <Button
+                      variant="outline"
+                      className="w-full text-xs sm:text-sm"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        handleContact(provider);
+                      }}
+                    >
+                      {t("customer.providers.detail.sendMessage")}
+                    </Button>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>
@@ -574,10 +807,10 @@ export default function ProviderDetailClient({
           <Card>
             <CardHeader className="p-4 sm:p-6">
               <CardTitle className="text-base sm:text-lg">
-                Specialties
+                {t("customer.providers.detail.specialtiesTitle")}
               </CardTitle>
               <CardDescription className="text-xs sm:text-sm">
-                Best-fit project types
+                {t("customer.providers.detail.specialtiesDesc")}
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-1.5 sm:gap-2 p-4 sm:p-6 pt-0">
@@ -598,16 +831,18 @@ export default function ProviderDetailClient({
             <Card>
               <CardHeader className="p-4 sm:p-6">
                 <CardTitle className="text-base sm:text-lg">
-                  Contact Information
+                  {t("customer.providers.detail.contactInfoTitle")}
                 </CardTitle>
                 <CardDescription className="text-xs sm:text-sm">
-                  Direct contact details
+                  {t("customer.providers.detail.contactInfoDesc")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-2.5 sm:space-y-3 text-xs sm:text-sm p-4 sm:p-6 pt-0">
                 {provider.email && (
                   <div>
-                    <p className="text-gray-500">Email</p>
+                    <p className="text-gray-500">
+                      {t("customer.providers.detail.label.email")}
+                    </p>
                     <a
                       href={`mailto:${provider.email}`}
                       className="font-medium text-blue-600 hover:underline break-all"
@@ -618,7 +853,9 @@ export default function ProviderDetailClient({
                 )}
                 {provider.phone && (
                   <div>
-                    <p className="text-gray-500">Phone</p>
+                    <p className="text-gray-500">
+                      {t("customer.providers.detail.label.phone")}
+                    </p>
                     <a
                       href={`tel:${provider.phone}`}
                       className="font-medium text-blue-600 hover:underline"
@@ -635,16 +872,18 @@ export default function ProviderDetailClient({
           <Card>
             <CardHeader className="p-4 sm:p-6">
               <CardTitle className="text-base sm:text-lg">
-                Additional Information
+                {t("customer.providers.detail.additionalTitle")}
               </CardTitle>
               <CardDescription className="text-xs sm:text-sm">
-                Work preferences and details
+                {t("customer.providers.detail.additionalDesc")}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2.5 sm:space-y-3 text-xs sm:text-sm p-4 sm:p-6 pt-0">
               {provider.availability && (
                 <div>
-                  <p className="text-gray-500">Availability</p>
+                  <p className="text-gray-500">
+                    {t("customer.providers.detail.label.availability")}
+                  </p>
                   <div className="flex items-center gap-1.5 mt-1">
                     <div
                       className={`w-2 h-2 rounded-full flex-shrink-0 ${
@@ -664,37 +903,102 @@ export default function ProviderDetailClient({
               )}
               {provider.workPreference && (
                 <div>
-                  <p className="text-gray-500">Work Preference</p>
+                  <p className="text-gray-500">
+                    {t("customer.providers.detail.label.workPreference")}
+                  </p>
                   <p className="font-medium capitalize">
                     {provider.workPreference}
                   </p>
                 </div>
               )}
-              {provider.teamSize && provider.teamSize > 1 && (
+              {(provider.teamSize ?? 0) > 1 && (
                 <div>
-                  <p className="text-gray-500">Team Size</p>
-                  <p className="font-medium">{provider.teamSize} members</p>
-                </div>
-              )}
-              {(provider.minimumProjectBudget ||
-                provider.maximumProjectBudget) && (
-                <div>
-                  <p className="text-gray-500">Project Budget Range</p>
+                  <p className="text-gray-500">
+                    {t("customer.providers.detail.label.teamSize")}
+                  </p>
                   <p className="font-medium">
-                    {provider.minimumProjectBudget &&
-                    provider.maximumProjectBudget
-                      ? `RM ${provider.minimumProjectBudget.toLocaleString()} - RM ${provider.maximumProjectBudget.toLocaleString()}`
-                      : provider.minimumProjectBudget
-                      ? `From RM ${provider.minimumProjectBudget.toLocaleString()}`
-                      : provider.maximumProjectBudget
-                      ? `Up to RM ${provider.maximumProjectBudget.toLocaleString()}`
-                      : "—"}
+                    {t("customer.providers.detail.teamMembers", {
+                      n: String(provider.teamSize),
+                    })}
                   </p>
                 </div>
               )}
+              {(provider.minimumProjectBudget ||
+                provider.maximumProjectBudget) &&
+                projectBudgetDisplay && (
+                  <div>
+                    <p className="text-gray-500">
+                      {t("customer.providers.detail.label.projectBudget")}
+                    </p>
+                    <div className="space-y-2 mt-1">
+                      <div>
+                        <p className="font-medium">
+                          {projectBudgetDisplay.primaryText}
+                        </p>
+                        {projectBudgetDisplay.showCaptions && (
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            {t(
+                              "customer.providers.detail.budgetCaptionProvider",
+                              {
+                                code: projectBudgetDisplay.providerCode,
+                              },
+                            )}
+                          </p>
+                        )}
+                      </div>
+                      {projectBudgetDisplay.secondaryText ? (
+                        <div className="pt-2 border-t border-gray-100">
+                          <p className="font-medium">
+                            {projectBudgetDisplay.secondaryText}
+                          </p>
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            {t("customer.providers.detail.budgetCaptionYours", {
+                              code: projectBudgetDisplay.viewerCode,
+                            })}
+                          </p>
+                        </div>
+                      ) : null}
+                      {projectBudgetDisplay.conversionFailed &&
+                      viewerPreferredCurrency &&
+                      normalizeCurrencyCode(viewerPreferredCurrency) !==
+                        normalizeCurrencyCode(
+                          provider.preferredCurrency || "MYR",
+                        ) ? (
+                        <p className="text-xs text-amber-800 bg-amber-50 rounded px-2 py-1.5">
+                          {t(
+                            "customer.providers.detail.budgetConversionUnavailable",
+                          )}
+                        </p>
+                      ) : null}
+                      {projectBudgetDisplay.footnote &&
+                      projectBudgetDisplay.secondaryText ? (
+                        <p className="text-xs text-gray-400 pt-0.5">
+                          {t("customer.providers.detail.budgetFxFootnote", {
+                            date: projectBudgetDisplay.footnote,
+                          })}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                )}
+              {provider.yearsExperience != null &&
+                provider.yearsExperience > 0 && (
+                  <div>
+                    <p className="text-gray-500">
+                      {t("customer.providers.detail.label.yearsExperience")}
+                    </p>
+                    <p className="font-medium">
+                      {t("customer.providers.card.years", {
+                        n: String(provider.yearsExperience),
+                      })}
+                    </p>
+                  </div>
+                )}
               {provider.preferredProjectDuration && (
                 <div>
-                  <p className="text-gray-500">Preferred Project Duration</p>
+                  <p className="text-gray-500">
+                    {t("customer.providers.detail.label.preferredDuration")}
+                  </p>
                   <p className="font-medium">
                     {provider.preferredProjectDuration}
                   </p>
@@ -702,7 +1006,9 @@ export default function ProviderDetailClient({
               )}
               {provider.website && (
                 <div>
-                  <p className="text-gray-500">Website</p>
+                  <p className="text-gray-500">
+                    {t("customer.providers.detail.label.website")}
+                  </p>
                   <a
                     href={
                       provider.website.startsWith("http")
@@ -717,16 +1023,25 @@ export default function ProviderDetailClient({
                   </a>
                 </div>
               )}
-              {provider.certificationsCount &&
-                provider.certificationsCount > 0 && (
-                  <div>
-                    <p className="text-gray-500">Certifications</p>
-                    <p className="font-medium">
-                      {provider.certificationsCount} certification
-                      {provider.certificationsCount !== 1 ? "s" : ""}
-                    </p>
-                  </div>
-                )}
+              {(provider.certificationsCount ?? 0) > 0 && (
+                <div>
+                  <p className="text-gray-500">
+                    {t("customer.providers.detail.label.certifications")}
+                  </p>
+                  <p className="font-medium">
+                    {provider.certificationsCount === 1
+                      ? t("customer.providers.detail.certificationCount", {
+                          n: String(provider.certificationsCount),
+                        })
+                      : t(
+                          "customer.providers.detail.certificationCountPlural",
+                          {
+                            n: String(provider.certificationsCount),
+                          },
+                        )}
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -735,10 +1050,10 @@ export default function ProviderDetailClient({
             <Card>
               <CardHeader className="p-4 sm:p-6">
                 <CardTitle className="text-base sm:text-lg">
-                  Certifications
+                  {t("customer.providers.detail.certificationsListTitle")}
                 </CardTitle>
                 <CardDescription className="text-xs sm:text-sm">
-                  Verified credentials
+                  {t("customer.providers.detail.certificationsListDesc")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-4 sm:p-6 pt-0">
@@ -746,6 +1061,8 @@ export default function ProviderDetailClient({
                   expanded={certificationsExpanded}
                   onToggle={() => setCertificationsExpanded((v) => !v)}
                   maxHeight={COLLAPSED_MAX_HEIGHT_SIDEBAR}
+                  showMoreLabel={t("customer.providers.detail.showMore")}
+                  showLessLabel={t("customer.providers.detail.showLess")}
                 >
                   <div className="space-y-4">
                     {provider.certifications.map((cert) => (
@@ -764,16 +1081,21 @@ export default function ProviderDetailClient({
                                 <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
                               )}
                             </div>
-                            <p className="text-sm text-gray-600">{cert.issuer}</p>
+                            <p className="text-sm text-gray-600">
+                              {cert.issuer}
+                            </p>
                             <p className="text-xs text-gray-500">
-                              Issued:{" "}
+                              {t("customer.providers.detail.issued")}{" "}
                               {cert.issuedDate
-                                ? new Date(cert.issuedDate).toLocaleDateString()
-                                : "N/A"}
+                                ? new Date(cert.issuedDate).toLocaleDateString(
+                                    dateLocale,
+                                  )
+                                : t("customer.providers.detail.notAvailable")}
                             </p>
                             {cert.serialNumber && (
                               <p className="text-xs text-gray-500 mt-1">
-                                Serial: {cert.serialNumber}
+                                {t("customer.providers.detail.serial")}{" "}
+                                {cert.serialNumber}
                               </p>
                             )}
                             {cert.sourceUrl && (
@@ -788,7 +1110,9 @@ export default function ProviderDetailClient({
                                 rel="noopener noreferrer"
                                 className="text-xs text-blue-600 hover:underline mt-1 inline-block"
                               >
-                                Verify Certificate ↗
+                                {t(
+                                  "customer.providers.detail.verifyCertificate",
+                                )}
                               </a>
                             )}
                           </div>
@@ -803,17 +1127,37 @@ export default function ProviderDetailClient({
         </div>
       </div>
 
+      <Dialog open={profilePhotoOpen} onOpenChange={setProfilePhotoOpen}>
+        <DialogContent className="max-w-[min(100vw-1rem,56rem)] p-2 sm:p-4 border bg-background">
+          <DialogTitle className="sr-only">
+            {t("customer.providers.detail.dialogPhotoTitle", {
+              name: provider.name ?? "",
+            })}
+          </DialogTitle>
+          <div className="flex max-h-[85vh] items-center justify-center overflow-auto">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={profilePhotoSrc}
+              alt={`${provider.name} profile photo`}
+              className="max-h-[85vh] w-auto max-w-full rounded-lg object-contain"
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Proposal Popup */}
-      <ProposalPopup
-        providerId={provider.id}
-        providerName={provider.name}
-        isOpen={isProposalPopupOpen}
-        onClose={() => setIsProposalPopupOpen(false)}
-        onSuccess={() => {
-          // Refresh or show success message
-          console.log("Proposal request sent successfully");
-        }}
-      />
+      {!publicGuestMode && (
+        <ProposalPopup
+          providerId={provider.id}
+          providerName={provider.name}
+          isOpen={isProposalPopupOpen}
+          onClose={() => setIsProposalPopupOpen(false)}
+          onSuccess={() => {
+            // Refresh or show success message
+            console.log("Proposal request sent successfully");
+          }}
+        />
+      )}
     </div>
   );
 }

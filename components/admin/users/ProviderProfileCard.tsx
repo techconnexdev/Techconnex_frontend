@@ -1,5 +1,6 @@
 "use client"
 
+import { useI18n } from "@/contexts/I18nProvider"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
@@ -23,6 +24,8 @@ export function ProviderProfileCard({
   onFieldChange,
   onArrayFieldChange,
 }: ProviderProfileCardProps) {
+  const { t } = useI18n()
+  const em = () => t("admin.users.common.emDash")
   const getStringValue = (value: unknown): string => {
     if (typeof value === "string") return value
     if (typeof value === "number") return String(value)
@@ -48,41 +51,41 @@ export function ProviderProfileCard({
   return (
     <Card>
       <CardHeader className="p-4 sm:p-6">
-        <CardTitle className="text-lg sm:text-xl">Provider Profile</CardTitle>
+        <CardTitle className="text-lg sm:text-xl">{t("admin.users.provider.title")}</CardTitle>
       </CardHeader>
       <CardContent className="p-4 sm:p-6 space-y-3 sm:space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="bio" className="text-xs sm:text-sm">Bio</Label>
+          <Label htmlFor="bio" className="text-xs sm:text-sm">{t("admin.users.provider.bio")}</Label>
           {isEditing ? (
             <Textarea
               id="bio"
               value={getStringValue(formData.bio)}
               onChange={(e) => onFieldChange("bio", e.target.value)}
-              placeholder="Enter bio"
+              placeholder={t("admin.users.provider.bioPlaceholder")}
               rows={4}
               className="text-sm sm:text-base"
             />
           ) : (
-            <p className="text-sm sm:text-base break-words">{getStringValue(profile.bio) || "—"}</p>
+            <p className="text-sm sm:text-base break-words">{getStringValue(profile.bio) || em()}</p>
           )}
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
           <div className="space-y-2">
-            <Label htmlFor="major" className="text-xs sm:text-sm">Major / Title</Label>
+            <Label htmlFor="major" className="text-xs sm:text-sm">{t("admin.users.provider.major")}</Label>
             {isEditing ? (
               <Input
                 id="major"
                 value={getStringValue(formData.major)}
                 onChange={(e) => onFieldChange("major", e.target.value)}
-                placeholder="e.g. Software Engineer"
+                placeholder={t("admin.users.provider.majorPlaceholder")}
                 className="text-sm sm:text-base"
               />
             ) : (
-              <p className="text-sm sm:text-base break-words">{getStringValue(profile.major) || "—"}</p>
+              <p className="text-sm sm:text-base break-words">{getStringValue(profile.major) || em()}</p>
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="location" className="text-xs sm:text-sm">Location</Label>
+            <Label htmlFor="location" className="text-xs sm:text-sm">{t("admin.users.provider.location")}</Label>
             {isEditing ? (
               <Input
                 id="location"
@@ -91,11 +94,11 @@ export function ProviderProfileCard({
                 className="text-sm sm:text-base"
               />
             ) : (
-              <p className="text-sm sm:text-base break-words">{getStringValue(profile.location) || "—"}</p>
+              <p className="text-sm sm:text-base break-words">{getStringValue(profile.location) || em()}</p>
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="hourlyRate" className="text-xs sm:text-sm">Hourly Rate (RM)</Label>
+            <Label htmlFor="hourlyRate" className="text-xs sm:text-sm">{t("admin.users.provider.hourlyRate")}</Label>
             {isEditing ? (
               <Input
                 id="hourlyRate"
@@ -107,41 +110,41 @@ export function ProviderProfileCard({
                 className="text-sm sm:text-base"
               />
             ) : (
-              <p className="text-sm sm:text-base">{profile.hourlyRate ? `RM ${profile.hourlyRate}` : "—"}</p>
+              <p className="text-sm sm:text-base">{profile.hourlyRate ? `RM ${profile.hourlyRate}` : em()}</p>
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="website" className="text-xs sm:text-sm">Website</Label>
+            <Label htmlFor="website" className="text-xs sm:text-sm">{t("admin.users.provider.website")}</Label>
             {isEditing ? (
               <Input
                 id="website"
                 type="url"
                 value={getStringValue(formData.website)}
                 onChange={(e) => onFieldChange("website", e.target.value)}
-                placeholder="https://..."
+                placeholder={t("admin.users.provider.urlPlaceholder")}
                 className="text-sm sm:text-base"
               />
             ) : (
-              <p className="text-sm sm:text-base break-words">{getStringValue(profile.website) || "—"}</p>
+              <p className="text-sm sm:text-base break-words">{getStringValue(profile.website) || em()}</p>
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="profileImageUrl" className="text-xs sm:text-sm">Profile Image URL</Label>
+            <Label htmlFor="profileImageUrl" className="text-xs sm:text-sm">{t("admin.users.provider.profileImageUrl")}</Label>
             {isEditing ? (
               <Input
                 id="profileImageUrl"
                 type="url"
                 value={getStringValue(formData.profileImageUrl)}
                 onChange={(e) => onFieldChange("profileImageUrl", e.target.value)}
-                placeholder="https://..."
+                placeholder={t("admin.users.provider.urlPlaceholder")}
                 className="text-sm sm:text-base"
               />
             ) : (
-              <p className="text-sm sm:text-base break-words">{getStringValue(profile.profileImageUrl) || "—"}</p>
+              <p className="text-sm sm:text-base break-words">{getStringValue(profile.profileImageUrl) || em()}</p>
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="yearsExperience" className="text-xs sm:text-sm">Years Experience</Label>
+            <Label htmlFor="yearsExperience" className="text-xs sm:text-sm">{t("admin.users.provider.yearsExperience")}</Label>
             {isEditing ? (
               <Input
                 id="yearsExperience"
@@ -153,11 +156,11 @@ export function ProviderProfileCard({
                 className="text-sm sm:text-base"
               />
             ) : (
-              <p className="text-sm sm:text-base">{getStringValue(profile.yearsExperience) || "—"}</p>
+              <p className="text-sm sm:text-base">{getStringValue(profile.yearsExperience) || em()}</p>
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="availability" className="text-xs sm:text-sm">Availability</Label>
+            <Label htmlFor="availability" className="text-xs sm:text-sm">{t("admin.users.provider.availability")}</Label>
             {isEditing ? (
               <Select
                 value={getStringValue(formData.availability) || "available"}
@@ -167,17 +170,17 @@ export function ProviderProfileCard({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="available">Available</SelectItem>
-                  <SelectItem value="busy">Busy</SelectItem>
-                  <SelectItem value="unavailable">Unavailable</SelectItem>
+                  <SelectItem value="available">{t("admin.users.provider.availability.available")}</SelectItem>
+                  <SelectItem value="busy">{t("admin.users.provider.availability.busy")}</SelectItem>
+                  <SelectItem value="unavailable">{t("admin.users.provider.availability.unavailable")}</SelectItem>
                 </SelectContent>
               </Select>
             ) : (
-              <p className="text-sm sm:text-base">{getStringValue(profile.availability) || "—"}</p>
+              <p className="text-sm sm:text-base">{getStringValue(profile.availability) || em()}</p>
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="workPreference" className="text-xs sm:text-sm">Work Preference</Label>
+            <Label htmlFor="workPreference" className="text-xs sm:text-sm">{t("admin.users.provider.workPreference")}</Label>
             {isEditing ? (
               <Select
                 value={getStringValue(formData.workPreference) || "remote"}
@@ -187,17 +190,17 @@ export function ProviderProfileCard({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="remote">Remote</SelectItem>
-                  <SelectItem value="onsite">On-site</SelectItem>
-                  <SelectItem value="hybrid">Hybrid</SelectItem>
+                  <SelectItem value="remote">{t("admin.users.provider.workPreference.remote")}</SelectItem>
+                  <SelectItem value="onsite">{t("admin.users.provider.workPreference.onsite")}</SelectItem>
+                  <SelectItem value="hybrid">{t("admin.users.provider.workPreference.hybrid")}</SelectItem>
                 </SelectContent>
               </Select>
             ) : (
-              <p className="text-sm sm:text-base">{getStringValue(profile.workPreference) || "—"}</p>
+              <p className="text-sm sm:text-base">{getStringValue(profile.workPreference) || em()}</p>
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="teamSize" className="text-xs sm:text-sm">Team Size</Label>
+            <Label htmlFor="teamSize" className="text-xs sm:text-sm">{t("admin.users.provider.teamSize")}</Label>
             {isEditing ? (
               <Input
                 id="teamSize"
@@ -207,11 +210,11 @@ export function ProviderProfileCard({
                 className="text-sm sm:text-base"
               />
             ) : (
-              <p className="text-sm sm:text-base">{profile.teamSize || "—"}</p>
+              <p className="text-sm sm:text-base">{profile.teamSize || em()}</p>
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="minimumProjectBudget" className="text-xs sm:text-sm">Minimum Project Budget (RM)</Label>
+            <Label htmlFor="minimumProjectBudget" className="text-xs sm:text-sm">{t("admin.users.provider.minBudget")}</Label>
             {isEditing ? (
               <Input
                 id="minimumProjectBudget"
@@ -223,11 +226,11 @@ export function ProviderProfileCard({
                 className="text-sm sm:text-base"
               />
             ) : (
-              <p className="text-sm sm:text-base">{profile.minimumProjectBudget ? `RM ${profile.minimumProjectBudget}` : "—"}</p>
+              <p className="text-sm sm:text-base">{profile.minimumProjectBudget ? `RM ${profile.minimumProjectBudget}` : em()}</p>
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="maximumProjectBudget" className="text-xs sm:text-sm">Maximum Project Budget (RM)</Label>
+            <Label htmlFor="maximumProjectBudget" className="text-xs sm:text-sm">{t("admin.users.provider.maxBudget")}</Label>
             {isEditing ? (
               <Input
                 id="maximumProjectBudget"
@@ -239,31 +242,31 @@ export function ProviderProfileCard({
                 className="text-sm sm:text-base"
               />
             ) : (
-              <p className="text-sm sm:text-base">{profile.maximumProjectBudget ? `RM ${profile.maximumProjectBudget}` : "—"}</p>
+              <p className="text-sm sm:text-base">{profile.maximumProjectBudget ? `RM ${profile.maximumProjectBudget}` : em()}</p>
             )}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="preferredProjectDuration" className="text-xs sm:text-sm">Preferred Project Duration</Label>
+            <Label htmlFor="preferredProjectDuration" className="text-xs sm:text-sm">{t("admin.users.provider.prefDuration")}</Label>
             {isEditing ? (
               <Input
                 id="preferredProjectDuration"
                 value={getStringValue(formData.preferredProjectDuration)}
                 onChange={(e) => onFieldChange("preferredProjectDuration", e.target.value)}
-                placeholder="e.g. 1-3 months"
+                placeholder={t("admin.users.provider.prefDurationPlaceholder")}
                 className="text-sm sm:text-base"
               />
             ) : (
-              <p className="text-sm sm:text-base">{getStringValue(profile.preferredProjectDuration) || "—"}</p>
+              <p className="text-sm sm:text-base">{getStringValue(profile.preferredProjectDuration) || em()}</p>
             )}
           </div>
         </div>
         <div className="space-y-2">
-          <Label className="text-xs sm:text-sm">Skills</Label>
+          <Label className="text-xs sm:text-sm">{t("admin.users.provider.skills")}</Label>
           {isEditing ? (
             <div className="space-y-2">
               <div className="flex gap-2">
                 <Input
-                  placeholder="Add skill"
+                  placeholder={t("admin.users.provider.addSkill")}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault()
@@ -299,18 +302,18 @@ export function ProviderProfileCard({
                   </Badge>
                 ))
               ) : (
-                <span className="text-xs sm:text-sm text-gray-400">No skills</span>
+                <span className="text-xs sm:text-sm text-gray-400">{t("admin.users.provider.noSkills")}</span>
               )}
             </div>
           )}
         </div>
         <div className="space-y-2">
-          <Label className="text-xs sm:text-sm">Languages</Label>
+          <Label className="text-xs sm:text-sm">{t("admin.users.provider.languages")}</Label>
           {isEditing ? (
             <div className="space-y-2">
               <div className="flex gap-2">
                 <Input
-                  placeholder="Add language"
+                  placeholder={t("admin.users.provider.addLanguage")}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault()
@@ -346,18 +349,18 @@ export function ProviderProfileCard({
                   </Badge>
                 ))
               ) : (
-                <span className="text-xs sm:text-sm text-gray-400">No languages</span>
+                <span className="text-xs sm:text-sm text-gray-400">{t("admin.users.provider.noLanguages")}</span>
               )}
             </div>
           )}
         </div>
         <div className="space-y-2">
-          <Label className="text-xs sm:text-sm">Portfolio Links</Label>
+          <Label className="text-xs sm:text-sm">{t("admin.users.provider.portfolio")}</Label>
           {isEditing ? (
             <div className="space-y-2">
               <div className="flex gap-2">
                 <Input
-                  placeholder="Add portfolio URL (e.g. GitHub, LinkedIn)"
+                  placeholder={t("admin.users.provider.addPortfolio")}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault()
@@ -395,7 +398,7 @@ export function ProviderProfileCard({
                   </Badge>
                 ))
               ) : (
-                <span className="text-xs sm:text-sm text-gray-400">No portfolio links</span>
+                <span className="text-xs sm:text-sm text-gray-400">{t("admin.users.provider.noPortfolio")}</span>
               )}
             </div>
           )}

@@ -29,10 +29,8 @@ import {
   Calendar,
   DollarSign,
   Clock,
-  Loader2,
   AlertTriangle,
 } from "lucide-react";
-import { ProviderLayout } from "@/components/provider-layout";
 import {
   useProviderCompletion,
   CONTACT_REQUIRED,
@@ -50,6 +48,16 @@ import { FriendlyErrorState } from "@/components/FriendlyErrorState";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useI18n } from "@/contexts/I18nProvider";
+import {
+  ProviderProjectsListSkeleton,
+  ProviderProjectsStatsSkeleton,
+} from "@/components/provider/ProviderProjectsSkeletons";
+import {
+  convertWithSnapshot,
+  normalizeCurrencyCode,
+  type FxRatesMap,
+} from "@/lib/fx-snapshot";
 
 type ProjectCustomer = {
   id?: string;
@@ -77,6 +85,14 @@ type ProviderProject = {
   category: string;
   budgetMin?: number;
   budgetMax?: number;
+  displayBudgetMin?: number;
+  displayBudgetMax?: number;
+  currencyCode?: string;
+  displayCurrencyCode?: string;
+  originalCurrencyCode?: string;
+  originalBudgetMin?: number | null;
+  originalBudgetMax?: number | null;
+  fxSnapshotRatesJson?: FxRatesMap;
   approvedPrice?: number;
   progress?: number;
   completedMilestones?: number;
@@ -98,7 +114,77 @@ function getProjectDueDate(project: ProviderProject): string | null {
   return last?.dueDate ?? null;
 }
 
+/** Align list amounts with provider display currency (budget + approved total use project FX snapshot). */
+function applyProviderBudgetDisplay(project: ProviderProject): ProviderProject {
+  const originalCode =
+    project.originalCurrencyCode || project.currencyCode || "MYR";
+  const toCode =
+    project.displayCurrencyCode || project.currencyCode || "MYR";
+  const rawMin = project.originalBudgetMin ?? project.budgetMin ?? 0;
+  const rawMax = project.originalBudgetMax ?? project.budgetMax ?? 0;
+  const rates = project.fxSnapshotRatesJson;
+
+  if (normalizeCurrencyCode(originalCode) === normalizeCurrencyCode(toCode)) {
+    return {
+      ...project,
+      budgetMin: project.displayBudgetMin ?? rawMin,
+      budgetMax: project.displayBudgetMax ?? rawMax,
+      currencyCode: toCode,
+    };
+  }
+
+  if (!rates) {
+    return {
+      ...project,
+      budgetMin: project.displayBudgetMin ?? rawMin,
+      budgetMax: project.displayBudgetMax ?? rawMax,
+      currencyCode: toCode,
+    };
+  }
+
+  const cMin = convertWithSnapshot({
+    amount: rawMin,
+    fromCurrencyCode: originalCode,
+    toCurrencyCode: toCode,
+    ratesMap: rates,
+  });
+  const cMax = convertWithSnapshot({
+    amount: rawMax,
+    fromCurrencyCode: originalCode,
+    toCurrencyCode: toCode,
+    ratesMap: rates,
+  });
+  const cApproved =
+    project.approvedPrice != null
+      ? convertWithSnapshot({
+          amount: project.approvedPrice,
+          fromCurrencyCode: originalCode,
+          toCurrencyCode: toCode,
+          ratesMap: rates,
+        })
+      : null;
+
+  if (cMin != null && cMax != null) {
+    return {
+      ...project,
+      budgetMin: cMin,
+      budgetMax: cMax,
+      currencyCode: toCode,
+      approvedPrice:
+        cApproved != null ? cApproved : project.approvedPrice,
+    };
+  }
+
+  return {
+    ...project,
+    budgetMin: project.displayBudgetMin ?? rawMin,
+    budgetMax: project.displayBudgetMax ?? rawMax,
+    currencyCode: toCode,
+  };
+}
+
 export default function ProviderProjectsPage() {
+  const { t } = useI18n();
   const { toast } = useToast();
   const router = useRouter();
   const { canContact } = useProviderCompletion();
@@ -133,7 +219,10 @@ export default function ProviderProjectsPage() {
       ]);
 
       if (projectsResponse.success) {
-        setProjects((projectsResponse.projects || []) as ProviderProject[]);
+        const normalized = ((projectsResponse.projects || []) as ProviderProject[]).map(
+          (project) => applyProviderBudgetDisplay(project),
+        );
+        setProjects(normalized);
       }
 
       if (statsResponse.success) {
@@ -166,20 +255,20 @@ export default function ProviderProjectsPage() {
   const getStatusText = (status: string) => {
     switch (status) {
       case "COMPLETED":
-        return "Completed";
+        return t("customer.dashboard.status.completed");
       case "IN_PROGRESS":
-        return "In Progress";
+        return t("customer.dashboard.status.inProgress");
       case "DISPUTED":
-        return "Disputed";
+        return t("customer.dashboard.status.disputed");
       default:
         return status;
     }
   };
 
-  const formatCurrency = (amount: number) => {
+  const formatCurrency = (amount: number, currencyCode: string = "MYR") => {
     return new Intl.NumberFormat("en-MY", {
       style: "currency",
-      currency: "MYR",
+      currency: currencyCode,
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(amount);
@@ -212,7 +301,7 @@ export default function ProviderProjectsPage() {
   const filteredProjects = projects;
 
   return (
-    <ProviderLayout>
+    <>
       <ProviderProjectsTour />
       <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
         {/* Header */}
@@ -222,10 +311,10 @@ export default function ProviderProjectsPage() {
         >
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-              My Projects
+              {t("provider.projects.list.title")}
             </h1>
             <p className="text-sm sm:text-base text-gray-600">
-              Manage and track all your active and completed projects
+              {t("provider.projects.list.subtitle")}
             </p>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
@@ -250,12 +339,12 @@ export default function ProviderProjectsPage() {
                   document.body.removeChild(link);
                   URL.revokeObjectURL(url);
                   toast({
-                    title: "Export successful",
-                    description: "Projects exported as PDF",
+                    title: t("provider.projects.list.exportSuccessTitle"),
+                    description: t("provider.projects.list.exportSuccessDesc"),
                   });
                 } catch (err) {
                   toast({
-                    title: "Export failed",
+                    title: t("provider.projects.list.exportFailedTitle"),
                     description: getUserFriendlyErrorMessage(
                       err,
                       "provider projects export"
@@ -266,106 +355,112 @@ export default function ProviderProjectsPage() {
               }}
             >
               <Filter className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-              Export Report
+              {t("provider.projects.list.exportReport")}
             </Button>
           </div>
         </div>
 
         {/* Stats Cards */}
-        <div
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6"
-          data-tour-step="1"
-        >
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs sm:text-sm font-medium text-gray-600">
-                    Total Projects
-                  </p>
-                  <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">
-                    {stats.totalProjects}
-                  </p>
+        {loading ? (
+          <div data-tour-step="1">
+            <ProviderProjectsStatsSkeleton />
+          </div>
+        ) : (
+          <div
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6"
+            data-tour-step="1"
+          >
+            <Card>
+              <CardContent className="p-4 sm:p-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs sm:text-sm font-medium text-gray-600">
+                      {t("provider.projects.list.stats.totalProjects")}
+                    </p>
+                    <p className="text-xl sm:text-2xl font-bold text-gray-900 mt-1">
+                      {stats.totalProjects}
+                    </p>
+                  </div>
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
+                    <Calendar className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
+                  </div>
                 </div>
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
-                  <Calendar className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs sm:text-sm font-medium text-gray-600">
-                    Active
-                  </p>
-                  <p className="text-xl sm:text-2xl font-bold text-blue-600 mt-1">
-                    {stats.activeProjects}
-                  </p>
+            <Card>
+              <CardContent className="p-4 sm:p-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs sm:text-sm font-medium text-gray-600">
+                      {t("provider.projects.list.stats.active")}
+                    </p>
+                    <p className="text-xl sm:text-2xl font-bold text-blue-600 mt-1">
+                      {stats.activeProjects}
+                    </p>
+                  </div>
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
+                    <Clock className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
+                  </div>
                 </div>
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
-                  <Clock className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs sm:text-sm font-medium text-gray-600">
-                    Completed
-                  </p>
-                  <p className="text-xl sm:text-2xl font-bold text-green-600 mt-1">
-                    {stats.completedProjects}
-                  </p>
+            <Card>
+              <CardContent className="p-4 sm:p-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs sm:text-sm font-medium text-gray-600">
+                      {t("provider.projects.list.stats.completed")}
+                    </p>
+                    <p className="text-xl sm:text-2xl font-bold text-green-600 mt-1">
+                      {stats.completedProjects}
+                    </p>
+                  </div>
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
+                    <Calendar className="w-5 h-5 sm:w-6 sm:h-6 text-green-600" />
+                  </div>
                 </div>
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
-                  <Calendar className="w-5 h-5 sm:w-6 sm:h-6 text-green-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs sm:text-sm font-medium text-gray-600">
-                    Disputed
-                  </p>
-                  <p className="text-xl sm:text-2xl font-bold text-red-600 mt-1">
-                    {stats.disputedProjects}
-                  </p>
+            <Card>
+              <CardContent className="p-4 sm:p-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs sm:text-sm font-medium text-gray-600">
+                      {t("provider.projects.list.stats.disputed")}
+                    </p>
+                    <p className="text-xl sm:text-2xl font-bold text-red-600 mt-1">
+                      {stats.disputedProjects}
+                    </p>
+                  </div>
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-red-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
+                    <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6 text-red-600" />
+                  </div>
                 </div>
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-red-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
-                  <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6 text-red-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
 
-          <Card>
-            <CardContent className="p-4 sm:p-6">
-              <div className="flex items-center justify-between">
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs sm:text-sm font-medium text-gray-600">
-                    Total Earnings
-                  </p>
-                  <p className="text-xl sm:text-2xl font-bold text-green-600 mt-1 break-words">
-                    {formatCurrency(stats.totalEarnings)}
-                  </p>
+            <Card>
+              <CardContent className="p-4 sm:p-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs sm:text-sm font-medium text-gray-600">
+                      {t("provider.projects.list.stats.totalEarnings")}
+                    </p>
+                    <p className="text-xl sm:text-2xl font-bold text-green-600 mt-1 break-words">
+                      {formatCurrency(stats.totalEarnings)}
+                    </p>
+                  </div>
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
+                    <DollarSign className="w-5 h-5 sm:w-6 sm:h-6 text-green-600" />
+                  </div>
                 </div>
-                <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
-                  <DollarSign className="w-5 h-5 sm:w-6 sm:h-6 text-green-600" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Filters */}
         <Card data-tour-step="2">
@@ -375,7 +470,7 @@ export default function ProviderProjectsPage() {
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                   <Input
-                    placeholder="Search projects..."
+                    placeholder={t("provider.projects.list.searchPlaceholder")}
                     className="pl-10 text-sm sm:text-base"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -384,13 +479,23 @@ export default function ProviderProjectsPage() {
               </div>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="w-full sm:w-48 text-sm sm:text-base">
-                  <SelectValue placeholder="All Status" />
+                  <SelectValue
+                    placeholder={t("provider.projects.list.filter.all")}
+                  />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
-                  <SelectItem value="COMPLETED">Completed</SelectItem>
-                  <SelectItem value="DISPUTED">Disputed</SelectItem>
+                  <SelectItem value="all">
+                    {t("provider.projects.list.filter.all")}
+                  </SelectItem>
+                  <SelectItem value="IN_PROGRESS">
+                    {t("provider.projects.list.filter.inProgress")}
+                  </SelectItem>
+                  <SelectItem value="COMPLETED">
+                    {t("provider.projects.list.filter.completed")}
+                  </SelectItem>
+                  <SelectItem value="DISPUTED">
+                    {t("provider.projects.list.filter.disputed")}
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -399,17 +504,9 @@ export default function ProviderProjectsPage() {
 
         {/* Projects */}
         {loading ? (
-          <Card>
-            <CardContent className="p-8 sm:p-12 text-center">
-              <Loader2 className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-4 animate-spin" />
-              <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
-                Loading projects...
-              </h3>
-              <p className="text-sm sm:text-base text-gray-600">
-                Please wait while we fetch your projects.
-              </p>
-            </CardContent>
-          </Card>
+          <ProviderProjectsListSkeleton
+            loadingLabel={`${t("provider.projects.list.loading")}. ${t("provider.projects.list.loadingDesc")}`}
+          />
         ) : error ? (
           <Card>
             <CardContent className="p-4 sm:p-6">
@@ -434,25 +531,25 @@ export default function ProviderProjectsPage() {
                 value="all"
                 className="text-xs sm:text-sm px-2 sm:px-4"
               >
-                All Projects
+                {t("provider.projects.list.tab.all")}
               </TabsTrigger>
               <TabsTrigger
                 value="active"
                 className="text-xs sm:text-sm px-2 sm:px-4"
               >
-                Active Projects
+                {t("provider.projects.list.tab.active")}
               </TabsTrigger>
               <TabsTrigger
                 value="completed"
                 className="text-xs sm:text-sm px-2 sm:px-4"
               >
-                Completed
+                {t("provider.projects.list.tab.completed")}
               </TabsTrigger>
               <TabsTrigger
                 value="disputed"
                 className="text-xs sm:text-sm px-2 sm:px-4"
               >
-                Disputed
+                {t("provider.projects.list.tab.disputed")}
               </TabsTrigger>
             </TabsList>
 
@@ -465,12 +562,12 @@ export default function ProviderProjectsPage() {
                         <Calendar className="w-6 h-6 sm:w-8 sm:h-8 text-gray-400" />
                       </div>
                       <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
-                        No projects found
+                        {t("provider.projects.list.empty.title")}
                       </h3>
                       <p className="text-sm sm:text-base text-gray-600">
                         {searchQuery || statusFilter !== "all"
-                          ? "Try adjusting your search or filter criteria."
-                          : "You don't have any projects yet."}
+                          ? t("provider.projects.list.empty.filtered")
+                          : t("provider.projects.list.empty.none")}
                       </p>
                     </CardContent>
                   </Card>
@@ -510,7 +607,8 @@ export default function ProviderProjectsPage() {
                                 )}
                               />
                               <AvatarFallback>
-                                {project.customer?.name?.charAt(0) || "C"}
+                                {project.customer?.name?.charAt(0) ||
+                                  t("provider.dashboard.avatarFallbackClient")}
                               </AvatarFallback>
                             </Avatar>
                             <div className="min-w-0">
@@ -518,7 +616,8 @@ export default function ProviderProjectsPage() {
                                 href={`/provider/companies/${project.customer?.id}`}
                                 className="font-medium text-sm sm:text-base text-blue-600 active:text-blue-800 sm:hover:text-blue-800 sm:hover:underline break-words"
                               >
-                                {project.customer?.name || "Unknown Client"}
+                                {project.customer?.name ||
+                                  t("provider.dashboard.unknownClient")}
                               </Link>
                               <p className="text-xs sm:text-sm text-gray-500">
                                 {project.category}
@@ -528,18 +627,23 @@ export default function ProviderProjectsPage() {
                           <div className="text-left sm:text-right w-full sm:w-auto">
                             <p className="font-semibold text-sm sm:text-base text-green-600 break-words">
                               {project.approvedPrice
-                                ? formatCurrency(project.approvedPrice)
+                                ? formatCurrency(
+                                    project.approvedPrice,
+                                    project.currencyCode || "MYR",
+                                  )
                                 : `${formatCurrency(
                                     project.budgetMin ?? 0,
+                                    project.currencyCode || "MYR",
                                   )} - ${formatCurrency(
                                     project.budgetMax ?? 0,
+                                    project.currencyCode || "MYR",
                                   )}`}
                             </p>
                             <p className="text-xs sm:text-sm text-gray-500">
-                              Due:{" "}
+                              {t("provider.projects.list.due")}{" "}
                               {getProjectDueDate(project)
                                 ? formatDate(getProjectDueDate(project)!)
-                                : "—"}
+                                : t("provider.projects.list.dueDash")}
                             </p>
                           </div>
                         </div>
@@ -547,10 +651,16 @@ export default function ProviderProjectsPage() {
                         {project.status === "IN_PROGRESS" && (
                           <div>
                             <div className="flex flex-col sm:flex-row justify-between text-xs sm:text-sm mb-2 gap-1 sm:gap-0">
-                              <span>Progress: {project.progress || 0}%</span>
                               <span>
-                                {project.completedMilestones || 0}/
-                                {project.totalMilestones || 0} milestones
+                                {t("provider.projects.list.progress", {
+                                  percent: project.progress || 0,
+                                })}
+                              </span>
+                              <span>
+                                {t("provider.projects.list.milestoneFraction", {
+                                  done: project.completedMilestones || 0,
+                                  total: project.totalMilestones || 0,
+                                })}
                               </span>
                             </div>
                             <Progress
@@ -559,11 +669,13 @@ export default function ProviderProjectsPage() {
                             />
                             {project.nextMilestone ? (
                               <p className="text-xs sm:text-sm text-blue-600 mt-2">
-                                Next: {project.nextMilestone.title}
+                                {t("provider.projects.list.nextMilestone", {
+                                  title: project.nextMilestone.title || "",
+                                })}
                               </p>
                             ) : (
                               <p className="text-xs sm:text-sm text-gray-500 mt-2">
-                                No pending milestones
+                                {t("provider.projects.list.noPendingMilestones")}
                               </p>
                             )}
                           </div>
@@ -572,10 +684,13 @@ export default function ProviderProjectsPage() {
                         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 pt-3 sm:pt-4 border-t">
                           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-500">
                             <span>
-                              Started: {formatDate(project.createdAt)}
+                              {t("provider.projects.list.started")}{" "}
+                              {formatDate(project.createdAt)}
                             </span>
                             <span>
-                              Timeline: {project.timeline || "Not specified"}
+                              {t("customer.projects.list.timeline")}:{" "}
+                              {project.timeline ||
+                                t("customer.dashboard.timelineNotSpecified")}
                             </span>
                           </div>
                           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
@@ -592,7 +707,7 @@ export default function ProviderProjectsPage() {
                               }
                             >
                               <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                              Message
+                              {t("provider.projects.list.message")}
                             </Button>
                             <Link
                               href={`/provider/projects/${project.id}`}
@@ -603,7 +718,7 @@ export default function ProviderProjectsPage() {
                                 className="w-full sm:w-auto text-xs sm:text-sm"
                               >
                                 <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                                View Details
+                                {t("provider.projects.list.viewDetails")}
                               </Button>
                             </Link>
                           </div>
@@ -654,7 +769,8 @@ export default function ProviderProjectsPage() {
                                 )}
                               />
                               <AvatarFallback>
-                                {project.customer?.name?.charAt(0) || "C"}
+                                {project.customer?.name?.charAt(0) ||
+                                  t("provider.dashboard.avatarFallbackClient")}
                               </AvatarFallback>
                             </Avatar>
                             <div className="min-w-0">
@@ -662,7 +778,8 @@ export default function ProviderProjectsPage() {
                                 href={`/provider/companies/${project.customer?.id}`}
                                 className="font-medium text-sm sm:text-base text-blue-600 active:text-blue-800 sm:hover:text-blue-800 sm:hover:underline break-words"
                               >
-                                {project.customer?.name || "Unknown Client"}
+                                {project.customer?.name ||
+                                  t("provider.dashboard.unknownClient")}
                               </Link>
                               <p className="text-xs sm:text-sm text-gray-500">
                                 {project.category}
@@ -672,18 +789,23 @@ export default function ProviderProjectsPage() {
                           <div className="text-left sm:text-right w-full sm:w-auto">
                             <p className="font-semibold text-sm sm:text-base text-green-600 break-words">
                               {project.approvedPrice
-                                ? formatCurrency(project.approvedPrice)
+                                ? formatCurrency(
+                                    project.approvedPrice,
+                                    project.currencyCode || "MYR",
+                                  )
                                 : `${formatCurrency(
                                     project.budgetMin ?? 0,
+                                    project.currencyCode || "MYR",
                                   )} - ${formatCurrency(
                                     project.budgetMax ?? 0,
+                                    project.currencyCode || "MYR",
                                   )}`}
                             </p>
                             <p className="text-xs sm:text-sm text-gray-500">
-                              Due:{" "}
+                              {t("provider.projects.list.due")}{" "}
                               {getProjectDueDate(project)
                                 ? formatDate(getProjectDueDate(project)!)
-                                : "—"}
+                                : t("provider.projects.list.dueDash")}
                             </p>
                           </div>
                         </div>
@@ -691,10 +813,16 @@ export default function ProviderProjectsPage() {
                         {project.status === "IN_PROGRESS" && (
                           <div>
                             <div className="flex flex-col sm:flex-row justify-between text-xs sm:text-sm mb-2 gap-1 sm:gap-0">
-                              <span>Progress: {project.progress || 0}%</span>
                               <span>
-                                {project.completedMilestones || 0}/
-                                {project.totalMilestones || 0} milestones
+                                {t("provider.projects.list.progress", {
+                                  percent: project.progress || 0,
+                                })}
+                              </span>
+                              <span>
+                                {t("provider.projects.list.milestoneFraction", {
+                                  done: project.completedMilestones || 0,
+                                  total: project.totalMilestones || 0,
+                                })}
                               </span>
                             </div>
                             <Progress
@@ -703,11 +831,13 @@ export default function ProviderProjectsPage() {
                             />
                             {project.nextMilestone ? (
                               <p className="text-xs sm:text-sm text-blue-600 mt-2">
-                                Next: {project.nextMilestone.title}
+                                {t("provider.projects.list.nextMilestone", {
+                                  title: project.nextMilestone.title || "",
+                                })}
                               </p>
                             ) : (
                               <p className="text-xs sm:text-sm text-gray-500 mt-2">
-                                No pending milestones
+                                {t("provider.projects.list.noPendingMilestones")}
                               </p>
                             )}
                           </div>
@@ -716,10 +846,13 @@ export default function ProviderProjectsPage() {
                         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 pt-3 sm:pt-4 border-t">
                           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-500">
                             <span>
-                              Started: {formatDate(project.createdAt)}
+                              {t("provider.projects.list.started")}{" "}
+                              {formatDate(project.createdAt)}
                             </span>
                             <span>
-                              Timeline: {project.timeline || "Not specified"}
+                              {t("customer.projects.list.timeline")}:{" "}
+                              {project.timeline ||
+                                t("customer.dashboard.timelineNotSpecified")}
                             </span>
                           </div>
                           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
@@ -736,7 +869,7 @@ export default function ProviderProjectsPage() {
                               }
                             >
                               <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                              Message
+                              {t("provider.projects.list.message")}
                             </Button>
                             <Link
                               href={`/provider/projects/${project.id}`}
@@ -747,7 +880,7 @@ export default function ProviderProjectsPage() {
                                 className="w-full sm:w-auto text-xs sm:text-sm"
                               >
                                 <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                                View Details
+                                {t("provider.projects.list.viewDetails")}
                               </Button>
                             </Link>
                           </div>
@@ -797,7 +930,8 @@ export default function ProviderProjectsPage() {
                                 )}
                               />
                               <AvatarFallback>
-                                {project.customer?.name?.charAt(0) || "C"}
+                                {project.customer?.name?.charAt(0) ||
+                                  t("provider.dashboard.avatarFallbackClient")}
                               </AvatarFallback>
                             </Avatar>
                             <div className="min-w-0">
@@ -805,7 +939,8 @@ export default function ProviderProjectsPage() {
                                 href={`/provider/companies/${project.customer?.id}`}
                                 className="font-medium text-sm sm:text-base text-blue-600 active:text-blue-800 sm:hover:text-blue-800 sm:hover:underline break-words"
                               >
-                                {project.customer?.name || "Unknown Client"}
+                                {project.customer?.name ||
+                                  t("provider.dashboard.unknownClient")}
                               </Link>
                               <p className="text-xs sm:text-sm text-gray-500">
                                 {project.category}
@@ -815,15 +950,21 @@ export default function ProviderProjectsPage() {
                           <div className="text-left sm:text-right w-full sm:w-auto">
                             <p className="font-semibold text-sm sm:text-base text-green-600 break-words">
                               {project.approvedPrice
-                                ? formatCurrency(project.approvedPrice)
+                                ? formatCurrency(
+                                    project.approvedPrice,
+                                    project.currencyCode || "MYR",
+                                  )
                                 : `${formatCurrency(
                                     project.budgetMin ?? 0,
+                                    project.currencyCode || "MYR",
                                   )} - ${formatCurrency(
                                     project.budgetMax ?? 0,
+                                    project.currencyCode || "MYR",
                                   )}`}
                             </p>
                             <p className="text-xs sm:text-sm text-gray-500">
-                              Completed: {formatDate(project.createdAt)}
+                              {t("provider.projects.list.completedOn")}{" "}
+                              {formatDate(project.createdAt)}
                             </p>
                           </div>
                         </div>
@@ -831,11 +972,17 @@ export default function ProviderProjectsPage() {
                         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 pt-3 sm:pt-4 border-t">
                           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-500">
                             <span>
-                              Timeline: {project.timeline || "Not specified"}
+                              {t("customer.projects.list.timeline")}:{" "}
+                              {project.timeline ||
+                                t("customer.dashboard.timelineNotSpecified")}
                             </span>
                             <span>
-                              {project.completedMilestones || 0} milestones
-                              completed
+                              {t(
+                                "provider.projects.list.milestonesCompletedLine",
+                                {
+                                  n: project.completedMilestones || 0,
+                                },
+                              )}
                             </span>
                           </div>
                           <div className="flex gap-2 w-full sm:w-auto">
@@ -849,7 +996,7 @@ export default function ProviderProjectsPage() {
                                 className="w-full sm:w-auto text-xs sm:text-sm"
                               >
                                 <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                                View Details
+                                {t("provider.projects.list.viewDetails")}
                               </Button>
                             </Link>
                           </div>
@@ -899,7 +1046,8 @@ export default function ProviderProjectsPage() {
                                 )}
                               />
                               <AvatarFallback>
-                                {project.customer?.name?.charAt(0) || "C"}
+                                {project.customer?.name?.charAt(0) ||
+                                  t("provider.dashboard.avatarFallbackClient")}
                               </AvatarFallback>
                             </Avatar>
                             <div className="min-w-0">
@@ -907,7 +1055,8 @@ export default function ProviderProjectsPage() {
                                 href={`/provider/companies/${project.customer?.id}`}
                                 className="font-medium text-sm sm:text-base text-blue-600 active:text-blue-800 sm:hover:text-blue-800 sm:hover:underline break-words"
                               >
-                                {project.customer?.name || "Unknown Client"}
+                                {project.customer?.name ||
+                                  t("provider.dashboard.unknownClient")}
                               </Link>
                               <p className="text-xs sm:text-sm text-gray-500">
                                 {project.category}
@@ -917,18 +1066,23 @@ export default function ProviderProjectsPage() {
                           <div className="text-left sm:text-right w-full sm:w-auto">
                             <p className="font-semibold text-sm sm:text-base text-green-600 break-words">
                               {project.approvedPrice
-                                ? formatCurrency(project.approvedPrice)
+                                ? formatCurrency(
+                                    project.approvedPrice,
+                                    project.currencyCode || "MYR",
+                                  )
                                 : `${formatCurrency(
                                     project.budgetMin ?? 0,
+                                    project.currencyCode || "MYR",
                                   )} - ${formatCurrency(
                                     project.budgetMax ?? 0,
+                                    project.currencyCode || "MYR",
                                   )}`}
                             </p>
                             <p className="text-xs sm:text-sm text-gray-500">
-                              Due:{" "}
+                              {t("provider.projects.list.due")}{" "}
                               {getProjectDueDate(project)
                                 ? formatDate(getProjectDueDate(project)!)
-                                : "—"}
+                                : t("provider.projects.list.dueDash")}
                             </p>
                           </div>
                         </div>
@@ -936,10 +1090,13 @@ export default function ProviderProjectsPage() {
                         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4 pt-3 sm:pt-4 border-t">
                           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-500">
                             <span>
-                              Started: {formatDate(project.createdAt)}
+                              {t("provider.projects.list.started")}{" "}
+                              {formatDate(project.createdAt)}
                             </span>
                             <span>
-                              Timeline: {project.timeline || "Not specified"}
+                              {t("customer.projects.list.timeline")}:{" "}
+                              {project.timeline ||
+                                t("customer.dashboard.timelineNotSpecified")}
                             </span>
                           </div>
                           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
@@ -956,7 +1113,7 @@ export default function ProviderProjectsPage() {
                               }
                             >
                               <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                              Message
+                              {t("provider.projects.list.message")}
                             </Button>
                             <Link
                               href={`/provider/projects/${project.id}`}
@@ -967,7 +1124,7 @@ export default function ProviderProjectsPage() {
                                 className="w-full sm:w-auto text-xs sm:text-sm"
                               >
                                 <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                                View Details
+                                {t("provider.projects.list.viewDetails")}
                               </Button>
                             </Link>
                           </div>
@@ -984,8 +1141,8 @@ export default function ProviderProjectsPage() {
         open={contactGateOpen}
         onOpenChange={setContactGateOpen}
         requiredPercent={CONTACT_REQUIRED}
-        actionLabel="contact users"
+        actionLabel={t("provider.projects.gate.contactUsers")}
       />
-    </ProviderLayout>
+    </>
   );
 }

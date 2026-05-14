@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import type React from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -18,6 +19,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label"
+import {
   Search,
   MoreHorizontal,
   Eye,
@@ -28,13 +39,32 @@ import {
   Briefcase,
   Loader2,
   RefreshCw,
+  Plus,
 } from "lucide-react"
 import { AdminLayout } from "@/components/admin-layout"
 import { useToast } from "@/hooks/use-toast"
-import { getAdminProjects, getAdminProjectStats } from "@/lib/api"
+import { getAdminProjects, getAdminProjectStats, createAdminProject, getAdminUsers } from "@/lib/api"
 import Link from "next/link"
+import { useI18n } from "@/contexts/I18nProvider"
+
+type UserOption = { id: string; name: string; email: string }
+
+const EMPTY_FORM = {
+  title: "",
+  description: "",
+  category: "Web Development",
+  budgetMin: "",
+  budgetMax: "",
+  timeline: "",
+  requirements: "",
+  deliverables: "",
+  currencyCode: "MYR",
+  customerId: "",
+  providerId: "",
+}
 
 export default function AdminProjectsPage() {
+  const { t, locale } = useI18n()
   const { toast } = useToast()
   const [loading, setLoading] = useState(true)
   const [projects, setProjects] = useState<Array<Record<string, unknown>>>([])
@@ -42,6 +72,20 @@ export default function AdminProjectsPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [categoryFilter, setCategoryFilter] = useState("all")
+  const [createOpen, setCreateOpen] = useState(false)
+  const [createLoading, setCreateLoading] = useState(false)
+  const [createForm, setCreateForm] = useState({ ...EMPTY_FORM })
+  const [customers, setCustomers] = useState<UserOption[]>([])
+  const [providers, setProviders] = useState<UserOption[]>([])
+  const [usersLoading, setUsersLoading] = useState(false)
+  const numberLocale =
+    locale === "id" ? "id-ID" : locale === "ar" ? "ar" : "en-MY"
+  const formatMoney = (amount: number, currencyCode?: string) =>
+    new Intl.NumberFormat(numberLocale, {
+      style: "currency",
+      currency: currencyCode || "MYR",
+      maximumFractionDigits: 0,
+    }).format(amount || 0)
 
   const loadProjects = useCallback(async () => {
     try {
@@ -55,14 +99,17 @@ export default function AdminProjectsPage() {
       }
     } catch (error: unknown) {
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to load projects",
+        title: t("admin.users.toast.errorTitle"),
+        description:
+          error instanceof Error
+            ? error.message
+            : t("admin.projects.list.toast.loadFailed"),
         variant: "destructive",
       })
     } finally {
       setLoading(false)
     }
-  }, [statusFilter, searchQuery, toast])
+  }, [statusFilter, searchQuery, toast, t])
 
   const loadStats = async () => {
     try {
@@ -80,24 +127,96 @@ export default function AdminProjectsPage() {
     loadStats()
   }, [loadProjects])
 
+  const openCreateDialog = async () => {
+    setCreateForm({ ...EMPTY_FORM })
+    setCreateOpen(true)
+    if (customers.length === 0 || providers.length === 0) {
+      setUsersLoading(true)
+      try {
+        const [custRes, provRes] = await Promise.all([
+          getAdminUsers({ role: "CUSTOMER" }),
+          getAdminUsers({ role: "PROVIDER" }),
+        ])
+        setCustomers((custRes.data || []).map((u: Record<string, unknown>) => ({ id: u.id as string, name: u.name as string, email: u.email as string })))
+        setProviders((provRes.data || []).map((u: Record<string, unknown>) => ({ id: u.id as string, name: u.name as string, email: u.email as string })))
+      } catch {
+        // silently fail — user can type IDs manually
+      } finally {
+        setUsersLoading(false)
+      }
+    }
+  }
+
+  const handleCreateProject = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!createForm.customerId || !createForm.providerId) {
+      toast({
+        title: t("admin.users.toast.errorTitle"),
+        description: t("admin.projects.create.toast.selectCustomerAndProvider"),
+        variant: "destructive",
+      })
+      return
+    }
+    setCreateLoading(true)
+    try {
+      const response = await createAdminProject({
+        title: createForm.title,
+        description: createForm.description,
+        category: createForm.category,
+        budgetMin: parseFloat(createForm.budgetMin) || 0,
+        budgetMax: parseFloat(createForm.budgetMax) || 0,
+        timeline: createForm.timeline,
+        requirements: createForm.requirements,
+        deliverables: createForm.deliverables,
+        currencyCode: createForm.currencyCode,
+        customerId: createForm.customerId,
+        providerId: createForm.providerId,
+        status: "IN_PROGRESS",
+      })
+      if (response.success) {
+        toast({
+          title: t("admin.projects.create.toast.createdTitle"),
+          description: t("admin.projects.create.toast.createdDesc", {
+            title: createForm.title,
+          }),
+        })
+        setCreateOpen(false)
+        loadProjects()
+        loadStats()
+      }
+    } catch (err: unknown) {
+      toast({
+        title: t("admin.users.toast.errorTitle"),
+        description:
+          err instanceof Error
+            ? err.message
+            : t("admin.projects.create.toast.createFailed"),
+        variant: "destructive",
+      })
+    } finally {
+      setCreateLoading(false)
+    }
+  }
+
+  const setField = (field: string, value: string) => setCreateForm(prev => ({ ...prev, [field]: value }))
+
 
   const getStatusText = (status: string, type?: string) => {
-    // ServiceRequests are always "OPEN" (unmatched opportunities)
     if (type === "serviceRequest") {
-      return "Open Opportunity"
+      return t("admin.projects.status.openOpportunity")
     }
-    
+
     switch (status?.toUpperCase()) {
       case "COMPLETED":
-        return "Completed"
+        return t("admin.projects.status.completed")
       case "IN_PROGRESS":
-        return "In Progress"
+        return t("admin.projects.status.inProgress")
       case "DISPUTED":
-        return "Disputed"
+        return t("admin.projects.status.disputed")
       case "OPEN":
-        return "Open Opportunity"
+        return t("admin.projects.status.openOpportunity")
       default:
-        return status?.replace("_", " ") || status
+        return status?.replace(/_/g, " ") || status
     }
   }
 
@@ -160,10 +279,112 @@ export default function AdminProjectsPage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Project Management</h1>
-            <p className="text-sm sm:text-base text-gray-600 mt-1">Monitor and manage all platform projects</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+              {t("admin.projects.list.pageTitle")}
+            </h1>
+            <p className="text-sm sm:text-base text-gray-600 mt-1">
+              {t("admin.projects.list.pageSubtitle")}
+            </p>
           </div>
+          <Button type="button" onClick={openCreateDialog} className="w-full sm:w-auto">
+            <Plus className="w-4 h-4 mr-2" />
+            {t("admin.projects.create.button")}
+          </Button>
         </div>
+
+        {/* Create Project Dialog */}
+        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>{t("admin.projects.create.dialog.title")}</DialogTitle>
+              <DialogDescription>{t("admin.projects.create.dialog.description")}</DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleCreateProject} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="sm:col-span-2 space-y-1">
+                  <Label htmlFor="cp-title">{t("admin.projects.create.field.title")}</Label>
+                  <Input id="cp-title" required value={createForm.title} onChange={e => setField("title", e.target.value)} placeholder={t("admin.projects.create.placeholder.title")} />
+                </div>
+                <div className="sm:col-span-2 space-y-1">
+                  <Label htmlFor="cp-description">{t("admin.projects.create.field.description")}</Label>
+                  <Textarea id="cp-description" value={createForm.description} onChange={e => setField("description", e.target.value)} placeholder={t("admin.projects.create.placeholder.description")} rows={3} />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="cp-category">{t("admin.projects.create.field.category")}</Label>
+                  <Input id="cp-category" value={createForm.category} onChange={e => setField("category", e.target.value)} placeholder={t("admin.projects.create.placeholder.category")} />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="cp-currency">{t("admin.projects.create.field.currency")}</Label>
+                  <Select value={createForm.currencyCode} onValueChange={v => setField("currencyCode", v)}>
+                    <SelectTrigger id="cp-currency"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="MYR">MYR</SelectItem>
+                      <SelectItem value="USD">USD</SelectItem>
+                      <SelectItem value="SGD">SGD</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="cp-budgetMin">{t("admin.projects.create.field.budgetMin")}</Label>
+                  <Input id="cp-budgetMin" type="number" min={0} value={createForm.budgetMin} onChange={e => setField("budgetMin", e.target.value)} placeholder="0" />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="cp-budgetMax">{t("admin.projects.create.field.budgetMax")}</Label>
+                  <Input id="cp-budgetMax" type="number" min={0} value={createForm.budgetMax} onChange={e => setField("budgetMax", e.target.value)} placeholder="0" />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="cp-timeline">{t("admin.projects.create.field.timeline")}</Label>
+                  <Input id="cp-timeline" value={createForm.timeline} onChange={e => setField("timeline", e.target.value)} placeholder={t("admin.projects.create.placeholder.timeline")} />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="cp-customer">{t("admin.projects.create.field.customer")}</Label>
+                  {usersLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="w-4 h-4 animate-spin" /> {t("admin.settings.page.loading")}</div>
+                  ) : customers.length > 0 ? (
+                    <Select value={createForm.customerId} onValueChange={v => setField("customerId", v)}>
+                      <SelectTrigger id="cp-customer"><SelectValue placeholder={t("admin.projects.create.placeholder.selectCustomer")} /></SelectTrigger>
+                      <SelectContent>
+                        {customers.map(c => <SelectItem key={c.id} value={c.id}>{c.name} ({c.email})</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input id="cp-customer" value={createForm.customerId} onChange={e => setField("customerId", e.target.value)} placeholder={t("admin.projects.create.placeholder.customerId")} />
+                  )}
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="cp-provider">{t("admin.projects.create.field.provider")}</Label>
+                  {usersLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-gray-500"><Loader2 className="w-4 h-4 animate-spin" /> {t("admin.settings.page.loading")}</div>
+                  ) : providers.length > 0 ? (
+                    <Select value={createForm.providerId} onValueChange={v => setField("providerId", v)}>
+                      <SelectTrigger id="cp-provider"><SelectValue placeholder={t("admin.projects.create.placeholder.selectProvider")} /></SelectTrigger>
+                      <SelectContent>
+                        {providers.map(p => <SelectItem key={p.id} value={p.id}>{p.name} ({p.email})</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input id="cp-provider" value={createForm.providerId} onChange={e => setField("providerId", e.target.value)} placeholder={t("admin.projects.create.placeholder.providerId")} />
+                  )}
+                </div>
+                <div className="sm:col-span-2 space-y-1">
+                  <Label htmlFor="cp-requirements">{t("admin.projects.create.field.requirements")}</Label>
+                  <Textarea id="cp-requirements" value={createForm.requirements} onChange={e => setField("requirements", e.target.value)} rows={2} placeholder={t("admin.projects.create.placeholder.requirements")} />
+                </div>
+                <div className="sm:col-span-2 space-y-1">
+                  <Label htmlFor="cp-deliverables">{t("admin.projects.create.field.deliverables")}</Label>
+                  <Textarea id="cp-deliverables" value={createForm.deliverables} onChange={e => setField("deliverables", e.target.value)} rows={2} placeholder={t("admin.projects.create.placeholder.deliverables")} />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>{t("admin.projects.create.cancel")}</Button>
+                <Button type="submit" disabled={createLoading}>
+                  {createLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                  {t("admin.projects.create.submit")}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
 
         {/* Stats Cards */}
         {stats && (
@@ -172,11 +393,15 @@ export default function AdminProjectsPage() {
             <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs sm:text-sm font-medium text-gray-600">Total Projects</p>
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">
+                    {t("admin.projects.list.stats.totalProjects")}
+                  </p>
                     <p className="text-xl sm:text-2xl font-bold text-gray-900 truncate">{typeof stats.totalProjects === "number" ? stats.totalProjects : 0}</p>
                     {typeof stats.openOpportunities === "number" && stats.openOpportunities > 0 && (
                       <p className="text-xs text-gray-500 mt-1">
-                        {stats.openOpportunities} open opportunities
+                        {t("admin.projects.list.stats.openOpportunities", {
+                          count: stats.openOpportunities,
+                        })}
                       </p>
                     )}
                 </div>
@@ -189,7 +414,9 @@ export default function AdminProjectsPage() {
             <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs sm:text-sm font-medium text-gray-600">Active</p>
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">
+                    {t("admin.projects.list.stats.active")}
+                  </p>
                     <p className="text-xl sm:text-2xl font-bold text-blue-600 truncate">{typeof stats.activeProjects === "number" ? stats.activeProjects : 0}</p>
                 </div>
                 <Clock className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600 flex-shrink-0 ml-2" />
@@ -201,7 +428,9 @@ export default function AdminProjectsPage() {
             <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs sm:text-sm font-medium text-gray-600">Completed</p>
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">
+                    {t("admin.projects.list.stats.completed")}
+                  </p>
                     <p className="text-xl sm:text-2xl font-bold text-green-600 truncate">{typeof stats.completedProjects === "number" ? stats.completedProjects : 0}</p>
                 </div>
                 <CheckCircle className="w-6 h-6 sm:w-8 sm:h-8 text-green-600 flex-shrink-0 ml-2" />
@@ -213,7 +442,9 @@ export default function AdminProjectsPage() {
             <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs sm:text-sm font-medium text-gray-600">Disputed</p>
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">
+                    {t("admin.projects.list.stats.disputed")}
+                  </p>
                     <p className="text-xl sm:text-2xl font-bold text-red-600 truncate">{typeof stats.disputedProjects === "number" ? stats.disputedProjects : 0}</p>
                 </div>
                 <AlertTriangle className="w-6 h-6 sm:w-8 sm:h-8 text-red-600 flex-shrink-0 ml-2" />
@@ -225,9 +456,15 @@ export default function AdminProjectsPage() {
             <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs sm:text-sm font-medium text-gray-600">Total Value</p>
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">
+                    {t("admin.projects.list.stats.totalValue")}
+                  </p>
                     <p className="text-xl sm:text-2xl font-bold text-purple-600 truncate">
-                      RM{((typeof stats.totalValue === "number" ? stats.totalValue : 0) / 1000).toFixed(0)}K
+                      {formatMoney(
+                        typeof stats.totalValue === "number"
+                          ? stats.totalValue
+                          : 0,
+                      )}
                     </p>
                 </div>
                 <DollarSign className="w-6 h-6 sm:w-8 sm:h-8 text-purple-600 flex-shrink-0 ml-2" />
@@ -245,7 +482,7 @@ export default function AdminProjectsPage() {
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   <Input
-                    placeholder="Search projects, customers, or providers..."
+                    placeholder={t("admin.projects.list.filters.searchPlaceholder")}
                     className="pl-9 sm:pl-10 text-sm sm:text-base"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -259,32 +496,32 @@ export default function AdminProjectsPage() {
               </div>
               <Select value={categoryFilter} onValueChange={setCategoryFilter}>
                 <SelectTrigger className="w-full sm:w-48 text-sm sm:text-base">
-                  <SelectValue placeholder="All Categories" />
+                  <SelectValue placeholder={t("admin.projects.list.filters.allCategories")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Categories</SelectItem>
-                  <SelectItem value="web">Web Development</SelectItem>
-                  <SelectItem value="mobile">Mobile Development</SelectItem>
-                  <SelectItem value="cloud">Cloud Services</SelectItem>
-                  <SelectItem value="iot">IoT Solutions</SelectItem>
-                  <SelectItem value="data">Data Analytics</SelectItem>
+                  <SelectItem value="all">{t("admin.projects.list.filters.allCategories")}</SelectItem>
+                  <SelectItem value="web">{t("admin.projects.list.filters.categoryWeb")}</SelectItem>
+                  <SelectItem value="mobile">{t("admin.projects.list.filters.categoryMobile")}</SelectItem>
+                  <SelectItem value="cloud">{t("admin.projects.list.filters.categoryCloud")}</SelectItem>
+                  <SelectItem value="iot">{t("admin.projects.list.filters.categoryIoT")}</SelectItem>
+                  <SelectItem value="data">{t("admin.projects.list.filters.categoryData")}</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="w-full sm:w-48 text-sm sm:text-base">
-                  <SelectValue placeholder="All Status" />
+                  <SelectValue placeholder={t("admin.projects.list.filters.allStatus")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="OPEN">Open Opportunities</SelectItem>
-                  <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
-                  <SelectItem value="COMPLETED">Completed</SelectItem>
-                  <SelectItem value="DISPUTED">Disputed</SelectItem>
+                  <SelectItem value="all">{t("admin.projects.list.filters.allStatus")}</SelectItem>
+                  <SelectItem value="OPEN">{t("admin.projects.list.filters.statusOpenOpportunities")}</SelectItem>
+                  <SelectItem value="IN_PROGRESS">{t("admin.projects.list.filters.statusInProgress")}</SelectItem>
+                  <SelectItem value="COMPLETED">{t("admin.projects.list.filters.statusCompleted")}</SelectItem>
+                  <SelectItem value="DISPUTED">{t("admin.projects.list.filters.statusDisputed")}</SelectItem>
                 </SelectContent>
               </Select>
               <Button variant="outline" onClick={loadProjects} className="w-full sm:w-auto text-xs sm:text-sm">
                 <RefreshCw className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                Refresh
+                {t("admin.projects.list.refresh")}
               </Button>
             </div>
           </CardContent>
@@ -293,8 +530,12 @@ export default function AdminProjectsPage() {
         {/* Projects Table */}
         <Card>
           <CardHeader className="p-4 sm:p-6">
-            <CardTitle className="text-lg sm:text-xl">Projects ({filteredProjects.length})</CardTitle>
-            <CardDescription className="text-xs sm:text-sm">Monitor project progress and resolve issues</CardDescription>
+            <CardTitle className="text-lg sm:text-xl">
+              {t("admin.projects.list.table.title", { count: filteredProjects.length })}
+            </CardTitle>
+            <CardDescription className="text-xs sm:text-sm">
+              {t("admin.projects.list.table.description")}
+            </CardDescription>
           </CardHeader>
           <CardContent className="p-0 sm:p-4 sm:p-6">
             {loading ? (
@@ -306,20 +547,34 @@ export default function AdminProjectsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-xs sm:text-sm">Project</TableHead>
-                  <TableHead className="text-xs sm:text-sm">Participants</TableHead>
-                  <TableHead className="text-xs sm:text-sm">Status</TableHead>
-                  <TableHead className="text-xs sm:text-sm">Progress</TableHead>
-                  <TableHead className="text-xs sm:text-sm">Budget</TableHead>
-                  <TableHead className="text-xs sm:text-sm">Timeline</TableHead>
-                  <TableHead className="text-right text-xs sm:text-sm">Actions</TableHead>
+                  <TableHead className="text-xs sm:text-sm">
+                    {t("admin.projects.list.table.col.project")}
+                  </TableHead>
+                  <TableHead className="text-xs sm:text-sm">
+                    {t("admin.projects.list.table.col.participants")}
+                  </TableHead>
+                  <TableHead className="text-xs sm:text-sm">
+                    {t("admin.projects.list.table.col.status")}
+                  </TableHead>
+                  <TableHead className="text-xs sm:text-sm">
+                    {t("admin.projects.list.table.col.progress")}
+                  </TableHead>
+                  <TableHead className="text-xs sm:text-sm">
+                    {t("admin.projects.list.table.col.budget")}
+                  </TableHead>
+                  <TableHead className="text-xs sm:text-sm">
+                    {t("admin.projects.list.table.col.timeline")}
+                  </TableHead>
+                  <TableHead className="text-right text-xs sm:text-sm">
+                    {t("admin.projects.list.table.col.actions")}
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                   {filteredProjects.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center py-8 sm:py-12 text-sm sm:text-base text-gray-500">
-                        No projects found
+                        {t("admin.projects.list.table.empty")}
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -343,7 +598,10 @@ export default function AdminProjectsPage() {
                       const proposalsCount = typeof project.proposalsCount === "number" ? project.proposalsCount : proposalsArray.length
                       
                       // Safely get project title
-                      const projectTitle = typeof project.title === "string" ? project.title : "Untitled Project"
+                      const projectTitle =
+                        typeof project.title === "string"
+                          ? project.title
+                          : t("admin.projects.list.table.untitled")
                       
                       // Safely get category
                       const projectCategory = typeof project.category === "string" ? project.category : ""
@@ -352,15 +610,28 @@ export default function AdminProjectsPage() {
                       const customerObj = project.customer && typeof project.customer === "object" && project.customer !== null
                         ? project.customer as Record<string, unknown>
                         : null
-                      const customerName = customerObj && typeof customerObj.name === "string" ? customerObj.name : "N/A"
-                      const customerInitial = customerName !== "N/A" ? customerName.charAt(0).toUpperCase() : "C"
+                      const naLabel = t("admin.projects.common.na")
+                      const customerName =
+                        customerObj && typeof customerObj.name === "string"
+                          ? customerObj.name
+                          : naLabel
+                      const customerInitial =
+                        customerName !== naLabel
+                          ? customerName.charAt(0).toUpperCase()
+                          : "C"
                       
                       // Safely get provider name
                       const providerObj = project.provider && typeof project.provider === "object" && project.provider !== null
                         ? project.provider as Record<string, unknown>
                         : null
-                      const providerName = providerObj && typeof providerObj.name === "string" ? providerObj.name : "N/A"
-                      const providerInitial = providerName !== "N/A" ? providerName.charAt(0).toUpperCase() : "P"
+                      const providerName =
+                        providerObj && typeof providerObj.name === "string"
+                          ? providerObj.name
+                          : naLabel
+                      const providerInitial =
+                        providerName !== naLabel
+                          ? providerName.charAt(0).toUpperCase()
+                          : "P"
                       
                       // Safely get status and type
                       const projectStatus = typeof project.status === "string" ? project.status : ""
@@ -371,10 +642,12 @@ export default function AdminProjectsPage() {
                       const budgetMax = typeof project.budgetMax === "number" ? project.budgetMax : 0
                       
                       // Safely get timeline
-                      const projectTimeline = typeof project.timeline === "string" ? project.timeline : "—"
-                      
+                      const em = t("admin.users.common.emDash")
+                      const projectTimeline =
+                        typeof project.timeline === "string" ? project.timeline : em
+
                       // Safely get created date
-                      let createdDateStr = "—"
+                      let createdDateStr = em
                       if (project.createdAt) {
                         if (typeof project.createdAt === "string") {
                           const date = new Date(project.createdAt)
@@ -397,7 +670,7 @@ export default function AdminProjectsPage() {
                           <p className="font-medium text-sm sm:text-base break-words">{projectTitle}</p>
                           {isServiceRequest && (
                             <Badge className="bg-yellow-100 text-yellow-800 text-xs flex-shrink-0">
-                              Opportunity
+                              {t("admin.projects.list.table.opportunityBadge")}
                             </Badge>
                           )}
                         </div>
@@ -407,12 +680,20 @@ export default function AdminProjectsPage() {
                               {disputesCount > 0 && !isServiceRequest && (
                           <Badge className="bg-red-100 text-red-800 mt-1 text-xs">
                             <AlertTriangle className="w-3 h-3 mr-1" />
-                                  {disputesCount} dispute(s)
+                            {disputesCount === 1
+                              ? t("admin.projects.list.table.disputesOne")
+                              : t("admin.projects.list.table.disputesMany", {
+                                  count: disputesCount,
+                                })}
                           </Badge>
                         )}
                         {isServiceRequest && proposalsCount > 0 && (
                           <Badge className="bg-blue-100 text-blue-800 mt-1 text-xs">
-                            {proposalsCount} {proposalsCount === 1 ? "proposal" : "proposals"}
+                            {proposalsCount === 1
+                              ? t("admin.projects.list.table.proposalOne")
+                              : t("admin.projects.list.table.proposalsMany", {
+                                  count: proposalsCount,
+                                })}
                           </Badge>
                         )}
                       </div>
@@ -439,7 +720,7 @@ export default function AdminProjectsPage() {
                         )}
                         {isServiceRequest && (
                           <div className="text-xs text-gray-500 italic">
-                            Awaiting provider match
+                            {t("admin.projects.list.table.awaitingMatch")}
                           </div>
                         )}
                       </div>
@@ -452,7 +733,7 @@ export default function AdminProjectsPage() {
                     <TableCell className="p-3 sm:p-4">
                       {isServiceRequest ? (
                         <div className="text-xs sm:text-sm text-gray-500">
-                          N/A
+                          {t("admin.projects.list.table.naProgress")}
                         </div>
                       ) : (
                         <div className="space-y-1 min-w-[80px]">
@@ -469,7 +750,17 @@ export default function AdminProjectsPage() {
                     <TableCell className="p-3 sm:p-4">
                       <div className="min-w-0">
                               <p className="font-medium text-xs sm:text-sm break-words">
-                                RM{budgetMin.toLocaleString()} - RM{budgetMax.toLocaleString()}
+                                {formatMoney(
+                                  budgetMin,
+                                  (project.currencyCode as string | undefined) ||
+                                    "MYR",
+                                )}{" "}
+                                -{" "}
+                                {formatMoney(
+                                  budgetMax,
+                                  (project.currencyCode as string | undefined) ||
+                                    "MYR",
+                                )}
                               </p>
                       </div>
                     </TableCell>
@@ -491,11 +782,13 @@ export default function AdminProjectsPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="text-xs sm:text-sm">
-                          <DropdownMenuLabel className="text-xs sm:text-sm">Actions</DropdownMenuLabel>
+                          <DropdownMenuLabel className="text-xs sm:text-sm">
+                            {t("admin.projects.list.actionsMenu")}
+                          </DropdownMenuLabel>
                                 <DropdownMenuItem asChild>
                                   <Link href={`/admin/projects/${projectId}`} className="text-xs sm:text-sm">
                             <Eye className="mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                            View Details
+                            {t("admin.projects.list.viewDetails")}
                                   </Link>
                           </DropdownMenuItem>
                                 {disputesCount > 0 && !isServiceRequest && (
@@ -504,7 +797,9 @@ export default function AdminProjectsPage() {
                                     <DropdownMenuItem asChild>
                                       <Link href={`/admin/disputes`} className="text-xs sm:text-sm">
                               <AlertTriangle className="mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                                        View Disputes ({disputesCount})
+                                        {t("admin.projects.list.viewDisputes", {
+                                          count: disputesCount,
+                                        })}
                                       </Link>
                             </DropdownMenuItem>
                                   </>

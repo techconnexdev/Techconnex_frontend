@@ -14,69 +14,28 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { toast } from "@/lib/toast";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   ArrowLeft,
   MapPin,
   Globe,
   CheckCircle,
   Loader2,
-  Send,
-  Paperclip,
   ThumbsUp,
   Eye,
 } from "lucide-react";
-import { ProviderLayout } from "@/components/provider-layout";
 import { PROPOSAL_REQUIRED } from "@/contexts/ProviderCompletionContext";
 import { ProfileCompletionGateModal } from "@/components/provider/ProfileCompletionGateModal";
-import { getProviderOpportunityById, getProviderProfileCompletion, sendProposal } from "@/lib/api";
+import {
+  getProviderOpportunityById,
+  getProviderProfileCompletion,
+} from "@/lib/api";
 import { getUserFriendlyErrorMessage } from "@/lib/errors";
 import { FriendlyErrorState } from "@/components/FriendlyErrorState";
-import {
-  formatTimeline,
-  buildTimelineData,
-  timelineToDays,
-} from "@/lib/timeline-utils";
-import { formatBidAmountDisplay, parseBidAmountInput } from "@/lib/utils";
+import { formatTimeline } from "@/lib/timeline-utils";
 import { MarkdownViewer } from "@/components/markdown/MarkdownViewer";
-
-type Milestone = {
-  sequence: number;
-  title: string;
-  description?: string;
-  amount: number;
-  dueDate?: string;
-  daysFromStart?: number;
-  durationAmount?: string;
-  durationUnit?: "day" | "week" | "month" | "";
-};
-
-type ProposalFormData = {
-  coverLetter: string;
-  bidAmount: string;
-  timelineAmount: string;
-  timelineUnit: "day" | "week" | "month" | "";
-  milestones: Milestone[];
-  attachments: File[];
-};
+import { useI18n } from "@/contexts/I18nProvider";
 
 type OpportunityMilestone = {
   id?: string;
@@ -109,6 +68,18 @@ type Opportunity = {
   category?: string;
   budgetMin?: number;
   budgetMax?: number;
+  displayBudgetMin?: number;
+  displayBudgetMax?: number;
+  originalBudgetMin?: number;
+  originalBudgetMax?: number;
+  originalCurrencyCode?: string;
+  currencyCode?: string;
+  displayCurrencyCode?: string;
+  conversionMeta?: {
+    snapshotDate?: string | null;
+    snapshotSession?: string | null;
+    usedSnapshot?: boolean;
+  };
   timeline?: string;
   priority?: string;
   skills?: string[];
@@ -126,48 +97,15 @@ type Opportunity = {
 export default function OpportunityDetailsPage() {
   const params = useParams();
   const router = useRouter();
+  const { t } = useI18n();
   const opportunityId = params.id as string;
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
-  const [proposalCompletionChecking, setProposalCompletionChecking] = useState(false);
+  const [proposalCompletionChecking, setProposalCompletionChecking] =
+    useState(false);
   const [proposalGateOpen, setProposalGateOpen] = useState(false);
-  const [isProposalModalOpen, setIsProposalModalOpen] = useState(false);
-  const [submittingProposal, setSubmittingProposal] = useState(false);
-
-  const [proposalData, setProposalData] = useState<ProposalFormData>({
-    coverLetter: "",
-    bidAmount: "",
-    timelineAmount: "",
-    timelineUnit: "",
-    milestones: [],
-    attachments: [],
-  });
-
-  const [proposalErrors, setProposalErrors] = useState<{
-    bidAmount?: string;
-    timelineAmount?: string;
-    timelineUnit?: string;
-    coverLetter?: string;
-    milestones?: string;
-    attachments?: string;
-    milestoneFields?: Record<
-      number,
-      {
-        title?: string;
-        description?: string;
-        amount?: string;
-        dueDate?: string;
-        daysFromStart?: string;
-        durationAmount?: string;
-        durationUnit?: string;
-      }
-    >;
-  }>({});
-
-  const MAX_FILES = 3;
-  const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 
   const loadOpportunity = async () => {
     try {
@@ -182,9 +120,41 @@ export default function OpportunityDetailsPage() {
         );
       }
     } catch (err: unknown) {
-      setError(
-        getUserFriendlyErrorMessage(err, "provider opportunity detail"),
-      );
+      const apiErr = err as {
+        status?: number;
+        code?: string;
+        projectId?: string;
+      };
+
+      if (
+        apiErr?.code === "OPPORTUNITY_MOVED_TO_PROJECT" &&
+        typeof apiErr.projectId === "string"
+      ) {
+        router.replace(`/provider/projects/${apiErr.projectId}`);
+        return;
+      }
+
+      if (apiErr?.code === "OPPORTUNITY_MOVED_TO_PROJECT") {
+        setError(t("provider.opportunities.detail.redirectProjectMissing"));
+        return;
+      }
+
+      if (apiErr?.code === "OPPORTUNITY_NO_LONGER_AVAILABLE") {
+        setError(t("provider.opportunities.detail.opportunityFilled"));
+        return;
+      }
+
+      if (apiErr?.status === 403) {
+        setError(t("provider.opportunities.detail.permissionDenied"));
+        return;
+      }
+
+      if (apiErr?.status === 404) {
+        setError(t("provider.opportunities.detail.notFound"));
+        return;
+      }
+
+      setError(getUserFriendlyErrorMessage(err, "provider opportunity detail"));
     } finally {
       setLoading(false);
     }
@@ -197,475 +167,111 @@ export default function OpportunityDetailsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opportunityId]);
 
-  // Keep sequences clean and sorted
-  const normalizeDraftSequences = (items: Milestone[]) =>
-    items
-      .map((m, i) => ({ ...m, sequence: i + 1 }))
-      .sort((a, b) => a.sequence - b.sequence);
-
-  const addMilestone = () => {
-    setProposalData((prev) => ({
-      ...prev,
-      milestones: normalizeDraftSequences([
-        ...prev.milestones,
-        {
-          sequence: prev.milestones.length + 1,
-          title: "",
-          description: "",
-          amount: 0,
-          durationAmount: "1",
-          durationUnit: "week",
-        },
-      ]),
-    }));
-  };
-
-  const updateMilestone = (index: number, patch: Partial<Milestone>) => {
-    setProposalData((prev) => ({
-      ...prev,
-      milestones: normalizeDraftSequences(
-        prev.milestones.map((m, i) => (i === index ? { ...m, ...patch } : m)),
-      ),
-    }));
-  };
-
-  const removeMilestone = (index: number) => {
-    setProposalData((prev) => ({
-      ...prev,
-      milestones: normalizeDraftSequences(
-        prev.milestones.filter((_, i) => i !== index),
-      ),
-    }));
-  };
-
-  function validateProposal(form: ProposalFormData) {
-    const newErrors: {
-      bidAmount?: string;
-      timelineAmount?: string;
-      timelineUnit?: string;
-      coverLetter?: string;
-      milestones?: string;
-      milestoneFields?: Record<
-        number,
-        {
-          title?: string;
-          description?: string;
-          amount?: string;
-          dueDate?: string;
-          daysFromStart?: string;
-        }
-      >;
-    } = {};
-
-    const messages: string[] = [];
-
-    // Bid amount: required, >0, and within budget range
-    const bidAmountNum = Number(form.bidAmount);
-    if (!form.bidAmount) {
-      newErrors.bidAmount = "Bid amount is required.";
-      messages.push("Bid amount is required.");
-    } else if (isNaN(bidAmountNum) || bidAmountNum <= 0) {
-      newErrors.bidAmount = "Bid amount must be a positive number.";
-      messages.push("Bid amount must be a positive number.");
-    } else if (opportunity) {
-      const budgetMin = opportunity.budgetMin || 0;
-      const budgetMax = opportunity.budgetMax || 0;
-      if (bidAmountNum < budgetMin || bidAmountNum > budgetMax) {
-        newErrors.bidAmount = `Bid amount must be between RM ${budgetMin.toLocaleString()} and RM ${budgetMax.toLocaleString()}.`;
-        messages.push(
-          `Bid amount must be within the budget range (RM ${budgetMin.toLocaleString()} - RM ${budgetMax.toLocaleString()}).`,
-        );
-      }
-    }
-
-    // Timeline: required, and must be <= original timeline
-    const timelineAmountNum = Number(form.timelineAmount);
-    if (!form.timelineAmount) {
-      newErrors.timelineAmount = "Timeline amount is required.";
-      messages.push("Timeline amount is required.");
-    } else if (isNaN(timelineAmountNum) || timelineAmountNum <= 0) {
-      newErrors.timelineAmount = "Timeline amount must be greater than 0.";
-      messages.push("Timeline amount must be greater than 0.");
-    }
-
-    if (!form.timelineUnit) {
-      newErrors.timelineUnit = "Timeline unit is required.";
-      messages.push("Timeline unit is required.");
-    } else if (opportunity && opportunity.timeline) {
-      // Parse original timeline to days
-      const timelineStr = opportunity.timeline.toLowerCase().trim();
-      const match = timelineStr.match(
-        /^(\d+(?:\.\d+)?)\s*(day|days|week|weeks|month|months)$/,
-      );
-      if (match) {
-        const amount = Number(match[1]);
-        const unit = match[2].replace(/s$/, "");
-        const originalTimelineInDays = timelineToDays(amount, unit);
-        const providerTimelineInDays = timelineToDays(
-          timelineAmountNum,
-          form.timelineUnit,
-        );
-        if (providerTimelineInDays > originalTimelineInDays) {
-          const originalTimelineDisplay =
-            formatTimeline(opportunity.timeline) ||
-            `${originalTimelineInDays} days`;
-          newErrors.timelineAmount = `Your timeline must be equal to or less than the company's timeline (${originalTimelineDisplay}).`;
-          messages.push(
-            `Your timeline must be equal to or less than the company's timeline (${originalTimelineDisplay}).`,
-          );
-        }
-      }
-    }
-
-    // Cover letter: required, min length 20
-    if (!form.coverLetter || form.coverLetter.trim().length < 20) {
-      newErrors.coverLetter = "Cover letter must be at least 20 characters.";
-      messages.push("Cover letter must be at least 20 characters.");
-    }
-
-    const milestoneFieldErrors: Record<
-      number,
-      {
-        title?: string;
-        description?: string;
-        amount?: string;
-        dueDate?: string;
-        daysFromStart?: string;
-        durationAmount?: string;
-        durationUnit?: string;
-      }
-    > = {};
-
-    if (form.milestones.length === 0) {
-      newErrors.milestones = "At least one milestone is required.";
-      messages.push("At least one milestone is required.");
-    } else {
-      const deliveryTimeDays = timelineToDays(
-        Number(form.timelineAmount),
-        form.timelineUnit,
-      );
-
-      form.milestones.forEach((m: Milestone, idx: number) => {
-        milestoneFieldErrors[idx] = {};
-
-        if (!m.title || !m.title.trim()) {
-          const errorMsg = "Title is required.";
-          milestoneFieldErrors[idx].title = errorMsg;
-          messages.push(`Milestone #${idx + 1}: title is required.`);
-        }
-        if (!m.description || !m.description.trim()) {
-          const errorMsg = "Description is required.";
-          milestoneFieldErrors[idx].description = errorMsg;
-          messages.push(`Milestone #${idx + 1}: description is required.`);
-        }
-        if (
-          m.amount == null ||
-          isNaN(Number(m.amount)) ||
-          Number(m.amount) <= 0
-        ) {
-          const errorMsg = "Amount must be greater than 0.";
-          milestoneFieldErrors[idx].amount = errorMsg;
-          messages.push(`Milestone #${idx + 1}: amount must be > 0.`);
-        }
-        const durAmount = m.durationAmount != null ? String(m.durationAmount).trim() : "";
-        const durUnit = m.durationUnit || "";
-        if (!durAmount || isNaN(Number(durAmount)) || Number(durAmount) <= 0) {
-          milestoneFieldErrors[idx].durationAmount = "Amount is required and must be > 0.";
-          messages.push(`Milestone #${idx + 1}: duration amount is required.`);
-        }
-        if (!durUnit) {
-          milestoneFieldErrors[idx].durationUnit = "Unit is required.";
-          messages.push(`Milestone #${idx + 1}: duration unit is required.`);
-        }
-      });
-
-      if (Object.keys(milestoneFieldErrors).length > 0) {
-        newErrors.milestoneFields = milestoneFieldErrors;
-      }
-
-      // Time total: sum of milestone durations must equal delivery timeline (same idea as bid amount)
-      if (deliveryTimeDays > 0 && form.milestones.length > 0) {
-        const milestonesDurationDays = form.milestones.reduce((sum, m) => {
-          const d = timelineToDays(Number(m.durationAmount || 0), m.durationUnit || "");
-          return sum + (d > 0 ? d : 0);
-        }, 0);
-        if (milestonesDurationDays !== deliveryTimeDays) {
-          const msg = `Total of milestone durations must equal your delivery timeline (${deliveryTimeDays} days). Currently ${milestonesDurationDays} days.`;
-          newErrors.milestones = newErrors.milestones || msg;
-          messages.push(msg);
-        }
-      }
-
-      // sum rule: milestones total must equal bidAmount
-      if (!isNaN(bidAmountNum) && bidAmountNum > 0) {
-        const sumMilestones = form.milestones.reduce(
-          (sum: number, m: Milestone) => {
-            const val = Number(m.amount);
-            if (!isNaN(val)) return sum + val;
-            return sum;
-          },
-          0,
-        );
-
-        if (sumMilestones !== bidAmountNum) {
-          const msg = `Total of milestones (RM ${sumMilestones}) must equal your bid amount (RM ${bidAmountNum}).`;
-          newErrors.milestones = msg;
-          messages.push(msg);
-        }
-      }
-    }
-
-    setProposalErrors(newErrors);
-    return { fieldErrors: newErrors, messages };
-  }
-
-  const handleSubmitProposal = async () => {
-    // 1. run validation
-    const { fieldErrors, messages } = validateProposal(proposalData);
-
-    // save inline field errors to state
-    setProposalErrors(fieldErrors);
-
-    // if there are validation problems, stop here and toast
-    if (messages.length > 0) {
-      toast.error(messages.map((m) => `• ${m}`).join("\n"));
-      return;
-    }
-
-    // 2. make sure we have opportunity data
-    if (!opportunity) {
-      toast.error("Invalid opportunity data");
-      return;
-    }
-
-    // 3. attachments validation
-    if (proposalData.attachments.length > MAX_FILES) {
-      toast.error("You can only upload up to 3 attachments");
-      return;
-    }
-    for (const file of proposalData.attachments) {
-      if (file.size > MAX_SIZE_BYTES) {
-        toast.error(`"${file.name}" is larger than 10 MB`);
-        return;
-      }
-    }
-
-    try {
-      setSubmittingProposal(true);
-
-      // Compute cumulative daysFromStart from duration (amount + unit) per milestone
-      const sorted = normalizeDraftSequences(proposalData.milestones);
-      let cumulativeDays = 0;
-      const normalized = sorted.map((m: Milestone, idx: number) => {
-        const durationDays = timelineToDays(
-          Number(m.durationAmount || 0),
-          m.durationUnit || "",
-        );
-        cumulativeDays += durationDays > 0 ? durationDays : 0;
-        return {
-          sequence: idx + 1,
-          title: (m.title || "").trim(),
-          description: m.description || "",
-          amount: Number(m.amount || 0),
-          daysFromStart: cumulativeDays,
-        };
-      });
-
-      // Build multipart/form-data
-      const formDataToSend = new FormData();
-
-      formDataToSend.append("serviceRequestId", opportunity.id);
-
-      formDataToSend.append(
-        "bidAmount",
-        parseFloat(proposalData.bidAmount).toString(),
-      );
-
-      // Build timeline data from amount and unit
-      const { timeline, timelineInDays } = buildTimelineData(
-        Number(proposalData.timelineAmount),
-        proposalData.timelineUnit,
-      );
-
-      formDataToSend.append("deliveryTime", timelineInDays.toString());
-      formDataToSend.append("timeline", timeline);
-      formDataToSend.append("timelineInDays", timelineInDays.toString());
-
-      formDataToSend.append("coverLetter", proposalData.coverLetter);
-
-      normalized.forEach((m, idx) => {
-        const row = m as {
-          sequence?: number;
-          title: string;
-          description: string;
-          amount: number;
-          daysFromStart?: number;
-        };
-        formDataToSend.append(
-          `milestones[${idx}][sequence]`,
-          String(row.sequence ?? idx + 1),
-        );
-        formDataToSend.append(`milestones[${idx}][title]`, row.title);
-        formDataToSend.append(
-          `milestones[${idx}][description]`,
-          row.description,
-        );
-        formDataToSend.append(
-          `milestones[${idx}][amount]`,
-          row.amount != null ? String(row.amount) : "0",
-        );
-        if (row.daysFromStart != null) {
-          formDataToSend.append(
-            `milestones[${idx}][daysFromStart]`,
-            String(row.daysFromStart),
-          );
-        }
-      });
-
-      proposalData.attachments.forEach((file) => {
-        formDataToSend.append("attachments", file);
-      });
-
-      const response = await sendProposal(formDataToSend);
-
-      if (response.success) {
-        toast.success("Proposal submitted successfully!");
-        setIsProposalModalOpen(false);
-
-        // reset form + errors
-        setProposalData({
-          coverLetter: "",
-          bidAmount: "",
-          timelineAmount: "",
-          timelineUnit: "",
-          milestones: [],
-          attachments: [],
-        });
-        setProposalErrors({});
-
-        // Reload opportunity to update hasProposed flag
-        await loadOpportunity();
-      } else {
-        toast.error(response.message || "Failed to submit proposal");
-      }
-    } catch (err: unknown) {
-      toast.error(
-        getUserFriendlyErrorMessage(
-          err,
-          "provider opportunity detail submit proposal",
-        ),
-      );
-    } finally {
-      setSubmittingProposal(false);
-    }
-  };
-
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const incoming = Array.from(event.target.files || []);
-
-    if (incoming.length === 0) return;
-
-    // --- Reset previous attachment errors ---
-    setProposalErrors((prev) => ({ ...prev, attachments: undefined }));
-
-    // --- Check file sizes ---
-    for (const file of incoming) {
-      if (file.size > MAX_SIZE_BYTES) {
-        toast.error(`"${file.name}" is larger than 10 MB`);
-        setProposalErrors((prev) => ({
-          ...prev,
-          attachments: `"${file.name}" exceeds 10 MB.`,
-        }));
-        event.target.value = "";
-        return;
-      }
-    }
-
-    setProposalData((prev) => {
-      const combined = [...prev.attachments, ...incoming];
-
-      // --- File count validation ---
-      if (combined.length > MAX_FILES) {
-        const errorMsg = `You can upload a maximum of ${MAX_FILES} files only. Remove some before adding new ones.`;
-        toast.error(errorMsg);
-        setProposalErrors((prev) => ({ ...prev, attachments: errorMsg }));
-        event.target.value = "";
-        return prev; // stop update
-      }
-
-      return {
-        ...prev,
-        attachments: combined,
-      };
-    });
-
-    // reset input
-    event.target.value = "";
-  };
-
-  const removeAttachment = (index: number) => {
-    setProposalData((prev) => ({
-      ...prev,
-      attachments: prev.attachments.filter((_, i) => i !== index),
-    }));
-  };
-
   if (loading) {
     return (
-      <ProviderLayout>
-        <div className="flex items-center justify-center min-h-[400px] px-4">
-          <div className="text-center">
-            <Loader2 className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-4 animate-spin" />
-            <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
-              Loading opportunity...
-            </h3>
-            <p className="text-sm sm:text-base text-gray-600">
-              Please wait while we fetch the opportunity details.
-            </p>
+      <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0 py-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
+          <Skeleton className="h-9 w-full sm:w-28 rounded-md" />
+          <div className="space-y-2 w-full">
+            <Skeleton className="h-8 w-64 sm:w-96 max-w-full" />
+            <Skeleton className="h-4 w-44 sm:w-60" />
           </div>
         </div>
-      </ProviderLayout>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+          <Card className="lg:col-span-2">
+            <CardHeader className="space-y-2">
+              <Skeleton className="h-6 w-40" />
+              <Skeleton className="h-4 w-72 max-w-full" />
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-5/6" />
+              <div className="pt-2 flex flex-wrap gap-2">
+                <Skeleton className="h-6 w-20 rounded-full" />
+                <Skeleton className="h-6 w-24 rounded-full" />
+                <Skeleton className="h-6 w-16 rounded-full" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="space-y-2">
+              <Skeleton className="h-6 w-28" />
+              <Skeleton className="h-4 w-36" />
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Skeleton className="h-10 w-full rounded-md" />
+              <Skeleton className="h-10 w-full rounded-md" />
+              <Skeleton className="h-10 w-full rounded-md" />
+            </CardContent>
+          </Card>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-44" />
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Skeleton className="h-16 w-full rounded-lg" />
+            <Skeleton className="h-16 w-full rounded-lg" />
+          </CardContent>
+        </Card>
+
+        <div className="text-center">
+          <p className="text-sm sm:text-base text-muted-foreground">
+            {t("provider.opportunities.detail.loadingDesc")}
+          </p>
+        </div>
+      </div>
     );
   }
 
   if (error || !opportunity) {
     return (
-      <ProviderLayout>
-        <div className="flex items-center justify-center min-h-[400px] px-4">
-          <div className="w-full max-w-md">
-            <FriendlyErrorState
-              variant="block"
-              message={
-                error ||
-                getUserFriendlyErrorMessage(
-                  undefined,
-                  "provider opportunity detail",
-                )
-              }
-              onRetry={() => {
-                setError(null);
-                loadOpportunity();
-              }}
-            />
-            <div className="mt-4 text-center">
-              <Button
-                variant="ghost"
-                onClick={() => router.back()}
-                className="text-xs sm:text-sm"
-              >
-                Go Back
-              </Button>
-            </div>
+      <div className="flex items-center justify-center min-h-[400px] px-4">
+        <div className="w-full max-w-md">
+          <FriendlyErrorState
+            variant="block"
+            message={
+              error ||
+              getUserFriendlyErrorMessage(
+                undefined,
+                "provider opportunity detail",
+              )
+            }
+            onRetry={() => {
+              setError(null);
+              loadOpportunity();
+            }}
+          />
+          <div className="mt-4 flex flex-col sm:flex-row items-center justify-center gap-2">
+            <Button variant="default" asChild className="text-xs sm:text-sm">
+              <Link href="/provider/opportunities">
+                {t("provider.opportunities.detail.browseAllOpportunities")}
+              </Link>
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => router.back()}
+              className="text-xs sm:text-sm"
+            >
+              {t("provider.opportunities.detail.goBack")}
+            </Button>
           </div>
         </div>
-      </ProviderLayout>
+      </div>
     );
   }
 
   // Format currency
-  const formatCurrency = (amount: number) => {
-    return `RM${amount.toLocaleString()}`;
-  };
+  const formatCurrency = (amount: number, currencyCode: string = "MYR") =>
+    new Intl.NumberFormat("en-MY", {
+      style: "currency",
+      currency: currencyCode,
+      maximumFractionDigits: 2,
+    }).format(amount || 0);
 
   // Get skills array
   const skills = Array.isArray(opportunity.skills) ? opportunity.skills : [];
@@ -697,7 +303,7 @@ export default function OpportunityDetailsPage() {
     : "/placeholder.svg";
 
   return (
-    <ProviderLayout>
+    <>
       <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
@@ -707,7 +313,7 @@ export default function OpportunityDetailsPage() {
             className="w-full sm:w-auto text-xs sm:text-sm"
           >
             <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-            Back
+            {t("provider.opportunities.detail.back")}
           </Button>
           <div className="flex-1 min-w-0">
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 break-words">
@@ -725,7 +331,7 @@ export default function OpportunityDetailsPage() {
                 className="w-full sm:w-auto text-xs sm:text-sm"
               >
                 <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                Proposal Submitted
+                {t("provider.opportunities.detail.proposalSubmitted")}
               </Button>
             ) : (
               <Button
@@ -734,23 +340,18 @@ export default function OpportunityDetailsPage() {
                   try {
                     const res = await getProviderProfileCompletion();
                     const data = res?.data ?? res;
-                    const completion = typeof (data as { completion?: number })?.completion === "number"
-                      ? (data as { completion: number }).completion
-                      : 0;
+                    const completion =
+                      typeof (data as { completion?: number })?.completion ===
+                      "number"
+                        ? (data as { completion: number }).completion
+                        : 0;
                     if (completion < PROPOSAL_REQUIRED) {
                       setProposalGateOpen(true);
                       return;
                     }
-                    setIsProposalModalOpen(true);
-                    setProposalData({
-                      coverLetter: "",
-                      bidAmount: "",
-                      timelineAmount: "",
-                      timelineUnit: "",
-                      milestones: [],
-                      attachments: [],
-                    });
-                    setProposalErrors({});
+                    router.push(
+                      `/provider/opportunities/${opportunityId}/proposal`,
+                    );
                   } catch {
                     setProposalGateOpen(true);
                   } finally {
@@ -765,7 +366,9 @@ export default function OpportunityDetailsPage() {
                 ) : (
                   <ThumbsUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
                 )}
-                {proposalCompletionChecking ? "Checking…" : "Submit Proposal"}
+                {proposalCompletionChecking
+                  ? t("provider.opportunities.checking")
+                  : t("provider.opportunities.submitProposal")}
               </Button>
             )}
           </div>
@@ -781,7 +384,7 @@ export default function OpportunityDetailsPage() {
                   value="overview"
                   className="text-xs sm:text-sm px-2 sm:px-4"
                 >
-                  Overview
+                  {t("provider.opportunities.detail.tab.overview")}
                 </TabsTrigger>
                 {opportunity.milestones &&
                   opportunity.milestones.length > 0 && (
@@ -789,7 +392,9 @@ export default function OpportunityDetailsPage() {
                       value="milestones"
                       className="text-xs sm:text-sm px-2 sm:px-4"
                     >
-                      Milestones ({opportunity.milestones.length})
+                      {t("provider.opportunities.detail.milestonesTab", {
+                        n: opportunity.milestones.length,
+                      })}
                     </TabsTrigger>
                   )}
               </TabsList>
@@ -799,14 +404,14 @@ export default function OpportunityDetailsPage() {
                 <Card>
                   <CardHeader className="p-4 sm:p-6">
                     <CardTitle className="text-lg sm:text-xl">
-                      Project Details
+                      {t("provider.opportunities.details.projectDetails")}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="p-4 sm:p-6 space-y-3 sm:space-y-4">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                       <div>
                         <Label className="text-xs sm:text-sm font-medium text-gray-500">
-                          Category
+                          {t("provider.opportunities.detail.category")}
                         </Label>
                         <p className="text-base sm:text-lg mt-1">
                           {opportunity.category}
@@ -814,35 +419,76 @@ export default function OpportunityDetailsPage() {
                       </div>
                       <div>
                         <Label className="text-xs sm:text-sm font-medium text-gray-500">
-                          Status
+                          {t("provider.opportunities.detail.status")}
                         </Label>
                         <div className="mt-1">
                           <Badge className="bg-green-100 text-green-800 text-xs">
-                            Open
+                            {t("provider.opportunities.detail.statusOpen")}
                           </Badge>
                         </div>
                       </div>
                       <div>
                         <Label className="text-xs sm:text-sm font-medium text-gray-500">
-                          Budget Range
+                          {t("provider.opportunities.detail.budgetRange")}
                         </Label>
-                        <p className="text-base sm:text-lg mt-1 break-words">
-                          {formatCurrency(opportunity.budgetMin || 0)} -{" "}
-                          {formatCurrency(opportunity.budgetMax || 0)}
+                        <p className="text-base sm:text-lg mt-1 break-words font-medium">
+                          {formatCurrency(
+                            opportunity.displayBudgetMin ??
+                              opportunity.budgetMin ??
+                              0,
+                            opportunity.displayCurrencyCode ||
+                              opportunity.currencyCode ||
+                              "MYR",
+                          )}{" "}
+                          -{" "}
+                          {formatCurrency(
+                            opportunity.displayBudgetMax ??
+                              opportunity.budgetMax ??
+                              0,
+                            opportunity.displayCurrencyCode ||
+                              opportunity.currencyCode ||
+                              "MYR",
+                          )}
                         </p>
+                        <p className="text-xs text-gray-500 mt-1 break-words">
+                          Original:{" "}
+                          {formatCurrency(
+                            opportunity.originalBudgetMin ??
+                              opportunity.budgetMin ??
+                              0,
+                            opportunity.originalCurrencyCode ||
+                              opportunity.currencyCode ||
+                              "MYR",
+                          )}{" "}
+                          -{" "}
+                          {formatCurrency(
+                            opportunity.originalBudgetMax ??
+                              opportunity.budgetMax ??
+                              0,
+                            opportunity.originalCurrencyCode ||
+                              opportunity.currencyCode ||
+                              "MYR",
+                          )}
+                        </p>
+                        {opportunity.conversionMeta?.snapshotDate && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            Conversion as of{" "}
+                            {opportunity.conversionMeta.snapshotDate}
+                          </p>
+                        )}
                       </div>
                       <div>
                         <Label className="text-xs sm:text-sm font-medium text-gray-500">
-                          Timeline
+                          {t("provider.opportunities.detail.timelineLabel")}
                         </Label>
                         <p className="text-base sm:text-lg mt-1 break-words">
                           {formatTimeline(opportunity.timeline) ||
-                            "Not specified"}
+                            t("customer.dashboard.timelineNotSpecified")}
                         </p>
                       </div>
                       <div>
                         <Label className="text-xs sm:text-sm font-medium text-gray-500">
-                          Priority
+                          {t("provider.opportunities.detail.priority")}
                         </Label>
                         <div className="mt-1">
                           <Badge className="text-xs">
@@ -852,11 +498,15 @@ export default function OpportunityDetailsPage() {
                       </div>
                       <div>
                         <Label className="text-xs sm:text-sm font-medium text-gray-500">
-                          Proposals
+                          {t("provider.opportunities.detail.proposalsLabel")}
                         </Label>
                         <p className="text-base sm:text-lg mt-1">
-                          {opportunity._count?.proposals || 0} proposals
-                          received
+                          {t(
+                            "provider.opportunities.detail.proposalsReceived",
+                            {
+                              n: opportunity._count?.proposals || 0,
+                            },
+                          )}
                         </p>
                       </div>
                     </div>
@@ -864,7 +514,7 @@ export default function OpportunityDetailsPage() {
                     {skills.length > 0 && (
                       <div>
                         <Label className="text-xs sm:text-sm font-medium text-gray-500">
-                          Required Skills
+                          {t("provider.opportunities.detail.requiredSkills")}
                         </Label>
                         <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-2">
                           {skills.map((skill: string, index: number) => (
@@ -898,13 +548,15 @@ export default function OpportunityDetailsPage() {
                     {deliverables && (
                       <div>
                         <Label className="text-xs sm:text-sm font-medium text-gray-500">
-                          Deliverables
+                          {t("provider.opportunities.details.deliverables")}
                         </Label>
                         <div className="mt-2 prose max-w-none text-gray-700">
                           <MarkdownViewer
                             content={deliverables}
                             className="prose max-w-none text-gray-700"
-                            emptyMessage="No deliverables specified"
+                            emptyMessage={t(
+                              "provider.opportunities.details.noDeliverables",
+                            )}
                           />
                         </div>
                       </div>
@@ -921,11 +573,14 @@ export default function OpportunityDetailsPage() {
                   <Card>
                     <CardHeader className="p-4 sm:p-6">
                       <CardTitle className="text-lg sm:text-xl">
-                        Company Proposed Milestones
+                        {t(
+                          "provider.opportunities.detail.companyMilestonesTitle",
+                        )}
                       </CardTitle>
                       <CardDescription className="text-xs sm:text-sm">
-                        These are the milestones suggested by the company. You
-                        can use them or propose your own in your proposal.
+                        {t(
+                          "provider.opportunities.detail.companyMilestonesHint",
+                        )}
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="p-4 sm:p-6">
@@ -958,10 +613,11 @@ export default function OpportunityDetailsPage() {
                                   </p>
                                   {milestone.dueDate && (
                                     <p className="text-xs sm:text-sm text-gray-500">
-                                      Due:{" "}
-                                      {new Date(
-                                        milestone.dueDate,
-                                      ).toLocaleDateString()}
+                                      {t("provider.opportunities.detail.due", {
+                                        date: new Date(
+                                          milestone.dueDate,
+                                        ).toLocaleDateString(),
+                                      })}
                                     </p>
                                   )}
                                 </div>
@@ -983,7 +639,7 @@ export default function OpportunityDetailsPage() {
             <Card>
               <CardHeader className="p-4 sm:p-6">
                 <CardTitle className="text-base sm:text-lg">
-                  Client Information
+                  {t("provider.opportunities.details.clientInfo")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-4 sm:p-6">
@@ -997,7 +653,8 @@ export default function OpportunityDetailsPage() {
                   <div className="flex-1 min-w-0 space-y-2">
                     <div>
                       <p className="font-semibold text-sm sm:text-lg break-words">
-                        {opportunity.customer?.name || "N/A"}
+                        {opportunity.customer?.name ||
+                          t("provider.opportunities.detail.notAvailable")}
                       </p>
                       <p className="text-xs sm:text-sm text-gray-600 break-words">
                         {opportunity.customer?.email || ""}
@@ -1033,7 +690,9 @@ export default function OpportunityDetailsPage() {
                       )}
                       {opportunity.customer?.customerProfile?.industry && (
                         <div>
-                          <span className="text-gray-500">Industry: </span>
+                          <span className="text-gray-500">
+                            {t("provider.opportunities.details.industry")}{" "}
+                          </span>
                           <span className="text-gray-700 break-words">
                             {opportunity.customer.customerProfile.industry}
                           </span>
@@ -1041,7 +700,11 @@ export default function OpportunityDetailsPage() {
                       )}
                       {opportunity.customer?.customerProfile?.companySize && (
                         <div>
-                          <span className="text-gray-500">Company Size: </span>
+                          <span className="text-gray-500">
+                            {t(
+                              "provider.opportunities.details.companySize",
+                            )}{" "}
+                          </span>
                           <span className="text-gray-700 break-words">
                             {opportunity.customer.customerProfile.companySize}
                           </span>
@@ -1051,7 +714,9 @@ export default function OpportunityDetailsPage() {
                         undefined && (
                         <div>
                           <span className="text-gray-500">
-                            Projects Posted:{" "}
+                            {t(
+                              "provider.opportunities.detail.projectsPostedLabel",
+                            )}{" "}
                           </span>
                           <span className="text-gray-700">
                             {opportunity.customer.customerProfile
@@ -1071,7 +736,7 @@ export default function OpportunityDetailsPage() {
                           className="w-full text-xs sm:text-sm"
                         >
                           <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                          View Company
+                          {t("provider.opportunities.details.viewCompany")}
                         </Button>
                       </Link>
                     )}
@@ -1084,13 +749,13 @@ export default function OpportunityDetailsPage() {
             <Card>
               <CardHeader className="p-4 sm:p-6">
                 <CardTitle className="text-base sm:text-lg">
-                  Quick Stats
+                  {t("provider.opportunities.detail.quickStats")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-4 sm:p-6 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs sm:text-sm text-gray-600">
-                    Posted:
+                    {t("provider.opportunities.detail.posted")}
                   </span>
                   <span className="font-semibold text-xs sm:text-sm">
                     {new Date(opportunity.createdAt).toLocaleDateString()}
@@ -1098,7 +763,7 @@ export default function OpportunityDetailsPage() {
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs sm:text-sm text-gray-600">
-                    Proposals:
+                    {t("provider.opportunities.details.proposals")}
                   </span>
                   <span className="font-semibold text-xs sm:text-sm">
                     {opportunity._count?.proposals || 0}
@@ -1107,7 +772,7 @@ export default function OpportunityDetailsPage() {
                 {opportunity.priority && (
                   <div className="flex items-center justify-between">
                     <span className="text-xs sm:text-sm text-gray-600">
-                      Priority:
+                      {t("provider.opportunities.detail.priorityLabel")}
                     </span>
                     <Badge className="text-xs">{opportunity.priority}</Badge>
                   </div>
@@ -1116,624 +781,13 @@ export default function OpportunityDetailsPage() {
             </Card>
           </div>
         </div>
-
-        {/* Submit Proposal Dialog */}
-        <Dialog
-          open={isProposalModalOpen}
-          onOpenChange={setIsProposalModalOpen}
-        >
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
-            <DialogHeader>
-              <DialogTitle className="text-lg sm:text-xl">
-                Submit Proposal
-              </DialogTitle>
-              <DialogDescription className="text-xs sm:text-sm">
-                Submit your proposal for &quot;{opportunity.title}&quot;
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-4 sm:space-y-6">
-              {/* Bid Amount */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                <div>
-                  <Label htmlFor="bidAmount" className="text-xs sm:text-sm">
-                    Your Bid Amount (RM) *
-                  </Label>
-                  <Input
-                    id="bidAmount"
-                    type="text"
-                    inputMode="decimal"
-                    placeholder="15,000.00"
-                    value={formatBidAmountDisplay(proposalData.bidAmount)}
-                    onChange={(e) =>
-                      setProposalData((prev) => ({
-                        ...prev,
-                        bidAmount: parseBidAmountInput(e.target.value),
-                      }))
-                    }
-                    className={`text-sm sm:text-base ${
-                      proposalErrors.bidAmount
-                        ? "border-red-500 focus-visible:ring-red-500"
-                        : ""
-                    }`}
-                  />
-                  {proposalErrors.bidAmount && (
-                    <p className="text-xs text-red-600 mt-1">
-                      {proposalErrors.bidAmount}
-                    </p>
-                  )}
-                  <p className="text-xs text-gray-500 mt-1 break-words">
-                    Client budget range: RM{" "}
-                    {opportunity.budgetMin?.toLocaleString() || "0"} - RM{" "}
-                    {opportunity.budgetMax?.toLocaleString() || "0"}
-                  </p>
-                </div>
-                <div>
-                  <Label htmlFor="timeline" className="text-xs sm:text-sm">
-                    Delivery Timeline *
-                  </Label>
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <Input
-                      id="timelineAmount"
-                      type="number"
-                      placeholder="e.g. 2"
-                      min="1"
-                      value={proposalData.timelineAmount}
-                      onChange={(e) =>
-                        setProposalData((prev) => ({
-                          ...prev,
-                          timelineAmount: e.target.value,
-                        }))
-                      }
-                      className={`text-sm sm:text-base ${
-                        proposalErrors.timelineAmount
-                          ? "border-red-500 focus-visible:ring-red-500"
-                          : ""
-                      }`}
-                    />
-                    <Select
-                      value={proposalData.timelineUnit}
-                      onValueChange={(value: "day" | "week" | "month") =>
-                        setProposalData((prev) => ({
-                          ...prev,
-                          timelineUnit: value,
-                        }))
-                      }
-                    >
-                      <SelectTrigger
-                        className={`text-sm sm:text-base ${
-                          proposalErrors.timelineUnit
-                            ? "border-red-500 focus:ring-red-500"
-                            : ""
-                        }`}
-                      >
-                        <SelectValue placeholder="Unit" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="day">Day(s)</SelectItem>
-                        <SelectItem value="week">Week(s)</SelectItem>
-                        <SelectItem value="month">Month(s)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  {proposalErrors.timelineAmount && (
-                    <p className="text-xs text-red-600 mt-1">
-                      {proposalErrors.timelineAmount}
-                    </p>
-                  )}
-                  {proposalErrors.timelineUnit && (
-                    <p className="text-xs text-red-600 mt-1">
-                      {proposalErrors.timelineUnit}
-                    </p>
-                  )}
-                  <p className="text-xs text-gray-500 mt-1 break-words">
-                    Company timeline:{" "}
-                    {opportunity.timeline
-                      ? formatTimeline(opportunity.timeline)
-                      : "Not specified"}
-                  </p>
-                  {proposalData.timelineAmount && proposalData.timelineUnit && (
-                    <p className="text-xs text-gray-500 mt-1">
-                      Your timeline:{" "}
-                      {formatTimeline(
-                        proposalData.timelineAmount,
-                        proposalData.timelineUnit,
-                      )}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {/* Cover Letter */}
-              <div>
-                <Label htmlFor="coverLetter" className="text-xs sm:text-sm">
-                  Cover Letter *
-                </Label>
-                <Textarea
-                  id="coverLetter"
-                  placeholder="Introduce yourself and explain why you're the best fit for this project..."
-                  className={`min-h-[120px] text-sm sm:text-base ${
-                    proposalErrors.coverLetter
-                      ? "border-red-500 focus-visible:ring-red-500"
-                      : ""
-                  }`}
-                  value={proposalData.coverLetter}
-                  onChange={(e) =>
-                    setProposalData((prev) => ({
-                      ...prev,
-                      coverLetter: e.target.value,
-                    }))
-                  }
-                />
-                {proposalErrors.coverLetter && (
-                  <p className="text-xs text-red-600 mt-1">
-                    {proposalErrors.coverLetter}
-                  </p>
-                )}
-                <p className="text-xs text-gray-500 mt-1">
-                  {proposalData.coverLetter.length}/1000 characters
-                </p>
-              </div>
-
-              {/* Project Milestones (Required) */}
-              <div>
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0 mb-2">
-                  <Label className="text-xs sm:text-sm">
-                    Project Milestones <span className="text-red-500">*</span>
-                  </Label>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={addMilestone}
-                    className="w-full sm:w-auto text-xs sm:text-sm"
-                  >
-                    + Add Milestone
-                  </Button>
-                </div>
-
-                {proposalData.milestones.length === 0 && (
-                  <p
-                    className={`text-xs sm:text-sm ${
-                      proposalErrors.milestones
-                        ? "text-red-600 font-medium"
-                        : "text-gray-500"
-                    }`}
-                  >
-                    {proposalErrors.milestones ||
-                      "At least one milestone is required. Click 'Add Milestone' to get started."}
-                  </p>
-                )}
-
-                <div className="space-y-3">
-                  {proposalData.milestones.map((m, i) => (
-                    <Card key={i}>
-                      <CardContent className="p-3 sm:p-4 space-y-3">
-                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
-                          <div className="sm:col-span-1">
-                            <label className="text-xs sm:text-sm font-medium">
-                              Seq
-                            </label>
-                            <Input
-                              type="number"
-                              value={i + 1}
-                              disabled
-                              className="text-sm sm:text-base"
-                            />
-                          </div>
-                          <div className="sm:col-span-12 md:col-span-4">
-                            <label className="text-xs sm:text-sm font-medium">
-                              Title <span className="text-red-500">*</span>
-                            </label>
-                            <Input
-                              value={m.title}
-                              onChange={(e) => {
-                                updateMilestone(i, {
-                                  title: e.target.value,
-                                });
-                                // Clear error when user starts typing
-                                if (
-                                  proposalErrors.milestoneFields?.[i]?.title
-                                ) {
-                                  setProposalErrors((prev) => ({
-                                    ...prev,
-                                    milestoneFields: {
-                                      ...prev.milestoneFields,
-                                      [i]: {
-                                        ...prev.milestoneFields?.[i],
-                                        title: undefined,
-                                      },
-                                    },
-                                  }));
-                                }
-                              }}
-                              placeholder="Milestone title (required)"
-                              className={`text-sm sm:text-base ${
-                                proposalErrors.milestoneFields?.[i]?.title
-                                  ? "border-red-500 focus-visible:ring-red-500"
-                                  : ""
-                              }`}
-                            />
-                            {proposalErrors.milestoneFields?.[i]?.title && (
-                              <p className="text-xs text-red-600 mt-1">
-                                {proposalErrors.milestoneFields[i].title}
-                              </p>
-                            )}
-                          </div>
-                          <div className="sm:col-span-12 md:col-span-3">
-                            <label className="text-xs sm:text-sm font-medium">
-                              Amount (RM)
-                            </label>
-                            <Input
-                              type="number"
-                              value={String(m.amount ?? 0)}
-                              onChange={(e) => {
-                                updateMilestone(i, {
-                                  amount: Number(e.target.value),
-                                });
-                                // Clear error when user starts typing
-                                if (
-                                  proposalErrors.milestoneFields?.[i]?.amount
-                                ) {
-                                  setProposalErrors((prev) => ({
-                                    ...prev,
-                                    milestoneFields: {
-                                      ...prev.milestoneFields,
-                                      [i]: {
-                                        ...prev.milestoneFields?.[i],
-                                        amount: undefined,
-                                      },
-                                    },
-                                  }));
-                                }
-                              }}
-                              className={`text-sm sm:text-base ${
-                                proposalErrors.milestoneFields?.[i]?.amount
-                                  ? "border-red-500 focus-visible:ring-red-500"
-                                  : ""
-                              }`}
-                            />
-                            {proposalErrors.milestoneFields?.[i]?.amount && (
-                              <p className="text-xs text-red-600 mt-1">
-                                {proposalErrors.milestoneFields[i].amount}
-                              </p>
-                            )}
-                          </div>
-                          <div className="sm:col-span-12 md:col-span-4">
-                            <label className="text-xs sm:text-sm font-medium">
-                              Duration <span className="text-red-500">*</span>
-                            </label>
-                            <div className="flex flex-col sm:flex-row gap-2 mt-1.5">
-                              <Input
-                                type="number"
-                                min={1}
-                                placeholder="e.g. 1"
-                                value={m.durationAmount ?? ""}
-                                onChange={(e) => {
-                                  updateMilestone(i, {
-                                    durationAmount: e.target.value,
-                                    durationUnit: m.durationUnit || "",
-                                  });
-                                  if (proposalErrors.milestoneFields?.[i]?.durationAmount) {
-                                    setProposalErrors((prev) => ({
-                                      ...prev,
-                                      milestoneFields: {
-                                        ...prev.milestoneFields,
-                                        [i]: { ...prev.milestoneFields?.[i], durationAmount: undefined },
-                                      },
-                                    }));
-                                  }
-                                }}
-                                className={`text-sm sm:text-base ${
-                                  proposalErrors.milestoneFields?.[i]?.durationAmount
-                                    ? "border-red-500 focus-visible:ring-red-500"
-                                    : ""
-                                }`}
-                              />
-                              <Select
-                                value={m.durationUnit || ""}
-                                onValueChange={(value: "day" | "week" | "month") => {
-                                  updateMilestone(i, {
-                                    durationAmount: m.durationAmount ?? "",
-                                    durationUnit: value,
-                                  });
-                                  if (proposalErrors.milestoneFields?.[i]?.durationUnit) {
-                                    setProposalErrors((prev) => ({
-                                      ...prev,
-                                      milestoneFields: {
-                                        ...prev.milestoneFields,
-                                        [i]: { ...prev.milestoneFields?.[i], durationUnit: undefined },
-                                      },
-                                    }));
-                                  }
-                                }}
-                              >
-                                <SelectTrigger
-                                  className={`text-sm sm:text-base ${
-                                    proposalErrors.milestoneFields?.[i]?.durationUnit
-                                      ? "border-red-500 focus:ring-red-500"
-                                      : ""
-                                  }`}
-                                >
-                                  <SelectValue placeholder="Unit" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="day">Day(s)</SelectItem>
-                                  <SelectItem value="week">Week(s)</SelectItem>
-                                  <SelectItem value="month">Month(s)</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            {(proposalErrors.milestoneFields?.[i]?.durationAmount ||
-                              proposalErrors.milestoneFields?.[i]?.durationUnit) && (
-                              <p className="text-xs text-red-600 mt-1">
-                                {proposalErrors.milestoneFields[i].durationAmount ||
-                                  proposalErrors.milestoneFields[i].durationUnit}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className="text-xs sm:text-sm font-medium">
-                            Description <span className="text-red-500">*</span>
-                          </label>
-                          <Textarea
-                            rows={2}
-                            value={m.description || ""}
-                            onChange={(e) => {
-                              updateMilestone(i, {
-                                description: e.target.value,
-                              });
-                              // Clear error when user starts typing
-                              if (
-                                proposalErrors.milestoneFields?.[i]?.description
-                              ) {
-                                setProposalErrors((prev) => ({
-                                  ...prev,
-                                  milestoneFields: {
-                                    ...prev.milestoneFields,
-                                    [i]: {
-                                      ...prev.milestoneFields?.[i],
-                                      description: undefined,
-                                    },
-                                  },
-                                }));
-                              }
-                            }}
-                            placeholder="Milestone description (required)"
-                            className={`text-sm sm:text-base ${
-                              proposalErrors.milestoneFields?.[i]?.description
-                                ? "border-red-500 focus-visible:ring-red-500"
-                                : ""
-                            }`}
-                          />
-                          {proposalErrors.milestoneFields?.[i]?.description && (
-                            <p className="text-xs text-red-600 mt-1">
-                              {proposalErrors.milestoneFields[i].description}
-                            </p>
-                          )}
-                        </div>
-
-                        <div className="flex justify-end">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => removeMilestone(i)}
-                            className="text-xs sm:text-sm"
-                          >
-                            Remove
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-                {/* Milestones total check (bid + time) */}
-                {proposalData.milestones.length > 0 && (
-                  <div className="mt-4 rounded-md border p-3 text-xs sm:text-sm space-y-3">
-                    {(() => {
-                      const bidAmountNum = Number(proposalData.bidAmount || 0);
-                      const sumMilestones = proposalData.milestones.reduce(
-                        (sum, m) => {
-                          const val = Number(m.amount);
-                          if (!isNaN(val)) return sum + val;
-                          return sum;
-                        },
-                        0,
-                      );
-                      const bidMatch =
-                        bidAmountNum > 0 && sumMilestones === bidAmountNum;
-
-                      const deliveryTimeDays = timelineToDays(
-                        Number(proposalData.timelineAmount || 0),
-                        proposalData.timelineUnit || "",
-                      );
-                      const milestonesDurationDays = proposalData.milestones.reduce(
-                        (sum, m) =>
-                          sum +
-                          (timelineToDays(
-                            Number(m.durationAmount || 0),
-                            m.durationUnit || "",
-                          ) || 0),
-                        0,
-                      );
-                      const timeMatch =
-                        deliveryTimeDays > 0 &&
-                        milestonesDurationDays === deliveryTimeDays;
-
-                      return (
-                        <>
-                          <div className="flex flex-col sm:flex-row sm:justify-between gap-2">
-                            <div>
-                              <div className="font-medium">
-                                Milestones total: RM {sumMilestones || 0}
-                              </div>
-                              <div>Your bid: RM {bidAmountNum || 0}</div>
-                            </div>
-                            <div
-                              className={
-                                "text-xs font-semibold " +
-                                (bidMatch ? "text-green-600" : "text-red-600")
-                              }
-                            >
-                              {bidMatch
-                                ? "Total matches bid ✅"
-                                : "Total does not match bid ❗"}
-                            </div>
-                          </div>
-                          <div className="flex flex-col sm:flex-row sm:justify-between gap-2 border-t pt-2">
-                            <div>
-                              <div className="font-medium">
-                                Milestones duration total: {milestonesDurationDays} days
-                              </div>
-                              <div>Your delivery timeline: {deliveryTimeDays} days</div>
-                            </div>
-                            <div
-                              className={
-                                "text-xs font-semibold " +
-                                (timeMatch ? "text-green-600" : "text-red-600")
-                              }
-                            >
-                              {timeMatch
-                                ? "Total matches delivery timeline ✅"
-                                : "Total does not match delivery timeline ❗"}
-                            </div>
-                          </div>
-                        </>
-                      );
-                    })()}
-                  </div>
-                )}
-                {proposalErrors.milestones && (
-                  <p className="text-xs text-red-600 mt-1">
-                    {proposalErrors.milestones}
-                  </p>
-                )}
-              </div>
-
-              {/* File Attachments */}
-              <div>
-                <Label className="text-xs sm:text-sm">
-                  Attachments (Optional)
-                </Label>
-                <div
-                  className={`border-2 border-dashed rounded-lg p-4 sm:p-6 text-center ${
-                    proposalErrors.attachments
-                      ? "border-red-500 bg-red-50"
-                      : "border-gray-300"
-                  }`}
-                >
-                  <input
-                    type="file"
-                    multiple
-                    onChange={handleFileUpload}
-                    className="hidden"
-                    id="file-upload"
-                    accept=".pdf,.doc,.docx,.txt,.jpg,.png"
-                  />
-                  <label htmlFor="file-upload" className="cursor-pointer">
-                    <Paperclip className="w-6 h-6 sm:w-8 sm:h-8 mx-auto text-gray-400 mb-2" />
-                    <p className="text-xs sm:text-sm text-gray-600">
-                      Click to upload portfolio, resume, or relevant documents
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      PDF, DOC, DOCX, TXT, JPG, PNG (Max 10MB each)
-                    </p>
-                  </label>
-                </div>
-
-                {/* Uploaded Files */}
-                {proposalData.attachments.length > 0 && (
-                  <div className="mt-3 space-y-2">
-                    {proposalData.attachments.map((file, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center justify-between bg-gray-50 p-2 rounded"
-                      >
-                        <span className="text-xs sm:text-sm text-gray-700 truncate flex-1 mr-2">
-                          {file.name}
-                        </span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeAttachment(index)}
-                          className="text-xs sm:text-sm flex-shrink-0"
-                        >
-                          Remove
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {proposalErrors.attachments && (
-                  <p className="text-xs text-red-600 mt-2">
-                    {proposalErrors.attachments}
-                  </p>
-                )}
-              </div>
-
-              {/* Proposal Summary */}
-              <Card className="bg-gray-50">
-                <CardContent className="p-3 sm:p-4">
-                  <h4 className="font-semibold text-sm sm:text-base mb-2">
-                    Proposal Summary
-                  </h4>
-                  <div className="space-y-1 text-xs sm:text-sm">
-                    <div className="flex justify-between">
-                      <span>Your Bid:</span>
-                      <span className="font-semibold">
-                        RM {proposalData.bidAmount || "0"}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Timeline:</span>
-                      <span className="break-words">
-                        {formatTimeline(
-                          proposalData.timelineAmount,
-                          proposalData.timelineUnit,
-                        ) || "Not specified"}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Attachments:</span>
-                      <span>{proposalData.attachments.length} files</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
-              <Button
-                variant="outline"
-                onClick={() => setIsProposalModalOpen(false)}
-                className="w-full sm:w-auto text-xs sm:text-sm"
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleSubmitProposal}
-                disabled={submittingProposal}
-                className="w-full sm:w-auto text-xs sm:text-sm"
-              >
-                {submittingProposal ? (
-                  <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 animate-spin" />
-                ) : (
-                  <Send className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                )}
-                {submittingProposal ? "Submitting..." : "Submit Proposal"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
       </div>
       <ProfileCompletionGateModal
         open={proposalGateOpen}
         onOpenChange={setProposalGateOpen}
         requiredPercent={PROPOSAL_REQUIRED}
-        actionLabel="submit proposals"
+        actionLabel={t("provider.opportunities.gate.submitProposals")}
       />
-    </ProviderLayout>
+    </>
   );
 }

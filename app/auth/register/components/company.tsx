@@ -35,7 +35,18 @@ import {
 import { RegistrationFormData } from "../page";
 import { useState } from "react";
 import { PhoneInputField } from "./PhoneInputField";
+import { useI18n } from "@/contexts/I18nProvider";
 import { CheckboxIndicator } from "@radix-ui/react-checkbox";
+import {
+  AUTH_COMPANY_REGISTER_INDUSTRY,
+  profileStoredLabel,
+  PROFILE_CONTRACT,
+  PROFILE_CORE_VALUE,
+  PROFILE_FUNDING,
+  PROFILE_HIRE_CATEGORY,
+  PROFILE_HIRING_FREQ,
+  PROFILE_REMOTE,
+} from "@/lib/i18n/customerProfileOptionMaps";
 
 const fadeInUp = {
   initial: { opacity: 0, y: 30 },
@@ -175,6 +186,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
   setNewSocialUrl,
   handleBooleanInputChange,
 }) => {
+  const { t } = useI18n();
   const [locationIsOther, setLocationIsOther] = useState(
     !!formData.location && !malaysianStates.includes(formData.location)
   );
@@ -270,20 +282,20 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
           className="space-y-6"
         >
           <div className="text-center mb-6">
-            <h2 className="text-lg font-semibold text-gray-900">Account Setup</h2>
+            <h2 className="text-lg font-semibold text-gray-900">{t("auth.account.title")}</h2>
             <p className="text-sm text-gray-600">
-              Let&apos;s start with your basic information
+              {t("auth.account.subtitle")}
             </p>
           </div>
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="companyName">Company Name *</Label>
+              <Label htmlFor="companyName">{t("auth.fields.companyNameLabel")}</Label>
               <div className="relative">
                 <Building className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                 <Input
                   id="companyName"
-                  placeholder="Enter your company name"
+                  placeholder={t("auth.fields.companyPlaceholder")}
                   className={`pl-10 bg-white/50 ${"border-gray-200 focus:border-blue-500 focus:ring-blue-500"}`}
                   value={formData.companyName}
                   onChange={(e) =>
@@ -295,14 +307,14 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="email">Email Address *</Label>
+              <Label htmlFor="email">{t("auth.fields.emailLabel")}</Label>
               <div className="relative">
                 <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                 <Input
                   ref={emailRef}
                   id="email"
                   type="email"
-                  placeholder="Enter your email"
+                  placeholder={t("auth.login.emailPlaceholder")}
                   value={formData.email}
                   onChange={(e) => handleInputChange("email", e.target.value)}
                   aria-invalid={Boolean(
@@ -318,39 +330,42 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
                 />
               </div>
 
+              <p className="text-xs text-gray-500">
+                {t("auth.fields.emailHint")}
+              </p>
+
               {emailStatus === "checking" && (
-                <p className="text-xs text-gray-500">Checking email…</p>
+                <p className="text-xs text-gray-500">{t("auth.fields.checkingEmail")}</p>
               )}
               {(fieldErrors.email || emailStatus === "used") && (
                 <p className="text-xs text-red-600">
-                  This email is already in use.
+                  {fieldErrors.email || t("auth.register.error.emailInUse")}
                 </p>
               )}
               {emailStatus === "available" &&
                 !fieldErrors.email &&
                 formData.email && (
-                  <p className="text-xs text-green-600">Email is available.</p>
+                  <p className="text-xs text-green-600">{t("auth.fields.emailAvailable")}</p>
                 )}
             </div>
 
             <PhoneInputField
               id="phone"
-              label="Phone Number *"
+              label={t("auth.fields.phoneLabel")}
               value={formData.phone}
               onChange={(val) => handleInputChange("phone", val)}
-              defaultCountry="MY"
-              placeholder="Enter phone number"
+              placeholder={t("auth.fields.phonePlaceholder")}
               required
             />
 
             <div className="space-y-2">
-              <Label htmlFor="password">Password *</Label>
+              <Label htmlFor="password">{t("auth.fields.password")} *</Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
-                  placeholder="Create a strong password"
+                  placeholder={t("auth.fields.passwordCreate")}
                   className="pl-10 pr-10 bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                   value={formData.password}
                   onChange={(e) =>
@@ -373,13 +388,13 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirm Password *</Label>
+              <Label htmlFor="confirmPassword">{t("auth.fields.confirmPassword")} *</Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                 <Input
                   id="confirmPassword"
                   type={showPassword ? "text" : "password"}
-                  placeholder="Re-enter your password"
+                  placeholder={t("auth.fields.passwordConfirmPlaceholder")}
                   className="pl-10 bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                   value={formData.confirmPassword}
                   onChange={(e) =>
@@ -392,14 +407,13 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
               {!isStrongPassword(formData.password) &&
                 formData.password.length > 0 && (
                   <p className="text-xs text-red-600">
-                    Use at least 8 characters with uppercase, lowercase, number,
-                    and symbol.
+                    {t("auth.fields.passwordRules")}
                   </p>
                 )}
               {formData.confirmPassword &&
                 formData.password !== formData.confirmPassword && (
                   <p className="text-xs text-red-600">
-                    Passwords do not match.
+                    {t("auth.fields.passwordMismatch")}
                   </p>
                 )}
             </div>
@@ -423,14 +437,14 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
                   htmlFor="terms-step1"
                   className="cursor-pointer text-sm leading-snug text-gray-700"
                 >
-                  I agree to the{" "}
+                  {t("auth.agreeTo")}{" "}
                   <a
                     href="/terms"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="font-medium text-blue-600 underline hover:text-blue-700"
                   >
-                    Terms of Service
+                    {t("auth.register.termsLink")}
                   </a>
                   ,{" "}
                   <a
@@ -439,16 +453,16 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
                     rel="noopener noreferrer"
                     className="font-medium text-blue-600 underline hover:text-blue-700"
                   >
-                    Privacy Policy
+                    {t("auth.register.privacyLink")}
                   </a>
-                  , and{" "}
+                  {t("auth.register.agreeTermsCookies")}{" "}
                   <a
                     href="/cookies"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="font-medium text-blue-600 underline hover:text-blue-700"
                   >
-                    Cookie Policy
+                    {t("auth.register.cookieLink")}
                   </a>
                   .
                 </Label>
@@ -468,14 +482,18 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
         >
           <div className="text-center mb-6">
             <h2 className="text-lg font-semibold text-gray-900">
-              Company Profile
+              {t("auth.companyRegister.profileTitle")}
             </h2>
-            <p className="text-sm text-gray-600">Tell us about your company</p>
+            <p className="text-sm text-gray-600">
+              {t("auth.companyRegister.aboutTitle")}
+            </p>
           </div>
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="location">Location (State) *</Label>
+              <Label htmlFor="location">
+                {t("auth.companyRegister.locationStateLabel")}
+              </Label>
               <div className="relative">
                 <MapPin className="absolute left-3 top-3 h-4 w-4 text-gray-400 z-10" />
                 <Select
@@ -502,7 +520,11 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
                         {formData.location}
                       </span>
                     ) : (
-                      <SelectValue placeholder="Select your state" />
+                      <SelectValue
+                        placeholder={t(
+                          "auth.companyRegister.selectStatePlaceholder",
+                        )}
+                      />
                     )}
                   </SelectTrigger>
                   <SelectContent>
@@ -511,7 +533,9 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
                         {state}
                       </SelectItem>
                     ))}
-                    <SelectItem value={LOCATION_OTHER}>{LOCATION_OTHER}</SelectItem>
+                    <SelectItem value={LOCATION_OTHER}>
+                      {t("auth.companyRegister.othersLocation")}
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -521,7 +545,9 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
                   <Input
                     id="location-other"
                     type="text"
-                    placeholder="Specify your location (e.g. city or country)"
+                    placeholder={t(
+                      "auth.companyRegister.locationOtherPlaceholder",
+                    )}
                     className="pl-10 bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                     value={formData.location}
                     onChange={(e) =>
@@ -533,38 +559,52 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="industry">Industry *</Label>
+              <Label htmlFor="industry">
+                {t("auth.companyRegister.industryLabel")}
+              </Label>
               <Select
                 value={formData.industry}
                 onValueChange={(value) => handleInputChange("industry", value)}
               >
                 <SelectTrigger className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500">
-                  <SelectValue placeholder="Select your industry" />
+                  <SelectValue
+                    placeholder={t(
+                      "auth.companyRegister.selectIndustryPlaceholder",
+                    )}
+                  />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="technology">Technology</SelectItem>
-                  <SelectItem value="finance">Finance & Banking</SelectItem>
-                  <SelectItem value="healthcare">Healthcare</SelectItem>
-                  <SelectItem value="education">Education</SelectItem>
-                  <SelectItem value="retail">Retail & E-commerce</SelectItem>
-                  <SelectItem value="manufacturing">Manufacturing</SelectItem>
-                  <SelectItem value="consulting">Consulting</SelectItem>
-                  <SelectItem value="media">Media & Entertainment</SelectItem>
-                  <SelectItem value="government">Government</SelectItem>
-                  <SelectItem value="nonprofit">Non-profit</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
+                  {(
+                    [
+                      "technology",
+                      "finance",
+                      "healthcare",
+                      "education",
+                      "retail",
+                      "manufacturing",
+                      "consulting",
+                      "media",
+                      "government",
+                      "nonprofit",
+                      "other",
+                    ] as const
+                  ).map((value) => (
+                    <SelectItem key={value} value={value}>
+                      {t(AUTH_COMPANY_REGISTER_INDUSTRY[value])}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="companySize">
-                Company Size (number of employees)
+                {t("auth.companyRegister.companySizeLabel")}
               </Label>
               <Input
                 id="companySize"
                 type="number"
-                placeholder="e.g. 150"
+                placeholder={t("auth.companyRegister.companySizePlaceholder")}
                 className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                 value={formData.companySize}
                 onChange={(e) =>
@@ -575,13 +615,15 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="website">Company Website</Label>
+              <Label htmlFor="website">
+                {t("auth.companyRegister.websiteLabel")}
+              </Label>
               <div className="relative">
                 <Globe className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                 <Input
                   id="website"
                   type="url"
-                  placeholder="https://your-company.com"
+                  placeholder={t("auth.companyRegister.websitePlaceholder")}
                   className="pl-10 bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                   value={formData.website}
                   onChange={(e) => handleInputChange("website", e.target.value)}
@@ -610,16 +652,16 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
             </div> */}
             {/* Portfolio URLs */}
             <div className="space-y-4">
-              <Label>Socials URLs</Label>
+              <Label>{t("auth.companyRegister.socialsUrlsLabel")}</Label>
               <p className="text-sm text-gray-600">
-                Add links LinkedIn, Twitter, or other social media profiles
+                {t("auth.companyRegister.socialUrlsIntro")}
               </p>
 
               <div className="flex gap-2">
                 <Input
                   value={newSocialUrl}
                   onChange={(e) => setNewSocialUrl(e.target.value)}
-                  placeholder="https://linkedin.com/yourusername"
+                  placeholder={t("auth.companyRegister.socialUrlPlaceholder")}
                   className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                   type="url"
                 />
@@ -635,7 +677,9 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
               {socialUrls.length > 0 && (
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">
-                    social Links ({socialUrls.length})
+                    {t("auth.companyRegister.socialLinksHeading", {
+                      count: socialUrls.length,
+                    })}
                   </Label>
                   <div className="space-y-2">
                     {socialUrls.map((url, index) => (
@@ -667,9 +711,9 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
               {socialUrls.length === 0 && (
                 <div className="text-center py-8 text-gray-500 border-2 border-dashed border-gray-200 rounded-lg">
                   <Globe className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                  <p>No portfolio links added yet</p>
+                  <p>{t("auth.companyRegister.noPortfolioLinks")}</p>
                   <p className="text-sm">
-                    Add links to showcase your work and professional profiles
+                    {t("auth.companyRegister.portfolioEmptyHint")}
                   </p>
                 </div>
               )}
@@ -678,16 +722,17 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
 
           <div className="space-y-4 mt-8 p-4 border rounded-lg bg-white/50">
             <h3 className="text-lg font-semibold text-gray-900">
-              KYC Verification (Company)
+              {t("auth.companyRegister.kycSectionTitle")}
             </h3>
             <p className="text-sm text-gray-600">
-            Upload any document as proof of your company (PDF or
-              image). <br /> This is required for registration. Our admin team will review and verify it.
+              {t("auth.companyRegister.kycUploadLine1")}
+              <br />
+              {t("auth.companyRegister.kycUploadLine2")}
             </p>
 
             <div className="space-y-2">
               <Label htmlFor="kycFileCompany">
-                Company Registration Paper *
+                {t("auth.companyRegister.companyRegPaperLabel")}
               </Label>
               <Input
                 id="kycFileCompany"
@@ -698,7 +743,8 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
               />
               {kycFile && (
                 <p className="text-xs text-green-700">
-                  Selected: <span className="font-medium">{kycFile.name}</span>
+                  {t("auth.companyRegister.selectedFile")}{" "}
+                  <span className="font-medium">{kycFile.name}</span>
                 </p>
               )}
             </div>
@@ -716,10 +762,10 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
         >
           <div className="text-center mb-6">
             <h2 className="text-lg font-semibold text-gray-900">
-              Company Details
+              {t("auth.companyRegister.companyDetailsTitle")}
             </h2>
             <p className="text-sm text-gray-600">
-              Additional information about your company
+              {t("auth.companyRegister.companyDetailsSubtitle")}
             </p>
           </div>
 
@@ -728,14 +774,16 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2 col-span-1 md:col-span-2">
                 <Label htmlFor="companyDescription">
-                  Company Description *
+                  {t("auth.companyRegister.companyDescriptionLabel")}
                 </Label>
                 <div className="relative">
                   <Building className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                   <Building className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                   <textarea
                     id="companyDescription"
-                    placeholder="Enter your company description"
+                    placeholder={t(
+                      "auth.companyRegister.descriptionPlaceholder",
+                    )}
                     className="
         pl-10 pt-3 pb-3
         bg-white/50 
@@ -756,11 +804,13 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="employeeCount">Employee Count *</Label>
+                <Label htmlFor="employeeCount">
+                  {t("auth.companyRegister.employeeCountLabel")}
+                </Label>
                 <Input
                   id="employeeCount"
                   type="number"
-                  placeholder="e.g. 150"
+                  placeholder={t("auth.companyRegister.companySizePlaceholder")}
                   className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                   value={formData.employeeCount}
                   onChange={(e) =>
@@ -772,11 +822,13 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="establishedYear">Established Year *</Label>
+                <Label htmlFor="establishedYear">
+                  {t("auth.companyRegister.establishedYearLabel")}
+                </Label>
                 <Input
                   id="establishedYear"
                   type="number"
-                  placeholder="e.g. 2020"
+                  placeholder={t("auth.companyRegister.yearPlaceholder")}
                   className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                   value={formData.establishedYear}
                   onChange={(e) =>
@@ -789,13 +841,15 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="annualRevenue">Annual Revenue (RM)</Label>
+                <Label htmlFor="annualRevenue">
+                  {t("auth.companyRegister.annualRevenueLabel")}
+                </Label>
                 <div className="relative">
                   <DollarSign className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                   <Input
                     id="annualRevenue"
                     type="number"
-                    placeholder="e.g. 5000000"
+                    placeholder={t("auth.companyRegister.revenuePlaceholder")}
                     className="pl-10 bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                     value={formData.annualRevenue}
                     onChange={(e) =>
@@ -807,7 +861,9 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="fundingStage">Funding Stage</Label>
+                <Label htmlFor="fundingStage">
+                  {t("auth.companyRegister.fundingStageLabel")}
+                </Label>
                 <Select
                   value={formData.fundingStage}
                   onValueChange={(value) =>
@@ -815,12 +871,16 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
                   }
                 >
                   <SelectTrigger className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500">
-                    <SelectValue placeholder="Select funding stage" />
+                    <SelectValue
+                      placeholder={t(
+                        "auth.companyRegister.selectFundingPlaceholder",
+                      )}
+                    />
                   </SelectTrigger>
                   <SelectContent>
                     {fundingStages.map((stage) => (
                       <SelectItem key={stage} value={stage}>
-                        {stage}
+                        {profileStoredLabel(PROFILE_FUNDING, stage, t)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -831,11 +891,13 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
             {/* Hiring Preferences */}
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-gray-900">
-                Hiring Preferences
+                {t("auth.companyRegister.hiringPreferencesTitle")}
               </h3>
 
               <div className="space-y-2">
-                <Label>Preferred Contract Types</Label>
+                <Label>
+                  {t("auth.companyRegister.preferredContractTypes")}
+                </Label>
                 <div className="flex flex-wrap gap-2 p-3 border rounded-lg bg-white/50">
                   {contractTypes.map((type) => (
                     <Badge
@@ -854,7 +916,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
                         handleArrayToggle("preferredContractTypes", type)
                       }
                     >
-                      {type}
+                      {profileStoredLabel(PROFILE_CONTRACT, type, t)}
                     </Badge>
                   ))}
                 </div>
@@ -862,11 +924,11 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
 
               <div className="space-y-2">
                 <Label htmlFor="averageBudgetRange">
-                  Average Budget Range (RM)
+                  {t("auth.companyRegister.averageBudgetRangeLabel")}
                 </Label>
                 <Input
                   id="averageBudgetRange"
-                  placeholder="e.g. 10,000 - 50,000"
+                  placeholder={t("auth.companyRegister.budgetRangePlaceholder")}
                   className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                   value={formData.averageBudgetRange}
                   onChange={(e) =>
@@ -876,7 +938,9 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="remotePolicy">Remote Work Policy</Label>
+                <Label htmlFor="remotePolicy">
+                  {t("auth.companyRegister.remotePolicyLabel")}
+                </Label>
                 <Select
                   value={formData.remotePolicy}
                   onValueChange={(value) =>
@@ -884,12 +948,16 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
                   }
                 >
                   <SelectTrigger className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500">
-                    <SelectValue placeholder="Select remote policy" />
+                    <SelectValue
+                      placeholder={t(
+                        "auth.companyRegister.selectRemotePlaceholder",
+                      )}
+                    />
                   </SelectTrigger>
                   <SelectContent>
                     {remotePolicies.map((policy) => (
                       <SelectItem key={policy} value={policy}>
-                        {policy}
+                        {profileStoredLabel(PROFILE_REMOTE, policy, t)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -897,7 +965,9 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="hiringFrequency">Hiring Frequency</Label>
+                <Label htmlFor="hiringFrequency">
+                  {t("auth.companyRegister.hiringFrequencyLabel")}
+                </Label>
                 <Select
                   value={formData.hiringFrequency}
                   onValueChange={(value) =>
@@ -905,12 +975,16 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
                   }
                 >
                   <SelectTrigger className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500">
-                    <SelectValue placeholder="Select hiring frequency" />
+                    <SelectValue
+                      placeholder={t(
+                        "auth.companyRegister.selectHiringPlaceholder",
+                      )}
+                    />
                   </SelectTrigger>
                   <SelectContent>
                     {hiringFrequencies.map((frequency) => (
                       <SelectItem key={frequency} value={frequency}>
-                        {frequency}
+                        {profileStoredLabel(PROFILE_HIRING_FREQ, frequency, t)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -920,16 +994,18 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
 
             {/* Categories Hiring For */}
             <div className="space-y-4">
-              <Label>Categories Hiring For</Label>
+              <Label>{t("auth.companyRegister.categoriesHiringLabel")}</Label>
               <p className="text-sm text-gray-600">
-                Select the types of roles you typically hire for
+                {t("auth.companyRegister.categoriesHiringHint")}
               </p>
 
               <div className="flex gap-2">
                 <Input
                   value={customCategory}
                   onChange={(e) => setCustomCategory(e.target.value)}
-                  placeholder="Type a category and press Add"
+                  placeholder={t(
+                    "auth.companyRegister.categoryTypeAddPlaceholder",
+                  )}
                   className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                   onKeyPress={(e) =>
                     e.key === "Enter" &&
@@ -948,7 +1024,9 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
               {formData.categoriesHiringFor.length > 0 && (
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">
-                    Selected Categories ({formData.categoriesHiringFor.length})
+                    {t("auth.companyRegister.selectedCategoriesHeading", {
+                      count: formData.categoriesHiringFor.length,
+                    })}
                   </Label>
                   <div className="flex flex-wrap gap-2 p-3 border rounded-lg bg-white/50">
                     {formData.categoriesHiringFor.map((category) => (
@@ -956,7 +1034,11 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
                         key={category}
                         className="bg-green-600 hover:bg-green-700 text-white pr-1"
                       >
-                        {category}
+                        {profileStoredLabel(
+                          PROFILE_HIRE_CATEGORY,
+                          category,
+                          t,
+                        )}
                         <button
                           type="button"
                           onClick={() => handleRemoveCategory(category)}
@@ -972,7 +1054,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
 
               <div className="space-y-2">
                 <Label className="text-sm font-medium">
-                  Popular Categories (click to add)
+                  {t("auth.companyRegister.popularCategoriesHint")}
                 </Label>
                 <div className="flex flex-wrap gap-2 p-3 border rounded-lg bg-white/50">
                   {popularHiringCategories
@@ -989,7 +1071,11 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
                           handleArrayToggle("categoriesHiringFor", category)
                         }
                       >
-                        {category}
+                        {profileStoredLabel(
+                          PROFILE_HIRE_CATEGORY,
+                          category,
+                          t,
+                        )}
                       </Badge>
                     ))}
                 </div>
@@ -999,14 +1085,16 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
             {/* Company Culture */}
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-gray-900">
-                Company Culture
+                {t("auth.companyRegister.companyCultureTitle")}
               </h3>
 
               <div className="space-y-2">
-                <Label htmlFor="mission">Company Mission *</Label>
+                <Label htmlFor="mission">
+                  {t("auth.companyRegister.missionLabel")}
+                </Label>
                 <Textarea
                   id="mission"
-                  placeholder="Describe your company's mission and purpose..."
+                  placeholder={t("auth.companyRegister.missionPlaceholder")}
                   className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500 min-h-[100px]"
                   value={formData.mission}
                   onChange={(e) => handleInputChange("mission", e.target.value)}
@@ -1015,16 +1103,18 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
               </div>
 
               <div className="space-y-2">
-                <Label>Company Values *</Label>
+                <Label>{t("auth.companyRegister.valuesLabel")}</Label>
                 <p className="text-sm text-gray-600">
-                  Select at least one value that represents your company culture
+                  {t("auth.companyRegister.valuesHint")}
                 </p>
 
                 <div className="flex gap-2">
                   <Input
                     value={customValue}
                     onChange={(e) => setCustomValue(e.target.value)}
-                    placeholder="Type a value and press Add"
+                    placeholder={t(
+                      "auth.companyRegister.valueTypeAddPlaceholder",
+                    )}
                     className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                     onKeyPress={(e) =>
                       e.key === "Enter" &&
@@ -1043,7 +1133,9 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
                 {formData.values.length > 0 && (
                   <div className="space-y-2">
                     <Label className="text-sm font-medium">
-                      Selected Values ({formData.values.length})
+                      {t("auth.companyRegister.selectedValuesHeading", {
+                        count: formData.values.length,
+                      })}
                     </Label>
                     <div className="flex flex-wrap gap-2 p-3 border rounded-lg bg-white/50">
                       {formData.values.map((value) => (
@@ -1052,7 +1144,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
                           className="bg-purple-600 hover:bg-purple-700 text-white pr-1"
                         >
                           <Heart className="w-3 h-3 mr-1" />
-                          {value}
+                          {profileStoredLabel(PROFILE_CORE_VALUE, value, t)}
                           <button
                             type="button"
                             onClick={() => handleRemoveValue(value)}
@@ -1068,7 +1160,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
 
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">
-                    Common Values (click to add)
+                    {t("auth.companyRegister.commonValuesHint")}
                   </Label>
                   <div className="flex flex-wrap gap-2 p-3 border rounded-lg bg-white/50">
                     {companyValues
@@ -1081,7 +1173,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
                           onClick={() => handleArrayToggle("values", value)}
                         >
                           <Heart className="w-3 h-3 mr-1" />
-                          {value}
+                          {profileStoredLabel(PROFILE_CORE_VALUE, value, t)}
                         </Badge>
                       ))}
                   </div>
@@ -1102,10 +1194,10 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
         >
           <div className="text-center mb-4">
             <h2 className="text-lg font-semibold text-gray-900">
-              Review & Submit
+              {t("auth.companyRegister.reviewTitle")}
             </h2>
             <p className="text-sm text-gray-600">
-              Please review your information before submitting
+              {t("auth.companyRegister.reviewSubtitle")}
             </p>
           </div>
 
@@ -1113,20 +1205,32 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
             <div className="p-4 border rounded-lg bg-white/50">
               <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center">
                 <Users className="w-4 h-4 mr-2" />
-                Account (Step 1)
+                {t("auth.companyRegister.review.accountSection")}
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
                 <div>
-                  <span className="text-gray-600">Company name:</span>
-                  <span className="ml-2 font-medium">{formData.companyName || "—"}</span>
+                  <span className="text-gray-600">
+                    {t("auth.companyRegister.review.companyName")}
+                  </span>
+                  <span className="ml-2 font-medium">
+                    {formData.companyName || t("auth.companyRegister.review.emDash")}
+                  </span>
                 </div>
                 <div>
-                  <span className="text-gray-600">Email:</span>
-                  <span className="ml-2 font-medium">{formData.email || "—"}</span>
+                  <span className="text-gray-600">
+                    {t("auth.companyRegister.review.email")}
+                  </span>
+                  <span className="ml-2 font-medium">
+                    {formData.email || t("auth.companyRegister.review.emDash")}
+                  </span>
                 </div>
                 <div>
-                  <span className="text-gray-600">Phone:</span>
-                  <span className="ml-2 font-medium">{formData.phone || "—"}</span>
+                  <span className="text-gray-600">
+                    {t("auth.companyRegister.review.phone")}
+                  </span>
+                  <span className="ml-2 font-medium">
+                    {formData.phone || t("auth.companyRegister.review.emDash")}
+                  </span>
                 </div>
               </div>
             </div>
@@ -1134,23 +1238,43 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
             <div className="p-4 border rounded-lg bg-white/50">
               <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center">
                 <Building className="w-4 h-4 mr-2" />
-                Company Profile (Step 3)
+                {t("auth.companyRegister.review.profileSection")}
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
                 <div>
-                  <span className="text-gray-600">Location:</span>
-                  <span className="ml-2 font-medium">{formData.location || "—"}</span>
+                  <span className="text-gray-600">
+                    {t("auth.companyRegister.review.location")}
+                  </span>
+                  <span className="ml-2 font-medium">
+                    {formData.location || t("auth.companyRegister.review.emDash")}
+                  </span>
                 </div>
                 <div>
-                  <span className="text-gray-600">Industry:</span>
-                  <span className="ml-2 font-medium">{formData.industry || "—"}</span>
+                  <span className="text-gray-600">
+                    {t("auth.companyRegister.review.industry")}
+                  </span>
+                  <span className="ml-2 font-medium">
+                    {formData.industry
+                      ? profileStoredLabel(
+                          AUTH_COMPANY_REGISTER_INDUSTRY,
+                          formData.industry,
+                          t,
+                        )
+                      : t("auth.companyRegister.review.emDash")}
+                  </span>
                 </div>
                 <div>
-                  <span className="text-gray-600">Company size:</span>
-                  <span className="ml-2 font-medium">{formData.companySize || "—"}</span>
+                  <span className="text-gray-600">
+                    {t("auth.companyRegister.review.companySize")}
+                  </span>
+                  <span className="ml-2 font-medium">
+                    {formData.companySize || t("auth.companyRegister.review.emDash")}
+                  </span>
                 </div>
                 <div>
-                  <span className="text-gray-600">Website:</span>
+                  <span className="text-gray-600">
+                    {t("auth.companyRegister.review.website")}
+                  </span>
                   {formData.website ? (
                     <a
                       href={formData.website}
@@ -1161,12 +1285,16 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
                       {formData.website}
                     </a>
                   ) : (
-                    <span className="ml-2">—</span>
+                    <span className="ml-2">
+                      {t("auth.companyRegister.review.emDash")}
+                    </span>
                   )}
                 </div>
                 {Array.isArray(formData.socialLinks) && formData.socialLinks.length > 0 && (
                   <div className="md:col-span-2">
-                    <span className="text-gray-600">Social links:</span>
+                    <span className="text-gray-600">
+                      {t("auth.companyRegister.review.socialLinks")}
+                    </span>
                     <ul className="ml-2 mt-0.5 list-disc list-inside">
                       {formData.socialLinks.map((url, i) => (
                         <li key={i}>
@@ -1189,69 +1317,141 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
             <div className="p-4 border rounded-lg bg-white/50">
               <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center">
                 <Briefcase className="w-4 h-4 mr-2" />
-                Company Details (Step 4)
+                {t("auth.companyRegister.review.detailsSection")}
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
                 <div className="md:col-span-2">
-                  <span className="text-gray-600">Company description:</span>
-                  <p className="ml-2 mt-0.5 font-medium">{formData.companyDescription?.trim() || "—"}</p>
+                  <span className="text-gray-600">
+                    {t("auth.companyRegister.review.description")}
+                  </span>
+                  <p className="ml-2 mt-0.5 font-medium">
+                    {formData.companyDescription?.trim() ||
+                      t("auth.companyRegister.review.emDash")}
+                  </p>
                 </div>
                 <div>
-                  <span className="text-gray-600">Employee count:</span>
-                  <span className="ml-2 font-medium">{formData.employeeCount || "—"}</span>
-                </div>
-                <div>
-                  <span className="text-gray-600">Established year:</span>
-                  <span className="ml-2 font-medium">{formData.establishedYear || "—"}</span>
-                </div>
-                <div>
-                  <span className="text-gray-600">Annual revenue:</span>
+                  <span className="text-gray-600">
+                    {t("auth.companyRegister.review.employeeCount")}
+                  </span>
                   <span className="ml-2 font-medium">
-                    {formData.annualRevenue ? `RM ${formData.annualRevenue}` : "—"}
+                    {formData.employeeCount || t("auth.companyRegister.review.emDash")}
                   </span>
                 </div>
                 <div>
-                  <span className="text-gray-600">Funding stage:</span>
-                  <span className="ml-2 font-medium">{formData.fundingStage || "—"}</span>
+                  <span className="text-gray-600">
+                    {t("auth.companyRegister.review.establishedYear")}
+                  </span>
+                  <span className="ml-2 font-medium">
+                    {formData.establishedYear || t("auth.companyRegister.review.emDash")}
+                  </span>
                 </div>
                 <div>
-                  <span className="text-gray-600">Average budget:</span>
-                  <span className="ml-2 font-medium">{formData.averageBudgetRange || "—"}</span>
+                  <span className="text-gray-600">
+                    {t("auth.companyRegister.review.annualRevenue")}
+                  </span>
+                  <span className="ml-2 font-medium">
+                    {formData.annualRevenue
+                      ? t("auth.companyRegister.review.annualRevenueRm", {
+                          amount: formData.annualRevenue,
+                        })
+                      : t("auth.companyRegister.review.emDash")}
+                  </span>
                 </div>
                 <div>
-                  <span className="text-gray-600">Remote policy:</span>
-                  <span className="ml-2 font-medium">{formData.remotePolicy || "—"}</span>
+                  <span className="text-gray-600">
+                    {t("auth.companyRegister.review.fundingStage")}
+                  </span>
+                  <span className="ml-2 font-medium">
+                    {formData.fundingStage
+                      ? profileStoredLabel(
+                          PROFILE_FUNDING,
+                          formData.fundingStage,
+                          t,
+                        )
+                      : t("auth.companyRegister.review.emDash")}
+                  </span>
                 </div>
                 <div>
-                  <span className="text-gray-600">Hiring frequency:</span>
-                  <span className="ml-2 font-medium">{formData.hiringFrequency || "—"}</span>
+                  <span className="text-gray-600">
+                    {t("auth.companyRegister.review.averageBudget")}
+                  </span>
+                  <span className="ml-2 font-medium">
+                    {formData.averageBudgetRange ||
+                      t("auth.companyRegister.review.emDash")}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-600">
+                    {t("auth.companyRegister.review.remotePolicy")}
+                  </span>
+                  <span className="ml-2 font-medium">
+                    {formData.remotePolicy
+                      ? profileStoredLabel(
+                          PROFILE_REMOTE,
+                          formData.remotePolicy,
+                          t,
+                        )
+                      : t("auth.companyRegister.review.emDash")}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-600">
+                    {t("auth.companyRegister.review.hiringFrequency")}
+                  </span>
+                  <span className="ml-2 font-medium">
+                    {formData.hiringFrequency
+                      ? profileStoredLabel(
+                          PROFILE_HIRING_FREQ,
+                          formData.hiringFrequency,
+                          t,
+                        )
+                      : t("auth.companyRegister.review.emDash")}
+                  </span>
                 </div>
                 {formData.preferredContractTypes?.length > 0 && (
                   <div className="md:col-span-2">
-                    <span className="text-gray-600">Preferred contract types:</span>
+                    <span className="text-gray-600">
+                      {t("auth.companyRegister.review.preferredContractTypes")}
+                    </span>
                     <span className="ml-2 font-medium">
-                      {formData.preferredContractTypes.join(", ")}
+                      {formData.preferredContractTypes
+                        .map((ct) => profileStoredLabel(PROFILE_CONTRACT, ct, t))
+                        .join(", ")}
                     </span>
                   </div>
                 )}
                 {formData.categoriesHiringFor?.length > 0 && (
                   <div className="md:col-span-2">
-                    <span className="text-gray-600">Categories hiring for:</span>
+                    <span className="text-gray-600">
+                      {t("auth.companyRegister.review.categoriesHiringFor")}
+                    </span>
                     <span className="ml-2 font-medium">
-                      {formData.categoriesHiringFor.join(", ")}
+                      {formData.categoriesHiringFor
+                        .map((c) =>
+                          profileStoredLabel(PROFILE_HIRE_CATEGORY, c, t),
+                        )
+                        .join(", ")}
                     </span>
                   </div>
                 )}
                 {formData.mission?.trim() && (
                   <div className="md:col-span-2">
-                    <span className="text-gray-600">Mission:</span>
+                    <span className="text-gray-600">
+                      {t("auth.companyRegister.review.mission")}
+                    </span>
                     <p className="ml-2 mt-0.5 font-medium">{formData.mission}</p>
                   </div>
                 )}
                 {formData.values?.length > 0 && (
                   <div className="md:col-span-2">
-                    <span className="text-gray-600">Values:</span>
-                    <span className="ml-2 font-medium">{formData.values.join(", ")}</span>
+                    <span className="text-gray-600">
+                      {t("auth.companyRegister.review.values")}
+                    </span>
+                    <span className="ml-2 font-medium">
+                      {formData.values
+                        .map((v) => profileStoredLabel(PROFILE_CORE_VALUE, v, t))
+                        .join(", ")}
+                    </span>
                   </div>
                 )}
               </div>
@@ -1259,7 +1459,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
 
             <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-4">
             <p className="mb-3 text-sm font-medium text-gray-900">
-              Agreement
+              {t("auth.companyRegister.agreementTitle")}
             </p>
             <div className="flex items-start gap-4">
               <Checkbox
@@ -1279,14 +1479,14 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
                 htmlFor="terms"
                 className="cursor-pointer text-sm leading-snug text-gray-700"
               >
-                I agree to the{" "}
+                {t("auth.agreeTo")}{" "}
                 <a
                   href="/terms"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="font-medium text-blue-600 underline hover:text-blue-700"
                 >
-                  Terms of Service
+                  {t("auth.register.termsLink")}
                 </a>
                 ,{" "}
                 <a
@@ -1295,16 +1495,16 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
                   rel="noopener noreferrer"
                   className="font-medium text-blue-600 underline hover:text-blue-700"
                 >
-                  Privacy Policy
+                  {t("auth.register.privacyLink")}
                 </a>
-                , and{" "}
+                {t("auth.register.agreeTermsCookies")}
                 <a
                   href="/cookies"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="font-medium text-blue-600 underline hover:text-blue-700"
                 >
-                  Cookie Policy
+                  {t("auth.register.cookieLink")}
                 </a>
                 .
               </Label>
@@ -1313,7 +1513,7 @@ const CustomerRegistration: React.FC<CustomerRegistrationProps> = ({
 
             {!formData.acceptedTerms && (
               <p className="text-sm text-red-600">
-                You must accept the Terms of Service, Privacy Policy, and Cookie Policy to continue.
+                {t("auth.companyRegister.mustAcceptTerms")}
               </p>
             )}
           </div>

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useI18n } from "@/contexts/I18nProvider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
@@ -12,6 +13,7 @@ import type { Project } from "./types";
 import { getCompanyProjects } from "@/lib/api";
 
 export default function ProjectsClient() {
+  const { t } = useI18n();
   const [projects, setProjects] = useState<Project[]>([]);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"all" | Project["status"]>("all");
@@ -79,18 +81,24 @@ export default function ProjectsClient() {
     });
   }, [projects, search, status]);
 
-  if (loading) return <div className="text-center p-10">Loading projects…</div>;
+  if (loading)
+    return (
+      <div className="text-center p-10">{t("customer.projects.list.loading")}</div>
+    );
 
   return (
     <div className="space-y-8">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">My Projects</h1>
-          <p className="text-gray-600">Manage and track all your ICT projects</p>
+          <h1 className="text-3xl font-bold">{t("customer.projects.list.title")}</h1>
+          <p className="text-gray-600">{t("customer.projects.list.subtitle")}</p>
         </div>
         <Link href="/customer/projects/new">
-          <Button><Plus className="w-4 h-4 mr-2" />New Project</Button>
+          <Button>
+            <Plus className="w-4 h-4 mr-2" />
+            {t("customer.projects.list.newProject")}
+          </Button>
         </Link>
       </div>
 
@@ -98,8 +106,12 @@ export default function ProjectsClient() {
 
       <Tabs defaultValue="grid" className="space-y-6">
         <TabsList>
-          <TabsTrigger value="grid">Grid</TabsTrigger>
-          <TabsTrigger value="list">List</TabsTrigger>
+          <TabsTrigger value="grid">
+            {t("customer.projects.list.viewGrid")}
+          </TabsTrigger>
+          <TabsTrigger value="list">
+            {t("customer.projects.list.viewList")}
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="grid">
           <ProjectsGrid projects={filtered} />

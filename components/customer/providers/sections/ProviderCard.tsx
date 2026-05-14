@@ -21,12 +21,17 @@ import { useRouter } from "next/navigation";
 import { getProfileImageUrl } from "@/lib/api";
 import { getUserFriendlyErrorMessage } from "@/lib/errors";
 import { useToast } from "@/hooks/use-toast";
+import { useI18n } from "@/contexts/I18nProvider";
+import { CustomerProviderHourlyRate } from "./CustomerProviderHourlyRate";
 
 export default function ProviderCard({
   provider,
+  viewerPreferredCurrency,
 }: {
   provider: Provider & { aiExplanation?: string };
+  viewerPreferredCurrency?: string;
 }) {
+  const { t } = useI18n();
   const router = useRouter();
   const { toast } = useToast();
   const [saved, setSaved] = useState<boolean>(!!provider.saved);
@@ -62,7 +67,7 @@ export default function ProviderCard({
     try {
       const { userId, token } = getUserAndToken();
       if (!userId || !token) {
-        alert("Please login to save providers");
+        alert(t("customer.providers.alert.loginToSave"));
         return;
       }
 
@@ -84,7 +89,7 @@ export default function ProviderCard({
         setSaved(!saved);
       } else {
         toast({
-          title: "Error",
+          title: t("customer.providers.toast.errorTitle"),
           description: getUserFriendlyErrorMessage(
             undefined,
             "customer provider card save",
@@ -94,7 +99,7 @@ export default function ProviderCard({
       }
     } catch (error) {
       toast({
-        title: "Error",
+        title: t("customer.providers.toast.errorTitle"),
         description: getUserFriendlyErrorMessage(
           error,
           "customer provider card save",
@@ -137,18 +142,18 @@ export default function ProviderCard({
               </h3>
               {provider.topRated && (
                 <Badge className="bg-yellow-100 text-yellow-800 text-[10px] sm:text-xs">
-                  Top Rated
+                  {t("customer.providers.badge.topRated")}
                 </Badge>
               )}
               {!provider.verified && (
                 <Badge className="bg-gray-100 text-gray-700 border-gray-300 text-[10px] sm:text-xs">
                   <AlertTriangle className="w-3 h-3 mr-1" />
-                  Not Verified
+                  {t("customer.providers.badge.notVerified")}
                 </Badge>
               )}
             </div>
             <p className="text-xs sm:text-sm text-gray-600 mb-0.5 sm:mb-1 truncate">
-              {provider.major || "ICT Professional"}
+              {provider.major || t("customer.providers.defaultMajor")}
             </p>
             <p className="text-xs text-gray-500 truncate">{provider.company}</p>
           </div>
@@ -161,7 +166,9 @@ export default function ProviderCard({
           <div className="absolute top-3 right-3 opacity-0 lg:group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
             <div className="flex items-center gap-1.5 px-2 py-1 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-full text-xs font-medium shadow-md">
               <Sparkles className="w-3 h-3" />
-              <span className="hidden sm:inline">AI Insights</span>
+              <span className="hidden sm:inline">
+                {t("customer.providers.badge.aiInsights")}
+              </span>
             </div>
           </div>
         )}
@@ -204,22 +211,38 @@ export default function ProviderCard({
 
         <div className="grid grid-cols-2 gap-3 sm:gap-4 text-xs sm:text-sm">
           <div>
-            <p className="text-gray-500">Hourly Rate</p>
-            <p className="font-semibold">RM{provider.hourlyRate}/hr</p>
+            <p className="text-gray-500">
+              {t("customer.providers.card.hourlyRate")}
+            </p>
+            <CustomerProviderHourlyRate
+              provider={provider}
+              viewerPreferredCurrency={viewerPreferredCurrency}
+              primaryClassName="font-semibold"
+            />
           </div>
           <div>
-            <p className="text-gray-500">Completed Jobs</p>
+            <p className="text-gray-500">
+              {t("customer.providers.card.completedJobs")}
+            </p>
             <p className="font-semibold">{provider.completedJobs}</p>
           </div>
-          {provider.yearsExperience && provider.yearsExperience > 0 && (
+          {(provider.yearsExperience ?? 0) > 0 && (
             <div>
-              <p className="text-gray-500">Experience</p>
-              <p className="font-semibold">{provider.yearsExperience} years</p>
+              <p className="text-gray-500">
+                {t("customer.providers.card.experience")}
+              </p>
+              <p className="font-semibold">
+                {t("customer.providers.card.years", {
+                  n: String(provider.yearsExperience),
+                })}
+              </p>
             </div>
           )}
-          {provider.certificationsCount && provider.certificationsCount > 0 && (
+          {(provider.certificationsCount ?? 0) > 0 && (
             <div>
-              <p className="text-gray-500">Certifications</p>
+              <p className="text-gray-500">
+                {t("customer.providers.card.certifications")}
+              </p>
               <p className="font-semibold">{provider.certificationsCount}</p>
             </div>
           )}
@@ -262,9 +285,11 @@ export default function ProviderCard({
               >
                 <Sparkles className="w-3.5 h-3.5 shrink-0" />
                 <span className="hidden sm:inline">
-                  Hover to see AI insights
+                  {t("customer.providers.hoverAiInsights")}
                 </span>
-                <span className="sm:hidden">Tap to see AI insights</span>
+                <span className="sm:hidden">
+                  {t("customer.providers.tapAiInsights")}
+                </span>
                 <ChevronRight
                   className={`w-3 h-3 shrink-0 transition-transform ${
                     expanded ? "rotate-90" : ""
@@ -284,7 +309,7 @@ export default function ProviderCard({
                     <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600" />
                   </div>
                   <p className="text-xs sm:text-sm font-semibold text-blue-900">
-                    About this provider
+                    {t("customer.providers.card.aboutProvider")}
                   </p>
                   <button
                     onClick={() => setExpanded(false)}
@@ -342,7 +367,7 @@ export default function ProviderCard({
               onClick={handleContact}
             >
               <MessageSquare className="w-4 h-4 mr-2" />
-              Contact
+              {t("customer.providers.contact")}
             </Button>
           )}
           <div className="flex gap-2">
@@ -372,7 +397,7 @@ export default function ProviderCard({
                 className="w-full h-9 sm:h-10 border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 text-gray-700 font-medium transition-all duration-200"
               >
                 <Eye className="w-4 h-4 mr-2" />
-                View Profile
+                {t("customer.providers.viewProfile")}
               </Button>
             </Link>
           </div>

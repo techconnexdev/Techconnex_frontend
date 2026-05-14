@@ -34,13 +34,15 @@ import {
   Plus,
   AlertCircle,
 } from "lucide-react";
-import { ProviderLayout } from "@/components/provider-layout";
 import { ProviderEarningsTour } from "@/components/provider/ProviderEarningsTour";
 import { toast } from "@/components/ui/use-toast";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getKycDocuments } from "@/lib/api";
 import { getUserFriendlyErrorMessage } from "@/lib/errors";
+import { useI18n } from "@/contexts/I18nProvider";
+import { ProviderEarningsPageSkeleton } from "@/components/provider/ProviderEarningsSkeletons";
+import { getProfileImageUrl } from "@/lib/api";
 import {
   Dialog,
   DialogContent,
@@ -67,6 +69,7 @@ interface PayoutMethod {
 
 type EarningsData = {
   totalEarnings: number;
+  preferredCurrency?: string;
   thisMonth: number;
   monthlyGrowth: number;
   pendingPayments: number;
@@ -87,19 +90,26 @@ type Payment = {
   client: string;
   milestone: string;
   amount: number;
+  currency?: string;
   status: string;
   date: string;
   avatar?: string;
+  originalAmount?: number;
+  originalCurrency?: string;
+  preferredAmount?: number | null;
+  preferredCurrency?: string;
 };
 
 type MonthlyEarning = {
   month: string;
+  monthStartIso?: string;
   projects: number;
   amount: number;
 };
 
 export default function ProviderEarningsPage() {
   const router = useRouter();
+  const { t, locale } = useI18n();
   const [timeFilter, setTimeFilter] = useState("this-month");
   const [earningsData, setEarningsData] = useState<EarningsData | null>(null);
   const [quickStats, setQuickStats] = useState<QuickStats | null>(null);
@@ -180,7 +190,7 @@ export default function ProviderEarningsPage() {
         // }
       } catch (err) {
         toast({
-          title: "Error",
+          title: t("provider.earnings.toast.errorTitle"),
           description: getUserFriendlyErrorMessage(
             err,
             "provider earnings fetch",
@@ -215,7 +225,7 @@ export default function ProviderEarningsPage() {
       setPayoutMethods(result.payoutMethods || []);
     } catch (err) {
       toast({
-        title: "Error",
+        title: t("provider.earnings.toast.errorTitle"),
         description: getUserFriendlyErrorMessage(
           err,
           "provider earnings payout methods",
@@ -267,9 +277,9 @@ export default function ProviderEarningsPage() {
           !formData.accountNumber ||
           !formData.accountHolder
         )
-          throw new Error("Please fill in all bank details");
+          throw new Error(t("provider.earnings.validation.bankFields"));
       } else if (!formData.accountEmail) {
-        throw new Error("Please provide an email address");
+        throw new Error(t("provider.earnings.validation.emailRequired"));
       }
 
       const url = editingMethod
@@ -289,10 +299,10 @@ export default function ProviderEarningsPage() {
       if (!res.ok) throw new Error("Failed to save payout method");
 
       toast({
-        title: "Success",
+        title: t("provider.earnings.toast.successTitle"),
         description: editingMethod
-          ? "Payout method updated successfully"
-          : "Payout method added successfully",
+          ? t("provider.earnings.toast.payoutUpdated")
+          : t("provider.earnings.toast.payoutAdded"),
       });
 
       setShowAddForm(false);
@@ -301,7 +311,7 @@ export default function ProviderEarningsPage() {
       await fetchPayoutMethods();
     } catch (err: unknown) {
       toast({
-        title: "Error",
+        title: t("provider.earnings.toast.errorTitle"),
         description: getUserFriendlyErrorMessage(
           err,
           "provider earnings save payout method",
@@ -325,13 +335,13 @@ export default function ProviderEarningsPage() {
       if (!res.ok) throw new Error("Failed to delete payout method");
 
       toast({
-        title: "Deleted",
-        description: "Payout method removed successfully",
+        title: t("provider.earnings.toast.deletedTitle"),
+        description: t("provider.earnings.toast.payoutRemoved"),
       });
       await fetchPayoutMethods();
     } catch (err: unknown) {
       toast({
-        title: "Error",
+        title: t("provider.earnings.toast.errorTitle"),
         description: getUserFriendlyErrorMessage(
           err,
           "provider earnings delete payout method",
@@ -374,15 +384,18 @@ export default function ProviderEarningsPage() {
       const token = localStorage.getItem("token");
       if (!token) {
         toast({
-          title: "Error",
-          description: "Please login to export reports",
+          title: t("provider.earnings.toast.errorTitle"),
+          description: t("provider.earnings.toast.loginForExport"),
           variant: "destructive",
         });
         return;
       }
 
+      const exportCurrency = String(
+        earningsData?.preferredCurrency || "MYR",
+      ).toUpperCase();
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/provider/earnings/export/report?timeFilter=${timeFilter}`,
+        `${process.env.NEXT_PUBLIC_API_URL}/provider/earnings/export/report?timeFilter=${encodeURIComponent(timeFilter)}&lang=${encodeURIComponent(locale)}&currency=${encodeURIComponent(exportCurrency)}`,
         {
           method: "GET",
           headers: {
@@ -403,16 +416,15 @@ export default function ProviderEarningsPage() {
         window.open(data.downloadUrl, "_blank");
 
         toast({
-          title: "Report Generated",
-          description:
-            "Your earnings report has been generated and is ready to download.",
+          title: t("provider.earnings.toast.exportReadyTitle"),
+          description: t("provider.earnings.toast.exportReadyDesc"),
         });
       } else {
         throw new Error(data.message || "Failed to get download URL");
       }
     } catch (err: unknown) {
       toast({
-        title: "Error exporting report",
+        title: t("provider.earnings.toast.exportFailedTitle"),
         description: getUserFriendlyErrorMessage(
           err,
           "provider earnings export report",
@@ -442,7 +454,10 @@ export default function ProviderEarningsPage() {
   const getPayoutDisplayText = (method: PayoutMethod) => {
     if (method.type === "BANK") {
       return {
-        title: method.label || method.bankName || "Bank Account",
+        title:
+          method.label ||
+          method.bankName ||
+          t("provider.earnings.methods.bankAccountFallback"),
         subtitle: method.accountNumber ? `${method.accountNumber}` : "",
         details: method.accountHolder || "",
       };
@@ -513,52 +528,143 @@ export default function ProviderEarningsPage() {
 
   if (loading) {
     return (
-      <ProviderLayout>
-        <div className="flex justify-center items-center h-64">
-          <p className="text-gray-500">Loading earnings...</p>
-        </div>
-      </ProviderLayout>
+      <>
+        <ProviderEarningsTour />
+        <ProviderEarningsPageSkeleton
+          loadingLabel={t("provider.earnings.loading")}
+        />
+      </>
     );
   }
 
   if (!earningsData) {
     return (
-      <ProviderLayout>
+      
         <div className="flex justify-center items-center h-64">
-          <p className="text-gray-500">No earnings data found.</p>
+          <p className="text-gray-500">{t("provider.earnings.noData")}</p>
         </div>
-      </ProviderLayout>
+      
     );
   }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "released":
-        return "bg-green-100 text-green-800";
-      case "pending":
-        return "bg-yellow-100 text-yellow-800";
-      case "in_progress":
-        return "bg-blue-100 text-blue-800";
+  const getPayoutTypeLabel = (type: PayoutMethodType) => {
+    switch (type) {
+      case "BANK":
+        return t("provider.earnings.payoutType.BANK");
+      case "PAYPAL":
+        return t("provider.earnings.payoutType.PAYPAL");
+      case "PAYONEER":
+        return t("provider.earnings.payoutType.PAYONEER");
+      case "WISE":
+        return t("provider.earnings.payoutType.WISE");
+      case "EWALLET":
+        return t("provider.earnings.payoutType.EWALLET");
       default:
-        return "bg-gray-100 text-gray-800";
+        return type;
+    }
+  };
+  const getStatusColor = (status: string) => {
+    switch (String(status || "").toLowerCase()) {
+      case "transferred":
+      case "paid":
+        return "bg-emerald-100 text-emerald-800 border border-emerald-200";
+      case "escrow":
+      case "escrowed":
+        return "bg-cyan-100 text-cyan-800 border border-cyan-200";
+      case "pending":
+      case "scheduled":
+        return "bg-amber-100 text-amber-800 border border-amber-200";
+      case "processing":
+      case "in_progress":
+        return "bg-indigo-100 text-indigo-800 border border-indigo-200";
+      case "refunded":
+        return "bg-violet-100 text-violet-800 border border-violet-200";
+      case "approved":
+        return "bg-sky-100 text-sky-800 border border-sky-200";
+      case "failed":
+      case "overdue":
+        return "bg-rose-100 text-rose-800 border border-rose-200";
+      default:
+        return "bg-slate-100 text-slate-800 border border-slate-200";
     }
   };
 
+
   const getStatusText = (status: string) => {
-    switch (status) {
+    switch (String(status || "").toLowerCase()) {
       case "released":
-        return "Paid";
+      case "transferred":
+      case "completed":
+        return t("provider.earnings.paymentStatus.released");
       case "pending":
-        return "Pending";
+        return t("provider.earnings.paymentStatus.pending");
       case "in_progress":
-        return "Processing";
+      case "processing":
+        return t("provider.earnings.paymentStatus.in_progress");
       default:
         return status;
     }
   };
 
+  const formatMoney = (amount: number, currency = "MYR") => {
+    const code = String(currency || "MYR").toUpperCase();
+    try {
+      return new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: code,
+      }).format(Number(amount || 0));
+    } catch {
+      return `${code} ${Number(amount || 0).toLocaleString()}`;
+    }
+  };
+
+  const renderDualPaymentAmount = (payment: Payment) => {
+    const originalAmount = Number(
+      payment.originalAmount ?? payment.amount ?? 0,
+    );
+    const originalCurrency = String(
+      payment.originalCurrency || payment.currency || "MYR",
+    ).toUpperCase();
+    const preferredCurrency = String(
+      payment.preferredCurrency || originalCurrency,
+    ).toUpperCase();
+    const preferredAmount =
+      payment.preferredAmount != null
+        ? Number(payment.preferredAmount)
+        : null;
+    const showDual =
+      preferredAmount != null && preferredCurrency !== originalCurrency;
+
+    return (
+      <>
+        <p className="font-semibold text-sm md:text-base">
+          {formatMoney(originalAmount, originalCurrency)}
+        </p>
+        {showDual && (
+          <p className="text-xs text-gray-500 mt-0.5">
+            {formatMoney(preferredAmount, preferredCurrency)}
+          </p>
+        )}
+      </>
+    );
+  };
+
+  const formatPaymentDateTime = (value?: string) => {
+    const d = value ? new Date(value) : null;
+    if (!d || Number.isNaN(d.getTime())) return value || "-";
+    const localeTag =
+      locale === "id" ? "id-ID" : locale === "ar" ? "ar" : "en-US";
+    return d.toLocaleString(localeTag, {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
   return (
-    <ProviderLayout>
+    <>
       <ProviderEarningsTour />
       <div className="space-y-6 md:space-y-8 px-4 md:px-0">
         {/* Verification warning: unverified providers cannot receive payouts */}
@@ -570,10 +676,10 @@ export default function ProviderEarningsPage() {
             <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0" />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-amber-800">
-                Provider not verified — you cannot receive payouts
+                {t("provider.earnings.verify.title")}
               </p>
               <p className="text-xs text-amber-700 mt-0.5">
-                Complete identity verification to receive your earnings. Go to Profile → Verification.
+                {t("provider.earnings.verify.desc")}
               </p>
             </div>
           </Link>
@@ -583,10 +689,20 @@ export default function ProviderEarningsPage() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4" data-tour-step="0">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold text-gray-900">
-              Earnings
+              {t("provider.earnings.title")}
             </h1>
             <p className="text-sm md:text-base text-gray-600">
-              Track your income and payment history
+              {t("provider.earnings.subtitle")}
+            </p>
+            <p className="text-xs md:text-sm text-gray-500 mt-1">
+              Currency preference can be changed in{" "}
+              <Link
+                href="/provider/settings?tab=language"
+                className="text-blue-600 hover:underline"
+              >
+                Settings → Language
+              </Link>
+              .
             </p>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto" data-tour-step="1">
@@ -595,10 +711,18 @@ export default function ProviderEarningsPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="this-week">This Week</SelectItem>
-                <SelectItem value="this-month">This Month</SelectItem>
-                <SelectItem value="last-month">Last Month</SelectItem>
-                <SelectItem value="this-year">This Year</SelectItem>
+                <SelectItem value="this-week">
+                  {t("provider.earnings.timeFilter.thisWeek")}
+                </SelectItem>
+                <SelectItem value="this-month">
+                  {t("provider.earnings.timeFilter.thisMonth")}
+                </SelectItem>
+                <SelectItem value="last-month">
+                  {t("provider.earnings.timeFilter.lastMonth")}
+                </SelectItem>
+                <SelectItem value="this-year">
+                  {t("provider.earnings.timeFilter.thisYear")}
+                </SelectItem>
               </SelectContent>
             </Select>
             <Button
@@ -607,7 +731,7 @@ export default function ProviderEarningsPage() {
               className="w-full sm:w-auto text-xs md:text-sm"
             >
               <Download className="w-3 h-3 md:w-4 md:h-4 mr-2" />
-              Export Report
+              {t("provider.earnings.exportReport")}
             </Button>
           </div>
         </div>
@@ -619,10 +743,13 @@ export default function ProviderEarningsPage() {
               <div className="flex items-center justify-between">
                 <div className="min-w-0 flex-1">
                   <p className="text-xs md:text-sm font-medium text-gray-600">
-                    Total Earnings
+                    {t("provider.earnings.stats.totalEarnings")}
                   </p>
                   <p className="text-xl md:text-2xl font-bold text-gray-900">
-                    RM{earningsData.totalEarnings.toLocaleString()}
+                    {formatMoney(
+                      earningsData.totalEarnings,
+                      earningsData.preferredCurrency || "MYR",
+                    )}
                   </p>
                 </div>
                 <div className="w-10 h-10 md:w-12 md:h-12 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
@@ -637,10 +764,13 @@ export default function ProviderEarningsPage() {
               <div className="flex items-center justify-between">
                 <div className="min-w-0 flex-1">
                   <p className="text-xs md:text-sm font-medium text-gray-600">
-                    This Month
+                    {t("provider.earnings.stats.thisMonth")}
                   </p>
                   <p className="text-xl md:text-2xl font-bold text-blue-600">
-                    RM{earningsData.thisMonth.toLocaleString()}
+                    {formatMoney(
+                      earningsData.thisMonth,
+                      earningsData.preferredCurrency || "MYR",
+                    )}
                   </p>
                   <div className="flex items-center mt-1">
                     <TrendingUp className="w-3 h-3 text-green-500 mr-1" />
@@ -661,10 +791,13 @@ export default function ProviderEarningsPage() {
               <div className="flex items-center justify-between">
                 <div className="min-w-0 flex-1">
                   <p className="text-xs md:text-sm font-medium text-gray-600">
-                    Pending Payments
+                    {t("provider.earnings.stats.pendingPayments")}
                   </p>
                   <p className="text-xl md:text-2xl font-bold text-yellow-600">
-                    RM{earningsData.pendingPayments.toLocaleString()}
+                    {formatMoney(
+                      earningsData.pendingPayments,
+                      earningsData.preferredCurrency || "MYR",
+                    )}
                   </p>
                 </div>
                 <div className="w-10 h-10 md:w-12 md:h-12 bg-yellow-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
@@ -679,14 +812,16 @@ export default function ProviderEarningsPage() {
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
                   <p className="text-xs md:text-sm font-medium text-gray-600">
-                    Available Balance
+                    {t("provider.earnings.stats.availableBalance")}
                   </p>
                   <p className="text-xl md:text-2xl font-bold text-purple-600">
-                    RM{earningsData.availableBalance.toLocaleString()}
+                    {formatMoney(
+                      earningsData.availableBalance,
+                      earningsData.preferredCurrency || "MYR",
+                    )}
                   </p>
                   <p className="text-xs text-gray-500 mt-2">
-                    Payments already transferred and should be received from
-                    Techconnex platform. Processing takes 3-14 working days.
+                    {t("provider.earnings.stats.availableBalanceHint")}
                   </p>
                 </div>
                 <div className="w-10 h-10 md:w-12 md:h-12 bg-purple-100 rounded-lg flex items-center justify-center flex-shrink-0 ml-2">
@@ -700,15 +835,15 @@ export default function ProviderEarningsPage() {
         <Tabs defaultValue="overview" className="space-y-6" data-tour-step="3">
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="overview" className="text-xs md:text-sm">
-              Overview
+              {t("provider.earnings.tabs.overview")}
             </TabsTrigger>
             <TabsTrigger value="payments" className="text-xs md:text-sm">
-              Payment History
+              {t("provider.earnings.tabs.paymentHistory")}
             </TabsTrigger>
             {/* <TabsTrigger value="analytics">Analytics</TabsTrigger> */}
             {/* <TabsTrigger value="withdraw">Withdraw</TabsTrigger> */}
             <TabsTrigger value="methods" className="text-xs md:text-sm">
-              Payment Methods
+              {t("provider.earnings.tabs.paymentMethods")}
             </TabsTrigger>
           </TabsList>
 
@@ -722,7 +857,7 @@ export default function ProviderEarningsPage() {
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                       <CardTitle className="flex items-center gap-2 text-base md:text-lg">
                         <BarChart3 className="w-4 h-4 md:w-5 md:h-5" />
-                        Monthly Earnings Trend
+                        {t("provider.earnings.monthlyTrend.title")}
                       </CardTitle>
                       {availableYears.length > 0 && (
                         <Select
@@ -732,7 +867,11 @@ export default function ProviderEarningsPage() {
                           }
                         >
                           <SelectTrigger className="w-full sm:w-48 text-sm md:text-base">
-                            <SelectValue placeholder="Select Year" />
+                            <SelectValue
+                              placeholder={t(
+                                "provider.earnings.monthlyTrend.selectYear",
+                              )}
+                            />
                           </SelectTrigger>
                           <SelectContent>
                             {availableYears.map((year) => {
@@ -741,7 +880,10 @@ export default function ProviderEarningsPage() {
                               const isCurrentYear = year === currentYear;
                               const label =
                                 isOnlyYear && isCurrentYear
-                                  ? `${year} (Only year with data)`
+                                  ? t(
+                                      "provider.earnings.monthlyTrend.yearOnlyData",
+                                      { year },
+                                    )
                                   : year.toString();
 
                               return (
@@ -778,10 +920,15 @@ export default function ProviderEarningsPage() {
                             </div>
                             <div className="flex items-center space-x-2 md:space-x-4">
                               <span className="text-xs md:text-sm text-gray-500">
-                                {month.projects} projects
+                                {t("provider.earnings.monthlyTrend.projectsCount", {
+                                  n: month.projects,
+                                })}
                               </span>
                               <span className="font-semibold text-sm md:text-base">
-                                RM{month.amount.toLocaleString()}
+                                {formatMoney(
+                                  month.amount,
+                                  earningsData.preferredCurrency || "MYR",
+                                )}
                               </span>
                             </div>
                           </div>
@@ -793,7 +940,9 @@ export default function ProviderEarningsPage() {
                         return parseInt(yearMatch[0], 10) === selectedYear;
                       }).length === 0 && (
                         <div className="text-center py-8 text-gray-500">
-                          No earnings data for {selectedYear}
+                          {t("provider.earnings.monthlyTrend.emptyYear", {
+                            year: selectedYear ?? "",
+                          })}
                         </div>
                       )}
                     </div>
@@ -804,10 +953,10 @@ export default function ProviderEarningsPage() {
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-base md:text-lg">
-                      Recent Payments
+                      {t("provider.earnings.recentPayments.title")}
                     </CardTitle>
                     <CardDescription className="text-xs md:text-sm">
-                      Your latest payment transactions
+                      {t("provider.earnings.recentPayments.desc")}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -820,7 +969,7 @@ export default function ProviderEarningsPage() {
                           <div className="flex items-center space-x-3 md:space-x-4 flex-1 min-w-0">
                             <Avatar className="w-10 h-10 md:w-12 md:h-12 flex-shrink-0">
                               <AvatarImage
-                                src={payment.avatar || "/placeholder.svg"}
+                                src={getProfileImageUrl(payment.avatar)}
                               />
                               <AvatarFallback>
                                 {payment.client.charAt(0)}
@@ -839,16 +988,14 @@ export default function ProviderEarningsPage() {
                             </div>
                           </div>
                           <div className="text-left sm:text-right flex-shrink-0">
-                            <p className="font-semibold text-sm md:text-base">
-                              RM{payment.amount.toLocaleString()}
-                            </p>
+                            {renderDualPaymentAmount(payment)}
                             <Badge
                               className={`${getStatusColor(payment.status)} text-xs mt-1`}
                             >
                               {getStatusText(payment.status)}
                             </Badge>
                             <p className="text-xs text-gray-500 mt-1">
-                              {payment.date}
+                              {formatPaymentDateTime(payment.date)}
                             </p>
                           </div>
                         </div>
@@ -864,21 +1011,24 @@ export default function ProviderEarningsPage() {
                 <Card data-tour-step="5">
                   <CardHeader>
                     <CardTitle className="text-base md:text-lg">
-                      Quick Stats
+                      {t("provider.earnings.quickStats.title")}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3 md:space-y-4">
                     <div className="flex items-center justify-between">
                       <span className="text-xs md:text-sm text-gray-600">
-                        Average Project Value
+                        {t("provider.earnings.quickStats.avgProjectValue")}
                       </span>
                       <span className="font-semibold text-sm md:text-base">
-                        RM{earningsData.averageProjectValue.toLocaleString()}
+                        {formatMoney(
+                          earningsData.averageProjectValue,
+                          earningsData.preferredCurrency || "MYR",
+                        )}
                       </span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-xs md:text-sm text-gray-600">
-                        Projects This Month
+                        {t("provider.earnings.quickStats.projectsThisMonth")}
                       </span>
                       <span className="font-semibold text-sm md:text-base">
                         {quickStats?.projectsThisMonth.toLocaleString() ?? 0}
@@ -886,7 +1036,7 @@ export default function ProviderEarningsPage() {
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-xs md:text-sm text-gray-600">
-                        Success Rate
+                        {t("provider.earnings.quickStats.successRate")}
                       </span>
                       <span className="font-semibold text-sm md:text-base">
                         {quickStats?.successRate.toLocaleString() ?? 0}%
@@ -894,7 +1044,7 @@ export default function ProviderEarningsPage() {
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-xs md:text-sm text-gray-600">
-                        Repeat Clients
+                        {t("provider.earnings.quickStats.repeatClients")}
                       </span>
                       <span className="font-semibold text-sm md:text-base">
                         {quickStats?.repeatClientsPercent.toLocaleString() ?? 0}
@@ -963,9 +1113,9 @@ export default function ProviderEarningsPage() {
           <TabsContent value="payments">
             <Card>
               <CardHeader>
-                <CardTitle>Payment History</CardTitle>
+                <CardTitle>{t("provider.earnings.history.title")}</CardTitle>
                 <CardDescription>
-                  Complete history of all your payments
+                  {t("provider.earnings.history.desc")}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -978,7 +1128,7 @@ export default function ProviderEarningsPage() {
                       <div className="flex items-center space-x-3 md:space-x-4 flex-1 min-w-0">
                         <Avatar className="w-10 h-10 md:w-12 md:h-12 flex-shrink-0">
                           <AvatarImage
-                            src={payment.avatar || "/placeholder.svg"}
+                            src={getProfileImageUrl(payment.avatar)}
                           />
                           <AvatarFallback>
                             {payment.client.charAt(0)}
@@ -992,15 +1142,14 @@ export default function ProviderEarningsPage() {
                             {payment.client}
                           </p>
                           <p className="text-xs text-gray-500">
-                            {payment.milestone} • {payment.date}
+                            {payment.milestone} •{" "}
+                            {formatPaymentDateTime(payment.date)}
                           </p>
                         </div>
                       </div>
                       <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 flex-shrink-0">
                         <div className="text-left sm:text-right">
-                          <p className="font-semibold text-sm md:text-base">
-                            RM{payment.amount.toLocaleString()}
-                          </p>
+                          {renderDualPaymentAmount(payment)}
                           <Badge
                             className={`${getStatusColor(payment.status)} text-xs mt-1`}
                           >
@@ -1018,7 +1167,7 @@ export default function ProviderEarningsPage() {
                           }
                         >
                           <Eye className="w-3 h-3 md:w-4 md:h-4 mr-2" />
-                          Details
+                          {t("provider.earnings.history.details")}
                         </Button>
                       </div>
                     </div>
@@ -1206,10 +1355,10 @@ export default function ProviderEarningsPage() {
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <div>
                     <CardTitle className="text-base md:text-lg">
-                      Payout Methods
+                      {t("provider.earnings.methods.title")}
                     </CardTitle>
                     <CardDescription className="text-xs md:text-sm">
-                      Manage your payout methods for withdrawals
+                      {t("provider.earnings.methods.desc")}
                     </CardDescription>
                   </div>
                   <Button
@@ -1221,7 +1370,7 @@ export default function ProviderEarningsPage() {
                     className="w-full sm:w-auto text-xs md:text-sm"
                   >
                     <Plus className="w-3 h-3 md:w-4 md:h-4 mr-2" />
-                    Add Method
+                    {t("provider.earnings.methods.add")}
                   </Button>
                 </div>
               </CardHeader>
@@ -1230,7 +1379,7 @@ export default function ProviderEarningsPage() {
                   <div className="text-center py-8 md:py-12">
                     <Wallet className="w-10 h-10 md:w-12 md:h-12 text-gray-400 mx-auto mb-4" />
                     <p className="text-sm md:text-base text-gray-500 mb-4">
-                      No payout methods added yet
+                      {t("provider.earnings.methods.empty")}
                     </p>
                     <Button
                       onClick={() => {
@@ -1241,7 +1390,7 @@ export default function ProviderEarningsPage() {
                       className="text-xs md:text-sm"
                     >
                       <Plus className="w-3 h-3 md:w-4 md:h-4 mr-2" />
-                      Add Your First Method
+                      {t("provider.earnings.methods.addFirst")}
                     </Button>
                   </div>
                 ) : (
@@ -1272,7 +1421,7 @@ export default function ProviderEarningsPage() {
                                 variant="secondary"
                                 className="text-xs flex-shrink-0"
                               >
-                                {method.type}
+                                {getPayoutTypeLabel(method.type)}
                               </Badge>
                             </div>
                             {displayInfo.details && (
@@ -1288,7 +1437,7 @@ export default function ProviderEarningsPage() {
                                 onClick={() => handleEditPayoutMethod(method)}
                               >
                                 <Edit className="w-3 h-3 md:w-4 md:h-4 mr-1" />
-                                Edit
+                                {t("provider.earnings.methods.actions.edit")}
                               </Button>
                               <Button
                                 variant="outline"
@@ -1299,7 +1448,7 @@ export default function ProviderEarningsPage() {
                                 }
                               >
                                 <Trash2 className="w-3 h-3 md:w-4 md:h-4 mr-1" />
-                                Remove
+                                {t("provider.earnings.methods.actions.remove")}
                               </Button>
                             </div>
                           </CardContent>
@@ -1318,17 +1467,21 @@ export default function ProviderEarningsPage() {
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>
-              {editingMethod ? "Edit Payout Method" : "Add Payout Method"}
+              {editingMethod
+                ? t("provider.earnings.dialog.titleEdit")
+                : t("provider.earnings.dialog.titleAdd")}
             </DialogTitle>
             <DialogDescription>
               {editingMethod
-                ? "Update your payout method details"
-                : "Add a new payout method for withdrawals"}
+                ? t("provider.earnings.dialog.descEdit")
+                : t("provider.earnings.dialog.descAdd")}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="type">Method Type</Label>
+              <Label htmlFor="type">
+                {t("provider.earnings.dialog.methodType")}
+              </Label>
               <Select
                 value={formData.type}
                 onValueChange={(value: PayoutMethodType) =>
@@ -1339,20 +1492,32 @@ export default function ProviderEarningsPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="BANK">Bank Transfer</SelectItem>
-                  <SelectItem value="PAYPAL">PayPal</SelectItem>
-                  <SelectItem value="PAYONEER">Payoneer</SelectItem>
-                  <SelectItem value="WISE">Wise</SelectItem>
-                  <SelectItem value="EWALLET">E-Wallet</SelectItem>
+                  <SelectItem value="BANK">
+                    {t("provider.earnings.payoutType.BANK")}
+                  </SelectItem>
+                  <SelectItem value="PAYPAL">
+                    {t("provider.earnings.payoutType.PAYPAL")}
+                  </SelectItem>
+                  <SelectItem value="PAYONEER">
+                    {t("provider.earnings.payoutType.PAYONEER")}
+                  </SelectItem>
+                  <SelectItem value="WISE">
+                    {t("provider.earnings.payoutType.WISE")}
+                  </SelectItem>
+                  <SelectItem value="EWALLET">
+                    {t("provider.earnings.payoutType.EWALLET")}
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="label">Label (Optional)</Label>
+              <Label htmlFor="label">
+                {t("provider.earnings.dialog.labelOptional")}
+              </Label>
               <Input
                 id="label"
-                placeholder="e.g. Main Bank, Business PayPal"
+                placeholder={t("provider.earnings.dialog.labelPlaceholder")}
                 value={formData.label}
                 onChange={(e) =>
                   setFormData({ ...formData, label: e.target.value })
@@ -1363,10 +1528,12 @@ export default function ProviderEarningsPage() {
             {formData.type === "BANK" ? (
               <>
                 <div className="space-y-2">
-                  <Label htmlFor="bankName">Bank Name *</Label>
+                  <Label htmlFor="bankName">
+                    {t("provider.earnings.dialog.bankName")}
+                  </Label>
                   <Input
                     id="bankName"
-                    placeholder="e.g. Maybank, CIMB Bank"
+                    placeholder={t("provider.earnings.dialog.bankNamePh")}
                     value={formData.bankName}
                     onChange={(e) =>
                       setFormData({ ...formData, bankName: e.target.value })
@@ -1374,10 +1541,12 @@ export default function ProviderEarningsPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="accountNumber">Account Number *</Label>
+                  <Label htmlFor="accountNumber">
+                    {t("provider.earnings.dialog.accountNumber")}
+                  </Label>
                   <Input
                     id="accountNumber"
-                    placeholder="e.g. 1234567890"
+                    placeholder={t("provider.earnings.dialog.accountNumberPh")}
                     value={formData.accountNumber}
                     onChange={(e) =>
                       setFormData({
@@ -1388,10 +1557,12 @@ export default function ProviderEarningsPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="accountHolder">Account Holder Name *</Label>
+                  <Label htmlFor="accountHolder">
+                    {t("provider.earnings.dialog.accountHolder")}
+                  </Label>
                   <Input
                     id="accountHolder"
-                    placeholder="e.g. John Doe"
+                    placeholder={t("provider.earnings.dialog.accountHolderPh")}
                     value={formData.accountHolder}
                     onChange={(e) =>
                       setFormData({
@@ -1405,11 +1576,13 @@ export default function ProviderEarningsPage() {
             ) : (
               <>
                 <div className="space-y-2">
-                  <Label htmlFor="accountEmail">Email Address *</Label>
+                  <Label htmlFor="accountEmail">
+                    {t("provider.earnings.dialog.email")}
+                  </Label>
                   <Input
                     id="accountEmail"
                     type="email"
-                    placeholder="e.g. your@email.com"
+                    placeholder={t("provider.earnings.dialog.emailPh")}
                     value={formData.accountEmail}
                     onChange={(e) =>
                       setFormData({
@@ -1422,11 +1595,11 @@ export default function ProviderEarningsPage() {
                 {formData.type === "EWALLET" && (
                   <div className="space-y-2">
                     <Label htmlFor="walletId">
-                      Wallet ID / Phone Number (Optional)
+                      {t("provider.earnings.dialog.walletIdOptional")}
                     </Label>
                     <Input
                       id="walletId"
-                      placeholder="e.g. +60123456789"
+                      placeholder={t("provider.earnings.dialog.walletIdPh")}
                       value={formData.walletId}
                       onChange={(e) =>
                         setFormData({ ...formData, walletId: e.target.value })
@@ -1446,14 +1619,16 @@ export default function ProviderEarningsPage() {
                 resetForm();
               }}
             >
-              Cancel
+              {t("provider.earnings.dialog.cancel")}
             </Button>
             <Button onClick={handleSavePayoutMethod}>
-              {editingMethod ? "Update Method" : "Add Method"}
+              {editingMethod
+                ? t("provider.earnings.dialog.submitUpdate")
+                : t("provider.earnings.dialog.submitAdd")}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </ProviderLayout>
+    </>
   );
 }

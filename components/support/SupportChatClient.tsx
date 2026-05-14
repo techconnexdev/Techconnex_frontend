@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import io, { Socket } from "socket.io-client";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -18,6 +18,7 @@ import {
   MessageSquare,
   History,
   ArrowLeft,
+  ChevronDown,
 } from "lucide-react";
 import Image from "next/image";
 import {
@@ -34,30 +35,17 @@ import { getMessageAttachmentUrl } from "@/lib/api";
 import { getUserFriendlyErrorMessage } from "@/lib/errors";
 import { uploadFile } from "@/lib/upload";
 import { toast } from "@/lib/toast";
+import { useI18n } from "@/contexts/I18nProvider";
 
 type ViewMode = "chat" | "history" | "history-detail";
-
-function formatRelativeTime(dateStr: string): string {
-  const d = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - d.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-  const diffMonths = Math.floor(diffDays / 30);
-  const diffYears = Math.floor(diffDays / 365);
-  if (diffMins < 1) return "Just now";
-  if (diffMins < 60) return `${diffMins}m`;
-  if (diffHours < 24) return `${diffHours}h`;
-  if (diffDays < 30) return `${diffDays}d`;
-  if (diffMonths < 12) return `${diffMonths}mo`;
-  return `${diffYears}y`;
-}
 
 type SupportChatClientProps = {
   /** When true, render without Card wrapper for use inside floating widget */
   embedded?: boolean;
 };
+
+/** Pixels from bottom to consider "at bottom" for auto-scroll and jump button */
+const SCROLL_BOTTOM_THRESHOLD = 80;
 
 export function SupportChatClient({
   embedded = false,
@@ -78,14 +66,111 @@ export function SupportChatClient({
   const [uploading, setUploading] = useState(false);
   const [socket, setSocket] = useState<Socket | null>(null);
   const [startingNew, setStartingNew] = useState(false);
+  const [showJumpToBottom, setShowJumpToBottom] = useState(false);
+  const [showHistoryJumpToBottom, setShowHistoryJumpToBottom] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const historyEndRef = useRef<HTMLDivElement>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+  const historyScrollRef = useRef<HTMLDivElement>(null);
+  /** When false, new messages should not force scroll (user is reading older messages). */
+  const isNearBottomRef = useRef(true);
+  const historyNearBottomRef = useRef(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const sendingRef = useRef(false);
+
+  const { t } = useI18n();
 
   const userId =
     typeof window !== "undefined"
       ? JSON.parse(localStorage.getItem("user") || "{}")?.id
       : null;
+
+  const formatRelativeTime = useCallback(
+    (dateStr: string): string => {
+      const d = new Date(dateStr);
+      const now = new Date();
+      const diffMs = now.getTime() - d.getTime();
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMs / 3600000);
+      const diffDays = Math.floor(diffMs / 86400000);
+      const diffMonths = Math.floor(diffDays / 30);
+      const diffYears = Math.floor(diffDays / 365);
+      if (diffMins < 1) return t("customer.support.relative.justNow");
+      if (diffMins < 60)
+        return t("customer.support.relative.minutes", { n: diffMins });
+      if (diffHours < 24)
+        return t("customer.support.relative.hours", { n: diffHours });
+      if (diffDays < 30)
+        return t("customer.support.relative.days", { n: diffDays });
+      if (diffMonths < 12)
+        return t("customer.support.relative.months", { n: diffMonths });
+      return t("customer.support.relative.years", { n: diffYears });
+    },
+    [t],
+  );
+
+  const statusLabel = useMemo(
+    () => ({
+      OPEN: t("customer.support.status.open"),
+      HANDOFF_REQUESTED: t("customer.support.status.handoffRequested"),
+      HUMAN_TAKEN: t("customer.support.status.humanTaken"),
+      CLOSED: t("customer.support.status.closed"),
+    }),
+    [t],
+  );
+
+  const senderLabel = useCallback(
+    (m: SupportMessage) => {
+      if (m.senderType === "AI")
+        return {
+          label: t("customer.support.sender.ai"),
+          icon: Bot,
+          color: "bg-blue-700/10",
+        };
+      if (m.senderUserId === userId)
+        return {
+          label: t("customer.support.sender.you"),
+          icon: User,
+          color: "bg-blue-700/10",
+        };
+      return {
+        label: t("customer.support.sender.human"),
+        icon: HeadphonesIcon,
+        color: "bg-green-500/10",
+      };
+    },
+    [t, userId],
+  );
+
+  const updateChatScrollStickiness = useCallback(() => {
+    const el = chatScrollRef.current;
+    if (!el) return;
+    const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const near = dist <= SCROLL_BOTTOM_THRESHOLD;
+    isNearBottomRef.current = near;
+    setShowJumpToBottom(!near);
+  }, []);
+
+  const updateHistoryScrollStickiness = useCallback(() => {
+    const el = historyScrollRef.current;
+    if (!el) return;
+    const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const near = dist <= SCROLL_BOTTOM_THRESHOLD;
+    historyNearBottomRef.current = near;
+    setShowHistoryJumpToBottom(!near);
+  }, []);
+
+  const scrollChatToBottom = useCallback(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+    isNearBottomRef.current = true;
+    setShowJumpToBottom(false);
+  }, []);
+
+  const scrollHistoryToBottom = useCallback(() => {
+    historyEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    historyNearBottomRef.current = true;
+    setShowHistoryJumpToBottom(false);
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -107,9 +192,7 @@ export function SupportChatClient({
       const res = await getSupportSessions();
       setSessions(res.data || []);
     } catch (e) {
-      toast.error(
-        getUserFriendlyErrorMessage(e, "support chat load sessions"),
-      );
+      toast.error(getUserFriendlyErrorMessage(e, "support chat load sessions"));
       setSessions([]);
     } finally {
       setSessionsLoading(false);
@@ -124,22 +207,11 @@ export function SupportChatClient({
     if (viewMode === "history") loadSessions();
   }, [viewMode, loadSessions]);
 
-  // Poll for status change until HUMAN_TAKEN or CLOSED (so we detect when admin takes over)
+  // Socket.IO while an active conversation exists: server emits support_message to the user's room
+  // (status HANDOFF_REQUESTED / HUMAN_TAKEN, new messages). Avoids HTTP polling before human takeover.
+  const conversationClosed = conversation?.status === "CLOSED";
   useEffect(() => {
-    const status = conversation?.status;
-    if (!conversation?.id || status === "HUMAN_TAKEN" || status === "CLOSED")
-      return;
-    const interval = setInterval(() => {
-      getSupportConversation()
-        .then((res) => setConversation(res.data))
-        .catch(() => {});
-    }, 2500);
-    return () => clearInterval(interval);
-  }, [conversation?.id, conversation?.status]);
-
-  // Socket.IO: connect only when on chat view and HUMAN_TAKEN (admin has taken over). Otherwise disconnect.
-  useEffect(() => {
-    if (viewMode !== "chat" || conversation?.status !== "HUMAN_TAKEN") {
+    if (viewMode !== "chat" || !conversation?.id || conversationClosed) {
       setSocket((prev) => {
         if (prev) {
           prev.disconnect();
@@ -153,20 +225,19 @@ export function SupportChatClient({
       typeof window !== "undefined" ? localStorage.getItem("token") : null;
     if (!token) return;
     const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+    const convId = conversation.id;
     const s = io(API_URL, {
       auth: { token },
       transports: ["websocket", "polling"],
     });
+    s.emit("support:join_conversation", { conversationId: convId });
     setSocket(s);
-    // Refetch conversation so we have any messages admin sent before we connected
-    getSupportConversation()
-      .then((res) => setConversation(res.data))
-      .catch(() => {});
     return () => {
+      s.emit("support:leave_conversation", { conversationId: convId });
       s.disconnect();
       setSocket(null);
     };
-  }, [viewMode, conversation?.status]);
+  }, [viewMode, conversation?.id, conversationClosed]);
 
   // Real-time: listen for support_message (admin replies, AI replies, status changes)
   useEffect(() => {
@@ -221,31 +292,75 @@ export function SupportChatClient({
     };
   }, [socket, conversation?.id]);
 
+  /** New conversation: start pinned to bottom. */
   useEffect(() => {
+    if (!conversation?.id) return;
+    isNearBottomRef.current = true;
+    setShowJumpToBottom(false);
+  }, [conversation?.id]);
+
+  /** Attach scroll listener for chat; re-measure when switching back to chat. */
+  useEffect(() => {
+    if (viewMode !== "chat") return;
+    const el = chatScrollRef.current;
+    if (!el) return;
+    updateChatScrollStickiness();
+    el.addEventListener("scroll", updateChatScrollStickiness, { passive: true });
+    return () =>
+      el.removeEventListener("scroll", updateChatScrollStickiness);
+  }, [viewMode, conversation?.id, updateChatScrollStickiness]);
+
+  /** After messages paint, update jump button (short threads may hide it). */
+  useEffect(() => {
+    if (viewMode !== "chat") return;
+    const id = requestAnimationFrame(() => updateChatScrollStickiness());
+    return () => cancelAnimationFrame(id);
+  }, [
+    conversation?.messages,
+    viewMode,
+    updateChatScrollStickiness,
+  ]);
+
+  /** Auto-scroll only when user is already near the bottom (or just sent a message). */
+  useEffect(() => {
+    if (viewMode !== "chat") return;
+    if (!isNearBottomRef.current) return;
     endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [conversation?.messages]);
+  }, [conversation?.messages, viewMode]);
+
+  /** History session opened: scroll to bottom once; user can scroll up without being yanked down. */
+  useEffect(() => {
+    if (viewMode !== "history-detail" || !historyConversation?.id) return;
+    historyNearBottomRef.current = true;
+    setShowHistoryJumpToBottom(false);
+    const id = requestAnimationFrame(() => {
+      historyEndRef.current?.scrollIntoView({ behavior: "auto" });
+      updateHistoryScrollStickiness();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [
+    viewMode,
+    historyConversation?.id,
+    updateHistoryScrollStickiness,
+  ]);
 
   useEffect(() => {
-    if (viewMode === "history-detail" && historyConversation?.messages?.length) {
-      historyEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [viewMode, historyConversation?.messages?.length]);
-
-  const senderLabel = (m: SupportMessage) => {
-    if (m.senderType === "AI")
-      return { label: "AI", icon: Bot, color: "bg-blue-700/10" };
-    if (m.senderUserId === userId)
-      return { label: "You", icon: User, color: "bg-blue-700/10" };
-    return {
-      label: "Human Support",
-      icon: HeadphonesIcon,
-      color: "bg-green-500/10",
-    };
-  };
+    if (viewMode !== "history-detail") return;
+    const el = historyScrollRef.current;
+    if (!el) return;
+    updateHistoryScrollStickiness();
+    el.addEventListener("scroll", updateHistoryScrollStickiness, {
+      passive: true,
+    });
+    return () =>
+      el.removeEventListener("scroll", updateHistoryScrollStickiness);
+  }, [viewMode, historyConversation?.id, updateHistoryScrollStickiness]);
 
   const handleSend = async () => {
+    if (sendingRef.current || sending || uploading) return;
     const text = input.trim();
     if (!text && attachmentUrls.length === 0) return;
+    sendingRef.current = true;
     setSending(true);
     setInput("");
     const urls = [...attachmentUrls];
@@ -255,6 +370,8 @@ export function SupportChatClient({
       if (conversation) {
         const newMessages = [res.data.userMessage];
         if (res.data.aiMessage) newMessages.push(res.data.aiMessage);
+        isNearBottomRef.current = true;
+        setShowJumpToBottom(false);
         setConversation({
           ...conversation,
           messages: [...conversation.messages, ...newMessages],
@@ -263,13 +380,16 @@ export function SupportChatClient({
         await load();
       }
     } catch (e) {
-      toast.error(
-        getUserFriendlyErrorMessage(e, "support chat send message"),
-      );
+      const raw =
+        e instanceof Error && e.message.trim()
+          ? e.message.trim()
+          : getUserFriendlyErrorMessage(e, "support chat send message");
+      toast.error(raw);
       setInput(text);
       setAttachmentUrls(urls);
     } finally {
       setSending(false);
+      sendingRef.current = false;
     }
   };
 
@@ -277,7 +397,7 @@ export function SupportChatClient({
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) {
-      toast.error("Please select an image file.");
+      toast.error(t("customer.support.error.imageOnly"));
       return;
     }
     setUploading(true);
@@ -297,9 +417,7 @@ export function SupportChatClient({
         );
       }
     } catch (err) {
-      toast.error(
-        getUserFriendlyErrorMessage(err, "support chat upload"),
-      );
+      toast.error(getUserFriendlyErrorMessage(err, "support chat upload"));
     } finally {
       setUploading(false);
       e.target.value = "";
@@ -313,9 +431,7 @@ export function SupportChatClient({
       const res = await getSupportConversationById(sessionId);
       setHistoryConversation(res.data);
     } catch (e) {
-      toast.error(
-        getUserFriendlyErrorMessage(e, "support chat load history"),
-      );
+      toast.error(getUserFriendlyErrorMessage(e, "support chat load history"));
       setHistoryConversation(null);
     } finally {
       setHistoryDetailLoading(false);
@@ -354,7 +470,7 @@ export function SupportChatClient({
         }`}
       >
         <MessageSquare className="h-4 w-4" />
-        Chat
+        {t("customer.support.tab.chat")}
       </button>
       <button
         type="button"
@@ -366,19 +482,21 @@ export function SupportChatClient({
         }`}
       >
         <History className="h-4 w-4" />
-        History
+        {t("customer.support.tab.history")}
       </button>
     </div>
   );
 
   const content = (
     <>
-      <div
-        className={`flex-1 overflow-y-auto space-y-4 ${embedded ? "mb-2" : "mb-4"}`}
-      >
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <div
+          ref={chatScrollRef}
+          className={`flex-1 overflow-y-auto space-y-4 ${embedded ? "mb-2" : "mb-4"}`}
+        >
         {!conversation?.messages?.length ? (
           <p className="text-sm text-muted-foreground text-center py-8">
-            Send a message to get started. The AI answers from the .
+            {t("customer.support.emptyPrompt")}
           </p>
         ) : (
           conversation.messages.map((m) => {
@@ -495,7 +613,7 @@ export function SupportChatClient({
                           ),
                           th: ({ children }) => (
                             <th className="border border-blue-700/20 bg-blue-700/10 px-2 py-1.5 text-left font-medium">
-                              to Guide and Help {children}
+                              {children}
                             </th>
                           ),
                           td: ({ children }) => (
@@ -528,7 +646,7 @@ export function SupportChatClient({
                             >
                               <Image
                                 src={fullUrl}
-                                alt="Attachment"
+                                alt={t("customer.support.attachmentAlt")}
                                 fill
                                 className="object-cover"
                                 unoptimized
@@ -542,7 +660,7 @@ export function SupportChatClient({
                               rel="noopener noreferrer"
                               className="text-xs text-blue-700 underline"
                             >
-                              View attachment
+                              {t("customer.support.viewAttachment")}
                             </a>
                           );
                         })}
@@ -558,13 +676,22 @@ export function SupportChatClient({
           })
         )}
         <div ref={endRef} />
+        </div>
+        {showJumpToBottom && (
+          <button
+            type="button"
+            onClick={scrollChatToBottom}
+            className="absolute bottom-2 right-2 z-10 flex h-9 w-9 items-center justify-center rounded-full border border-blue-700/20 bg-background shadow-md transition-colors hover:bg-muted focus:outline-none focus:ring-2 focus:ring-blue-700 focus:ring-offset-2"
+            aria-label={t("customer.support.aria.jumpLatest")}
+          >
+            <ChevronDown className="h-5 w-5 text-blue-700" aria-hidden />
+          </button>
+        )}
       </div>
 
       {conversation?.status === "CLOSED" ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/30 px-3 py-3 text-sm text-amber-800 dark:text-amber-200 space-y-2">
-          <p>
-            This conversation has been closed. You cannot send more messages.
-          </p>
+          <p>{t("customer.support.closed.body")}</p>
           <Button
             size="sm"
             onClick={async () => {
@@ -585,10 +712,10 @@ export function SupportChatClient({
             {startingNew ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                Starting…
+                {t("customer.support.startingNew")}
               </>
             ) : (
-              "Start new conversation"
+              t("customer.support.startNew")
             )}
           </Button>
         </div>
@@ -607,7 +734,7 @@ export function SupportChatClient({
                         ? url
                         : getMessageAttachmentUrl(url)
                     }
-                    alt="Attach"
+                    alt={t("customer.support.attachPreviewAlt")}
                     fill
                     className="object-cover"
                     unoptimized
@@ -647,7 +774,7 @@ export function SupportChatClient({
               )}
             </Button>
             <Textarea
-              placeholder="Type your message..."
+              placeholder={t("customer.support.placeholder")}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
@@ -675,13 +802,6 @@ export function SupportChatClient({
     </>
   );
 
-  const statusLabel: Record<string, string> = {
-    OPEN: "Open",
-    HANDOFF_REQUESTED: "Handoff requested",
-    HUMAN_TAKEN: "Human taken",
-    CLOSED: "Closed",
-  };
-
   const historyListView = (
     <div className="flex flex-1 flex-col min-h-0 overflow-hidden">
       <div className="flex-1 overflow-y-auto">
@@ -691,7 +811,7 @@ export function SupportChatClient({
           </div>
         ) : sessions.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-8">
-            No past sessions yet.
+            {t("customer.support.history.empty")}
           </p>
         ) : (
           <ul className="divide-y">
@@ -713,15 +833,18 @@ export function SupportChatClient({
                   <Bot className="h-5 w-5 text-blue-700" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium text-sm truncate">AI Support</p>
+                  <p className="font-medium text-sm truncate">
+                    {t("customer.support.history.sessionTitle")}
+                  </p>
                   <p className="text-xs text-muted-foreground truncate">
                     {s.lastMessage?.content?.trim()
                       ? s.lastMessage.content.slice(0, 60) +
                         (s.lastMessage.content.length > 60 ? "…" : "")
-                      : "No messages"}
+                      : t("customer.support.history.noMessages")}
                   </p>
                   <span className="text-xs text-muted-foreground">
-                    {statusLabel[s.status] ?? s.status}
+                    {statusLabel[s.status as keyof typeof statusLabel] ??
+                      s.status}
                   </span>
                 </div>
                 <span className="shrink-0 text-xs text-muted-foreground">
@@ -747,17 +870,23 @@ export function SupportChatClient({
         }}
       >
         <ArrowLeft className="h-4 w-4 mr-1" />
-        Back to list
+        {t("customer.support.backToList")}
       </Button>
       {historyDetailLoading ? (
         <div className="flex flex-1 items-center justify-center">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
       ) : !historyConversation ? (
-        <p className="text-sm text-muted-foreground py-4">Failed to load conversation.</p>
+        <p className="text-sm text-muted-foreground py-4">
+          {t("customer.support.history.loadFailed")}
+        </p>
       ) : (
         <>
-          <div className="flex-1 overflow-y-auto space-y-4 mb-4">
+          <div className="relative flex min-h-0 flex-1 flex-col mb-4">
+            <div
+              ref={historyScrollRef}
+              className="flex-1 overflow-y-auto space-y-4 min-h-0"
+            >
             {historyConversation.messages.map((m) => {
               const { label, icon: Icon, color } = senderLabel(m);
               return (
@@ -782,19 +911,27 @@ export function SupportChatClient({
                           remarkPlugins={[remarkGfm]}
                           components={{
                             p: ({ children }) => (
-                              <p className="whitespace-pre-wrap m-0">{children}</p>
+                              <p className="whitespace-pre-wrap m-0">
+                                {children}
+                              </p>
                             ),
                             ul: ({ children }) => (
-                              <ul className="list-disc pl-4 my-2 space-y-0.5">{children}</ul>
+                              <ul className="list-disc pl-4 my-2 space-y-0.5">
+                                {children}
+                              </ul>
                             ),
                             ol: ({ children }) => (
-                              <ol className="list-decimal pl-4 my-2 space-y-0.5">{children}</ol>
+                              <ol className="list-decimal pl-4 my-2 space-y-0.5">
+                                {children}
+                              </ol>
                             ),
                             li: ({ children }) => (
                               <li className="leading-relaxed">{children}</li>
                             ),
                             strong: ({ children }) => (
-                              <strong className="font-semibold">{children}</strong>
+                              <strong className="font-semibold">
+                                {children}
+                              </strong>
                             ),
                             code: ({ children }) => (
                               <code className="rounded bg-blue-700/10 px-1.5 py-0.5 font-mono text-xs">
@@ -830,7 +967,7 @@ export function SupportChatClient({
                                 rel="noopener noreferrer"
                                 className="text-xs text-blue-700 underline"
                               >
-                                View attachment
+                                {t("customer.support.viewAttachment")}
                               </a>
                             );
                           })}
@@ -846,12 +983,28 @@ export function SupportChatClient({
             })}
             <div ref={historyEndRef} />
           </div>
+          {showHistoryJumpToBottom && (
+            <button
+              type="button"
+              onClick={scrollHistoryToBottom}
+              className="absolute bottom-2 right-2 z-10 flex h-9 w-9 items-center justify-center rounded-full border border-blue-700/20 bg-background shadow-md transition-colors hover:bg-muted focus:outline-none focus:ring-2 focus:ring-blue-700 focus:ring-offset-2"
+              aria-label={t("customer.support.aria.jumpEnd")}
+            >
+              <ChevronDown className="h-5 w-5 text-blue-700" aria-hidden />
+            </button>
+          )}
+          </div>
           <div className="border rounded-lg p-3 bg-muted/30 space-y-2">
             <p className="text-xs text-muted-foreground">
-              This is a past conversation. Status: {statusLabel[historyConversation.status] ?? historyConversation.status}.
+              {t("customer.support.history.pastNote", {
+                status:
+                  statusLabel[
+                    historyConversation.status as keyof typeof statusLabel
+                  ] ?? historyConversation.status,
+              })}
             </p>
             <Button size="sm" variant="outline" onClick={backToChat}>
-              Back to current chat
+              {t("customer.support.backToCurrent")}
             </Button>
             {historyConversation.status === "CLOSED" && (
               <Button
@@ -869,14 +1022,18 @@ export function SupportChatClient({
                     );
                   } finally {
                     setStartingNew(false);
-                  }}
-                }
+                  }
+                }}
                 disabled={startingNew}
               >
                 {startingNew ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : null}
-                Start new conversation
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    {t("customer.support.startingNew")}
+                  </>
+                ) : (
+                  t("customer.support.startNew")
+                )}
               </Button>
             )}
           </div>
@@ -901,11 +1058,10 @@ export function SupportChatClient({
       <CardHeader className="border-b">
         <CardTitle className="flex items-center gap-2">
           <HeadphonesIcon className="h-5 w-5" />
-          AI Support Chat
+          {t("customer.support.cardTitle")}
         </CardTitle>
         <p className="text-sm text-muted-foreground">
-          Ask questions about the platform. For account or payment issues, a
-          human agent will join.
+          {t("customer.support.cardSubtitle")}
         </p>
       </CardHeader>
       <CardContent className="flex flex-col flex-1 p-4 overflow-hidden min-h-0">

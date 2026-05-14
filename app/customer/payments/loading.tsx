@@ -1,9 +1,7 @@
 import { Skeleton } from "@/components/ui/skeleton"
-import { CustomerLayout } from "@/components/customer-layout"
-
 export default function CustomerPaymentsLoading() {
   return (
-    <CustomerLayout>
+    
       <div className="space-y-8">
         {/* Header Skeleton */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -78,6 +76,6 @@ export default function CustomerPaymentsLoading() {
           </div>
         </div>
       </div>
-    </CustomerLayout>
+    
   )
 }

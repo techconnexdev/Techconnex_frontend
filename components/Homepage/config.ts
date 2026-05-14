@@ -178,7 +178,7 @@ export const videoPlayerConfig: VideoPlayerConfig = {
   sectionTitle: "DISCOVER TECHCONNEX",
   videoSrc: HOMEPAGE_VIDEO_URL,
   videoUrl: "",
-  posterImage: "/homepage/video-poster.jpg",
+  posterImage: "/assets/product-imageborder.png",
   description: "Watch how Techconnex transforms the way businesses connect with world-class tech talent. From AI-powered matching to seamless project management, see why thousands of companies trust our platform.",
 };
 

@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { getRecommendedProviders } from "@/lib/api";
-import { getProfileImageUrl } from "@/lib/api";
+import { getRecommendedProviders, getProfileImageUrl } from "@/lib/api";
 
 export type RecommendedProvider = {
   id: string;
@@ -24,6 +23,7 @@ export type RecommendedProvider = {
   responseTime?: number;
   workPreference?: string;
   availability?: string;
+  preferredCurrency?: string;
 };
 
 function mapApiProviderToRecommended(provider: Record<string, unknown>): RecommendedProvider {
@@ -50,6 +50,10 @@ function mapApiProviderToRecommended(provider: Record<string, unknown>): Recomme
     responseTime: typeof provider.responseTime === "number" ? provider.responseTime : undefined,
     workPreference: typeof provider.workPreference === "string" ? provider.workPreference : undefined,
     availability: typeof provider.availability === "string" ? provider.availability : undefined,
+    preferredCurrency:
+      typeof provider.preferredCurrency === "string"
+        ? String(provider.preferredCurrency)
+        : undefined,
   };
 }
 

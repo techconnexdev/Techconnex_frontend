@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -19,6 +19,7 @@ import {
   Globe,
   ChevronRight,
   Mail,
+  Phone,
   ShieldCheck,
 } from "lucide-react";
 import {
@@ -42,32 +43,15 @@ import {
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@radix-ui/react-checkbox";
 import { getUserFriendlyErrorMessage } from "@/lib/errors";
+import { useI18n } from "@/contexts/I18nProvider";
+import { LanguageSwitcher } from "@/components/Homepage/LanguageSwitcher";
+import { isLocale } from "@/lib/i18n/locales";
 
 const fadeInUp = {
   initial: { opacity: 0, y: 30 },
   animate: { opacity: 1, y: 0 },
   transition: { duration: 0.5, ease: "easeOut" },
 };
-
-// Registration steps for providers (minimal: account + OTP only; rest in profile later)
-const PROVIDER_STEPS = [
-  { id: 1, title: "Account Setup", description: "Basic account information" },
-  {
-    id: 2,
-    title: "Email Verification",
-    description: "Verify your email address",
-  },
-];
-
-// Registration steps for customers (minimal: account + OTP only; rest in onboarding)
-const CUSTOMER_STEPS = [
-  { id: 1, title: "Account Setup", description: "Basic account information" },
-  {
-    id: 2,
-    title: "Email Verification",
-    description: "Verify your email address",
-  },
-];
 
 export type Certification = {
   name: string;
@@ -123,6 +107,37 @@ export type RegistrationFormData = {
 };
 
 export default function SignupPage() {
+  const { t, setLocale } = useI18n();
+  const providerSteps = useMemo(
+    () => [
+      {
+        id: 1,
+        title: t("auth.register.stepAccountSetup"),
+        description: t("auth.register.stepAccountSetupDesc"),
+      },
+      {
+        id: 2,
+        title: t("auth.register.stepEmailVerify"),
+        description: t("auth.register.stepEmailVerifyDesc"),
+      },
+    ],
+    [t],
+  );
+  const customerSteps = useMemo(
+    () => [
+      {
+        id: 1,
+        title: t("auth.register.stepAccountSetup"),
+        description: t("auth.register.stepAccountSetupDesc"),
+      },
+      {
+        id: 2,
+        title: t("auth.register.stepEmailVerify"),
+        description: t("auth.register.stepEmailVerifyDesc"),
+      },
+    ],
+    [t],
+  );
   const emailRef = useRef<HTMLInputElement>(null!);
   const [roleSelected, setRoleSelected] = useState(false);
   /** 'email' = use website form; 'google' = use Google (button on same screen); null = show method choice */
@@ -220,6 +235,9 @@ export default function SignupPage() {
   const [success, setSuccess] = useState("");
   const [emailOtpSent, setEmailOtpSent] = useState(false);
   const [emailOtpVerified, setEmailOtpVerified] = useState(false);
+  const [otpChannel, setOtpChannel] = useState<"email" | "whatsapp">("email");
+  const [phoneOtpSent, setPhoneOtpSent] = useState(false);
+  const [phoneOtpVerified, setPhoneOtpVerified] = useState(false);
   const [otpCode, setOtpCode] = useState("");
   const [otpError, setOtpError] = useState("");
   const [resendCooldown, setResendCooldown] = useState(0);
@@ -229,11 +247,24 @@ export default function SignupPage() {
   const searchParams = useSearchParams();
   const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
+  const switchOtpChannel = (ch: "email" | "whatsapp") => {
+    if (ch === otpChannel) return;
+    if (ch === "whatsapp" && !emailOtpVerified) {
+      setOtpError("Please verify your email first.");
+      return;
+    }
+    setOtpChannel(ch);
+    setOtpCode("");
+    setOtpError("");
+  };
+
   // Helper functions
   const isStrongPassword = (pwd: string) =>
     /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_\-+={}[\]|;:'",.<>/?`~]).{8,}$/.test(
       pwd,
     );
+  const isValidEmail = (email: string) =>
+    /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(email || "").trim());
 
   const checkEmailAvailability = async (email: string) => {
     try {
@@ -267,7 +298,7 @@ export default function SignupPage() {
       setEmailStatus("idle");
       setFieldErrors((p) => ({
         ...p,
-        email: "Could not verify email right now.",
+        email: t("auth.register.error.emailCheckFailed"),
       }));
       return null;
     }
@@ -276,7 +307,11 @@ export default function SignupPage() {
   const sendEmailOtp = async () => {
     const email = formData.email?.trim();
     if (!email) {
-      setOtpError("Please enter your email first.");
+      setOtpError(t("auth.register.validation.otpEnterEmail"));
+      return;
+    }
+    if (!isValidEmail(email)) {
+      setOtpError("Please enter a valid email address first.");
       return;
     }
     setOtpError("");
@@ -301,7 +336,7 @@ export default function SignupPage() {
   const verifyEmailOtp = async () => {
     const email = formData.email?.trim();
     if (!email || otpCode.length !== 6) {
-      setOtpError("Please enter the 6-digit code.");
+      setOtpError(t("auth.register.validation.otpSixDigits"));
       return;
     }
     setOtpError("");
@@ -315,8 +350,66 @@ export default function SignupPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Verification failed");
       setEmailOtpVerified(true);
+      setOtpChannel("whatsapp");
+      setOtpCode("");
+      setOtpError("");
+      setResendCooldown(0);
     } catch (e) {
       setOtpError(getUserFriendlyErrorMessage(e, "auth register otp verify"));
+    } finally {
+      setIsVerifyingOtp(false);
+    }
+  };
+
+  const sendWhatsAppOtp = async () => {
+    const phone = formData.phone?.trim();
+    if (!phone) {
+      setOtpError("Please enter your phone number on the previous step.");
+      return;
+    }
+    setOtpError("");
+    setIsSendingOtp(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/send-whatsapp-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone }),
+      });
+      const data = await res.json();
+      if (!res.ok)
+        throw new Error(data?.error || "Failed to send WhatsApp code");
+      setPhoneOtpSent(true);
+      setResendCooldown(60);
+    } catch (e) {
+      setOtpError(
+        getUserFriendlyErrorMessage(e, "auth register whatsapp otp send"),
+      );
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
+
+  const verifyWhatsAppOtp = async () => {
+    const phone = formData.phone?.trim();
+    if (!phone || otpCode.length !== 6) {
+      setOtpError("Please enter the 6-digit code.");
+      return;
+    }
+    setOtpError("");
+    setIsVerifyingOtp(true);
+    try {
+      const res = await fetch(`${API_BASE}/auth/verify-whatsapp-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone, otp: otpCode }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Verification failed");
+      setPhoneOtpVerified(true);
+    } catch (e) {
+      setOtpError(
+        getUserFriendlyErrorMessage(e, "auth register whatsapp otp verify"),
+      );
     } finally {
       setIsVerifyingOtp(false);
     }
@@ -331,20 +424,6 @@ export default function SignupPage() {
     return () => clearInterval(t);
   }, [resendCooldown]);
 
-  // Auto-send OTP when user lands on verification step
-  useEffect(() => {
-    if (
-      currentStep === 2 &&
-      formData.email?.trim() &&
-      !emailOtpSent &&
-      !isSendingOtp &&
-      emailStatus === "available"
-    ) {
-      sendEmailOtp();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentStep]);
-
   // Load Google Sign-In and render button when on method choice screen
   useEffect(() => {
     if (!roleSelected || registrationMethod !== null || !userRole) return;
@@ -355,8 +434,7 @@ export default function SignupPage() {
 
     const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
     if (!clientId) {
-      container.innerHTML =
-        '<p class="text-sm text-amber-600">Google sign-in not configured</p>';
+      container.innerHTML = `<p class="text-sm text-amber-600">${t("auth.register.googleNotConfigured")}</p>`;
       return;
     }
 
@@ -376,6 +454,10 @@ export default function SignupPage() {
             );
           localStorage.setItem("token", data.token);
           localStorage.setItem("user", JSON.stringify(data.user));
+          const u = data.user as { settings?: { locale?: string } };
+          if (u?.settings?.locale && isLocale(u.settings.locale)) {
+            setLocale(u.settings.locale);
+          }
           Cookies.set("token", data.token, {
             path: "/",
             secure: process.env.NODE_ENV === "production",
@@ -425,7 +507,7 @@ export default function SignupPage() {
       container.innerHTML = "";
       g.accounts.id.renderButton(container, {
         type: "standard",
-        theme: "outline",
+        theme: "filled_blue",
         size: "large",
         text: "continue_with",
         width: 320,
@@ -447,7 +529,7 @@ export default function SignupPage() {
     return () => {
       container.innerHTML = "";
     };
-  }, [roleSelected, registrationMethod, userRole, router]);
+  }, [roleSelected, registrationMethod, userRole, router, t, setLocale]);
 
   const uploadResume = async (
     userId: string,
@@ -743,7 +825,7 @@ export default function SignupPage() {
   };
 
   const getCurrentSteps = () => {
-    return userRole === "provider" ? PROVIDER_STEPS : CUSTOMER_STEPS;
+    return userRole === "provider" ? providerSteps : customerSteps;
   };
 
   const getStepProgress = () => (currentStep / getCurrentSteps().length) * 100;
@@ -815,99 +897,108 @@ export default function SignupPage() {
       switch (step) {
         case 1: {
           const missing: string[] = [];
-          if (!formData.companyName?.trim()) missing.push("Company name");
-          if (!formData.email?.trim()) missing.push("Email");
-          if (!formData.password) missing.push("Password");
-          if (!formData.confirmPassword) missing.push("Confirm password");
-          if (!formData.phone?.trim()) missing.push("Phone number");
-          if (!formData.acceptedTerms) missing.push("Accept Terms of Service");
+          if (!formData.companyName?.trim())
+            missing.push(t("auth.fields.companyName"));
+          if (!formData.email?.trim()) missing.push(t("auth.fields.email"));
+          if (formData.email?.trim() && !isValidEmail(formData.email))
+            missing.push("valid email format");
+          if (!formData.password) missing.push(t("auth.fields.password"));
+          if (!formData.confirmPassword)
+            missing.push(t("auth.fields.confirmPassword"));
+          if (!formData.phone?.trim()) missing.push(t("auth.fields.phone"));
+          if (!formData.acceptedTerms)
+            missing.push(t("auth.fields.acceptTerms"));
           if (formData.password && !isStrongPassword(formData.password))
-            missing.push(
-              "Password must be strong (8+ chars, upper, lower, number, symbol)",
-            );
+            missing.push(t("auth.fields.passwordStrong"));
           if (
             formData.password &&
             formData.confirmPassword &&
             formData.password !== formData.confirmPassword
           )
-            missing.push("Passwords must match");
+            missing.push(t("auth.fields.passwordsMatch"));
           if (missing.length)
-            return `Account Setup: please fill in ${missing.join(", ")}.`;
-          return "Please fill in all required account fields before proceeding.";
+            return `${t("auth.register.validation.accountPrefix")} ${missing.join(", ")}.`;
+          return t("auth.register.validation.fillStep");
         }
         case 2:
-          return "Please verify your email with the 6-digit code we sent before continuing.";
+          return "Please verify your email first. Phone verification is optional.";
         default:
-          return "Please complete the required fields for this step before proceeding.";
+          return t("auth.register.validation.fillStep");
       }
     }
-    // Provider
     switch (step) {
       case 1: {
         const missing: string[] = [];
-        if (!formData.name?.trim()) missing.push("Full name");
-        if (!formData.email?.trim()) missing.push("Email");
-        if (!formData.password) missing.push("Password");
-        if (!formData.confirmPassword) missing.push("Confirm password");
-        if (!formData.phone?.trim()) missing.push("Phone number");
+        if (!formData.name?.trim()) missing.push(t("auth.fields.fullName"));
+        if (!formData.email?.trim()) missing.push(t("auth.fields.email"));
+        if (formData.email?.trim() && !isValidEmail(formData.email))
+          missing.push("valid email format");
+        if (!formData.password) missing.push(t("auth.fields.password"));
+        if (!formData.confirmPassword)
+          missing.push(t("auth.fields.confirmPassword"));
+        if (!formData.phone?.trim()) missing.push(t("auth.fields.phone"));
         if (formData.password && !isStrongPassword(formData.password))
-          missing.push(
-            "Password must be strong (8+ chars, upper, lower, number, symbol)",
-          );
+          missing.push(t("auth.fields.passwordStrong"));
         if (
           formData.password &&
           formData.confirmPassword &&
           formData.password !== formData.confirmPassword
         )
-          missing.push("Passwords must match");
+          missing.push(t("auth.fields.passwordsMatch"));
         if (missing.length)
-          return `Account Setup: please fill in ${missing.join(", ")}.`;
-        return "Please fill in all required account fields before proceeding.";
+          return `${t("auth.register.validation.accountPrefix")} ${missing.join(", ")}.`;
+        return t("auth.register.validation.fillStep");
       }
       case 2:
-        return "Please verify your email with the 6-digit code we sent before continuing.";
+        return "Please verify your email first. Phone verification is optional.";
       case 3: {
         const missing: string[] = [];
-        if (!formData.bio?.trim()) missing.push("Bio");
-        if (!formData.location?.trim()) missing.push("Location");
-        if (!resumeFile) missing.push("Resume (upload a file)");
-        if (!kycDocType || !kycFile)
-          missing.push("KYC document (select type and upload file)");
+        if (!formData.bio?.trim()) missing.push(t("auth.fields.bio"));
+        if (!formData.location?.trim()) missing.push(t("auth.fields.location"));
+        if (!resumeFile) missing.push(t("auth.fields.resume"));
+        if (!kycDocType || !kycFile) missing.push(t("auth.fields.kycDoc"));
         if (missing.length)
-          return `Profile & CV: please fill in ${missing.join(", ")}.`;
-        return "Please complete all required Profile & CV fields before proceeding.";
+          return `${t("auth.register.validation.profileCvPrefix")} ${missing.join(", ")}.`;
+        return t("auth.register.validation.fillStep");
       }
       case 6: {
         if (certifications.length === 0)
-          return "Please complete the required fields for this step before proceeding.";
+          return t("auth.register.validation.fillStep");
         const invalid: string[] = [];
-        const isValidDate = (s: string) => {
-          const t = (s || "").trim();
-          if (!t) return false;
-          return !Number.isNaN(new Date(t).getTime());
+        const isValidDateStr = (dateStr: string) => {
+          const x = (dateStr || "").trim();
+          if (!x) return false;
+          return !Number.isNaN(new Date(x).getTime());
         };
-        certifications.forEach((cert, i) => {
+        certifications.forEach((cert) => {
           const serial = (cert.serialNumber || "").trim().toLowerCase();
           const link = (cert.sourceUrl || "").trim().toLowerCase();
           const hasSerial =
             serial && serial !== "not specified" && serial !== "n/a";
           const hasLink = link && link !== "not specified" && link !== "n/a";
+          const displayName =
+            cert.name?.trim() || t("auth.register.validation.certUnnamed");
           if (!hasSerial && !hasLink)
             invalid.push(
-              `Cert "${cert.name || "Unnamed"}" needs serial number or verification link`,
+              t("auth.register.validation.certMissingSerialOrLink", {
+                name: displayName,
+              }),
             );
-          else if (!isValidDate(cert.issuedDate || ""))
+          else if (!isValidDateStr(cert.issuedDate || ""))
             invalid.push(
-              `Cert "${cert.name || "Unnamed"}" needs a valid issue date`,
+              t("auth.register.validation.certNeedsDateMsg", {
+                name: displayName,
+              }),
             );
         });
-        if (invalid.length) return `Certifications: ${invalid.join(". ")}`;
-        return "Please complete the required fields for this step before proceeding.";
+        if (invalid.length)
+          return `${t("auth.register.validation.certPrefix")} ${invalid.join(". ")}`;
+        return t("auth.register.validation.fillStep");
       }
       case 7:
-        return "You must accept the Terms of Service, Privacy Policy, and Cookie Policy to proceed.";
+        return t("auth.register.validation.acceptPolicies");
       default:
-        return "Please complete the required fields for this step before proceeding.";
+        return t("auth.register.validation.fillStep");
     }
   };
 
@@ -927,7 +1018,8 @@ export default function SignupPage() {
             isStrongPassword(formData.password) &&
             formData.password === formData.confirmPassword;
 
-          return requiredFilled && strongAndMatch;
+          const emailValid = isValidEmail(formData.email);
+          return requiredFilled && strongAndMatch && emailValid;
         }
         case 2:
           return emailOtpVerified;
@@ -946,7 +1038,8 @@ export default function SignupPage() {
           const strongAndMatch =
             isStrongPassword(formData.password) &&
             formData.password === formData.confirmPassword;
-          return requiredFilled && strongAndMatch;
+          const emailValid = isValidEmail(formData.email);
+          return requiredFilled && strongAndMatch && emailValid;
         }
         case 2:
           return emailOtpVerified;
@@ -994,6 +1087,12 @@ export default function SignupPage() {
 
   const nextStep = async () => {
     if (!validateStep(currentStep)) {
+      if (currentStep === 1 && !isValidEmail(formData.email)) {
+        setFieldErrors((prev) => ({
+          ...prev,
+          email: "Please enter a valid email address.",
+        }));
+      }
       setError(getMissingRequiredFields(currentStep));
       return;
     }
@@ -1001,15 +1100,24 @@ export default function SignupPage() {
     if (currentStep === 1) {
       setFieldErrors((prev) => ({ ...prev, email: undefined }));
       setError("");
+      if (!isValidEmail(formData.email)) {
+        setFieldErrors((prev) => ({
+          ...prev,
+          email: "Please enter a valid email address.",
+        }));
+        setError("Please enter a valid email address.");
+        emailRef?.current?.focus();
+        return;
+      }
       const available = await checkEmailAvailability(formData.email);
 
       if (available === false) {
         setEmailStatus("used");
         setFieldErrors((prev) => ({
           ...prev,
-          email: "This email is already in use.",
+          email: t("auth.register.error.emailInUse"),
         }));
-        setError("This email is already in use. Please use a different email.");
+        setError(t("auth.register.error.emailInUseLong"));
         emailRef?.current?.focus();
         emailRef?.current?.scrollIntoView({
           behavior: "smooth",
@@ -1018,7 +1126,7 @@ export default function SignupPage() {
         return;
       }
       if (available === null) {
-        setError("We couldn't verify your email right now. Please try again.");
+        setError(t("auth.register.error.emailVerifyFailed"));
         return;
       }
 
@@ -1076,12 +1184,16 @@ export default function SignupPage() {
       if (userRole === "provider" && data.token && data.user) {
         localStorage.setItem("token", data.token);
         localStorage.setItem("user", JSON.stringify(data.user));
+        const u = data.user as { settings?: { locale?: string } };
+        if (u?.settings?.locale && isLocale(u.settings.locale)) {
+          setLocale(u.settings.locale);
+        }
         Cookies.set("token", data.token, {
           path: "/",
           secure: process.env.NODE_ENV === "production",
           sameSite: "lax",
         });
-        setSuccess("Account created! Redirecting to dashboard...");
+        setSuccess(t("auth.register.successProvider"));
         await new Promise((resolve) => setTimeout(resolve, 500));
         router.push("/provider/dashboard");
         return;
@@ -1091,14 +1203,16 @@ export default function SignupPage() {
       if (userRole === "customer" && data.token && data.user) {
         localStorage.setItem("token", data.token);
         localStorage.setItem("user", JSON.stringify(data.user));
+        const u = data.user as { settings?: { locale?: string } };
+        if (u?.settings?.locale && isLocale(u.settings.locale)) {
+          setLocale(u.settings.locale);
+        }
         Cookies.set("token", data.token, {
           path: "/",
           secure: process.env.NODE_ENV === "production",
           sameSite: "lax",
         });
-        setSuccess(
-          "Account created! Redirecting to complete your company profile...",
-        );
+        setSuccess(t("auth.register.successCustomer"));
         await new Promise((resolve) => setTimeout(resolve, 500));
         router.push("/customer/onboarding");
         return;
@@ -1143,6 +1257,9 @@ export default function SignupPage() {
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.5, ease: "easeOut" }}
         >
+          <div className="flex justify-end mb-4">
+            <LanguageSwitcher />
+          </div>
           <motion.div
             className="text-center mb-8"
             variants={fadeInUp}
@@ -1152,13 +1269,13 @@ export default function SignupPage() {
             <Link href="/" className="inline-flex items-center space-x-2 group">
               <Image
                 src="/logo.png"
-                alt="TechConnex"
+                alt={t("auth.logoAlt")}
                 width={40}
                 height={40}
                 className="h-10 w-10 rounded-xl object-contain"
               />
               <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                Techconnex
+                {t("auth.brandName")}
               </span>
             </Link>
           </motion.div>
@@ -1172,10 +1289,10 @@ export default function SignupPage() {
             <Card className="bg-white/80 backdrop-blur-sm border-white/20 shadow-xl">
               <CardHeader className="text-center">
                 <CardTitle className="text-3xl font-bold text-gray-900 mb-2">
-                  Join Techconnex
+                  {t("auth.register.joinTitle")}
                 </CardTitle>
                 <CardDescription className="text-lg text-gray-600">
-                  Choose how you want to use our platform
+                  {t("auth.register.joinSubtitle")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-8">
@@ -1199,24 +1316,23 @@ export default function SignupPage() {
                             <Building className="w-16 h-16 mx-auto text-blue-600" />
                           </div>
                           <h3 className="text-2xl font-semibold mb-4 text-gray-900">
-                            Hire Freelancers
+                            {t("auth.register.hireTitle")}
                           </h3>
                           <p className="text-gray-600 mb-6 leading-relaxed">
-                            I&apos;m a company looking to hire talented ICT
-                            professionals for my projects
+                            {t("auth.register.hireDesc")}
                           </p>
                           <div className="space-y-3 mb-6">
                             <div className="flex items-center text-sm text-gray-600">
-                              <Users className="w-4 h-4 mr-2 text-blue-500" />
-                              <span>Access to verified freelancers</span>
+                              <Users className="w-4 h-4 me-2 text-blue-500" />
+                              <span>{t("auth.register.hireFeature1")}</span>
                             </div>
                             <div className="flex items-center text-sm text-gray-600">
-                              <Briefcase className="w-4 h-4 mr-2 text-blue-500" />
-                              <span>Post unlimited projects</span>
+                              <Briefcase className="w-4 h-4 me-2 text-blue-500" />
+                              <span>{t("auth.register.hireFeature2")}</span>
                             </div>
                             <div className="flex items-center text-sm text-gray-600">
-                              <CheckCircle className="w-4 h-4 mr-2 text-blue-500" />
-                              <span>Simple 3-step setup</span>
+                              <CheckCircle className="w-4 h-4 me-2 text-blue-500" />
+                              <span>{t("auth.register.hireFeature3")}</span>
                             </div>
                           </div>
                         </div>
@@ -1228,7 +1344,7 @@ export default function SignupPage() {
                               : "bg-blue-50 text-blue-600 border-blue-200"
                           }`}
                         >
-                          Quick Setup
+                          {t("auth.register.hireBadge")}
                         </Badge>
                       </CardContent>
                     </Card>
@@ -1253,24 +1369,23 @@ export default function SignupPage() {
                             <User className="w-16 h-16 mx-auto text-purple-600" />
                           </div>
                           <h3 className="text-2xl font-semibold mb-4 text-gray-900">
-                            Work as Freelancer
+                            {t("auth.register.workTitle")}
                           </h3>
                           <p className="text-gray-600 mb-6 leading-relaxed">
-                            I&apos;m a freelancer offering ICT services and want
-                            to find exciting projects
+                            {t("auth.register.workDesc")}
                           </p>
                           <div className="space-y-3 mb-6">
                             <div className="flex items-center text-sm text-gray-600">
-                              <Zap className="w-4 h-4 mr-2 text-purple-500" />
-                              <span>AI-powered profile setup</span>
+                              <Zap className="w-4 h-4 me-2 text-purple-500" />
+                              <span>{t("auth.register.workFeature1")}</span>
                             </div>
                             <div className="flex items-center text-sm text-gray-600">
-                              <Upload className="w-4 h-4 mr-2 text-purple-500" />
-                              <span>CV auto-fill with AI</span>
+                              <Upload className="w-4 h-4 me-2 text-purple-500" />
+                              <span>{t("auth.register.workFeature2")}</span>
                             </div>
                             <div className="flex items-center text-sm text-gray-600">
-                              <Globe className="w-4 h-4 mr-2 text-purple-500" />
-                              <span>Showcase your portfolio</span>
+                              <Globe className="w-4 h-4 me-2 text-purple-500" />
+                              <span>{t("auth.register.workFeature3")}</span>
                             </div>
                           </div>
                         </div>
@@ -1282,7 +1397,7 @@ export default function SignupPage() {
                               : "bg-purple-50 text-purple-600 border-purple-200"
                           }`}
                         >
-                          AI-Powered Setup
+                          {t("auth.register.workBadge")}
                         </Badge>
                       </CardContent>
                     </Card>
@@ -1295,24 +1410,24 @@ export default function SignupPage() {
                     disabled={!userRole}
                     className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-8 py-3 text-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Continue as{" "}
+                    {t("auth.register.continueAs")}{" "}
                     {userRole === "customer"
-                      ? "Company"
+                      ? t("auth.register.roleCompany")
                       : userRole === "provider"
-                        ? "Freelancer"
-                        : "..."}
-                    <ArrowRight className="w-5 h-5 ml-2" />
+                        ? t("auth.register.roleFreelancer")
+                        : t("auth.register.roleEllipsis")}
+                    <ArrowRight className="w-5 h-5 ms-2" />
                   </Button>
                 </div>
 
                 <div className="mt-6 text-center">
                   <p className="text-sm text-gray-600">
-                    Already have an account?{" "}
+                    {t("auth.register.hasAccount")}{" "}
                     <Link
                       href="/auth/login"
                       className="text-blue-600 hover:text-blue-700 font-medium"
                     >
-                      Sign in here
+                      {t("auth.register.signInHere")}
                     </Link>
                   </p>
                 </div>
@@ -1355,6 +1470,9 @@ export default function SignupPage() {
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.4, ease: "easeOut" }}
         >
+          <div className="flex justify-end mb-4">
+            <LanguageSwitcher />
+          </div>
           <motion.div
             className="text-center mb-6"
             variants={fadeInUp}
@@ -1364,13 +1482,13 @@ export default function SignupPage() {
             <Link href="/" className="inline-flex items-center space-x-2 group">
               <Image
                 src="/logo.png"
-                alt="TechConnex"
+                alt={t("auth.logoAlt")}
                 width={40}
                 height={40}
                 className="h-10 w-10 rounded-xl object-contain"
               />
               <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                Techconnex
+                {t("auth.brandName")}
               </span>
             </Link>
           </motion.div>
@@ -1381,18 +1499,18 @@ export default function SignupPage() {
                 variant="ghost"
                 size="sm"
                 onClick={() => setRoleSelected(false)}
-                className="absolute top-4 left-4 text-gray-500 hover:text-gray-700 z-10"
+                className="absolute top-4 start-4 text-gray-500 hover:text-gray-700 z-10"
               >
-                <ChevronLeft className="w-4 h-4 mr-1" />
-                Back
+                <ChevronLeft className="w-4 h-4 me-1" />
+                {t("auth.register.back")}
               </Button>
               <CardTitle className="text-xl font-bold text-gray-900 mt-6">
-                How do you want to sign up?
+                {t("auth.register.howSignUpTitle")}
               </CardTitle>
               <CardDescription className="text-gray-600">
                 {userRole === "provider"
-                  ? "Create your freelancer account with email or use Google for a one-click sign up."
-                  : "Create your company account with email or use Google for a one-click sign up."}
+                  ? t("auth.register.howSignUpProvider")
+                  : t("auth.register.howSignUpCustomer")}
               </CardDescription>
             </CardHeader>
             <CardContent className="p-6 pt-2 space-y-4">
@@ -1403,12 +1521,12 @@ export default function SignupPage() {
               )}
               {isLoading && (
                 <p className="text-center text-sm text-gray-500">
-                  Signing you in...
+                  {t("auth.register.signingIn")}
                 </p>
               )}
               <div
                 id="google-register-button-container"
-                className="flex justify-center min-h-[44px]"
+                className="flex min-h-[44px] items-center justify-center rounded-md border border-blue-100 bg-blue-50/40 px-1"
               />
               <div className="relative my-6">
                 <div className="absolute inset-0 flex items-center">
@@ -1416,7 +1534,7 @@ export default function SignupPage() {
                 </div>
                 <div className="relative flex justify-center text-xs uppercase">
                   <span className="bg-white px-2 text-gray-500">
-                    Or register with email
+                    {t("auth.register.orEmail")}
                   </span>
                 </div>
               </div>
@@ -1426,16 +1544,16 @@ export default function SignupPage() {
                 className="w-full h-12 border-2 border-gray-200 hover:border-blue-300 hover:bg-blue-50/50 font-medium"
                 onClick={handleChooseEmailRegistration}
               >
-                <Mail className="w-5 h-5 mr-2 text-gray-600" />
-                Register with Email
+                <Mail className="w-5 h-5 me-2 text-gray-600" />
+                {t("auth.register.registerWithEmail")}
               </Button>
               <p className="text-center text-sm text-gray-500 mt-4">
-                Already have an account?{" "}
+                {t("auth.register.hasAccount")}{" "}
                 <Link
                   href="/auth/login"
                   className="text-blue-600 hover:text-blue-700 font-medium"
                 >
-                  Sign in
+                  {t("auth.register.signIn")}
                 </Link>
               </p>
             </CardContent>
@@ -1475,6 +1593,9 @@ export default function SignupPage() {
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.5, ease: "easeOut" }}
       >
+        <div className="flex justify-end mb-4">
+          <LanguageSwitcher />
+        </div>
         <motion.div
           className="text-center mb-8"
           variants={fadeInUp}
@@ -1484,13 +1605,13 @@ export default function SignupPage() {
           <Link href="/" className="inline-flex items-center space-x-2 group">
             <Image
               src="/logo.png"
-              alt="TechConnex"
+              alt={t("auth.logoAlt")}
               width={40}
               height={40}
               className="h-10 w-10 rounded-xl object-contain"
             />
             <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-              Techconnex
+              {t("auth.brandName")}
             </span>
           </Link>
         </motion.div>
@@ -1509,28 +1630,33 @@ export default function SignupPage() {
                   onClick={handleChangeRole}
                   className="text-gray-500 hover:text-gray-700"
                 >
-                  <ChevronLeft className="w-4 h-4 mr-1" />
-                  Change Role
+                  <ChevronLeft className="w-4 h-4 me-1" />
+                  {t("auth.register.changeRole")}
                 </Button>
               </div>
               <CardTitle className="text-2xl font-bold text-gray-900">
                 {userRole === "customer"
-                  ? "Company Registration"
-                  : "Freelancer Registration"}
+                  ? t("auth.register.companyTitle")
+                  : t("auth.register.freelancerTitle")}
               </CardTitle>
               <CardDescription className="text-gray-600">
                 {userRole === "customer"
-                  ? "Create your company account to start hiring freelancers"
-                  : "Complete your profile to start offering your ICT services"}
+                  ? t("auth.register.companySubtitle")
+                  : t("auth.register.freelancerSubtitle")}
               </CardDescription>
 
               <div className="mt-6">
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-sm font-medium text-gray-700">
-                    Step {currentStep} of {getCurrentSteps().length}
+                    {t("auth.register.stepOf", {
+                      current: currentStep,
+                      total: getCurrentSteps().length,
+                    })}
                   </span>
                   <span className="text-sm text-gray-500">
-                    {Math.round(getStepProgress())}% Complete
+                    {t("auth.register.percentComplete", {
+                      n: Math.round(getStepProgress()),
+                    })}
                   </span>
                 </div>
                 <Progress value={getStepProgress()} className="h-2" />
@@ -1583,129 +1709,318 @@ export default function SignupPage() {
                       animate="animate"
                       className="space-y-6"
                     >
+                      <div className="flex justify-center gap-2 mb-4">
+                        <Button
+                          type="button"
+                          variant={
+                            otpChannel === "email" ? "default" : "outline"
+                          }
+                          size="sm"
+                          className={
+                            otpChannel === "email"
+                              ? "bg-blue-600 hover:bg-blue-700"
+                              : ""
+                          }
+                          onClick={() => switchOtpChannel("email")}
+                        >
+                          <Mail className="w-4 h-4 mr-1.5" />
+                          Email code
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={
+                            otpChannel === "whatsapp" ? "default" : "outline"
+                          }
+                          size="sm"
+                          className={
+                            otpChannel === "whatsapp"
+                              ? "bg-green-600 hover:bg-green-700"
+                              : ""
+                          }
+                          onClick={() => switchOtpChannel("whatsapp")}
+                          disabled={!emailOtpVerified}
+                        >
+                          <Phone className="w-4 h-4 mr-1.5" />
+                          WhatsApp code
+                        </Button>
+                      </div>
+
                       <div className="text-center mb-6">
                         <div className="mx-auto w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center mb-4">
                           <ShieldCheck className="w-7 h-7 text-blue-600" />
                         </div>
                         <h2 className="text-2xl font-bold text-gray-900">
-                          Verify your email
+                          {otpChannel === "email"
+                            ? t("auth.register.verifyEmailTitle")
+                            : "Verify your WhatsApp"}
                         </h2>
                         <p className="text-gray-600 mt-1">
-                          We sent a 6-digit code to
+                          {otpChannel === "email"
+                            ? t("auth.register.verifyEmailSentPrefix")
+                            : "We sent a 6-digit code to"}
                         </p>
                         <p className="font-medium text-gray-900 flex items-center justify-center gap-2 mt-1">
-                          <Mail className="w-4 h-4 text-gray-500" />
-                          {formData.email}
+                          {otpChannel === "whatsapp" ? (
+                            <>
+                              <Phone className="w-4 h-4 text-gray-500" />
+                              {formData.phone || "—"}
+                            </>
+                          ) : (
+                            <>
+                              <Mail className="w-4 h-4 text-gray-500" />
+                              {formData.email}
+                            </>
+                          )}
                         </p>
+                        {otpChannel === "email" && !emailOtpVerified && (
+                          <p className="text-xs text-gray-500 mt-2">
+                            Email verification is required before continuing.
+                          </p>
+                        )}
+                        {otpChannel === "whatsapp" && emailOtpVerified && (
+                          <p className="text-xs text-amber-700 mt-2 max-w-md mx-auto">
+                            Phone verification is optional. If you skip it, you
+                            may not receive phone/WhatsApp notifications.
+                          </p>
+                        )}
                       </div>
 
-                      {emailOtpVerified ? (
-                        <div className="space-y-4">
-                          <div className="rounded-xl border border-green-200 bg-green-50/80 p-6 text-center">
-                            <CheckCircle className="w-12 h-12 text-green-600 mx-auto mb-2" />
+                      {otpChannel === "email" ? (
+                        emailOtpVerified ? (
+                          <div className="rounded-xl border border-green-200 bg-green-50/80 p-4 text-center">
                             <p className="text-green-800 font-medium">
-                              Email verified
+                              Email verified successfully.
                             </p>
                             <p className="text-sm text-green-700 mt-1">
-                              {userRole === "provider"
-                                ? "Accept the terms below and create your account to go to your dashboard."
-                                : "Click Next to continue your registration."}
+                              You can now switch to WhatsApp verification or
+                              click Next to continue.
                             </p>
                           </div>
-                          {userRole === "provider" && (
-                            <div className="rounded-lg border-2 border-gray-300 bg-white p-4 shadow-sm">
-                              <div className="flex items-start gap-3">
-                                <Checkbox
-                                  id="provider-terms"
-                                  checked={formData.acceptedTerms}
-                                  onCheckedChange={(checked) =>
-                                    handleBooleanInputChange(
-                                      "acceptedTerms",
-                                      checked === true,
-                                    )
-                                  }
-                                  className="mt-0.5 h-5 w-5 shrink-0 rounded border-2 border-gray-500 data-[state=checked]:border-blue-600 data-[state=checked]:bg-blue-600"
-                                />
-                                <label
-                                  htmlFor="provider-terms"
-                                  className="cursor-pointer text-sm font-medium text-gray-800 leading-snug"
+                        ) : !emailOtpSent ? (
+                          <div className="space-y-5 max-w-sm mx-auto text-center">
+                            {otpError && (
+                              <p className="text-sm text-red-600">{otpError}</p>
+                            )}
+                            <Button
+                              type="button"
+                              onClick={sendEmailOtp}
+                              disabled={isSendingOtp || !formData.email?.trim()}
+                              className="bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto min-w-[200px]"
+                            >
+                              {isSendingOtp
+                                ? "Sending…"
+                                : "Send verification code"}
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="space-y-5 max-w-sm mx-auto">
+                            <div className="space-y-2">
+                              <Label className="text-center block">
+                                {t("auth.register.enterCodeLabel")}
+                              </Label>
+                              <div className="flex justify-center">
+                                <InputOTP
+                                  maxLength={6}
+                                  value={otpCode}
+                                  onChange={(value) => setOtpCode(value)}
+                                  containerClassName="justify-center gap-1 sm:gap-2"
                                 >
-                                  I accept the{" "}
-                                  <Link
-                                    href="/terms"
-                                    className="text-blue-600 underline hover:text-blue-700"
-                                    target="_blank"
-                                  >
-                                    Terms of Service
-                                  </Link>{" "}
-                                  and{" "}
-                                  <Link
-                                    href="/privacy"
-                                    className="text-blue-600 underline hover:text-blue-700"
-                                    target="_blank"
-                                  >
-                                    Privacy Policy
-                                  </Link>
-                                  .
-                                </label>
+                                  <InputOTPGroup className="bg-white/80 border-gray-200 rounded-lg p-2 gap-1 sm:gap-2">
+                                    {[0, 1, 2, 3, 4, 5].map((i) => (
+                                      <InputOTPSlot
+                                        key={i}
+                                        index={i}
+                                        className="h-12 w-10 sm:w-12 text-lg border-gray-300 rounded-md"
+                                      />
+                                    ))}
+                                  </InputOTPGroup>
+                                </InputOTP>
                               </div>
+                              {otpError && (
+                                <p className="text-center text-sm text-red-600">
+                                  {otpError}
+                                </p>
+                              )}
+                            </div>
+                            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                              <Button
+                                type="button"
+                                onClick={verifyEmailOtp}
+                                disabled={otpCode.length !== 6 || isVerifyingOtp}
+                                className="bg-blue-600 hover:bg-blue-700 text-white min-w-[140px]"
+                              >
+                                {isVerifyingOtp
+                                  ? t("auth.register.verifying")
+                                  : t("auth.register.verifyCode")}
+                              </Button>
+                              {resendCooldown > 0 ? (
+                                <span className="text-sm text-gray-500">
+                                  {t("auth.register.resendIn", {
+                                    seconds: resendCooldown,
+                                  })}
+                                </span>
+                              ) : (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  onClick={sendEmailOtp}
+                                  disabled={isSendingOtp}
+                                  className="border-gray-300"
+                                >
+                                  {isSendingOtp
+                                    ? t("auth.register.sending")
+                                    : t("auth.register.resendCode")}
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      ) : !emailOtpVerified ? (
+                        <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 text-sm text-amber-900 text-center">
+                          Please verify your email first to unlock WhatsApp
+                          verification.
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          {!phoneOtpVerified && (
+                            <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 text-sm text-amber-900">
+                              Phone verification is optional. You can click Next
+                              to skip, but you may not receive phone/WhatsApp
+                              notifications until your phone is verified.
+                            </div>
+                          )}
+                          {!phoneOtpVerified && (
+                            <div className="space-y-5 max-w-sm mx-auto">
+                              {!phoneOtpSent ? (
+                                <div className="text-center">
+                                  {otpError && (
+                                    <p className="text-sm text-red-600 mb-3">
+                                      {otpError}
+                                    </p>
+                                  )}
+                                  <Button
+                                    type="button"
+                                    onClick={sendWhatsAppOtp}
+                                    disabled={isSendingOtp || !formData.phone?.trim()}
+                                    className="bg-green-600 hover:bg-green-700 text-white w-full sm:w-auto min-w-[220px]"
+                                  >
+                                    {isSendingOtp
+                                      ? "Sending…"
+                                      : "Verify phone with WhatsApp"}
+                                  </Button>
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="space-y-2">
+                                    <Label className="text-center block">
+                                      Enter WhatsApp code
+                                    </Label>
+                                    <div className="flex justify-center">
+                                      <InputOTP
+                                        maxLength={6}
+                                        value={otpCode}
+                                        onChange={(value) => setOtpCode(value)}
+                                        containerClassName="justify-center gap-1 sm:gap-2"
+                                      >
+                                        <InputOTPGroup className="bg-white/80 border-gray-200 rounded-lg p-2 gap-1 sm:gap-2">
+                                          {[0, 1, 2, 3, 4, 5].map((i) => (
+                                            <InputOTPSlot
+                                              key={i}
+                                              index={i}
+                                              className="h-12 w-10 sm:w-12 text-lg border-gray-300 rounded-md"
+                                            />
+                                          ))}
+                                        </InputOTPGroup>
+                                      </InputOTP>
+                                    </div>
+                                    {otpError && (
+                                      <p className="text-center text-sm text-red-600">
+                                        {otpError}
+                                      </p>
+                                    )}
+                                  </div>
+                                  <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                                    <Button
+                                      type="button"
+                                      onClick={verifyWhatsAppOtp}
+                                      disabled={
+                                        otpCode.length !== 6 || isVerifyingOtp
+                                      }
+                                      className="bg-green-600 hover:bg-green-700 text-white min-w-[140px]"
+                                    >
+                                      {isVerifyingOtp
+                                        ? t("auth.register.verifying")
+                                        : t("auth.register.verifyCode")}
+                                    </Button>
+                                    {resendCooldown > 0 ? (
+                                      <span className="text-sm text-gray-500">
+                                        {t("auth.register.resendIn", {
+                                          seconds: resendCooldown,
+                                        })}
+                                      </span>
+                                    ) : (
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={sendWhatsAppOtp}
+                                        disabled={isSendingOtp}
+                                        className="border-gray-300"
+                                      >
+                                        {isSendingOtp
+                                          ? t("auth.register.sending")
+                                          : t("auth.register.resendCode")}
+                                      </Button>
+                                    )}
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          )}
+                          {phoneOtpVerified && (
+                            <div className="rounded-xl border border-green-200 bg-green-50/80 p-4 text-center">
+                              <p className="text-green-800 font-medium">
+                                Phone verified successfully.
+                              </p>
                             </div>
                           )}
                         </div>
-                      ) : (
-                        <div className="space-y-5 max-w-sm mx-auto">
-                          <div className="space-y-2">
-                            <Label className="text-center block">
-                              Enter verification code
-                            </Label>
-                            <div className="flex justify-center">
-                              <InputOTP
-                                maxLength={6}
-                                value={otpCode}
-                                onChange={(value) => setOtpCode(value)}
-                                containerClassName="justify-center gap-1 sm:gap-2"
-                              >
-                                <InputOTPGroup className="bg-white/80 border-gray-200 rounded-lg p-2 gap-1 sm:gap-2">
-                                  {[0, 1, 2, 3, 4, 5].map((i) => (
-                                    <InputOTPSlot
-                                      key={i}
-                                      index={i}
-                                      className="h-12 w-10 sm:w-12 text-lg border-gray-300 rounded-md"
-                                    />
-                                  ))}
-                                </InputOTPGroup>
-                              </InputOTP>
-                            </div>
-                            {otpError && (
-                              <p className="text-center text-sm text-red-600">
-                                {otpError}
-                              </p>
-                            )}
-                          </div>
-                          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-                            <Button
-                              type="button"
-                              onClick={verifyEmailOtp}
-                              disabled={otpCode.length !== 6 || isVerifyingOtp}
-                              className="bg-blue-600 hover:bg-blue-700 text-white min-w-[140px]"
+                      )}
+                      {emailOtpVerified && userRole === "provider" && (
+                        <div className="rounded-lg border-2 border-gray-300 bg-white p-4 shadow-sm">
+                          <div className="flex items-start gap-3">
+                            <Checkbox
+                              id="provider-terms"
+                              checked={formData.acceptedTerms}
+                              onCheckedChange={(checked) =>
+                                handleBooleanInputChange(
+                                  "acceptedTerms",
+                                  checked === true,
+                                )
+                              }
+                              className="mt-0.5 h-5 w-5 shrink-0 rounded border-2 border-gray-500 data-[state=checked]:border-blue-600 data-[state=checked]:bg-blue-600"
+                            />
+                            <label
+                              htmlFor="provider-terms"
+                              className="cursor-pointer text-sm font-medium text-gray-800 leading-snug"
                             >
-                              {isVerifyingOtp ? "Verifying…" : "Verify code"}
-                            </Button>
-                            {resendCooldown > 0 ? (
-                              <span className="text-sm text-gray-500">
-                                Resend in {resendCooldown}s
-                              </span>
-                            ) : (
-                              <Button
-                                type="button"
-                                variant="outline"
-                                onClick={sendEmailOtp}
-                                disabled={isSendingOtp}
-                                className="border-gray-300"
+                              {t("auth.register.providerAcceptTerms")}{" "}
+                              <Link
+                                href="/terms"
+                                className="text-blue-600 underline hover:text-blue-700"
+                                target="_blank"
                               >
-                                {isSendingOtp ? "Sending…" : "Resend code"}
-                              </Button>
-                            )}
+                                {t("auth.register.termsLink")}
+                              </Link>{" "}
+                              {t("auth.register.and")}{" "}
+                              <Link
+                                href="/privacy"
+                                className="text-blue-600 underline hover:text-blue-700"
+                                target="_blank"
+                              >
+                                {t("auth.register.privacyLink")}
+                              </Link>
+                              .
+                            </label>
                           </div>
                         </div>
                       )}
@@ -1797,8 +2112,8 @@ export default function SignupPage() {
                   disabled={currentStep === 1}
                   className="bg-transparent"
                 >
-                  <ChevronLeft className="w-4 h-4 mr-2" />
-                  Previous
+                  <ChevronLeft className="w-4 h-4 me-2" />
+                  {t("auth.register.previous")}
                 </Button>
 
                 {currentStep < getCurrentSteps().length ? (
@@ -1819,18 +2134,23 @@ export default function SignupPage() {
               }`}
                   >
                     {emailStatus === "checking"
-                      ? "Checking..."
+                      ? t("auth.register.checking")
                       : currentStep === 2 && !emailOtpVerified
-                        ? "Verify email to continue"
-                        : "Next"}
-                    <ChevronRight className="w-4 h-4 ml-2" />
+                        ? t("auth.register.verifyToContinue")
+                        : t("auth.register.next")}
+                    <ChevronRight className="w-4 h-4 ms-2" />
                   </Button>
                 ) : (
                   <Button
                     type="button"
                     onClick={handleSubmit}
                     className="bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 text-white"
-                    disabled={isLoading || !formData.acceptedTerms}
+                    disabled={
+                      isLoading ||
+                      !validateStep(1) ||
+                      !validateStep(2) ||
+                      !formData.acceptedTerms
+                    }
                   >
                     {isLoading ? (
                       <motion.div
@@ -1840,28 +2160,28 @@ export default function SignupPage() {
                           repeat: Number.POSITIVE_INFINITY,
                           ease: "linear",
                         }}
-                        className="w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"
+                        className="w-4 h-4 border-2 border-white border-t-transparent rounded-full me-2"
                       />
                     ) : (
-                      <CheckCircle className="w-4 h-4 mr-2" />
+                      <CheckCircle className="w-4 h-4 me-2" />
                     )}
                     {isLoading
-                      ? "Creating Account..."
+                      ? t("auth.register.creatingAccount")
                       : userRole === "provider"
-                        ? "Create account & go to dashboard"
-                        : "Create account & continue"}
+                        ? t("auth.register.createGoDashboard")
+                        : t("auth.register.createContinue")}
                   </Button>
                 )}
               </div>
 
               <div className="mt-6 text-center">
                 <p className="text-sm text-gray-600">
-                  Already have an account?{" "}
+                  {t("auth.register.hasAccount")}{" "}
                   <Link
                     href="/auth/login"
                     className="text-blue-600 hover:text-blue-700 font-medium"
                   >
-                    Sign in here
+                    {t("auth.register.signInHere")}
                   </Link>
                 </p>
               </div>

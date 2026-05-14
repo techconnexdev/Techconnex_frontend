@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { MessageSquare, Search, RefreshCw, Download } from "lucide-react";
 import { toast } from "@/lib/toast";
+import { useI18n } from "@/contexts/I18nProvider";
 
 import type { Option, ProviderRequest } from "./types";
 import StatsBar from "./sections/StatsBar";
@@ -52,6 +53,7 @@ export default function RequestsClient({
   projects: Option[];
   sortOptions: Option[];
 }) {
+  const { t } = useI18n();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [projectFilter, setProjectFilter] = useState(projects[0]?.value ?? "all");
@@ -74,7 +76,7 @@ export default function RequestsClient({
         typeof window !== "undefined" ? JSON.parse(localStorage.getItem("user") || "null") : null;
       const userId = user?.id;
       if (!userId) {
-        setError("User not found.");
+        setError(t("customer.requests.errorUserNotFound"));
         setLoading(false);
         return;
       }
@@ -87,7 +89,8 @@ export default function RequestsClient({
             list.push({
               id: p.id,
               providerId: p.providerId,
-              providerName: p.provider?.name || "Unknown Provider",
+              providerName:
+                p.provider?.name || t("customer.projects.detail.unknownProvider"),
               providerAvatar: "/placeholder.svg?height=40&width=40",
               providerRating: 4.5,
               providerLocation: p.provider?.location || "-",
@@ -95,7 +98,9 @@ export default function RequestsClient({
               serviceRequestId: sr.id,
               projectTitle: sr.title,
               bidAmount: p.bidAmount,
-              proposedTimeline: p.deliveryTime ? `${p.deliveryTime} days` : "-",
+              proposedTimeline: p.deliveryTime
+                ? t("customer.requests.timelineDays", { n: p.deliveryTime })
+                : "-",
               coverLetter: p.coverLetter,
               status: "pending",
               submittedAt: p.createdAt,
@@ -122,12 +127,14 @@ export default function RequestsClient({
         });
         setRequests(list);
       } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : "Failed to fetch requests.");
+        setError(
+          e instanceof Error ? e.message : t("customer.requests.fetchFailed"),
+        );
       } finally {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [t]);
 
   const filtered = useMemo(() => {
     const q = searchQuery.toLowerCase();
@@ -173,7 +180,9 @@ export default function RequestsClient({
       typeof window !== "undefined" ? JSON.parse(localStorage.getItem("user") || "null") : null;
     const userId = user?.id;
     if (!userId) {
-      toast("User not found", { description: "Please log in again." });
+      toast(t("customer.requests.errorUserNotFound"), {
+        description: t("customer.requests.toast.loginAgain"),
+      });
       return;
     }
 
@@ -201,7 +210,7 @@ export default function RequestsClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      if (!r1.ok) throw new Error("Failed to create project");
+      if (!r1.ok) throw new Error(t("customer.requests.error.createProject"));
 
       // NOTE: original code used a likely-typo endpoint: /service-requests/dservice-request/{id}
       // If your API expects /service-requests/{id}, update here.
@@ -212,15 +221,22 @@ export default function RequestsClient({
       });
 
       setRequests((prev) => prev.map((x) => (x.id === requestId ? { ...x, status: "accepted" } as ProviderRequest : x)));
-      toast("Request Accepted", { description: "Provider notified. Project created." });
+      toast(t("customer.requests.toast.acceptTitle"), {
+        description: t("customer.requests.toast.acceptDesc"),
+      });
     } catch (e: unknown) {
-      toast("Failed to accept request", { description: e instanceof Error ? e.message : "An error occurred" });
+      toast(t("customer.requests.toast.acceptFailedTitle"), {
+        description:
+          e instanceof Error ? e.message : t("customer.requests.fetchFailed"),
+      });
     }
   };
 
   const reject = (requestId: string) => {
     setRequests((prev) => prev.map((x) => (x.id === requestId ? { ...x, status: "rejected" } : x)));
-    toast("Request Rejected", { description: "The provider has been notified." });
+    toast(t("customer.requests.toast.rejectTitle"), {
+      description: t("customer.requests.toast.rejectDesc"),
+    });
   };
 
   const downloadAttachment = async (attachmentUrl: string) => {
@@ -229,7 +245,7 @@ export default function RequestsClient({
         }/api/${attachmentUrl}`;
     try {
       const res = await fetch(full);
-      if (!res.ok) throw new Error("Failed to download file");
+      if (!res.ok) throw new Error(t("customer.providers.toast.downloadFailed"));
       const blob = await res.blob();
       const name = (attachmentUrl.split(/[\\/]/).pop() || "attachment") + ".pdf";
       const url = URL.createObjectURL(blob);
@@ -237,7 +253,10 @@ export default function RequestsClient({
       a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
     } catch (e: unknown) {
-      toast("Failed to download PDF", { description: e instanceof Error ? e.message : "An error occurred" });
+      toast(t("customer.requests.toast.downloadPdfFailedTitle"), {
+        description:
+          e instanceof Error ? e.message : t("customer.requests.fetchFailed"),
+      });
     }
   };
 
@@ -246,7 +265,7 @@ export default function RequestsClient({
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4" />
-          <p className="text-gray-600">Loading requests...</p>
+          <p className="text-gray-600">{t("customer.requests.loading.title")}</p>
         </div>
       </div>
     );
@@ -260,12 +279,20 @@ export default function RequestsClient({
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Provider Requests</h1>
-          <p className="text-gray-600">Manage requests from providers for your projects</p>
+          <h1 className="text-3xl font-bold text-gray-900">
+            {t("customer.requests.title")}
+          </h1>
+          <p className="text-gray-600">{t("customer.requests.subtitle")}</p>
         </div>
         <div className="flex gap-3">
-          <Button variant="outline"><Download className="w-4 h-4 mr-2" />Export</Button>
-          <Button variant="outline" onClick={() => location.reload()}><RefreshCw className="w-4 h-4 mr-2" />Refresh</Button>
+          <Button variant="outline">
+            <Download className="w-4 h-4 mr-2" />
+            {t("customer.requests.export")}
+          </Button>
+          <Button variant="outline" onClick={() => location.reload()}>
+            <RefreshCw className="w-4 h-4 mr-2" />
+            {t("customer.requests.refresh")}
+          </Button>
         </div>
       </div>
 
@@ -279,7 +306,7 @@ export default function RequestsClient({
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
               <Input
-                placeholder="Search by provider name or project..."
+                placeholder={t("customer.requests.searchPlaceholder")}
                 className="pl-10"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -288,24 +315,44 @@ export default function RequestsClient({
 
             <div className="flex gap-4">
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-40"><SelectValue placeholder="Status" /></SelectTrigger>
+                <SelectTrigger className="w-40">
+                  <SelectValue
+                    placeholder={t("customer.requests.statusPlaceholder")}
+                  />
+                </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="accepted">Accepted</SelectItem>
-                  <SelectItem value="rejected">Rejected</SelectItem>
+                  <SelectItem value="all">
+                    {t("customer.requests.filter.status.all")}
+                  </SelectItem>
+                  <SelectItem value="pending">
+                    {t("customer.requests.filter.status.pending")}
+                  </SelectItem>
+                  <SelectItem value="accepted">
+                    {t("customer.requests.filter.status.accepted")}
+                  </SelectItem>
+                  <SelectItem value="rejected">
+                    {t("customer.requests.filter.status.rejected")}
+                  </SelectItem>
                 </SelectContent>
               </Select>
 
               <Select value={projectFilter} onValueChange={setProjectFilter}>
-                <SelectTrigger className="w-48"><SelectValue placeholder="Project" /></SelectTrigger>
+                <SelectTrigger className="w-48">
+                  <SelectValue
+                    placeholder={t("customer.requests.projectPlaceholder")}
+                  />
+                </SelectTrigger>
                 <SelectContent>
                   {projects.map((p) => (<SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>))}
                 </SelectContent>
               </Select>
 
               <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger className="w-40"><SelectValue placeholder="Sort by" /></SelectTrigger>
+                <SelectTrigger className="w-40">
+                  <SelectValue
+                    placeholder={t("customer.requests.sortPlaceholder")}
+                  />
+                </SelectTrigger>
                 <SelectContent>
                   {sortOptions.map((o) => (<SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>))}
                 </SelectContent>
@@ -318,7 +365,15 @@ export default function RequestsClient({
       {/* List */}
       <div className="space-y-4">
         {filtered.length === 0 ? (
-          <Card><CardContent className="p-12 text-center"><MessageSquare className="w-12 h-12 text-gray-400 mx-auto mb-4" /><h3 className="text-lg font-semibold">No requests found</h3><p className="text-gray-600">No provider requests match your current filters.</p></CardContent></Card>
+          <Card>
+            <CardContent className="p-12 text-center">
+              <MessageSquare className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold">
+                {t("customer.requests.empty.title")}
+              </h3>
+              <p className="text-gray-600">{t("customer.requests.empty.body")}</p>
+            </CardContent>
+          </Card>
         ) : (
           filtered.map((r) => (
             <RequestCard

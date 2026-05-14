@@ -35,6 +35,8 @@ import {
 } from "@/lib/api";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useI18n } from "@/contexts/I18nProvider";
+import { disputeStatusLabel } from "@/components/admin/disputes/dispute-i18n-maps";
 
 // Types
 type Dispute = {
@@ -93,6 +95,7 @@ type DisputeStats = {
 };
 
 export default function AdminDisputesPage() {
+  const { t } = useI18n();
   const { toast } = useToast();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -113,16 +116,18 @@ export default function AdminDisputesPage() {
       }
     } catch (error: unknown) {
       const errorMessage =
-        error instanceof Error ? error.message : "Failed to load disputes";
+        error instanceof Error
+          ? error.message
+          : t("admin.disputes.toast.loadListFailed");
       toast({
-        title: "Error",
+        title: t("admin.users.toast.errorTitle"),
         description: errorMessage,
         variant: "destructive",
       });
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, searchQuery, toast]);
+  }, [statusFilter, searchQuery, toast, t]);
 
   const loadStats = useCallback(async () => {
     try {
@@ -188,10 +193,10 @@ export default function AdminDisputesPage() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">
-              Dispute Management
+              {t("admin.disputes.page.title")}
             </h1>
             <p className="text-gray-600">
-              Resolve conflicts between customers and providers
+              {t("admin.disputes.page.subtitle")}
             </p>
           </div>
         </div>
@@ -202,7 +207,7 @@ export default function AdminDisputesPage() {
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium text-gray-600">
-                      Total Disputes
+                  {t("admin.disputes.stats.totalDisputes")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -214,7 +219,7 @@ export default function AdminDisputesPage() {
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium text-gray-600">
-                  Open
+                  {t("admin.disputes.stats.open")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -226,7 +231,7 @@ export default function AdminDisputesPage() {
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium text-gray-600">
-                  Under Review
+                  {t("admin.disputes.stats.underReview")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -238,7 +243,7 @@ export default function AdminDisputesPage() {
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium text-gray-600">
-                      Resolved
+                  {t("admin.disputes.stats.resolved")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -250,12 +255,14 @@ export default function AdminDisputesPage() {
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium text-gray-600">
-                  Total Amount
+                  {t("admin.disputes.stats.totalAmount")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  RM{(stats.totalAmount || 0).toLocaleString()}
+                  {t("admin.disputes.stats.amountRm", {
+                    amount: (stats.totalAmount || 0).toLocaleString(),
+                  })}
                 </div>
               </CardContent>
             </Card>
@@ -265,7 +272,9 @@ export default function AdminDisputesPage() {
         {/* Filters */}
         <Card>
           <CardHeader className="p-4 sm:p-6">
-            <CardTitle className="text-lg sm:text-xl">Filters</CardTitle>
+            <CardTitle className="text-lg sm:text-xl">
+              {t("admin.disputes.filters.title")}
+            </CardTitle>
           </CardHeader>
           <CardContent className="p-4 sm:p-6 pt-0">
             <div className="flex flex-col gap-4">
@@ -273,7 +282,7 @@ export default function AdminDisputesPage() {
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                   <Input
-                    placeholder="Search disputes..."
+                    placeholder={t("admin.disputes.filters.searchPlaceholder")}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="pl-10 text-sm sm:text-base"
@@ -300,9 +309,15 @@ export default function AdminDisputesPage() {
         {/* Disputes Table */}
         <Card>
           <CardHeader>
-            <CardTitle>Disputes</CardTitle>
+            <CardTitle>{t("admin.disputes.table.title")}</CardTitle>
             <CardDescription>
-              {filteredDisputes.length} dispute(s) found
+              {filteredDisputes.length === 1
+                ? t("admin.disputes.table.foundOne", {
+                    count: filteredDisputes.length,
+                  })
+                : t("admin.disputes.table.foundMany", {
+                    count: filteredDisputes.length,
+                  })}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -313,20 +328,24 @@ export default function AdminDisputesPage() {
             ) : filteredDisputes.length === 0 ? (
               <div className="text-center py-12">
                 <AlertTriangle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-500">No disputes found</p>
+                <p className="text-gray-500">{t("admin.disputes.table.empty")}</p>
               </div>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-12">#</TableHead>
-                    <TableHead>Reason</TableHead>
-                    <TableHead>Project</TableHead>
-                    <TableHead>Raised By</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Created</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableHead className="w-12">
+                      {t("admin.disputes.table.col.index")}
+                    </TableHead>
+                    <TableHead>{t("admin.disputes.table.col.reason")}</TableHead>
+                    <TableHead>{t("admin.disputes.table.col.project")}</TableHead>
+                    <TableHead>{t("admin.disputes.table.col.raisedBy")}</TableHead>
+                    <TableHead>{t("admin.disputes.table.col.status")}</TableHead>
+                    <TableHead>{t("admin.disputes.table.col.amount")}</TableHead>
+                    <TableHead>{t("admin.disputes.table.col.created")}</TableHead>
+                    <TableHead className="text-right">
+                      {t("admin.disputes.table.col.actions")}
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -354,18 +373,20 @@ export default function AdminDisputesPage() {
                               </AvatarFallback>
                             </Avatar>
                             <span className="text-sm">
-                              {dispute.raisedBy?.name || "N/A"}
+                              {dispute.raisedBy?.name || t("admin.disputes.na")}
                             </span>
                           </div>
                         </TableCell>
                         <TableCell>
                           <Badge className={getStatusColor(dispute.status)}>
-                            {dispute.status?.replace("_", " ")}
+                            {disputeStatusLabel(dispute.status, t)}
                           </Badge>
                         </TableCell>
                         <TableCell>
                           <p className="font-medium">
-                            RM{disputeAmount(dispute).toLocaleString()}
+                            {t("admin.disputes.stats.amountRm", {
+                              amount: disputeAmount(dispute).toLocaleString(),
+                            })}
                           </p>
                         </TableCell>
                         <TableCell>
@@ -374,8 +395,11 @@ export default function AdminDisputesPage() {
                               {new Date(dispute.createdAt).toLocaleDateString()}
                             </p>
                             <p className="text-xs text-gray-500">
-                              Updated:{" "}
-                              {new Date(dispute.updatedAt).toLocaleDateString()}
+                              {t("admin.disputes.table.updated", {
+                                date: new Date(
+                                  dispute.updatedAt
+                                ).toLocaleDateString(),
+                              })}
                             </p>
                           </div>
                         </TableCell>
@@ -386,7 +410,7 @@ export default function AdminDisputesPage() {
                             onClick={() => handleViewDispute(dispute.id)}
                           >
                             <Eye className="w-4 h-4 mr-2" />
-                            Review
+                            {t("admin.disputes.table.review")}
                           </Button>
                         </TableCell>
                       </TableRow>

@@ -20,6 +20,9 @@ import check from '@/public/assets/check.png';
 import gradient from '@/public/assets/gradient.png';
 import milestone from '@/public/assets/Milestone.png';
 import service22 from '@/public/assets/services/service-22.png';
+import billing from '@/public/homepage/billing.png';
+import oppurtunities from '@/public/homepage/oppurtunities.png';
+import job from '@/public/homepage/job.png';
 
 const brands = [brand1, brand2, brand3, brand4];
 
@@ -37,5 +40,8 @@ export {
   check,
   gradient,
   milestone,
-  service22
+  service22,
+  billing,
+  oppurtunities,
+  job
 };

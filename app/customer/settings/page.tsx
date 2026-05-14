@@ -14,11 +14,38 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
-import { Bell, Shield, CreditCard, Trash2, Mail } from "lucide-react";
-import { CustomerLayout } from "@/components/customer-layout";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Bell, Shield, CreditCard, Trash2, Mail, Globe } from "lucide-react";
 import { CustomerSettingsTour } from "@/components/customer/CustomerSettingsTour";
 import { Loader2 } from "lucide-react";
+import { CustomerSettingsPageSkeleton } from "@/components/customer/CustomerPageSkeletons";
 import { getUserFriendlyErrorMessage } from "@/lib/errors";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useI18n } from "@/contexts/I18nProvider";
+import {
+  DEFAULT_LOCALE,
+  isLocale,
+  LOCALES_LANGUAGE_PICKER,
+  type Locale,
+} from "@/lib/i18n/locales";
+import type { MessageKey } from "@/lib/i18n/messages";
+import {
+  mergeUserLocaleInStorage,
+  mergeUserPreferredCurrencyInStorage,
+} from "@/lib/userLocale";
 
 type NotificationSettings = {
   emailNotifications: boolean;
@@ -45,7 +72,52 @@ type Payment = {
   status: string;
 };
 
+const PASSWORD_RULE_CHECKS: {
+  test: (password: string) => boolean;
+  key: MessageKey;
+}[] = [
+  {
+    test: (p) => p.length >= 8,
+    key: "customer.settings.password.req.minLength",
+  },
+  {
+    test: (p) => /[A-Z]/.test(p),
+    key: "customer.settings.password.req.uppercase",
+  },
+  {
+    test: (p) => /[a-z]/.test(p),
+    key: "customer.settings.password.req.lowercase",
+  },
+  {
+    test: (p) => /[0-9]/.test(p),
+    key: "customer.settings.password.req.number",
+  },
+  {
+    test: (p) => /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(p),
+    key: "customer.settings.password.req.special",
+  },
+];
+
+function evaluatePasswordStrength(password: string): {
+  score: number;
+  missing: MessageKey[];
+} {
+  let score = 0;
+  const missing: MessageKey[] = [];
+  for (const { test, key } of PASSWORD_RULE_CHECKS) {
+    if (test(password)) score += 1;
+    else missing.push(key);
+  }
+  return { score, missing };
+}
+
 export default function CustomerSettingsPage() {
+  const { t, setLocale, locale } = useI18n();
+  const [activeTab, setActiveTab] = useState("notifications");
+  const dateLocale =
+    locale === "ar" ? "ar" : locale === "id" ? "id-ID" : "en-US";
+  const [systemLocale, setSystemLocale] = useState<Locale>(DEFAULT_LOCALE);
+  const [preferredCurrency, setPreferredCurrency] = useState("MYR");
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] =
     useState<NotificationSettings | null>(null);
@@ -60,37 +132,65 @@ export default function CustomerSettingsPage() {
   const [passwordSuccess, setPasswordSuccess] = useState(false);
   const [passwordStrength, setPasswordStrength] = useState<{
     score: number;
-    feedback: string[];
-  }>({ score: 0, feedback: [] });
+    missing: MessageKey[];
+  }>({ score: 0, missing: [] });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [deleteMessage, setDeleteMessage] = useState("");
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteDialogError, setDeleteDialogError] = useState("");
+  const currencyOptions = [
+    "MYR",
+    "USD",
+    "EUR",
+    "GBP",
+    "SGD",
+    "AUD",
+    "JPY",
+    "AED",
+    "IDR",
+  ];
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const tab = new URLSearchParams(window.location.search).get("tab");
+    const allowed = new Set([
+      "notifications",
+      "language",
+      "privacy",
+      "security",
+    ]);
+    if (tab && allowed.has(tab)) setActiveTab(tab);
+  }, []);
 
   const handleDeleteAccount = async () => {
-    // Step 1: Confirm user intention
-    const confirmDelete = window.confirm(
-      "⚠️ Are you sure you want to permanently delete your account? This action cannot be undone.",
-    );
-    if (!confirmDelete) return;
+    if (!deletePassword.trim()) {
+      setDeleteDialogError(t("customer.settings.delete.passwordRequired"));
+      return;
+    }
 
     try {
       setDeleting(true);
       setDeleteMessage("");
+      setDeleteDialogError("");
 
-      // Step 2: Call backend DELETE endpoint
+      // Require password confirmation before deleting account
       const response = await fetch(`${API_URL}/settings/${userId}`, {
         method: "DELETE",
         headers: {
+          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
+        body: JSON.stringify({ password: deletePassword }),
       });
 
-      // Step 3: Handle response
       if (response.ok) {
-        setDeleteMessage("✅ Account deleted successfully. Logging out...");
+        setDeleteMessage(t("customer.settings.delete.success"));
+        setDeleteDialogOpen(false);
+        setDeletePassword("");
 
-        // Step 4: Clear session & redirect
         setTimeout(() => {
           localStorage.removeItem("token");
           localStorage.removeItem("user");
@@ -98,16 +198,18 @@ export default function CustomerSettingsPage() {
           window.location.href = "/auth/login"; // Redirect to login page
         }, 2000);
       } else {
-        const data = await response.json();
-        setDeleteMessage(
-          getUserFriendlyErrorMessage(
-            data?.message != null ? new Error(data.message) : undefined,
-            "customer settings delete",
-          ),
+        const data = await response.json().catch(() => ({}));
+        const apiMsg =
+          (typeof data?.error === "string" && data.error) ||
+          (typeof data?.message === "string" && data.message) ||
+          "";
+        setDeleteDialogError(
+          apiMsg ||
+            getUserFriendlyErrorMessage(undefined, "customer settings delete"),
         );
       }
     } catch (error) {
-      setDeleteMessage(
+      setDeleteDialogError(
         getUserFriendlyErrorMessage(error, "customer settings delete"),
       );
     } finally {
@@ -115,11 +217,20 @@ export default function CustomerSettingsPage() {
     }
   };
 
-  const handleSaveNotifications = async (overrides?: Partial<NotificationSettings>) => {
+  const handleSaveNotifications = async (
+    overrides?: Partial<NotificationSettings>,
+  ) => {
     try {
       setSaving(true);
       setMessage("");
-      const payload = { ...notifications, ...overrides };
+      const payload = {
+        ...notifications,
+        ...overrides,
+        // Keep WhatsApp notifications OFF until phone is verified.
+        smsNotifications: hasVerifiedPhone
+          ? Boolean({ ...notifications, ...overrides }.smsNotifications)
+          : false,
+      };
       const response = await fetch(
         `${API_URL}/settings/${userId}/notifications`,
         {
@@ -135,7 +246,7 @@ export default function CustomerSettingsPage() {
       const data = await response.json();
 
       if (response.ok) {
-        setMessage("✅ Notification preferences updated successfully!");
+        setMessage(t("customer.settings.toast.notificationsSaved"));
       } else {
         setMessage(
           getUserFriendlyErrorMessage(
@@ -146,10 +257,7 @@ export default function CustomerSettingsPage() {
       }
     } catch (error) {
       setMessage(
-        getUserFriendlyErrorMessage(
-          error,
-          "customer settings notifications",
-        ),
+        getUserFriendlyErrorMessage(error, "customer settings notifications"),
       );
     } finally {
       setSaving(false);
@@ -172,7 +280,7 @@ export default function CustomerSettingsPage() {
       const data = await response.json();
 
       if (response.ok) {
-        setMessage("✅ Privacy settings updated successfully!");
+        setMessage(t("customer.settings.toast.privacySaved"));
       } else {
         setMessage(
           getUserFriendlyErrorMessage(
@@ -190,69 +298,27 @@ export default function CustomerSettingsPage() {
     }
   };
 
-  // Validate password strength
-  const validatePasswordStrength = (password: string) => {
-    const feedback: string[] = [];
-    let score = 0;
-
-    // Minimum length
-    if (password.length >= 8) {
-      score += 1;
-    } else {
-      feedback.push("At least 8 characters");
-    }
-
-    // Has uppercase
-    if (/[A-Z]/.test(password)) {
-      score += 1;
-    } else {
-      feedback.push("One uppercase letter");
-    }
-
-    // Has lowercase
-    if (/[a-z]/.test(password)) {
-      score += 1;
-    } else {
-      feedback.push("One lowercase letter");
-    }
-
-    // Has number
-    if (/[0-9]/.test(password)) {
-      score += 1;
-    } else {
-      feedback.push("One number");
-    }
-
-    // Has special character
-    if (/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
-      score += 1;
-    } else {
-      feedback.push("One special character");
-    }
-
-    return { score, feedback };
-  };
-
   const handleChangePassword = async () => {
     if (!oldPassword || !newPassword || !confirmPassword) {
-      setPasswordMessage("Please fill in all password fields.");
+      setPasswordMessage(t("customer.settings.password.fillAll"));
       setPasswordSuccess(false);
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      setPasswordMessage("New passwords do not match.");
+      setPasswordMessage(t("customer.settings.password.mismatch"));
       setPasswordSuccess(false);
       return;
     }
 
-    // Validate password strength
-    const strength = validatePasswordStrength(newPassword);
+    const strength = evaluatePasswordStrength(newPassword);
     setPasswordStrength(strength);
 
     if (strength.score < 5) {
       setPasswordMessage(
-        `Password must be stronger. Missing: ${strength.feedback.join(", ")}.`,
+        t("customer.settings.password.weakBody", {
+          list: strength.missing.map((k) => t(k)).join(", "),
+        }),
       );
       setPasswordSuccess(false);
       return;
@@ -278,7 +344,7 @@ export default function CustomerSettingsPage() {
 
       if (response.ok) {
         setPasswordSuccess(true);
-        setPasswordMessage("Password updated successfully!");
+        setPasswordMessage(t("customer.settings.password.success"));
         setOldPassword("");
         setNewPassword("");
         setConfirmPassword("");
@@ -316,6 +382,9 @@ export default function CustomerSettingsPage() {
 
   const { token, user } = getAuthData();
   const userId = user?.id;
+  const hasVerifiedPhone = Boolean(
+    user?.phoneVerified ?? user?.isPhoneVerified ?? user?.whatsappVerified,
+  );
 
   // 🔹 Fetch settings and payment info
   useEffect(() => {
@@ -345,7 +414,9 @@ export default function CustomerSettingsPage() {
 
         setNotifications({
           emailNotifications: settingsData.emailNotifications ?? false,
-          smsNotifications: settingsData.smsNotifications ?? false,
+          smsNotifications: hasVerifiedPhone
+            ? (settingsData.smsNotifications ?? false)
+            : false,
           pushNotifications: settingsData.pushNotifications ?? true,
           projectUpdates: settingsData.projectUpdates ?? false,
           marketingEmails: settingsData.marketingEmails ?? false,
@@ -358,6 +429,23 @@ export default function CustomerSettingsPage() {
           showPhone: settingsData.showPhone ?? false,
           allowMessages: settingsData.allowMessages ?? false,
         });
+
+        const rawLocale = settingsData.locale;
+        if (typeof rawLocale === "string" && isLocale(rawLocale)) {
+          // Arabic temporarily not in language picker; fall back for display/save.
+          const next = rawLocale === "ar" ? DEFAULT_LOCALE : rawLocale;
+          setSystemLocale(next);
+          if (rawLocale === "ar") {
+            setLocale(DEFAULT_LOCALE);
+            mergeUserLocaleInStorage(DEFAULT_LOCALE);
+          }
+        }
+        const rawCurrency = settingsData.preferredCurrency;
+        if (typeof rawCurrency === "string" && rawCurrency.trim()) {
+          const next = rawCurrency.trim().toUpperCase();
+          setPreferredCurrency(next);
+          mergeUserPreferredCurrencyInStorage(next);
+        }
 
         setPayments(Array.isArray(paymentsData) ? paymentsData : []);
       } catch (error) {
@@ -382,44 +470,94 @@ export default function CustomerSettingsPage() {
     };
 
     fetchData();
-  }, [userId, API_URL, token]);
+  }, [userId, API_URL, token, hasVerifiedPhone]);
+
+  const handleSaveLocale = async () => {
+    if (!userId || !token) return;
+    try {
+      setSaving(true);
+      setMessage("");
+      const response = await fetch(`${API_URL}/settings/${userId}/locale`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ locale: systemLocale, preferredCurrency }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) {
+        setLocale(systemLocale);
+        mergeUserLocaleInStorage(systemLocale);
+        if (
+          typeof data?.preferredCurrency === "string" &&
+          data.preferredCurrency.trim()
+        ) {
+          const savedCur = data.preferredCurrency.trim().toUpperCase();
+          setPreferredCurrency(savedCur);
+          mergeUserPreferredCurrencyInStorage(savedCur);
+        }
+        setMessage(t("settings.language.saved"));
+      } else {
+        setMessage(
+          getUserFriendlyErrorMessage(
+            data?.message != null ? new Error(String(data.message)) : undefined,
+            "customer settings locale",
+          ),
+        );
+      }
+    } catch (error) {
+      setMessage(
+        getUserFriendlyErrorMessage(error, "customer settings locale"),
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
 
   if (loading) {
     return (
-      <CustomerLayout>
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="text-center">
-            <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-4" />
-            <p className="text-gray-600">Loading settings...</p>
-          </div>
-        </div>
-      </CustomerLayout>
+      <>
+        <CustomerSettingsTour />
+        <CustomerSettingsPageSkeleton
+          loadingLabel={t("customer.settings.page.loading")}
+        />
+      </>
     );
   }
 
   return (
-    <CustomerLayout>
+    <>
       <CustomerSettingsTour />
       <div className="space-y-8">
         {/* Header */}
         <div data-tour-step="0">
-          <h1 className="text-3xl font-bold text-gray-900">Settings</h1>
+          <h1 className="text-3xl font-bold text-gray-900">
+            {t("customer.settings.page.title")}
+          </h1>
           <p className="text-gray-600">
-            Manage your account settings and preferences
+            {t("customer.settings.page.subtitle")}
           </p>
         </div>
 
-        <Tabs defaultValue="notifications" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3">
+        <Tabs
+          value={activeTab}
+          onValueChange={setActiveTab}
+          className="space-y-6"
+        >
+          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 gap-1">
             <TabsTrigger value="notifications" data-tour-step="1">
-              Notifications
+              {t("customer.settings.tab.notifications")}
+            </TabsTrigger>
+            <TabsTrigger value="language">
+              {t("settings.language.title")}
             </TabsTrigger>
             <TabsTrigger value="privacy">
-              Privacy
+              {t("customer.settings.tab.privacy")}
             </TabsTrigger>
             {/* <TabsTrigger value="billing">Billing</TabsTrigger> */}
             <TabsTrigger value="security" data-tour-step="2">
-              Security
+              {t("customer.settings.tab.security")}
             </TabsTrigger>
           </TabsList>
 
@@ -429,10 +567,10 @@ export default function CustomerSettingsPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Bell className="w-5 h-5" />
-                  Notification Preferences
+                  {t("customer.settings.notifications.title")}
                 </CardTitle>
                 <CardDescription>
-                  In-app notifications always appear inside the app. Choose additional channels below.
+                  {t("customer.settings.notifications.desc")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -440,9 +578,11 @@ export default function CustomerSettingsPage() {
                   <div className="flex items-center gap-3 rounded-lg border p-3 bg-muted/30">
                     <Bell className="w-5 h-5 text-muted-foreground shrink-0" />
                     <div>
-                      <Label className="font-medium">In-app notifications</Label>
+                      <Label className="font-medium">
+                        {t("customer.settings.notifications.inApp.title")}
+                      </Label>
                       <p className="text-sm text-muted-foreground">
-                        Always on — you&apos;ll see notifications in the bell icon when logged in
+                        {t("customer.settings.notifications.inApp.desc")}
                       </p>
                     </div>
                   </div>
@@ -454,10 +594,10 @@ export default function CustomerSettingsPage() {
                       <Mail className="w-4 h-4 text-muted-foreground" />
                       <div>
                         <Label htmlFor="email-notifications">
-                          Email Notifications
+                          {t("customer.settings.notifications.email.label")}
                         </Label>
                         <p className="text-sm text-gray-500">
-                          Receive notifications via email
+                          {t("customer.settings.notifications.email.desc")}
                         </p>
                       </div>
                     </div>
@@ -476,30 +616,115 @@ export default function CustomerSettingsPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <Label htmlFor="whatsapp-notifications">
-                        WhatsApp Notifications
+                        {t("customer.settings.notifications.whatsapp.label")}
                       </Label>
                       <p className="text-sm text-gray-500">
-                        Receive urgent notifications via WhatsApp
+                        {t("customer.settings.notifications.whatsapp.desc")}
                       </p>
+                      {!hasVerifiedPhone && (
+                        <p className="text-xs text-amber-700 mt-1">
+                          Verify your phone number first to enable WhatsApp
+                          notifications.
+                        </p>
+                      )}
                     </div>
                     <Switch
                       id="whatsapp-notifications"
                       checked={notifications?.smsNotifications ?? false}
+                      disabled={!hasVerifiedPhone}
                       onCheckedChange={(checked) =>
-                        setNotifications((prev) => ({ ...prev!, smsNotifications: checked }))
+                        setNotifications((prev) => ({
+                          ...prev!,
+                          smsNotifications: checked,
+                        }))
                       }
                     />
                   </div>
                 </div>
 
                 <div className="flex justify-end">
-                  <Button onClick={() => handleSaveNotifications()} disabled={saving}>
-                    {saving ? "Saving..." : "Save Preferences"}
+                  <Button
+                    onClick={() => handleSaveNotifications()}
+                    disabled={saving}
+                  >
+                    {saving
+                      ? t("customer.settings.common.saving")
+                      : t("customer.settings.notifications.savePrefs")}
                   </Button>
                 </div>
                 {message && (
                   <p className="text-sm text-gray-600 mt-2">{message}</p>
                 )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="language">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Globe className="w-5 h-5" />
+                  {t("settings.language.title")}
+                </CardTitle>
+                <CardDescription>
+                  {t("settings.language.description")}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2 max-w-md">
+                  <Label htmlFor="system-locale">
+                    {t("settings.language.label")}
+                  </Label>
+                  <Select
+                    value={systemLocale}
+                    onValueChange={(v) => {
+                      if (isLocale(v)) setSystemLocale(v);
+                    }}
+                  >
+                    <SelectTrigger id="system-locale">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {/* Arabic temporarily hidden — see LOCALES_LANGUAGE_PICKER in locales.ts */}
+                      {LOCALES_LANGUAGE_PICKER.map((loc) => (
+                        <SelectItem key={loc} value={loc}>
+                          {t(`settings.language.option.${loc}` as MessageKey)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2 max-w-md">
+                  <Label htmlFor="preferred-currency-customer">
+                    Preferred currency
+                  </Label>
+                  <Select
+                    value={preferredCurrency}
+                    onValueChange={(v) => setPreferredCurrency(v)}
+                  >
+                    <SelectTrigger id="preferred-currency-customer">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {currencyOptions.map((code) => (
+                        <SelectItem key={code} value={code}>
+                          {code}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex justify-end">
+                  <Button
+                    onClick={() => void handleSaveLocale()}
+                    disabled={saving}
+                  >
+                    {saving
+                      ? t("customer.settings.common.saving")
+                      : t("settings.language.save")}
+                  </Button>
+                </div>
+                {message && <p className="text-sm text-gray-600">{message}</p>}
               </CardContent>
             </Card>
           </TabsContent>
@@ -510,10 +735,10 @@ export default function CustomerSettingsPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Shield className="w-5 h-5" />
-                  Privacy Settings
+                  {t("customer.settings.privacy.title")}
                 </CardTitle>
                 <CardDescription>
-                  Control your privacy and data sharing preferences
+                  {t("customer.settings.privacy.desc")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -522,9 +747,11 @@ export default function CustomerSettingsPage() {
 
                   <div className="flex items-center justify-between">
                     <div>
-                      <Label htmlFor="show-email">Show Email Address</Label>
+                      <Label htmlFor="show-email">
+                        {t("customer.settings.privacy.showEmail.label")}
+                      </Label>
                       <p className="text-sm text-gray-500">
-                        Allow providers to see your email address
+                        {t("customer.settings.privacy.showEmail.desc")}
                       </p>
                     </div>
                     <Switch
@@ -544,9 +771,11 @@ export default function CustomerSettingsPage() {
 
                   <div className="flex items-center justify-between">
                     <div>
-                      <Label htmlFor="show-phone">Show Phone Number</Label>
+                      <Label htmlFor="show-phone">
+                        {t("customer.settings.privacy.showPhone.label")}
+                      </Label>
                       <p className="text-sm text-gray-500">
-                        Allow providers to see your phone number
+                        {t("customer.settings.privacy.showPhone.desc")}
                       </p>
                     </div>
                     <Switch
@@ -567,10 +796,10 @@ export default function CustomerSettingsPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <Label htmlFor="allow-messages">
-                        Allow Direct Messages
+                        {t("customer.settings.privacy.allowMessages.label")}
                       </Label>
                       <p className="text-sm text-gray-500">
-                        Let providers contact you directly
+                        {t("customer.settings.privacy.allowMessages.desc")}
                       </p>
                     </div>
                     <Switch
@@ -591,7 +820,9 @@ export default function CustomerSettingsPage() {
 
                 <div className="flex justify-end">
                   <Button onClick={handleSavePrivacy} disabled={saving}>
-                    {saving ? "Saving..." : "Save Settings"}
+                    {saving
+                      ? t("customer.settings.common.saving")
+                      : t("customer.settings.privacy.save")}
                   </Button>
                 </div>
                 {message && (
@@ -608,10 +839,10 @@ export default function CustomerSettingsPage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <CreditCard className="w-5 h-5" />
-                    Payment Methods
+                    {t("customer.settings.billing.title")}
                   </CardTitle>
                   <CardDescription>
-                    Manage your payment methods and billing information
+                    {t("customer.settings.billing.desc")}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -621,17 +852,26 @@ export default function CustomerSettingsPage() {
                         <div className="flex items-center justify-between">
                           <div>
                             <p className="font-medium">
-                              {p.method === "CREDIT_CARD"
-                                ? "•••• •••• •••• " + p.last4
+                              {p.method === "CREDIT_CARD" && p.last4
+                                ? t(
+                                    "customer.settings.billing.creditCardMasked",
+                                    {
+                                      last4: p.last4,
+                                    },
+                                  )
                                 : p.method}
                             </p>
                             <p className="text-sm text-gray-500">
-                              {new Date(p.createdAt).toLocaleDateString()}
+                              {new Date(p.createdAt).toLocaleDateString(
+                                dateLocale,
+                              )}
                             </p>
                           </div>
                           <div className="text-right">
                             <p className="font-medium">
-                              RM {p.amount.toFixed(2)}
+                              {t("customer.settings.billing.currency", {
+                                amount: p.amount.toFixed(2),
+                              })}
                             </p>
                             <p
                               className={`text-sm ${
@@ -640,18 +880,22 @@ export default function CustomerSettingsPage() {
                                   : "text-red-500"
                               }`}
                             >
-                              {p.status}
+                              {p.status === "PAID"
+                                ? t("customer.settings.billing.statusPaid")
+                                : p.status}
                             </p>
                           </div>
                         </div>
                       </div>
                     ))
                   ) : (
-                    <p className="text-sm text-gray-500">No payments found.</p>
+                    <p className="text-sm text-gray-500">
+                      {t("customer.settings.billing.empty")}
+                    </p>
                   )}
 
                   <Button variant="outline" className="w-full bg-transparent">
-                    Add New Payment Method
+                    {t("customer.settings.billing.addMethod")}
                   </Button>
                 </CardContent>
               </Card>
@@ -663,15 +907,17 @@ export default function CustomerSettingsPage() {
             <div className="grid gap-6">
               <Card>
                 <CardHeader>
-                  <CardTitle>Change Password</CardTitle>
+                  <CardTitle>{t("customer.settings.password.title")}</CardTitle>
                   <CardDescription>
-                    Update your password to keep your account secure
+                    {t("customer.settings.password.desc")}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {/* Password fields */}
                   <div className="space-y-2">
-                    <Label htmlFor="current-password">Current Password</Label>
+                    <Label htmlFor="current-password">
+                      {t("customer.settings.password.current")}
+                    </Label>
                     <Input
                       id="current-password"
                       type="password"
@@ -680,7 +926,9 @@ export default function CustomerSettingsPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="new-password">New Password</Label>
+                    <Label htmlFor="new-password">
+                      {t("customer.settings.password.new")}
+                    </Label>
                     <Input
                       id="new-password"
                       type="password"
@@ -689,10 +937,10 @@ export default function CustomerSettingsPage() {
                         setNewPassword(e.target.value);
                         if (e.target.value) {
                           setPasswordStrength(
-                            validatePasswordStrength(e.target.value),
+                            evaluatePasswordStrength(e.target.value),
                           );
                         } else {
-                          setPasswordStrength({ score: 0, feedback: [] });
+                          setPasswordStrength({ score: 0, missing: [] });
                         }
                       }}
                     />
@@ -717,20 +965,22 @@ export default function CustomerSettingsPage() {
                         <p className="text-xs text-gray-500">
                           {passwordStrength.score === 5 ? (
                             <span className="text-green-600 font-medium">
-                              ✓ Strong password
+                              {t("customer.settings.password.strength.strong")}
                             </span>
                           ) : passwordStrength.score > 0 ? (
                             <span className="text-yellow-600">
-                              Password strength: {passwordStrength.score}/5
+                              {t("customer.settings.password.strength.score", {
+                                n: passwordStrength.score,
+                              })}
                             </span>
                           ) : (
-                            "Password must include:"
+                            t("customer.settings.password.strength.mustInclude")
                           )}
                         </p>
-                        {passwordStrength.feedback.length > 0 && (
+                        {passwordStrength.missing.length > 0 && (
                           <ul className="text-xs text-gray-500 list-disc list-inside space-y-0.5">
-                            {passwordStrength.feedback.map((req, idx) => (
-                              <li key={idx}>{req}</li>
+                            {passwordStrength.missing.map((reqKey) => (
+                              <li key={reqKey}>{t(reqKey)}</li>
                             ))}
                           </ul>
                         )}
@@ -739,7 +989,7 @@ export default function CustomerSettingsPage() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="confirm-password">
-                      Confirm New Password
+                      {t("customer.settings.password.confirm")}
                     </Label>
                     <Input
                       id="confirm-password"
@@ -753,7 +1003,9 @@ export default function CustomerSettingsPage() {
                     onClick={handleChangePassword}
                     disabled={loadingPassword}
                   >
-                    {loadingPassword ? "Updating..." : "Update Password"}
+                    {loadingPassword
+                      ? t("customer.settings.common.updating")
+                      : t("customer.settings.password.update")}
                   </Button>
 
                   {passwordMessage && (
@@ -800,24 +1052,29 @@ export default function CustomerSettingsPage() {
                 <CardHeader>
                   <CardTitle className="text-red-600 flex items-center gap-2">
                     <Trash2 className="w-5 h-5" />
-                    Delete Account
+                    {t("customer.settings.delete.title")}
                   </CardTitle>
                   <CardDescription>
-                    Permanently delete your account and all associated data
+                    {t("customer.settings.delete.desc")}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <p className="text-sm text-gray-600 mb-4">
-                    This action cannot be undone. All your projects, messages,
-                    and data will be permanently deleted.
+                    {t("customer.settings.delete.warning")}
                   </p>
                   <Button
                     variant="destructive"
-                    onClick={handleDeleteAccount}
+                    onClick={() => {
+                      setDeleteDialogOpen(true);
+                      setDeleteMessage("");
+                      setDeleteDialogError("");
+                    }}
                     disabled={deleting}
-                    className="mt-4"
+                    className="mt-4 text-white"
                   >
-                    {deleting ? "Deleting..." : "Delete Account"}
+                    {deleting
+                      ? t("customer.settings.common.deleting")
+                      : t("customer.settings.delete.button")}
                   </Button>
 
                   {deleteMessage && (
@@ -827,10 +1084,83 @@ export default function CustomerSettingsPage() {
                   )}
                 </CardContent>
               </Card>
+
+              <Dialog
+                open={deleteDialogOpen}
+                onOpenChange={(open) => {
+                  setDeleteDialogOpen(open);
+                  if (!open) {
+                    setDeletePassword("");
+                    setDeleteDialogError("");
+                  }
+                }}
+              >
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle className="text-red-600">
+                      {t("customer.settings.delete.dialogTitle")}
+                    </DialogTitle>
+                    <DialogDescription>
+                      {t("customer.settings.delete.dialogDesc")}
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-2">
+                    <Label htmlFor="delete-account-password">
+                      {t("customer.settings.delete.passwordLabel")}
+                    </Label>
+                    <Input
+                      id="delete-account-password"
+                      type="password"
+                      value={deletePassword}
+                      onChange={(e) => {
+                        setDeletePassword(e.target.value);
+                        if (deleteDialogError) setDeleteDialogError("");
+                      }}
+                      placeholder={t(
+                        "customer.settings.delete.passwordPlaceholder",
+                      )}
+                      aria-invalid={!!deleteDialogError}
+                      className={
+                        deleteDialogError
+                          ? "border-red-500 focus-visible:ring-red-500"
+                          : undefined
+                      }
+                    />
+                    {deleteDialogError ? (
+                      <p className="text-sm text-red-600" role="alert">
+                        {deleteDialogError}
+                      </p>
+                    ) : null}
+                  </div>
+                  <DialogFooter>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setDeleteDialogOpen(false);
+                        setDeletePassword("");
+                        setDeleteDialogError("");
+                      }}
+                      disabled={deleting}
+                    >
+                      {t("customer.profile.cancel")}
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      className="text-white"
+                      onClick={handleDeleteAccount}
+                      disabled={deleting}
+                    >
+                      {deleting
+                        ? t("customer.settings.common.deleting")
+                        : t("customer.settings.delete.confirm")}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </div>
           </TabsContent>
         </Tabs>
       </div>
-    </CustomerLayout>
+    </>
   );
 }

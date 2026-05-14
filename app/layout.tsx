@@ -3,8 +3,10 @@ import StripeProvider from "./customer/components/stripeProvider";
 import CookieConsentBanner from "@/components/legal/CookieConsentBanner";
 import { Toaster } from "@/components/ui/toaster";
 import { OfflineProvider } from "@/contexts/OfflineContext";
+import { I18nProvider } from "@/contexts/I18nProvider";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { AuthSessionGuard } from "@/components/AuthSessionGuard";
+import { QueryProvider } from "@/components/QueryProvider";
 import type { Metadata, Viewport } from "next";
 import { GeistSans, GeistMono } from "geist/font";
 import "./globals.css";
@@ -69,18 +71,26 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${GeistSans.variable} ${GeistMono.variable}`}
+    >
       <Analytics />
       <body className="antialiased">
+        <QueryProvider>
         <AuthSessionGuard />
         <OfflineProvider>
-          <OfflineBanner />
-          <StripeProvider>
-            {children}
-            <CookieConsentBanner />
-            <Toaster />
-          </StripeProvider>
+          <I18nProvider>
+            <OfflineBanner />
+            <StripeProvider>
+              {children}
+              <CookieConsentBanner />
+              <Toaster />
+            </StripeProvider>
+          </I18nProvider>
         </OfflineProvider>
+        </QueryProvider>
       </body>
     </html>
   );

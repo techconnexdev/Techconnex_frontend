@@ -2,7 +2,14 @@
 
 import { DotLottieReact, type DotLottie } from "@lottiefiles/dotlottie-react";
 import productImage from "@/public/assets/product-image.png";
-import { ComponentPropsWithoutRef, useEffect, useRef, useState } from "react";
+import {
+  ComponentPropsWithoutRef,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useI18n } from "@/contexts/I18nProvider";
 import {
   animate,
   motion,
@@ -10,39 +17,24 @@ import {
   useMotionValue,
   ValueAnimationTransition,
 } from "framer-motion";
+import Heading from "./Services/Heading";
 
-const tabs = [
-  {
-    icon: "/assets/lottie/vroom.lottie",
-    title: "User-friendly dashboard",
-    isNew: false,
-    backgroundPositionX: 0,
-    backgroundPositionY: 0,
-    backgroundSizeX: 110,
-  },
-  {
-    icon: "/assets/lottie/click.lottie",
-    title: "Performance Analytics",
-    isNew: false,
-    backgroundPositionX: 100,
-    backgroundPositionY: 27,
-    backgroundSizeX: 177,
-  },
-  {
-    icon: "/assets/lottie/stars.lottie",
-    title: "Smart AI Matching",
-    isNew: true,
+const HERO_RECTANGLE_FROM = "#2D6DFC";
+const HERO_RECTANGLE_TO = "#614EF8";
 
-    backgroundPositionX: 98,
-    backgroundPositionY: 100,
-    backgroundSizeX: 135,
-  },
-];
+type TabDef = {
+  icon: string;
+  title: string;
+  isNew: boolean;
+  backgroundPositionX: number;
+  backgroundPositionY: number;
+  backgroundSizeX: number;
+};
 
 const FeatureTab = (
-  probs: (typeof tabs)[number] &
-    ComponentPropsWithoutRef<"div"> & { selected: boolean }
+  probs: TabDef & ComponentPropsWithoutRef<"div"> & { selected: boolean },
 ) => {
+  const { t } = useI18n();
   const tabRef = useRef<HTMLDivElement>(null);
   const dotlottieRef = useRef<DotLottie | null>(null);
 
@@ -114,7 +106,7 @@ const FeatureTab = (
       <div className="font-medium text-gray-900">{probs.title}</div>
       {probs.isNew && (
         <div className="text-xs rounded-full px-2 py-0.5 bg-blue-400/20 text-blue-700 font-semibold border border-blue-300/40">
-          New
+          {t("home.features.new")}
         </div>
       )}
     </div>
@@ -122,6 +114,37 @@ const FeatureTab = (
 };
 
 export const Features = () => {
+  const { t } = useI18n();
+  const tabs: TabDef[] = useMemo(
+    () => [
+      {
+        icon: "/assets/lottie/vroom.lottie",
+        title: t("home.features.tab.dashboard"),
+        isNew: false,
+        backgroundPositionX: 0,
+        backgroundPositionY: 0,
+        backgroundSizeX: 110,
+      },
+      {
+        icon: "/assets/lottie/click.lottie",
+        title: t("home.features.tab.analytics"),
+        isNew: false,
+        backgroundPositionX: 100,
+        backgroundPositionY: 27,
+        backgroundSizeX: 177,
+      },
+      {
+        icon: "/assets/lottie/stars.lottie",
+        title: t("home.features.tab.matching"),
+        isNew: true,
+        backgroundPositionX: 98,
+        backgroundPositionY: 100,
+        backgroundSizeX: 135,
+      },
+    ],
+    [t],
+  );
+
   const [selectedTab, setSelectedTab] = useState(0);
 
   const backgroundPositionX = useMotionValue(tabs[0].backgroundPositionX);
@@ -144,22 +167,22 @@ export const Features = () => {
     animate(
       backgroundSizeX,
       [backgroundSizeX.get(), 100, tabs[index].backgroundSizeX],
-      animateOptions
+      animateOptions,
     );
     animate(
       backgroundPositionX,
       [backgroundPositionX.get(), tabs[index].backgroundPositionX],
-      animateOptions
+      animateOptions,
     );
     animate(
       backgroundPositionY,
       [backgroundPositionY.get(), tabs[index].backgroundPositionY],
-      animateOptions
+      animateOptions,
     );
   };
 
   return (
-    <section id="features" className="relative py-24 md:py-60 overflow-hidden ">
+    <section id="features" className="relative py-24 md:py-20 overflow-hidden ">
       {/* Blurred background circles */}
       <div
         className="absolute bottom-1/4 right-0 w-[400px] h-[400px] rounded-full bg-blue-500/20 blur-[80px] pointer-events-none"
@@ -171,14 +194,12 @@ export const Features = () => {
       />
 
       <div className="container relative">
-        <h2 className="text-4xl font-semibold !leading-tight mb-4 md:text-5xl md:mb-5 lg:text-6xl text-center text-gray-900 tracking-tight">
-          Focus on the Work, Not the Hustle.
-        </h2>
-        <p className="text-center text-gray-600 md:text-xl mx-auto mt-8 md:mt-12 leading-relaxed">
-          Stop fighting for attention in bidding wars. Our AI finds the projects
-          that fit your skills, while our smart dashboard handles the admin,
-          earnings, and milestones for you.
-        </p>
+        <Heading
+          tag="Features"
+          title={t("home.features.title")}
+          text={t("home.features.subtitle")}
+        />
+        
         <div className="mt-10 flex flex-col lg:flex-row gap-3">
           {tabs.map((tab, tabIndex) => (
             <FeatureTab
@@ -189,15 +210,26 @@ export const Features = () => {
             />
           ))}
         </div>
-        <div className="mt-6 p-3 rounded-2xl bg-white/50 backdrop-blur-xl border border-white/70 shadow-[0_4px_24px_rgba(59,130,246,0.1)]">
-          <motion.div
-            className="aspect-video bg-cover rounded-xl border border-white/60 shadow-inner overflow-hidden"
+        <div className="relative mx-auto mt-8 w-full max-w-4xl">
+          <div
+            className="pointer-events-none absolute left-1/2 top-1/2 z-0 w-full -translate-x-1/2 -translate-y-1/2 rounded-[40px] shadow-[0_2px_90px_rgba(45,109,252,0.28)]"
             style={{
-              backgroundPosition,
-              backgroundSize,
-              backgroundImage: `url(${productImage.src})`,
+              width: "min(94vw, 1240px)",
+              height: "min(32vw, 470px)",
+              background: `linear-gradient(90deg, ${HERO_RECTANGLE_FROM} 0%, ${HERO_RECTANGLE_TO} 100%)`,
             }}
-          ></motion.div>
+            aria-hidden
+          />
+          <div className="relative z-10 mx-auto w-full max-w-3xl rounded-2xl border border-white/70 bg-white/50 p-2 backdrop-blur-xl shadow-[0_4px_24px_rgba(59,130,246,0.1)]">
+            <motion.div
+              className="aspect-video overflow-hidden rounded-xl border border-white/60 bg-cover shadow-inner"
+              style={{
+                backgroundPosition,
+                backgroundSize,
+                backgroundImage: `url(${productImage.src})`,
+              }}
+            ></motion.div>
+          </div>
         </div>
       </div>
     </section>

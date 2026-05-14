@@ -19,6 +19,8 @@ export type Opportunity = {
   urgent?: boolean;
   verified?: boolean;
   hasSubmitted?: boolean;
+  /** Display / preferred currency for bid UI (e.g. from API displayCurrencyCode) */
+  currencyCode?: string;
   requirements?: string[];
   deliverables?: string[];
   clientInfo?: {

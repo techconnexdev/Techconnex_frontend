@@ -3,13 +3,13 @@ import LegalPageLayout from "@/components/legal/LegalPageLayout";
 import PrivacyPolicyContent from "@/components/legal/PrivacyPolicyContent";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy | TechConnex",
+  title: "Kebijakan Privasi | Privacy Policy | TechConnex",
   description:
-    "Privacy Policy describing how TechConnex collects, stores, uses, and shares your personal information. PDPA and GDPR aligned.",
+    "Kebijakan Privasi yang menjelaskan bagaimana TechConnex mengumpulkan, menyimpan, menggunakan, dan membagikan data pribadi Anda.",
   openGraph: {
-    title: "Privacy Policy | TechConnex",
+    title: "Kebijakan Privasi | Privacy Policy | TechConnex",
     description:
-      "How TechConnex collects, uses, and protects your personal data.",
+      "Bagaimana TechConnex mengumpulkan, menggunakan, dan melindungi data pribadi Anda.",
     url: "https://techconnex.vip/privacy",
   },
   robots: { index: true, follow: true },

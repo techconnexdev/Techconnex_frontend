@@ -35,13 +35,21 @@ import { useToast } from "@/hooks/use-toast";
 import {
   getAdminDisputeById,
   simulateDisputePayout,
+  manualResolveDispute,
   redoMilestone,
+  redoProject,
   resolveDispute,
   getAttachmentUrl,
   getR2DownloadUrl,
 } from "@/lib/api";
+import { Input } from "@/components/ui/input";
 import Link from "next/link";
 import Image from "next/image";
+import { useI18n } from "@/contexts/I18nProvider";
+import {
+  disputeStatusLabel,
+  paymentStatusLabel,
+} from "@/components/admin/disputes/dispute-i18n-maps";
 
 // Types
 type Dispute = {
@@ -88,6 +96,8 @@ type Dispute = {
     method?: string;
     stripeRefundId?: string;
     bankTransferRef?: string;
+    milestoneId?: string;
+    milestone?: { id: string; title?: string };
   };
   milestone?: {
     amount: number;
@@ -109,6 +119,7 @@ export default function AdminDisputeDetailPage() {
   const params = useParams();
   const router = useRouter();
   const disputeId = params.id as string;
+  const { t } = useI18n();
   const { toast } = useToast();
 
   const [loading, setLoading] = useState(true);
@@ -125,6 +136,12 @@ export default function AdminDisputeDetailPage() {
   const [selectedAction, setSelectedAction] = useState<
     "refund" | "release" | "partial" | null
   >(null);
+  const [payoutBankName, setPayoutBankName] = useState("");
+  const [payoutAccountNumber, setPayoutAccountNumber] = useState("");
+  const [payoutAccountName, setPayoutAccountName] = useState("");
+  const [manualSummary, setManualSummary] = useState("");
+  const [manualCustomerNote, setManualCustomerNote] = useState("");
+  const [manualProviderNote, setManualProviderNote] = useState("");
 
   const loadDispute = useCallback(async () => {
     try {
@@ -137,28 +154,38 @@ export default function AdminDisputeDetailPage() {
       const errorMessage =
         error instanceof Error
           ? error.message
-          : "Failed to load dispute details";
+          : t("admin.disputes.toast.loadDetailFailed");
       toast({
-        title: "Error",
+        title: t("admin.users.toast.errorTitle"),
         description: errorMessage,
         variant: "destructive",
       });
     } finally {
       setLoading(false);
     }
-  }, [disputeId, toast]);
+  }, [disputeId, toast, t]);
 
   useEffect(() => {
     loadDispute();
   }, [loadDispute]);
+
+  useEffect(() => {
+    if (!dispute?.milestoneId) {
+      setSelectedAction((prev) =>
+        prev === "refund" || prev === "release" ? null : prev,
+      );
+      setBankTransferRefImage(null);
+      setBankTransferRefImagePreview(null);
+    }
+  }, [dispute?.id, dispute?.milestoneId]);
 
   const handleResolve = async (
     action: "refund" | "release" | "partial" | "redo" | "cancel"
   ) => {
     if (!dispute) {
       toast({
-        title: "Error",
-        description: "No dispute selected",
+        title: t("admin.users.toast.errorTitle"),
+        description: t("admin.disputes.toast.noDisputeSelected"),
         variant: "destructive",
       });
       return;
@@ -168,40 +195,70 @@ export default function AdminDisputeDetailPage() {
       setActionLoading(true);
 
       if (action === "redo") {
-        if (!dispute.milestoneId) {
+        const idForApi = String(disputeId || "").trim();
+        if (!idForApi) {
           toast({
-            title: "Error",
-            description: "No milestone found for this dispute",
+            title: t("admin.users.toast.errorTitle"),
+            description: t("admin.disputes.toast.invalidDisputeUrl"),
             variant: "destructive",
           });
           return;
         }
 
-        const response = await redoMilestone(dispute.milestoneId);
-        if (response.success) {
-        toast({
-          title: "Success",
-            description: "Milestone has been reset for rework",
-        });
-          await loadDispute();
+        // Match Dispute.milestoneId only — payment may reference another milestone.
+        const milestoneForRedo = dispute.milestoneId;
+        const resolutionText = resolutionNotes.trim() || undefined;
+
+        if (milestoneForRedo) {
+          const response = await redoMilestone(idForApi, resolutionText);
+          if (response.success) {
+            toast({
+              title: t("admin.disputes.toast.successTitle"),
+              description: t("admin.disputes.toast.redoMilestoneSuccess"),
+            });
+            await loadDispute();
+          }
+        } else {
+          const response = await redoProject(idForApi, resolutionText);
+          if (response.success) {
+            toast({
+              title: t("admin.disputes.toast.successTitle"),
+              description: t("admin.disputes.toast.redoProjectSuccess"),
+            });
+            await loadDispute();
+          }
         }
         return;
       }
 
       if (action === "cancel") {
-        const finalResolution = resolutionNotes || "Dispute rejected by admin";
-        const response = await resolveDispute(dispute.id, "CANCELLED", finalResolution);
+        const finalResolution =
+          resolutionNotes || t("admin.disputes.resolution.rejectedDefault");
+        const response = await resolveDispute(dispute.id, "REJECTED", finalResolution);
         if (response.success) {
           toast({
-            title: "Success",
-            description: "Dispute has been rejected",
+            title: t("admin.disputes.toast.successTitle"),
+            description: t("admin.disputes.toast.rejectedSuccess"),
           });
           setSelectedAction(null);
           setResolutionNotes("");
           await loadDispute();
         }
-          return;
-        }
+        return;
+      }
+
+      if (
+        !dispute.milestoneId &&
+        (action === "refund" || action === "release" || action === "partial")
+      ) {
+        toast({
+          title: t("admin.disputes.toast.notAvailableTitle"),
+          description: t("admin.disputes.toast.milestoneOnlyRefundRelease"),
+          variant: "destructive",
+        });
+        setActionLoading(false);
+        return;
+      }
 
       const amount =
         dispute.payment?.amount ||
@@ -211,28 +268,30 @@ export default function AdminDisputeDetailPage() {
       let resolutionText = "";
 
       if (action === "refund") {
-        resolutionText = `Refunded RM ${amount.toLocaleString()} to customer via Stripe.`;
+        resolutionText = t("admin.disputes.resolution.refund", {
+          amount: amount.toLocaleString(),
+        });
       } else if (action === "release") {
         if (!bankTransferRefImage) {
           toast({
-            title: "Image Required",
-            description:
-              "Please upload a bank transfer reference image",
+            title: t("admin.disputes.toast.imageRequiredTitle"),
+            description: t("admin.disputes.toast.uploadBankImage"),
             variant: "destructive",
           });
           setActionLoading(false);
           return;
         }
-        resolutionText = `Released RM ${amount.toLocaleString()} to provider. Bank transfer reference uploaded.`;
+        resolutionText = t("admin.disputes.resolution.release", {
+          amount: amount.toLocaleString(),
+        });
       } else if (action === "partial") {
         const refund = parseFloat(refundAmount) || 0;
         const release = parseFloat(releaseAmount) || 0;
 
         if (refund + release > amount) {
           toast({
-            title: "Error",
-            description:
-              "Refund and release amounts cannot exceed total amount",
+            title: t("admin.users.toast.errorTitle"),
+            description: t("admin.disputes.toast.amountsExceed"),
             variant: "destructive",
           });
           setActionLoading(false);
@@ -241,8 +300,8 @@ export default function AdminDisputeDetailPage() {
 
         if (refund <= 0 || release <= 0) {
           toast({
-            title: "Error",
-            description: "Both amounts must be greater than 0",
+            title: t("admin.users.toast.errorTitle"),
+            description: t("admin.disputes.toast.amountsMustBePositive"),
             variant: "destructive",
           });
           setActionLoading(false);
@@ -251,16 +310,18 @@ export default function AdminDisputeDetailPage() {
 
         if (!bankTransferRefImage) {
           toast({
-            title: "Image Required",
-            description:
-              "Please upload a bank transfer reference image for the release portion",
+            title: t("admin.disputes.toast.imageRequiredTitle"),
+            description: t("admin.disputes.toast.uploadBankImagePartial"),
             variant: "destructive",
           });
           setActionLoading(false);
           return;
         }
 
-        resolutionText = `Partial split: Refunded RM ${refund.toLocaleString()} to customer via Stripe, Released RM ${release.toLocaleString()} to provider. Bank transfer reference uploaded.`;
+        resolutionText = t("admin.disputes.resolution.partial", {
+          refund: refund.toLocaleString(),
+          release: release.toLocaleString(),
+        });
       }
 
       const finalResolution = resolutionNotes
@@ -280,18 +341,36 @@ export default function AdminDisputeDetailPage() {
             : amount
           : 0;
 
-        const response = await simulateDisputePayout(
-          dispute.id,
+      const payoutOverride =
+        (action === "release" || action === "partial") &&
+        payoutBankName.trim() &&
+        payoutAccountNumber.trim()
+          ? {
+              bankName: payoutBankName.trim(),
+              accountNumber: payoutAccountNumber.trim(),
+              accountName: payoutAccountName.trim(),
+            }
+          : undefined;
+
+      const response = await simulateDisputePayout(
+        dispute.id,
         refundAmt,
         releaseAmt,
         finalResolution,
-        bankTransferRefImage || undefined
-        );
+        bankTransferRefImage || undefined,
+        payoutOverride
+      );
 
       if (response.success) {
+        const resolvedDesc =
+          action === "refund"
+            ? t("admin.disputes.toast.disputeResolvedRefund")
+            : action === "release"
+              ? t("admin.disputes.toast.disputeResolvedRelease")
+              : t("admin.disputes.toast.disputeResolvedPartial");
         toast({
-          title: "Success",
-          description: `Dispute resolved: ${action}`,
+          title: t("admin.disputes.toast.successTitle"),
+          description: resolvedDesc,
         });
         setSelectedAction(null);
       setResolutionNotes("");
@@ -303,10 +382,45 @@ export default function AdminDisputeDetailPage() {
       }
     } catch (error: unknown) {
       const errorMessage =
-        error instanceof Error ? error.message : "Failed to resolve dispute";
+        error instanceof Error
+          ? error.message
+          : t("admin.disputes.toast.resolveFailed");
       toast({
-        title: "Error",
+        title: t("admin.users.toast.errorTitle"),
         description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleManualResolve = async () => {
+    if (!dispute) return;
+    try {
+      setActionLoading(true);
+      const response = await manualResolveDispute(dispute.id, {
+        resolution: manualSummary,
+        customerPayoutNote: manualCustomerNote,
+        providerPayoutNote: manualProviderNote,
+      });
+      if (response.success) {
+        toast({
+          title: t("admin.disputes.toast.recordedTitle"),
+          description: t("admin.disputes.toast.manualRecorded"),
+        });
+        setManualSummary("");
+        setManualCustomerNote("");
+        setManualProviderNote("");
+        await loadDispute();
+      }
+    } catch (error: unknown) {
+      toast({
+        title: t("admin.users.toast.errorTitle"),
+        description:
+          error instanceof Error
+            ? error.message
+            : t("admin.disputes.toast.manualFailed"),
         variant: "destructive",
       });
     } finally {
@@ -320,6 +434,7 @@ export default function AdminDisputeDetailPage() {
         return "bg-green-100 text-green-800";
       case "UNDER_REVIEW":
         return "bg-yellow-100 text-yellow-800";
+      case "REJECTED":
       case "CANCELLED":
         return "bg-gray-100 text-gray-800";
       case "CLOSED":
@@ -338,94 +453,107 @@ export default function AdminDisputeDetailPage() {
     );
   };
 
-  // Parse description to convert attachment metadata to clickable links
-  const parseDescriptionWithAttachments = (text: string) => {
-    if (!text) return null;
+  const parseDescriptionWithAttachments = useCallback(
+    (text: string) => {
+      if (!text) return null;
 
-    const attachmentPattern = /\[Attachment: (.+?) uploaded by (.+?) on (.+?)\]/g;
-    const parts: (string | React.ReactElement)[] = [];
-    let lastIndex = 0;
-    let match;
-    let keyIndex = 0;
+      const attachmentPattern =
+        /\[Attachment: (.+?) uploaded by (.+?) on (.+?)\]/g;
+      const parts: (string | React.ReactElement)[] = [];
+      let lastIndex = 0;
+      let match;
+      let keyIndex = 0;
 
-    while ((match = attachmentPattern.exec(text)) !== null) {
-      if (match.index > lastIndex) {
-        parts.push(text.substring(lastIndex, match.index));
-      }
+      while ((match = attachmentPattern.exec(text)) !== null) {
+        if (match.index > lastIndex) {
+          parts.push(text.substring(lastIndex, match.index));
+        }
 
-      const filename = match[1];
-      const uploadedBy = match[2];
-      const uploadedAt = match[3];
+        const filename = match[1];
+        const uploadedBy = match[2];
+        const uploadedAt = match[3];
 
-      const matchingAttachment = dispute?.attachments?.find((url: string) => {
-        const normalized = url.replace(/\\/g, "/");
-        const urlFilename = normalized.split("/").pop() || "";
-        return (
-          urlFilename === filename ||
-          urlFilename.includes(filename) ||
-          filename.includes(urlFilename)
+        const matchingAttachment = dispute?.attachments?.find(
+          (url: string) => {
+            const normalized = url.replace(/\\/g, "/");
+            const urlFilename = normalized.split("/").pop() || "";
+            return (
+              urlFilename === filename ||
+              urlFilename.includes(filename) ||
+              filename.includes(urlFilename)
+            );
+          }
         );
-      });
 
-      if (matchingAttachment) {
-        const attachmentUrl = getAttachmentUrl(matchingAttachment);
-        const isR2Key =
-          attachmentUrl === "#" ||
-          (!attachmentUrl.startsWith("http") &&
-            !attachmentUrl.startsWith("/uploads/") &&
-            !attachmentUrl.includes(
-              process.env.NEXT_PUBLIC_API_URL || "localhost"
-            ));
+        if (matchingAttachment) {
+          const attachmentUrl = getAttachmentUrl(matchingAttachment);
+          const isR2Key =
+            attachmentUrl === "#" ||
+            (!attachmentUrl.startsWith("http") &&
+              !attachmentUrl.startsWith("/uploads/") &&
+              !attachmentUrl.includes(
+                process.env.NEXT_PUBLIC_API_URL || "localhost"
+              ));
 
-        parts.push(
-          <span
-            key={`attachment-${keyIndex++}`}
-            className="inline-flex items-center gap-1"
-          >
-            <span className="text-blue-600">[Attachment:</span>
-            <button
-              onClick={async (e) => {
-                e.preventDefault();
-                try {
-                  let downloadUrl: string;
-                  if (isR2Key) {
-                    const r2Response = await getR2DownloadUrl(matchingAttachment);
-                    downloadUrl = r2Response.downloadUrl;
-                  } else {
-                    downloadUrl = attachmentUrl;
-                  }
-                  window.open(downloadUrl, "_blank");
-                } catch (error) {
-                  console.error("Failed to download attachment:", error);
-                  toast({
-                    title: "Error",
-                    description: "Failed to download attachment",
-                    variant: "destructive",
-                  });
-                }
-              }}
-              className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
+          parts.push(
+            <span
+              key={`attachment-${keyIndex++}`}
+              className="inline-flex items-center gap-1"
             >
-              {filename}
-            </button>
-            <span className="text-gray-600">
-              uploaded by {uploadedBy} on {uploadedAt}]
+              <span className="text-blue-600">
+                {t("admin.disputes.detail.attachment.openBracket")}
+              </span>
+              <button
+                onClick={async (e) => {
+                  e.preventDefault();
+                  try {
+                    let downloadUrl: string;
+                    if (isR2Key) {
+                      const r2Response =
+                        await getR2DownloadUrl(matchingAttachment);
+                      downloadUrl = r2Response.downloadUrl;
+                    } else {
+                      downloadUrl = attachmentUrl;
+                    }
+                    window.open(downloadUrl, "_blank");
+                  } catch (error) {
+                    console.error("Failed to download attachment:", error);
+                    toast({
+                      title: t("admin.users.toast.errorTitle"),
+                      description: t(
+                        "admin.disputes.toast.downloadAttachmentFailed"
+                      ),
+                      variant: "destructive",
+                    });
+                  }
+                }}
+                className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
+              >
+                {filename}
+              </button>
+              <span className="text-gray-600">
+                {t("admin.disputes.detail.attachment.uploadedByOn", {
+                  user: uploadedBy,
+                  date: uploadedAt,
+                })}
+              </span>
             </span>
-          </span>
-        );
-      } else {
-        parts.push(match[0]);
+          );
+        } else {
+          parts.push(match[0]);
+        }
+
+        lastIndex = match.index + match[0].length;
       }
 
-      lastIndex = match.index + match[0].length;
-    }
+      if (lastIndex < text.length) {
+        parts.push(text.substring(lastIndex));
+      }
 
-    if (lastIndex < text.length) {
-      parts.push(text.substring(lastIndex));
-    }
-
-    return parts.length > 0 ? parts : text;
-  };
+      return parts.length > 0 ? parts : text;
+    },
+    [dispute, t, toast]
+  );
 
   if (loading) {
     return (
@@ -441,9 +569,9 @@ export default function AdminDisputeDetailPage() {
     return (
       <AdminLayout>
         <div className="text-center py-12">
-          <p className="text-gray-500">Dispute not found</p>
+          <p className="text-gray-500">{t("admin.disputes.detail.notFound")}</p>
           <Link href="/admin/disputes">
-            <Button className="mt-4">Back to Disputes</Button>
+            <Button className="mt-4">{t("admin.disputes.detail.backToList")}</Button>
           </Link>
         </div>
       </AdminLayout>
@@ -469,15 +597,17 @@ export default function AdminDisputeDetailPage() {
             </Link>
             <div>
               <h1 className="text-3xl font-bold text-gray-900">
-                Dispute Review - {dispute.reason}
+                {t("admin.disputes.detail.headerTitle", { reason: dispute.reason })}
               </h1>
               <p className="text-gray-600">
-                Project: {dispute.project?.title || "N/A"}
+                {t("admin.disputes.detail.projectLabel", {
+                  title: dispute.project?.title || t("admin.disputes.na"),
+                })}
               </p>
             </div>
           </div>
           <Badge className={getStatusColor(dispute.status)}>
-            {dispute.status?.replace("_", " ")}
+            {disputeStatusLabel(dispute.status, t)}
           </Badge>
         </div>
 
@@ -485,33 +615,48 @@ export default function AdminDisputeDetailPage() {
         <div className="grid md:grid-cols-2 gap-6">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Dispute Details</CardTitle>
+              <CardTitle className="text-lg">
+                {t("admin.disputes.detail.card.disputeDetails")}
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <div>
                 <p className="font-medium">{dispute.reason}</p>
                 <p className="text-sm text-gray-500">
-                  Project: {dispute.project?.title}
+                  {t("admin.disputes.detail.field.project")}{" "}
+                  {dispute.project?.title}
                 </p>
               </div>
               <div className="text-sm space-y-1">
                 <p>
-                  <span className="font-medium">Amount:</span> RM
-                  {disputeAmount(dispute).toLocaleString()}
+                  <span className="font-medium">
+                    {t("admin.disputes.detail.field.amount")}
+                  </span>{" "}
+                  {t("admin.disputes.stats.amountRm", {
+                    amount: disputeAmount(dispute).toLocaleString(),
+                  })}
                 </p>
                 <p>
-                  <span className="font-medium">Created:</span>{" "}
+                  <span className="font-medium">
+                    {t("admin.disputes.detail.field.created")}
+                  </span>{" "}
                   {new Date(dispute.createdAt).toLocaleDateString()}
                 </p>
                 {dispute.contestedAmount && (
                   <p>
-                    <span className="font-medium">Contested Amount:</span> RM
-                    {dispute.contestedAmount.toLocaleString()}
+                    <span className="font-medium">
+                      {t("admin.disputes.detail.field.contestedAmount")}
+                    </span>{" "}
+                    {t("admin.disputes.stats.amountRm", {
+                      amount: dispute.contestedAmount.toLocaleString(),
+                    })}
                   </p>
                 )}
               </div>
               <div className="mt-3">
-                <p className="font-medium mb-3">Description & Updates:</p>
+                <p className="font-medium mb-3">
+                  {t("admin.disputes.detail.section.descriptionUpdates")}
+                </p>
                 <div className="space-y-4">
                   {/* Original Description */}
                   <div className="bg-gray-50 p-4 rounded-lg border-l-4 border-blue-500">
@@ -523,11 +668,13 @@ export default function AdminDisputeDetailPage() {
                       </Avatar>
                       <div>
                         <p className="text-sm font-semibold text-gray-900">
-                          {dispute.raisedBy?.name || "Unknown User"}
+                          {dispute.raisedBy?.name ||
+                            t("admin.disputes.detail.unknownUser")}
                         </p>
                         <p className="text-xs text-gray-500">
-                          Original dispute •{" "}
-                          {new Date(dispute.createdAt).toLocaleString()}
+                          {t("admin.disputes.detail.originalMeta", {
+                            date: new Date(dispute.createdAt).toLocaleString(),
+                          })}
                         </p>
                       </div>
                     </div>
@@ -558,27 +705,33 @@ export default function AdminDisputeDetailPage() {
                           /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
                         if (uuidRegex.test(userIdOrName)) {
                           if (dispute.project?.customer?.id === userIdOrName) {
-                            userName = dispute.project?.customer?.name || "Customer";
+                            userName =
+                              dispute.project?.customer?.name ||
+                              t("admin.disputes.detail.role.customer");
                           } else if (
                             dispute.project?.provider?.id === userIdOrName
                           ) {
-                            userName = dispute.project?.provider?.name || "Provider";
+                            userName =
+                              dispute.project?.provider?.name ||
+                              t("admin.disputes.detail.role.provider");
                           } else if (dispute.raisedBy?.id === userIdOrName) {
-                            userName = dispute.raisedBy?.name || "Unknown User";
+                            userName =
+                              dispute.raisedBy?.name ||
+                              t("admin.disputes.detail.unknownUser");
                           } else {
-                            userName = "Unknown User";
+                            userName = t("admin.disputes.detail.unknownUser");
                           }
-                          updateDate = "Unknown Date";
+                          updateDate = t("admin.disputes.detail.unknownDate");
                           updateContent = content;
                         } else {
                           userName = userIdOrName;
-                          updateDate = "Unknown Date";
+                          updateDate = t("admin.disputes.detail.unknownDate");
                         updateContent = content;
                         }
                       } else {
                         updateContent = update;
-                        userName = "Unknown User";
-                        updateDate = "Unknown Date";
+                        userName = t("admin.disputes.detail.unknownUser");
+                        updateDate = t("admin.disputes.detail.unknownDate");
                       }
                     }
 
@@ -611,14 +764,17 @@ export default function AdminDisputeDetailPage() {
                               </p>
                               <Badge variant="outline" className="text-xs">
                                 {isCustomer
-                                  ? "Customer"
+                                  ? t("admin.disputes.detail.role.customer")
                                   : isProvider
-                                  ? "Provider"
-                                  : "User"}
+                                  ? t("admin.disputes.detail.role.provider")
+                                  : t("admin.disputes.detail.role.user")}
                               </Badge>
                             </div>
                             <p className="text-xs text-gray-500">
-                              Update #{idx + 1} • {updateDate}
+                              {t("admin.disputes.detail.updateLine", {
+                                n: idx + 1,
+                                date: updateDate,
+                              })}
                             </p>
                           </div>
                         </div>
@@ -633,7 +789,9 @@ export default function AdminDisputeDetailPage() {
               </div>
               {dispute.suggestedResolution && (
                 <div className="mt-3">
-                  <p className="font-medium mb-2">Suggested Resolution:</p>
+                  <p className="font-medium mb-2">
+                    {t("admin.disputes.detail.suggestedResolution")}
+                  </p>
                   <p className="text-sm text-gray-700">
                     {dispute.suggestedResolution}
                   </p>
@@ -644,7 +802,9 @@ export default function AdminDisputeDetailPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Participants</CardTitle>
+              <CardTitle className="text-lg">
+                {t("admin.disputes.detail.participants.title")}
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center gap-3 p-3 border rounded-lg">
@@ -655,9 +815,11 @@ export default function AdminDisputeDetailPage() {
                 </Avatar>
                 <div>
                   <p className="font-medium">
-                    {dispute.project?.customer?.name || "N/A"}
+                    {dispute.project?.customer?.name || t("admin.disputes.na")}
                   </p>
-                  <p className="text-sm text-gray-500">Customer</p>
+                  <p className="text-sm text-gray-500">
+                    {t("admin.disputes.detail.role.customer")}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-3 p-3 border rounded-lg">
@@ -668,9 +830,11 @@ export default function AdminDisputeDetailPage() {
                 </Avatar>
                 <div>
                   <p className="font-medium">
-                    {dispute.project?.provider?.name || "N/A"}
+                    {dispute.project?.provider?.name || t("admin.disputes.na")}
                   </p>
-                  <p className="text-sm text-gray-500">Provider</p>
+                  <p className="text-sm text-gray-500">
+                    {t("admin.disputes.detail.role.provider")}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-3 p-3 border rounded-lg">
@@ -681,15 +845,17 @@ export default function AdminDisputeDetailPage() {
                 </Avatar>
                 <div>
                   <p className="font-medium">
-                    {dispute.raisedBy?.name || "N/A"}
+                    {dispute.raisedBy?.name || t("admin.disputes.na")}
                   </p>
-                  <p className="text-sm text-gray-500">Raised By</p>
+                  <p className="text-sm text-gray-500">
+                    {t("admin.disputes.detail.participants.raisedBy")}
+                  </p>
                 </div>
               </div>
               <Link href={`/admin/projects/${dispute.projectId}`}>
                 <Button variant="outline" className="w-full">
                   <Eye className="w-4 h-4 mr-2" />
-                  View Project Details
+                  {t("admin.disputes.detail.viewProject")}
                 </Button>
               </Link>
             </CardContent>
@@ -700,14 +866,19 @@ export default function AdminDisputeDetailPage() {
         {dispute.attachments && dispute.attachments.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Evidence & Documents</CardTitle>
+              <CardTitle className="text-lg">
+                {t("admin.disputes.detail.evidence.title")}
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid md:grid-cols-2 gap-4">
                 {dispute.attachments.map((url: string, index: number) => {
                   const normalized = url.replace(/\\/g, "/");
                   const filename =
-                    normalized.split("/").pop() || `Attachment ${index + 1}`;
+                    normalized.split("/").pop() ||
+                    t("admin.disputes.detail.evidence.fallbackName", {
+                      n: index + 1,
+                    });
                   const cleanFilename = filename.replace(/^\d+_/, "");
 
                   const attachmentMetadataMatch =
@@ -717,8 +888,9 @@ export default function AdminDisputeDetailPage() {
                         "g"
                       )
                     );
-                  let uploadedBy = "Unknown User";
-                  let uploadedAt = "Unknown Date";
+                  let uploadedBy = "";
+                  let uploadedAt = "";
+                  let matchedAttachmentMeta = false;
 
                   if (attachmentMetadataMatch) {
                     for (const meta of attachmentMetadataMatch) {
@@ -728,18 +900,24 @@ export default function AdminDisputeDetailPage() {
                       if (metaMatch && metaMatch[1] === filename) {
                         uploadedBy = metaMatch[2];
                         uploadedAt = metaMatch[3];
+                        matchedAttachmentMeta = true;
                         break;
                       }
                     }
                   }
 
                   if (
-                    uploadedBy === "Unknown User" &&
+                    !matchedAttachmentMeta &&
                     index === 0 &&
                     dispute.attachments?.length === 1
                   ) {
-                    uploadedBy = dispute.raisedBy?.name || "Unknown User";
+                    uploadedBy =
+                      dispute.raisedBy?.name ||
+                      t("admin.disputes.detail.unknownUser");
                     uploadedAt = new Date(dispute.createdAt).toLocaleString();
+                  } else if (!matchedAttachmentMeta) {
+                    uploadedBy = t("admin.disputes.detail.unknownUser");
+                    uploadedAt = t("admin.disputes.detail.unknownDate");
                   }
 
                   return (
@@ -752,7 +930,10 @@ export default function AdminDisputeDetailPage() {
                               {cleanFilename}
                             </p>
                             <p className="text-xs text-gray-500">
-                              Uploaded by {uploadedBy} • {uploadedAt}
+                              {t("admin.disputes.detail.evidence.uploadedLine", {
+                                user: uploadedBy,
+                                date: uploadedAt,
+                              })}
                             </p>
                           </div>
                         </div>
@@ -786,8 +967,10 @@ export default function AdminDisputeDetailPage() {
                                         error
                                       );
                                       toast({
-                                        title: "Error",
-                                        description: "Failed to download attachment",
+                                        title: t("admin.users.toast.errorTitle"),
+                                        description: t(
+                                          "admin.disputes.toast.downloadAttachmentFailed"
+                                        ),
                                         variant: "destructive",
                                       });
                                     }
@@ -797,7 +980,7 @@ export default function AdminDisputeDetailPage() {
                           >
                             <Button variant="outline" size="sm" className="w-full bg-transparent">
                               <Eye className="w-4 h-4 mr-2" />
-                              View
+                              {t("admin.disputes.detail.evidence.view")}
                             </Button>
                           </a>
                         );
@@ -817,7 +1000,7 @@ export default function AdminDisputeDetailPage() {
             <Card className="border-purple-200 bg-purple-50">
               <CardHeader>
                 <CardTitle className="text-lg text-purple-800">
-                  Admin Resolution Notes
+                  {t("admin.disputes.detail.adminNotesCard.title")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -849,18 +1032,26 @@ export default function AdminDisputeDetailPage() {
                           </Avatar>
                           <div>
                             <p className="text-sm font-semibold text-gray-900">
-                              Resolution Note #{index + 1}
+                              {t("admin.disputes.detail.adminNotesCard.noteHeading", {
+                                n: index + 1,
+                              })}
                             </p>
                             <p className="text-xs text-gray-500">
-                              By {note.adminName || "Admin"} •{" "}
-                              {new Date(note.createdAt).toLocaleString()}
+                              {t("admin.disputes.detail.adminNotesCard.byLine", {
+                                name:
+                                  note.adminName ||
+                                  t("admin.disputes.detail.adminNotesCard.adminFallback"),
+                                date: new Date(note.createdAt).toLocaleString(),
+                              })}
                             </p>
                           </div>
                         </div>
                         <div className="space-y-3 mt-2">
                           <div>
                             <p className="text-xs font-semibold text-gray-500 mb-1">
-                              Resolution Result:
+                              {t(
+                                "admin.disputes.detail.adminNotesCard.resolutionResult"
+                              )}
                             </p>
                             <p className="text-sm text-gray-700 whitespace-pre-wrap bg-gray-50 p-2 rounded">
                               {resolutionResult}
@@ -869,7 +1060,7 @@ export default function AdminDisputeDetailPage() {
                           {hasAdminNote && adminNote && (
                             <div>
                               <p className="text-xs font-semibold text-purple-600 mb-1">
-                                Admin Note:
+                                {t("admin.disputes.detail.adminNotesCard.adminNote")}
                               </p>
                               <p className="text-sm text-gray-700 whitespace-pre-wrap bg-purple-50 p-2 rounded border-l-2 border-purple-300">
                                 {adminNote}
@@ -894,7 +1085,7 @@ export default function AdminDisputeDetailPage() {
             <Card className="border-green-200 bg-green-50">
               <CardHeader>
                 <CardTitle className="text-lg text-green-800">
-                  Resolution
+                  {t("admin.disputes.detail.legacyResolutionTitle")}
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -908,25 +1099,36 @@ export default function AdminDisputeDetailPage() {
           <Card className="border-blue-200 bg-blue-50">
             <CardHeader>
               <CardTitle className="text-lg text-blue-900">
-                Payment Information
+                {t("admin.disputes.detail.payment.title")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <span className="font-medium text-blue-800">Payment ID:</span>
+                  <span className="font-medium text-blue-800">
+                    {t("admin.disputes.detail.payment.paymentId")}
+                  </span>
                   <p className="text-blue-600 font-mono text-xs break-all">
-                    {dispute.payment?.id || dispute.paymentId || "N/A"}
+                    {dispute.payment?.id ||
+                      dispute.paymentId ||
+                      t("admin.disputes.na")}
                   </p>
                 </div>
                 <div>
-                  <span className="font-medium text-blue-800">Amount:</span>
+                  <span className="font-medium text-blue-800">
+                    {t("admin.disputes.detail.payment.amount")}
+                  </span>
                   <p className="text-blue-600">
-                    RM {dispute.payment?.amount?.toLocaleString() || "0"}
+                    {t("admin.disputes.stats.amountRm", {
+                      amount:
+                        dispute.payment?.amount?.toLocaleString() || "0",
+                    })}
                   </p>
                 </div>
                 <div>
-                  <span className="font-medium text-blue-800">Status:</span>
+                  <span className="font-medium text-blue-800">
+                    {t("admin.disputes.detail.payment.status")}
+                  </span>
                   <Badge
                     className={`ml-2 ${
                       dispute.payment?.status === "ESCROWED"
@@ -940,22 +1142,22 @@ export default function AdminDisputeDetailPage() {
                         : "bg-gray-100 text-gray-800"
                     }`}
                   >
-                    {dispute.payment?.status || "N/A"}
+                    {paymentStatusLabel(dispute.payment?.status, t)}
                   </Badge>
                 </div>
                 <div>
                   <span className="font-medium text-blue-800">
-                    Payment Method:
+                    {t("admin.disputes.detail.payment.method")}
                   </span>
                   <p className="text-blue-600">
-                    {dispute.payment?.method || "N/A"}
+                    {dispute.payment?.method || t("admin.disputes.na")}
                   </p>
                 </div>
               </div>
               {dispute.payment?.stripeRefundId && (
                 <div className="mt-2 pt-2 border-t border-blue-200">
                   <span className="font-medium text-blue-800">
-                    Refund Transaction ID:
+                    {t("admin.disputes.detail.payment.refundTxnId")}
                   </span>
                   <p className="text-blue-600 font-mono text-xs break-all">
                     {dispute.payment?.stripeRefundId}
@@ -965,7 +1167,7 @@ export default function AdminDisputeDetailPage() {
               {dispute.payment?.bankTransferRef && (
                 <div className="mt-2 pt-2 border-t border-blue-200">
                   <span className="font-medium text-blue-800">
-                    Transfer Reference:
+                    {t("admin.disputes.detail.payment.transferRef")}
                   </span>
                   <p className="text-blue-600 font-mono text-xs break-all">
                     {dispute.payment?.bankTransferRef?.startsWith("http") ? (
@@ -975,7 +1177,7 @@ export default function AdminDisputeDetailPage() {
                         rel="noopener noreferrer"
                         className="text-blue-600 hover:underline"
                       >
-                        View File
+                        {t("admin.disputes.detail.payment.viewFile")}
                       </a>
                     ) : (
                       dispute.payment?.bankTransferRef
@@ -992,95 +1194,78 @@ export default function AdminDisputeDetailPage() {
           dispute.status !== "CLOSED" && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Resolution Actions</CardTitle>
+              <CardTitle className="text-lg">
+                {t("admin.disputes.detail.resolution.title")}
+              </CardTitle>
               <CardDescription>
                 {dispute.payment
-                  ? `Payment Amount: RM ${
-                      dispute.payment?.amount?.toLocaleString() ||
-                      dispute.contestedAmount ||
-                      0
-                    }`
-                  : `Contested Amount: RM ${dispute.contestedAmount || 0}`}
+                  ? t("admin.disputes.detail.resolution.descPayment", {
+                      amount: String(
+                        dispute.payment?.amount?.toLocaleString() ||
+                          dispute.contestedAmount ||
+                          0
+                      ),
+                    })
+                  : t("admin.disputes.detail.resolution.descContested", {
+                      amount: String(dispute.contestedAmount || 0),
+                    })}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    if (
-                      !dispute.payment?.id &&
-                      !dispute.paymentId &&
-                      !dispute.milestoneId
-                    ) {
-                      toast({
-                        title: "Error",
-                        description: "No payment found for this dispute",
-                        variant: "destructive",
-                      });
-                      return;
-                    }
-                    setSelectedAction("refund");
-                    setBankTransferRefImage(null);
-                    setBankTransferRefImagePreview(null);
-                  }}
-                  disabled={
-                    actionLoading ||
-                    (!dispute.payment?.id &&
-                      !dispute.paymentId &&
-                      !dispute.milestoneId)
-                  }
-                  className={`${
-                    selectedAction === "refund"
-                      ? "bg-green-50 border-green-500 text-green-700"
-                      : "text-green-600 hover:text-green-700 border-green-300"
-                  }`}
-                >
-                  <DollarSign className="w-4 h-4 mr-2" />
-                  Refund (Company Wins)
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    if (
-                      !dispute.payment?.id &&
-                      !dispute.paymentId &&
-                      !dispute.milestoneId
-                    ) {
-                      toast({
-                        title: "Error",
-                        description: "No payment found for this dispute",
-                        variant: "destructive",
-                      });
-                      return;
-                    }
-                    setSelectedAction("release");
-                    setBankTransferRefImage(null);
-                    setBankTransferRefImagePreview(null);
-                  }}
-                  disabled={
-                    actionLoading ||
-                    (!dispute.payment?.id &&
-                      !dispute.paymentId &&
-                      !dispute.milestoneId)
-                  }
-                  className={`${
-                    selectedAction === "release"
-                      ? "bg-blue-50 border-blue-500 text-blue-700"
-                      : "text-blue-600 hover:text-blue-700 border-blue-300"
-                  }`}
-                >
-                  <CheckCircle className="w-4 h-4 mr-2" />
-                  Release (Provider Wins)
-                </Button>
+                {dispute.milestoneId ? (
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setSelectedAction("refund");
+                        setBankTransferRefImage(null);
+                        setBankTransferRefImagePreview(null);
+                      }}
+                      disabled={actionLoading}
+                      className={`${
+                        selectedAction === "refund"
+                          ? "bg-green-50 border-green-500 text-green-700"
+                          : "text-green-600 hover:text-green-700 border-green-300"
+                      }`}
+                    >
+                      <DollarSign className="w-4 h-4 mr-2" />
+                      {t("admin.disputes.detail.action.refund")}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setSelectedAction("release");
+                        setBankTransferRefImage(null);
+                        setBankTransferRefImagePreview(null);
+                      }}
+                      disabled={actionLoading}
+                      className={`${
+                        selectedAction === "release"
+                          ? "bg-blue-50 border-blue-500 text-blue-700"
+                          : "text-blue-600 hover:text-blue-700 border-blue-300"
+                      }`}
+                    >
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      {t("admin.disputes.detail.action.release")}
+                    </Button>
+                  </>
+                ) : null}
                 <Button
                   variant="outline"
                   onClick={() => handleResolve("redo")}
                   disabled={actionLoading}
                   className="text-yellow-600 hover:text-yellow-700 border-yellow-300"
+                  title={
+                    dispute.milestoneId
+                      ? t("admin.disputes.detail.action.redoHintMilestone")
+                      : t("admin.disputes.detail.action.redoHintProject")
+                  }
                 >
                   <RefreshCw className="w-4 h-4 mr-2" />
-                  Redo Milestone
+                  {dispute.milestoneId
+                    ? t("admin.disputes.detail.action.redoMilestone")
+                    : t("admin.disputes.detail.action.redoProject")}
                 </Button>
                   <Button
                     variant="outline"
@@ -1089,23 +1274,23 @@ export default function AdminDisputeDetailPage() {
                     className="text-red-600 hover:text-red-700 border-red-300"
                   >
                     <X className="w-4 h-4 mr-2" />
-                    Reject Dispute
+                    {t("admin.disputes.detail.action.endProject")}
                   </Button>
                 </div>
 
                 {/* Admin Note Box */}
                 <div className="p-4 border rounded-lg bg-gray-50">
                   <Label htmlFor="admin-resolution-notes" className="text-base font-semibold">
-                    Admin Resolution Notes (Optional)
+                    {t("admin.disputes.detail.adminNoteBox.label")}
                   </Label>
                   <p className="text-sm text-gray-600 mt-1 mb-3">
-                    Add notes about this resolution. These notes will be visible to all parties.
+                    {t("admin.disputes.detail.adminNoteBox.hint")}
                   </p>
                   <textarea
                     id="admin-resolution-notes"
                     value={resolutionNotes}
                     onChange={(e) => setResolutionNotes(e.target.value)}
-                    placeholder="Enter resolution notes or admin comments..."
+                    placeholder={t("admin.disputes.detail.adminNoteBox.placeholder")}
                     className="w-full p-3 border rounded-md min-h-[120px] resize-y"
                   />
               </div>
@@ -1116,11 +1301,10 @@ export default function AdminDisputeDetailPage() {
                   <div className="flex items-center justify-between mb-3">
                     <div>
                       <h4 className="font-semibold text-green-900">
-                        Process Refund
+                        {t("admin.disputes.detail.refund.heading")}
                       </h4>
                       <p className="text-sm text-green-700 mt-1">
-                        Refund will be processed directly via Stripe. No bank
-                        transfer reference needed.
+                        {t("admin.disputes.detail.refund.body")}
                       </p>
                     </div>
                     <Button
@@ -1142,12 +1326,12 @@ export default function AdminDisputeDetailPage() {
                     {actionLoading ? (
                       <>
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Processing...
+                        {t("admin.disputes.detail.processing")}
                       </>
                     ) : (
                       <>
                         <DollarSign className="w-4 h-4 mr-2" />
-                        Submit Refund
+                        {t("admin.disputes.detail.refund.submit")}
                       </>
                     )}
                   </Button>
@@ -1163,10 +1347,10 @@ export default function AdminDisputeDetailPage() {
                         htmlFor="bank-transfer-ref-image"
                         className="text-base font-semibold"
                       >
-                        Bank Transfer Reference Image
+                        {t("admin.disputes.detail.release.imageLabel")}
                       </Label>
                       <p className="text-sm text-gray-600 mt-1">
-                        Required for release processing
+                        {t("admin.disputes.detail.release.imageHint")}
                       </p>
                     </div>
                     <Button
@@ -1177,17 +1361,72 @@ export default function AdminDisputeDetailPage() {
                         setSelectedAction(null);
                         setBankTransferRefImage(null);
                         setBankTransferRefImagePreview(null);
+                        setPayoutBankName("");
+                        setPayoutAccountNumber("");
+                        setPayoutAccountName("");
                       }}
                     >
                       <X className="w-4 h-4" />
                     </Button>
                   </div>
 
+                  <div className="p-4 border rounded-lg bg-slate-50 border-slate-200 space-y-3">
+                    <h4 className="font-semibold text-slate-900 text-sm">
+                      {t("admin.disputes.detail.release.overrideHeading")}
+                    </h4>
+                    <p className="text-xs text-slate-600">
+                      {t("admin.disputes.detail.release.overrideHint")}
+                    </p>
+                    <div className="grid gap-2 sm:grid-cols-3">
+                      <div className="space-y-1">
+                        <Label htmlFor="payout-bank" className="text-xs">
+                          {t("admin.disputes.detail.release.bankName")}
+                        </Label>
+                        <Input
+                          id="payout-bank"
+                          value={payoutBankName}
+                          onChange={(e) => setPayoutBankName(e.target.value)}
+                          placeholder={t(
+                            "admin.disputes.detail.release.placeholderBank"
+                          )}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="payout-acct" className="text-xs">
+                          {t("admin.disputes.detail.release.accountNumber")}
+                        </Label>
+                        <Input
+                          id="payout-acct"
+                          value={payoutAccountNumber}
+                          onChange={(e) =>
+                            setPayoutAccountNumber(e.target.value)
+                          }
+                          placeholder={t(
+                            "admin.disputes.detail.release.placeholderAccount"
+                          )}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="payout-holder" className="text-xs">
+                          {t("admin.disputes.detail.release.accountHolder")}
+                        </Label>
+                        <Input
+                          id="payout-holder"
+                          value={payoutAccountName}
+                          onChange={(e) => setPayoutAccountName(e.target.value)}
+                          placeholder={t(
+                            "admin.disputes.detail.release.placeholderHolder"
+                          )}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Provider Payout Method Info */}
                   <div className="p-4 border rounded-lg bg-blue-50 border-blue-200">
                     <div className="flex items-center justify-between mb-3">
                       <h4 className="font-semibold text-blue-900">
-                        Provider Payout Method
+                        {t("admin.disputes.detail.payout.title")}
                       </h4>
                       {dispute.project?.provider?.id && (
                         <Button
@@ -1207,7 +1446,7 @@ export default function AdminDisputeDetailPage() {
                           className="text-xs"
                         >
                           <MessageSquare className="w-3 h-3 mr-1" />
-                          Message Provider
+                          {t("admin.disputes.detail.payout.messageProvider")}
                         </Button>
                       )}
                     </div>
@@ -1240,12 +1479,20 @@ export default function AdminDisputeDetailPage() {
                                   title:
                                     method.label ||
                                     method.bankName ||
-                                    "Bank Account",
+                                    t("admin.disputes.detail.payout.bankAccount"),
                                   subtitle: method.accountNumber
-                                    ? `Account: ${method.accountNumber}`
-                                    : "No account number",
+                                    ? t(
+                                        "admin.disputes.detail.payout.accountLine",
+                                        { number: method.accountNumber }
+                                      )
+                                    : t(
+                                        "admin.disputes.detail.payout.noAccountNumber"
+                                      ),
                                   details: method.accountHolder
-                                    ? `Holder: ${method.accountHolder}`
+                                    ? t(
+                                        "admin.disputes.detail.payout.holderLine",
+                                        { name: method.accountHolder }
+                                      )
                                     : "",
                                 };
                               } else {
@@ -1298,12 +1545,10 @@ export default function AdminDisputeDetailPage() {
                           <AlertCircle className="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" />
                           <div className="flex-1">
                             <p className="text-sm font-medium text-yellow-900">
-                              No payout method provided
+                              {t("admin.disputes.detail.payout.noMethodsTitle")}
                             </p>
                             <p className="text-xs text-yellow-700 mt-1">
-                              The provider has not set up any payout methods.
-                              Please contact them to add their bank details or
-                              payment information.
+                              {t("admin.disputes.detail.payout.noMethodsBody")}
                             </p>
                             {dispute.project?.provider?.id && (
                               <Button
@@ -1323,7 +1568,7 @@ export default function AdminDisputeDetailPage() {
                                 className="mt-2 text-xs"
                               >
                                 <MessageSquare className="w-3 h-3 mr-1" />
-                                Message Provider to Add Payout Method
+                                {t("admin.disputes.detail.payout.promptAddMethod")}
                               </Button>
                             )}
                           </div>
@@ -1337,7 +1582,7 @@ export default function AdminDisputeDetailPage() {
                       <div className="relative w-full h-48 border rounded-lg overflow-hidden">
                         <Image
                           src={bankTransferRefImagePreview}
-                          alt="Bank transfer reference"
+                          alt={t("admin.disputes.detail.release.bankImageAlt")}
                           fill
                           className="object-contain"
                           unoptimized
@@ -1367,17 +1612,24 @@ export default function AdminDisputeDetailPage() {
                             if (file) {
                               if (!file.type.startsWith("image/")) {
                                 toast({
-                                  title: "Invalid file type",
-                                  description: "Please select an image file",
+                                  title: t(
+                                    "admin.disputes.toast.invalidFileTypeTitle"
+                                  ),
+                                  description: t(
+                                    "admin.disputes.toast.invalidFileTypeDesc"
+                                  ),
                                   variant: "destructive",
                                 });
                                 return;
                               }
                               if (file.size > 5 * 1024 * 1024) {
                                 toast({
-                                  title: "File too large",
-                                  description:
-                                    "Please select an image smaller than 5MB",
+                                  title: t(
+                                    "admin.disputes.toast.fileTooLargeTitle"
+                                  ),
+                                  description: t(
+                                    "admin.disputes.toast.fileTooLargeDesc"
+                                  ),
                                   variant: "destructive",
                                 });
                                 return;
@@ -1399,10 +1651,10 @@ export default function AdminDisputeDetailPage() {
                         >
                           <Upload className="w-8 h-8 text-gray-400 mb-2" />
                           <span className="text-sm text-gray-600">
-                            Click to upload bank transfer reference image
+                            {t("admin.disputes.detail.upload.cta")}
                           </span>
                           <span className="text-xs text-gray-500 mt-1">
-                            PNG, JPG, GIF up to 5MB
+                            {t("admin.disputes.detail.upload.formats")}
                           </span>
                         </label>
                       </div>
@@ -1413,9 +1665,12 @@ export default function AdminDisputeDetailPage() {
                         onClick={() => {
                           if (!bankTransferRefImage) {
                             toast({
-                              title: "Image Required",
-                              description:
-                                "Please upload a bank transfer reference image",
+                              title: t(
+                                "admin.disputes.toast.imageRequiredTitle"
+                              ),
+                              description: t(
+                                "admin.disputes.toast.uploadBankImage"
+                              ),
                               variant: "destructive",
                             });
                             return;
@@ -1428,18 +1683,85 @@ export default function AdminDisputeDetailPage() {
                       {actionLoading ? (
                         <>
                           <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Processing...
+                          {t("admin.disputes.detail.processing")}
                         </>
                       ) : (
                         <>
                           <CheckCircle className="w-4 h-4 mr-2" />
-                          Submit Release
+                          {t("admin.disputes.detail.release.submit")}
                         </>
                       )}
                     </Button>
                   )}
                 </div>
               )}
+
+              <div className="p-4 border border-dashed rounded-lg border-amber-300 bg-amber-50/60 space-y-3">
+                <h4 className="font-semibold text-amber-950">
+                  {t("admin.disputes.detail.manual.title")}
+                </h4>
+                <p className="text-sm text-amber-900/90">
+                  {t("admin.disputes.detail.manual.body")}
+                </p>
+                <div className="space-y-2">
+                  <Label htmlFor="manual-summary">
+                    {t("admin.disputes.detail.manual.summary")}
+                  </Label>
+                  <textarea
+                    id="manual-summary"
+                    value={manualSummary}
+                    onChange={(e) => setManualSummary(e.target.value)}
+                    placeholder={t(
+                      "admin.disputes.detail.manual.summaryPlaceholder"
+                    )}
+                    className="w-full p-3 border rounded-md min-h-[72px] text-sm"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="manual-customer">
+                    {t("admin.disputes.detail.manual.customerNote")}
+                  </Label>
+                  <textarea
+                    id="manual-customer"
+                    value={manualCustomerNote}
+                    onChange={(e) => setManualCustomerNote(e.target.value)}
+                    placeholder={t(
+                      "admin.disputes.detail.manual.customerPlaceholder"
+                    )}
+                    className="w-full p-3 border rounded-md min-h-[64px] text-sm"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="manual-provider">
+                    {t("admin.disputes.detail.manual.providerNote")}
+                  </Label>
+                  <textarea
+                    id="manual-provider"
+                    value={manualProviderNote}
+                    onChange={(e) => setManualProviderNote(e.target.value)}
+                    placeholder={t(
+                      "admin.disputes.detail.manual.providerPlaceholder"
+                    )}
+                    className="w-full p-3 border rounded-md min-h-[64px] text-sm"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full border-amber-400 text-amber-950 hover:bg-amber-100"
+                  disabled={actionLoading}
+                  onClick={handleManualResolve}
+                >
+                  {actionLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      {t("admin.disputes.detail.manual.saving")}
+                    </>
+                  ) : (
+                    t("admin.disputes.detail.manual.record")
+                  )}
+                </Button>
+              </div>
             </CardContent>
           </Card>
         )}

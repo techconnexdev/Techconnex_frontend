@@ -21,6 +21,12 @@ export type Provider = {
   verified?: boolean;
   topRated?: boolean;
   saved?: boolean;
+  /** ISO 4217 — provider display currency (profile/settings); budgets & hourly use this. */
+  preferredCurrency?: string;
+  /** BNM snapshot metadata for converting provider amounts (same pattern as projects). */
+  pricingFxSnapshotDate?: string | null;
+  pricingFxSnapshotSession?: string | null;
+  pricingFxSnapshotRatesJson?: Record<string, unknown> | null;
   // Additional public-safe fields
   yearsExperience?: number;
   minimumProjectBudget?: number | null;

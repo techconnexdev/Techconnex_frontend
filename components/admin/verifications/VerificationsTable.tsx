@@ -1,5 +1,6 @@
 "use client"
 
+import { useI18n } from "@/contexts/I18nProvider"
 import {
   Table,
   TableBody,
@@ -13,6 +14,11 @@ import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Eye, FileText, Building, User } from "lucide-react"
 import { VerificationRow, KycUser } from "./types"
+import {
+  PILL_STATUS_KEYS,
+  UI_TYPE_KEYS,
+  docStatusLabel,
+} from "./verification-i18n-maps"
 import { getAttachmentUrl, getR2DownloadUrl } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 
@@ -51,6 +57,7 @@ interface VerificationsTableProps {
 }
 
 export function VerificationsTable({ rows, loading, onSelectUser }: VerificationsTableProps) {
+  const { t } = useI18n()
   const { toast } = useToast()
 
   const handleDocumentClick = async (doc: { fileUrl: string; filename: string }) => {
@@ -67,8 +74,11 @@ export function VerificationsTable({ rows, loading, onSelectUser }: Verification
     } catch (error: unknown) {
       console.error("Failed to open document:", error)
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to open document",
+        title: t("admin.users.toast.errorTitle"),
+        description:
+          error instanceof Error
+            ? error.message
+            : t("admin.verifications.toast.openDocumentFailed"),
         variant: "destructive",
       })
     }
@@ -77,7 +87,7 @@ export function VerificationsTable({ rows, loading, onSelectUser }: Verification
   if (!loading && rows.length === 0) {
     return (
       <div className="text-center text-sm text-gray-500 py-12 px-4">
-        No verification requests found.
+        {t("admin.verifications.table.empty")}
       </div>
     )
   }
@@ -95,12 +105,14 @@ export function VerificationsTable({ rows, loading, onSelectUser }: Verification
                   <AvatarFallback>{u.name?.charAt(0) || "U"}</AvatarFallback>
                 </Avatar>
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium truncate">{u.name || "Unnamed"}</p>
+                  <p className="font-medium truncate">
+                    {u.name || t("admin.verifications.unnamed")}
+                  </p>
                   <p className="text-xs sm:text-sm text-gray-500 truncate">{u.email}</p>
                 </div>
               </div>
               <Badge className={getStatusColor(u._uiStatus)}>
-                {u._uiStatus.charAt(0).toUpperCase() + u._uiStatus.slice(1)}
+                {t(PILL_STATUS_KEYS[u._uiStatus])}
               </Badge>
             </div>
 
@@ -117,7 +129,7 @@ export function VerificationsTable({ rows, loading, onSelectUser }: Verification
                     : "bg-purple-100 text-purple-800"
                 }
               >
-                {u._uiType.charAt(0).toUpperCase() + u._uiType.slice(1)}
+                {t(UI_TYPE_KEYS[u._uiType])}
               </Badge>
               <span className="text-xs text-gray-500">•</span>
               <span className="text-xs text-gray-500">{u.submittedDate}</span>
@@ -125,7 +137,9 @@ export function VerificationsTable({ rows, loading, onSelectUser }: Verification
 
             {u.documents && u.documents.length > 0 && (
               <div className="space-y-2 pt-2 border-t">
-                <p className="text-xs font-medium text-gray-700">Documents:</p>
+                <p className="text-xs font-medium text-gray-700">
+                  {t("admin.verifications.table.documentsLabel")}
+                </p>
                 <div className="space-y-1.5">
                   {u.documents.map((doc) => (
                     <div key={doc.id} className="flex items-center gap-2 text-xs sm:text-sm">
@@ -142,7 +156,7 @@ export function VerificationsTable({ rows, loading, onSelectUser }: Verification
                         {doc.type}
                       </a>
                       <Badge variant="outline" className={`text-xs flex-shrink-0 ${getDocumentStatusColor(doc.status)}`}>
-                        {doc.status}
+                        {docStatusLabel(doc.status, t)}
                       </Badge>
                     </div>
                   ))}
@@ -152,7 +166,7 @@ export function VerificationsTable({ rows, loading, onSelectUser }: Verification
 
             <Button variant="outline" size="sm" className="w-full" onClick={() => onSelectUser(u)}>
               <Eye className="w-4 h-4 mr-2" />
-              Review
+              {t("admin.verifications.table.review")}
             </Button>
           </div>
         ))}
@@ -163,12 +177,14 @@ export function VerificationsTable({ rows, loading, onSelectUser }: Verification
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>User</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Documents</TableHead>
-              <TableHead>Submitted</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead>{t("admin.verifications.table.col.user")}</TableHead>
+              <TableHead>{t("admin.verifications.table.col.type")}</TableHead>
+              <TableHead>{t("admin.verifications.table.col.status")}</TableHead>
+              <TableHead>{t("admin.verifications.table.col.documents")}</TableHead>
+              <TableHead>{t("admin.verifications.table.col.submitted")}</TableHead>
+              <TableHead className="text-right">
+                {t("admin.verifications.table.col.actions")}
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -181,7 +197,9 @@ export function VerificationsTable({ rows, loading, onSelectUser }: Verification
                       <AvatarFallback>{u.name?.charAt(0) || "U"}</AvatarFallback>
                     </Avatar>
                     <div>
-                      <p className="font-medium">{u.name || "Unnamed"}</p>
+                      <p className="font-medium">
+                        {u.name || t("admin.verifications.unnamed")}
+                      </p>
                       <p className="text-sm text-gray-500">{u.email}</p>
                     </div>
                   </div>
@@ -200,13 +218,13 @@ export function VerificationsTable({ rows, loading, onSelectUser }: Verification
                           : "bg-purple-100 text-purple-800"
                       }
                     >
-                      {u._uiType.charAt(0).toUpperCase() + u._uiType.slice(1)}
+                      {t(UI_TYPE_KEYS[u._uiType])}
                     </Badge>
                   </div>
                 </TableCell>
                 <TableCell>
                   <Badge className={getStatusColor(u._uiStatus)}>
-                    {u._uiStatus.charAt(0).toUpperCase() + u._uiStatus.slice(1)}
+                    {t(PILL_STATUS_KEYS[u._uiStatus])}
                   </Badge>
                 </TableCell>
                 <TableCell>
@@ -226,7 +244,7 @@ export function VerificationsTable({ rows, loading, onSelectUser }: Verification
                           {doc.type}
                         </a>
                         <Badge variant="outline" className={`text-xs ${getDocumentStatusColor(doc.status)}`}>
-                          {doc.status}
+                          {docStatusLabel(doc.status, t)}
                         </Badge>
                       </div>
                     ))}
@@ -240,7 +258,7 @@ export function VerificationsTable({ rows, loading, onSelectUser }: Verification
                 <TableCell className="text-right">
                   <Button variant="outline" size="sm" onClick={() => onSelectUser(u)}>
                     <Eye className="w-4 h-4 mr-2" />
-                    Review
+                    {t("admin.verifications.table.review")}
                   </Button>
                 </TableCell>
               </TableRow>

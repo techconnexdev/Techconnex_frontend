@@ -29,6 +29,7 @@ import {
 import Link from "next/link";
 import { AdminLayout } from "@/components/admin-layout";
 import { useToast } from "@/hooks/use-toast";
+import { useI18n } from "@/contexts/I18nProvider";
 import {
   getAdminDashboardStats,
   getAdminRecentActivity,
@@ -37,6 +38,7 @@ import {
 } from "@/lib/api";
 
 export default function AdminDashboard() {
+  const { t } = useI18n();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
@@ -89,17 +91,17 @@ export default function AdminDashboard() {
     } catch (error: unknown) {
       console.error("Error loading dashboard data:", error);
       toast({
-        title: "Error",
+        title: t("admin.dashboard.toast.errorTitle"),
         description:
           error instanceof Error
             ? error.message
-            : "Failed to load dashboard data",
+            : t("admin.dashboard.toast.loadFailed"),
         variant: "destructive",
       });
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, t]);
 
   useEffect(() => {
     loadDashboardData();
@@ -110,13 +112,20 @@ export default function AdminDashboard() {
     const now = new Date();
     const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 
-    if (diffInSeconds < 60) return `${diffInSeconds} seconds ago`;
-    if (diffInSeconds < 3600)
-      return `${Math.floor(diffInSeconds / 60)} minutes ago`;
-    if (diffInSeconds < 86400)
-      return `${Math.floor(diffInSeconds / 3600)} hours ago`;
-    if (diffInSeconds < 604800)
-      return `${Math.floor(diffInSeconds / 86400)} days ago`;
+    if (diffInSeconds < 60)
+      return t("admin.dashboard.time.seconds", { count: diffInSeconds });
+    if (diffInSeconds < 3600) {
+      const m = Math.floor(diffInSeconds / 60);
+      return t("admin.dashboard.time.minutes", { count: m });
+    }
+    if (diffInSeconds < 86400) {
+      const h = Math.floor(diffInSeconds / 3600);
+      return t("admin.dashboard.time.hours", { count: h });
+    }
+    if (diffInSeconds < 604800) {
+      const d = Math.floor(diffInSeconds / 86400);
+      return t("admin.dashboard.time.days", { count: d });
+    }
     return date.toLocaleDateString();
   };
 
@@ -167,7 +176,7 @@ export default function AdminDashboard() {
         <div className="flex items-center justify-center py-8 sm:py-12 px-4 sm:px-6 lg:px-0">
           <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin" />
           <span className="ml-2 text-sm sm:text-base">
-            Loading dashboard...
+            {t("admin.dashboard.loading")}
           </span>
         </div>
       </AdminLayout>
@@ -181,10 +190,10 @@ export default function AdminDashboard() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-              Admin Dashboard
+              {t("admin.dashboard.title")}
             </h1>
             <p className="text-sm sm:text-base text-gray-600 mt-1">
-              Platform overview and management tools
+              {t("admin.dashboard.subtitle")}
             </p>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
@@ -194,13 +203,13 @@ export default function AdminDashboard() {
                 className="w-full sm:w-auto text-xs sm:text-sm"
               >
                 <BarChart3 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                Reports
+                {t("admin.dashboard.reports")}
               </Button>
             </Link>
             <Link href="/admin/settings" className="w-full sm:w-auto">
               <Button className="w-full sm:w-auto text-xs sm:text-sm">
                 <Settings className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                Settings
+                {t("admin.dashboard.settings")}
               </Button>
             </Link>
             <Button
@@ -214,7 +223,7 @@ export default function AdminDashboard() {
                   loading ? "animate-spin" : ""
                 }`}
               />
-              Refresh
+              {t("admin.dashboard.refresh")}
             </Button>
           </div>
         </div>
@@ -226,7 +235,7 @@ export default function AdminDashboard() {
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
                   <p className="text-xs sm:text-sm font-medium text-gray-600">
-                    Total Users
+                    {t("admin.dashboard.stats.totalUsers")}
                   </p>
                   <p className="text-xl sm:text-2xl font-bold text-gray-900 truncate">
                     {stats.totalUsers.toLocaleString()}
@@ -244,7 +253,7 @@ export default function AdminDashboard() {
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
                   <p className="text-xs sm:text-sm font-medium text-gray-600">
-                    Active Projects
+                    {t("admin.dashboard.stats.activeProjects")}
                   </p>
                   <p className="text-xl sm:text-2xl font-bold text-gray-900 truncate">
                     {stats.activeProjects}
@@ -262,7 +271,7 @@ export default function AdminDashboard() {
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
                   <p className="text-xs sm:text-sm font-medium text-gray-600">
-                    Total Revenue
+                    {t("admin.dashboard.stats.totalRevenue")}
                   </p>
                   <p className="text-xl sm:text-2xl font-bold text-gray-900 truncate">
                     {formatRevenue(stats.totalRevenue || 0)}
@@ -280,7 +289,7 @@ export default function AdminDashboard() {
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
                   <p className="text-xs sm:text-sm font-medium text-gray-600">
-                    Growth Rate
+                    {t("admin.dashboard.stats.growthRate")}
                   </p>
                   <p className="text-xl sm:text-2xl font-bold text-gray-900 truncate">
                     {stats.platformGrowth >= 0 ? "+" : ""}
@@ -302,16 +311,18 @@ export default function AdminDashboard() {
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-600 flex-shrink-0" />
                 <CardTitle className="text-base sm:text-lg text-yellow-900">
-                  Pending Verifications
+                  {t("admin.dashboard.alerts.pendingVerifications.title")}
                 </CardTitle>
               </div>
             </CardHeader>
             <CardContent className="p-4 sm:p-6 pt-0">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
                 <p className="text-sm sm:text-base text-yellow-800 break-words">
-                  {stats.pendingVerifications}{" "}
-                  {stats.pendingVerifications === 1 ? "user" : "users"} awaiting
-                  verification
+                  {stats.pendingVerifications === 1
+                    ? t("admin.dashboard.alerts.pendingVerifications.usersOne")
+                    : t("admin.dashboard.alerts.pendingVerifications.usersMany", {
+                        count: stats.pendingVerifications,
+                      })}
                 </p>
                 <Link href="/admin/verifications" className="w-full sm:w-auto">
                   <Button
@@ -319,7 +330,7 @@ export default function AdminDashboard() {
                     variant="outline"
                     className="border-yellow-300 text-yellow-700 active:bg-yellow-100 sm:hover:bg-yellow-100 bg-transparent w-full sm:w-auto text-xs sm:text-sm"
                   >
-                    Review
+                    {t("admin.dashboard.actions.review")}
                   </Button>
                 </Link>
               </div>
@@ -331,15 +342,18 @@ export default function AdminDashboard() {
               <div className="flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5 text-red-600 flex-shrink-0" />
                 <CardTitle className="text-base sm:text-lg text-red-900">
-                  Active Disputes
+                  {t("admin.dashboard.alerts.disputes.title")}
                 </CardTitle>
               </div>
             </CardHeader>
             <CardContent className="p-4 sm:p-6 pt-0">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0">
                 <p className="text-sm sm:text-base text-red-800 break-words">
-                  {totalDisputes} {totalDisputes === 1 ? "dispute" : "disputes"}{" "}
-                  require attention
+                  {totalDisputes === 1
+                    ? t("admin.dashboard.alerts.disputes.one")
+                    : t("admin.dashboard.alerts.disputes.many", {
+                        count: totalDisputes,
+                      })}
                 </p>
                 <Link href="/admin/disputes" className="w-full sm:w-auto">
                   <Button
@@ -347,7 +361,7 @@ export default function AdminDashboard() {
                     variant="outline"
                     className="border-red-300 text-red-700 active:bg-red-100 sm:hover:bg-red-100 bg-transparent w-full sm:w-auto text-xs sm:text-sm"
                   >
-                    Resolve
+                    {t("admin.dashboard.actions.resolve")}
                   </Button>
                 </Link>
               </div>
@@ -361,17 +375,17 @@ export default function AdminDashboard() {
             <Card>
               <CardHeader className="p-4 sm:p-6">
                 <CardTitle className="text-lg sm:text-xl">
-                  Recent Activity
+                  {t("admin.dashboard.recentActivity.title")}
                 </CardTitle>
                 <CardDescription className="text-xs sm:text-sm">
-                  Latest platform activities and user actions
+                  {t("admin.dashboard.recentActivity.description")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-4 sm:p-6">
                 <div className="space-y-3 sm:space-y-4">
                   {recentActivity.length === 0 ? (
                     <div className="text-center text-sm sm:text-base text-gray-500 py-6 sm:py-8">
-                      No recent activity
+                      {t("admin.dashboard.recentActivity.empty")}
                     </div>
                   ) : (
                     recentActivity.map((activity, index) => (
@@ -423,7 +437,7 @@ export default function AdminDashboard() {
               <CardHeader className="p-4 sm:p-6">
                 <div className="flex items-center justify-between gap-2">
                   <CardTitle className="text-base sm:text-lg">
-                    Pending Verifications
+                    {t("admin.dashboard.pendingVerifications.title")}
                   </CardTitle>
                   <Link href="/admin/verifications">
                     <Button variant="ghost" size="sm" className="flex-shrink-0">
@@ -436,7 +450,7 @@ export default function AdminDashboard() {
                 <div className="space-y-3 sm:space-y-4">
                   {pendingVerifications.length === 0 ? (
                     <div className="text-center text-sm sm:text-base text-gray-500 py-6 sm:py-8">
-                      No pending verifications
+                      {t("admin.dashboard.pendingVerifications.empty")}
                     </div>
                   ) : (
                     pendingVerifications.map((verification, index) => {
@@ -476,7 +490,7 @@ export default function AdminDashboard() {
                                 {String(verification.type || "")}
                               </p>
                               <p className="text-xs text-gray-500">
-                                Submitted:{" "}
+                                {t("admin.dashboard.pendingVerifications.submitted")}{" "}
                                 {new Date(
                                   String(verification.submitted || "")
                                 ).toLocaleDateString()}
@@ -488,15 +502,20 @@ export default function AdminDashboard() {
                                   : 0;
                                 return docCount > 0 ? (
                                   <p className="text-xs text-gray-400 mt-1">
-                                    {docCount}{" "}
-                                    {docCount === 1 ? "document" : "documents"}
+                                    {docCount === 1
+                                      ? t("admin.dashboard.documents.one", {
+                                          count: docCount,
+                                        })
+                                      : t("admin.dashboard.documents.many", {
+                                          count: docCount,
+                                        })}
                                   </p>
                                 ) : null;
                               })()}
                             </div>
                             <div className="flex flex-col gap-1 flex-shrink-0">
                               <Button size="sm" className="text-xs">
-                                Review
+                                {t("admin.dashboard.actions.review")}
                               </Button>
                             </div>
                           </div>
@@ -512,17 +531,17 @@ export default function AdminDashboard() {
             <Card>
               <CardHeader className="p-4 sm:p-6">
                 <CardTitle className="text-base sm:text-lg">
-                  Top Providers
+                  {t("admin.dashboard.topProviders.title")}
                 </CardTitle>
                 <CardDescription className="text-xs sm:text-sm">
-                  Highest performing service providers
+                  {t("admin.dashboard.topProviders.description")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-4 sm:p-6 pt-0">
                 <div className="space-y-3 sm:space-y-4">
                   {topProviders.length === 0 ? (
                     <div className="text-center text-sm sm:text-base text-gray-500 py-6 sm:py-8">
-                      No providers found
+                      {t("admin.dashboard.topProviders.empty")}
                     </div>
                   ) : (
                     topProviders.map((provider, index) => {
@@ -574,13 +593,21 @@ export default function AdminDashboard() {
                                   {providerRating.toFixed(1)}
                                 </span>
                                 <span className="text-xs text-gray-500">
-                                  ({providerCompletedJobs}{" "}
-                                  {providerCompletedJobs === 1 ? "job" : "jobs"}
+                                  (
+                                  {providerCompletedJobs === 1
+                                    ? t("admin.dashboard.topProviders.jobsOne", {
+                                        count: providerCompletedJobs,
+                                      })
+                                    : t("admin.dashboard.topProviders.jobsMany", {
+                                        count: providerCompletedJobs,
+                                      })}
                                   )
                                 </span>
                               </div>
                               <p className="text-xs text-gray-600">
-                                RM{providerEarnings.toLocaleString()} earned
+                                {t("admin.dashboard.topProviders.earned", {
+                                  amount: providerEarnings.toLocaleString(),
+                                })}
                               </p>
                             </div>
                           </div>
@@ -596,7 +623,7 @@ export default function AdminDashboard() {
             <Card>
               <CardHeader className="p-4 sm:p-6">
                 <CardTitle className="text-base sm:text-lg">
-                  Quick Actions
+                  {t("admin.dashboard.quickActions.title")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-4 sm:p-6 pt-0 space-y-2 sm:space-y-3">
@@ -606,7 +633,7 @@ export default function AdminDashboard() {
                     className="w-full justify-start bg-transparent text-xs sm:text-sm"
                   >
                     <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                    Manage Users
+                    {t("admin.dashboard.quickActions.manageUsers")}
                   </Button>
                 </Link>
                 <Link href="/admin/projects">
@@ -615,7 +642,7 @@ export default function AdminDashboard() {
                     className="w-full justify-start bg-transparent text-xs sm:text-sm"
                   >
                     <Briefcase className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                    Monitor Projects
+                    {t("admin.dashboard.quickActions.monitorProjects")}
                   </Button>
                 </Link>
                 <Link href="/admin/payments">
@@ -624,7 +651,7 @@ export default function AdminDashboard() {
                     className="w-full justify-start bg-transparent text-xs sm:text-sm"
                   >
                     <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                    Payment Management
+                    {t("admin.dashboard.quickActions.paymentManagement")}
                   </Button>
                 </Link>
                 <Link href="/admin/reports">
@@ -633,7 +660,7 @@ export default function AdminDashboard() {
                     className="w-full justify-start bg-transparent text-xs sm:text-sm"
                   >
                     <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                    Generate Reports
+                    {t("admin.dashboard.quickActions.generateReports")}
                   </Button>
                 </Link>
               </CardContent>

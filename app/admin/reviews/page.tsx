@@ -33,6 +33,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useI18n } from "@/contexts/I18nProvider";
 
 interface Review {
   id: string;
@@ -74,6 +75,7 @@ interface Stats {
 }
 
 export default function AdminReviewsPage() {
+  const { t } = useI18n();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<"all" | "company" | "provider">(
     "all"
@@ -94,7 +96,7 @@ export default function AdminReviewsPage() {
     try {
       const token = localStorage.getItem("token");
       if (!token) {
-        throw new Error("No authentication token found");
+        throw new Error(t("admin.reviews.errors.noToken"));
       }
       const API_URL =
         process.env.NEXT_PUBLIC_API_URL ||
@@ -149,25 +151,24 @@ export default function AdminReviewsPage() {
     } catch (error: unknown) {
       console.error("Error loading reviews:", error);
       toast({
-        title: "Error loading reviews",
-        description: error instanceof Error ? error.message : "Failed to load reviews",
+        title: t("admin.reviews.toast.loadErrorTitle"),
+        description:
+          error instanceof Error
+            ? error.message
+            : t("admin.reviews.toast.loadErrorDesc"),
         variant: "destructive",
       });
     } finally {
       setLoading(false);
     }
-  }, [activeTab, toast]);
+  }, [activeTab, toast, t]);
 
   useEffect(() => {
     fetchReviews();
   }, [fetchReviews]);
 
   const handleDeleteReview = async (reviewId: string) => {
-    if (
-      !confirm(
-        "Are you sure you want to delete this review? This action cannot be undone."
-      )
-    ) {
+    if (!confirm(t("admin.reviews.confirm.delete"))) {
       return;
     }
 
@@ -186,8 +187,8 @@ export default function AdminReviewsPage() {
 
       if (response.ok) {
         toast({
-          title: "Review deleted",
-          description: "The review has been permanently deleted.",
+          title: t("admin.reviews.toast.deleteSuccessTitle"),
+          description: t("admin.reviews.toast.deleteSuccessDesc"),
         });
         fetchReviews();
       } else {
@@ -197,8 +198,11 @@ export default function AdminReviewsPage() {
     } catch (error: unknown) {
       console.error("Error deleting review:", error);
       toast({
-        title: "Error deleting review",
-        description: error instanceof Error ? error.message : "Failed to delete review",
+        title: t("admin.reviews.toast.deleteErrorTitle"),
+        description:
+          error instanceof Error
+            ? error.message
+            : t("admin.reviews.toast.deleteErrorDesc"),
         variant: "destructive",
       });
     }
@@ -224,10 +228,10 @@ export default function AdminReviewsPage() {
         {/* Header */}
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-            Reviews Management
+            {t("admin.reviews.page.title")}
           </h1>
           <p className="text-sm sm:text-base text-gray-600 mt-1 sm:mt-2">
-            Manage and monitor all reviews from companies and providers
+            {t("admin.reviews.page.subtitle")}
           </p>
         </div>
 
@@ -236,20 +240,22 @@ export default function AdminReviewsPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2 p-4 sm:p-6">
               <CardTitle className="text-xs sm:text-sm font-medium text-gray-600">
-                Total Reviews
+                {t("admin.reviews.stats.totalReviews")}
               </CardTitle>
               <MessageSquare className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600 flex-shrink-0" />
             </CardHeader>
             <CardContent className="p-4 sm:p-6 pt-0">
               <div className="text-xl sm:text-2xl font-bold">{stats.totalReviews}</div>
-              <p className="text-xs text-gray-600 mt-1">All time reviews</p>
+              <p className="text-xs text-gray-600 mt-1">
+                {t("admin.reviews.stats.totalReviewsHint")}
+              </p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2 p-4 sm:p-6">
               <CardTitle className="text-xs sm:text-sm font-medium text-gray-600">
-                Average Rating
+                {t("admin.reviews.stats.averageRating")}
               </CardTitle>
               <Star className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-500 fill-current flex-shrink-0" />
             </CardHeader>
@@ -257,33 +263,39 @@ export default function AdminReviewsPage() {
               <div className="text-xl sm:text-2xl font-bold">
                 {stats.averageRating.toFixed(1)}
               </div>
-              <p className="text-xs text-gray-600 mt-1">Platform average</p>
+              <p className="text-xs text-gray-600 mt-1">
+                {t("admin.reviews.stats.averageHint")}
+              </p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2 p-4 sm:p-6">
               <CardTitle className="text-xs sm:text-sm font-medium text-gray-600">
-                Company Reviews
+                {t("admin.reviews.stats.companyReviews")}
               </CardTitle>
               <Building2 className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 flex-shrink-0" />
             </CardHeader>
             <CardContent className="p-4 sm:p-6 pt-0">
               <div className="text-xl sm:text-2xl font-bold">{stats.companyReviews}</div>
-              <p className="text-xs text-gray-600 mt-1">By companies</p>
+              <p className="text-xs text-gray-600 mt-1">
+                {t("admin.reviews.stats.companyHint")}
+              </p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2 p-4 sm:p-6">
               <CardTitle className="text-xs sm:text-sm font-medium text-gray-600">
-                Provider Reviews
+                {t("admin.reviews.stats.providerReviews")}
               </CardTitle>
               <User className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600 flex-shrink-0" />
             </CardHeader>
             <CardContent className="p-4 sm:p-6 pt-0">
               <div className="text-xl sm:text-2xl font-bold">{stats.providerReviews}</div>
-              <p className="text-xs text-gray-600 mt-1">By providers</p>
+              <p className="text-xs text-gray-600 mt-1">
+                {t("admin.reviews.stats.providerHint")}
+              </p>
             </CardContent>
           </Card>
         </div>
@@ -293,16 +305,18 @@ export default function AdminReviewsPage() {
           <CardHeader className="p-4 sm:p-6">
             <div className="flex flex-col gap-4">
               <div>
-                <CardTitle className="text-lg sm:text-xl">All Reviews</CardTitle>
+                <CardTitle className="text-lg sm:text-xl">
+                  {t("admin.reviews.section.title")}
+                </CardTitle>
                 <CardDescription className="text-sm">
-                  View and manage all platform reviews
+                  {t("admin.reviews.section.description")}
                 </CardDescription>
               </div>
               <div className="flex flex-col sm:flex-row gap-3">
                 <div className="relative flex-1 min-w-0">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                   <Input
-                    placeholder="Search reviews..."
+                    placeholder={t("admin.reviews.filters.searchPlaceholder")}
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     className="pl-9 text-sm sm:text-base"
@@ -310,15 +324,29 @@ export default function AdminReviewsPage() {
                 </div>
                 <Select value={ratingFilter} onValueChange={setRatingFilter}>
                   <SelectTrigger className="w-full sm:w-32 text-sm sm:text-base">
-                    <SelectValue placeholder="Rating" />
+                    <SelectValue
+                      placeholder={t("admin.reviews.filters.ratingPlaceholder")}
+                    />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Ratings</SelectItem>
-                    <SelectItem value="5">5 Stars</SelectItem>
-                    <SelectItem value="4">4 Stars</SelectItem>
-                    <SelectItem value="3">3 Stars</SelectItem>
-                    <SelectItem value="2">2 Stars</SelectItem>
-                    <SelectItem value="1">1 Star</SelectItem>
+                    <SelectItem value="all">
+                      {t("admin.reviews.filters.allRatings")}
+                    </SelectItem>
+                    <SelectItem value="5">
+                      {t("admin.reviews.filters.stars5")}
+                    </SelectItem>
+                    <SelectItem value="4">
+                      {t("admin.reviews.filters.stars4")}
+                    </SelectItem>
+                    <SelectItem value="3">
+                      {t("admin.reviews.filters.stars3")}
+                    </SelectItem>
+                    <SelectItem value="2">
+                      {t("admin.reviews.filters.stars2")}
+                    </SelectItem>
+                    <SelectItem value="1">
+                      {t("admin.reviews.filters.stars1")}
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -331,9 +359,15 @@ export default function AdminReviewsPage() {
               onValueChange={(v) => setActiveTab(v as typeof activeTab)}
             >
               <TabsList className="w-full sm:w-auto flex flex-col sm:flex-row h-auto sm:h-10">
-                <TabsTrigger value="all" className="text-xs sm:text-sm w-full sm:w-auto">All Reviews</TabsTrigger>
-                <TabsTrigger value="company" className="text-xs sm:text-sm w-full sm:w-auto">Company Reviews</TabsTrigger>
-                <TabsTrigger value="provider" className="text-xs sm:text-sm w-full sm:w-auto">Provider Reviews</TabsTrigger>
+                <TabsTrigger value="all" className="text-xs sm:text-sm w-full sm:w-auto">
+                  {t("admin.reviews.tabs.all")}
+                </TabsTrigger>
+                <TabsTrigger value="company" className="text-xs sm:text-sm w-full sm:w-auto">
+                  {t("admin.reviews.tabs.company")}
+                </TabsTrigger>
+                <TabsTrigger value="provider" className="text-xs sm:text-sm w-full sm:w-auto">
+                  {t("admin.reviews.tabs.provider")}
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value={activeTab} className="mt-4 sm:mt-6">
@@ -341,19 +375,21 @@ export default function AdminReviewsPage() {
                   <div className="flex items-center justify-center py-8 sm:py-12">
                     <div className="text-center">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                      <p className="text-sm sm:text-base text-gray-600">Loading reviews...</p>
+                      <p className="text-sm sm:text-base text-gray-600">
+                        {t("admin.reviews.loading")}
+                      </p>
                     </div>
                   </div>
                 ) : filteredReviews.length === 0 ? (
                   <div className="text-center py-8 sm:py-12">
                     <MessageSquare className="h-10 w-10 sm:h-12 sm:w-12 text-gray-400 mx-auto mb-4" />
                     <h3 className="text-base sm:text-lg font-medium text-gray-900 mb-2">
-                      No reviews found
+                      {t("admin.reviews.empty.title")}
                     </h3>
                     <p className="text-sm sm:text-base text-gray-600">
                       {searchTerm || ratingFilter !== "all"
-                        ? "Try adjusting your filters"
-                        : "No reviews have been submitted yet"}
+                        ? t("admin.reviews.empty.withFilters")
+                        : t("admin.reviews.empty.noReviewsYet")}
                     </p>
                   </div>
                 ) : (
@@ -383,6 +419,7 @@ function ReviewCard({
   review: Review;
   onDelete: (id: string) => void;
 }) {
+  const { t } = useI18n();
   const [showDetails, setShowDetails] = useState(false);
 
   return (
@@ -405,7 +442,7 @@ function ReviewCard({
                     <ExternalLink className="w-3 h-3 flex-shrink-0" />
                   </Link>
                   <p className="text-xs sm:text-sm text-gray-600 mt-1">
-                    reviewed{" "}
+                    {t("admin.reviews.card.reviewedVerb")}{" "}
                     <Link
                       href={`/admin/users/${review.recipient.id}`}
                       className="text-gray-900 hover:text-blue-600 hover:underline font-medium inline-flex items-center gap-1 break-words"
@@ -438,7 +475,7 @@ function ReviewCard({
 
               <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs text-gray-500">
                 <span className="inline-flex items-center gap-1 flex-wrap">
-                  Project:{" "}
+                  {t("admin.reviews.card.project")}{" "}
                   <Link
                     href={`/admin/projects/${review.project.id}`}
                     className="text-gray-900 hover:text-blue-600 hover:underline font-medium inline-flex items-center gap-1 break-words"
@@ -453,7 +490,7 @@ function ReviewCard({
                   <>
                     <span className="hidden sm:inline">•</span>
                     <Badge variant="secondary" className="text-xs">
-                      Has Reply
+                      {t("admin.reviews.card.hasReply")}
                     </Badge>
                   </>
                 )}
@@ -462,12 +499,14 @@ function ReviewCard({
               {showDetails && (
                 <div className="mt-4 space-y-2 border-t pt-4">
                   <h4 className="text-xs sm:text-sm font-medium text-gray-900">
-                    Detailed Ratings
+                    {t("admin.reviews.card.detailedRatings")}
                   </h4>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs sm:text-sm">
                     {review.communicationRating && (
                       <div>
-                        <span className="text-gray-600">Communication:</span>{" "}
+                        <span className="text-gray-600">
+                          {t("admin.reviews.card.communication")}
+                        </span>{" "}
                         <span className="font-medium">
                           {review.communicationRating}/5
                         </span>
@@ -475,7 +514,9 @@ function ReviewCard({
                     )}
                     {review.qualityRating && (
                       <div>
-                        <span className="text-gray-600">Quality:</span>{" "}
+                        <span className="text-gray-600">
+                          {t("admin.reviews.card.quality")}
+                        </span>{" "}
                         <span className="font-medium">
                           {review.qualityRating}/5
                         </span>
@@ -483,7 +524,9 @@ function ReviewCard({
                     )}
                     {review.timelinessRating && (
                       <div>
-                        <span className="text-gray-600">Timeliness:</span>{" "}
+                        <span className="text-gray-600">
+                          {t("admin.reviews.card.timeliness")}
+                        </span>{" "}
                         <span className="font-medium">
                           {review.timelinessRating}/5
                         </span>
@@ -491,7 +534,9 @@ function ReviewCard({
                     )}
                     {review.professionalismRating && (
                       <div>
-                        <span className="text-gray-600">Professionalism:</span>{" "}
+                        <span className="text-gray-600">
+                          {t("admin.reviews.card.professionalism")}
+                        </span>{" "}
                         <span className="font-medium">
                           {review.professionalismRating}/5
                         </span>
@@ -511,7 +556,9 @@ function ReviewCard({
               className="h-8 w-8 sm:h-9 sm:w-auto sm:px-3"
             >
               <Eye className="w-4 h-4" />
-              <span className="hidden sm:inline ml-2">Details</span>
+              <span className="hidden sm:inline ml-2">
+                {t("admin.reviews.card.details")}
+              </span>
             </Button>
             <Button
               variant="ghost"
@@ -520,7 +567,9 @@ function ReviewCard({
               className="text-red-600 hover:text-red-700 hover:bg-red-50 h-8 w-8 sm:h-9 sm:w-auto sm:px-3"
             >
               <Trash2 className="w-4 h-4" />
-              <span className="hidden sm:inline ml-2">Delete</span>
+              <span className="hidden sm:inline ml-2">
+                {t("admin.reviews.card.delete")}
+              </span>
             </Button>
           </div>
         </div>

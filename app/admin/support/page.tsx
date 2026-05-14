@@ -27,6 +27,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { uploadFile } from "@/lib/upload";
+import { useI18n } from "@/contexts/I18nProvider";
 
 type ConvItem = {
   id: string;
@@ -58,6 +59,7 @@ type RefDoc = {
 };
 
 export default function AdminSupportPage() {
+  const { t, locale } = useI18n();
   const [conversations, setConversations] = useState<ConvItem[]>([]);
   const [refs, setRefs] = useState<RefDoc[]>([]);
   const [loading, setLoading] = useState(true);
@@ -84,9 +86,12 @@ export default function AdminSupportPage() {
   const [reindexing, setReindexing] = useState<string | null>(null);
   const [deletingRef, setDeletingRef] = useState<string | null>(null);
   const [refUploadSlug, setRefUploadSlug] = useState("company_manual");
-  const [refUploadName, setRefUploadName] = useState("Company Manual");
+  const [refUploadName, setRefUploadName] = useState(
+    t("admin.support.refs.companyManual")
+  );
   const [refFile, setRefFile] = useState<File | null>(null);
   const [socket, setSocket] = useState<Socket | null>(null);
+  const intlLocale = locale === "id" ? "id-ID" : locale === "ar" ? "ar" : "en-US";
 
   const loadConversations = useCallback(async () => {
     try {
@@ -291,14 +296,21 @@ export default function AdminSupportPage() {
   };
 
   const deleteRef = async (id: string, name: string) => {
-    if (!confirm(`Remove "${name}"? This will delete the document and all its RAG chunks. The file will be removed from storage.`)) return;
+    if (
+      !confirm(
+        t("admin.support.refs.removeConfirm", {
+          name,
+        })
+      )
+    )
+      return;
     setDeletingRef(id);
     try {
       await deleteAdminSupportReference(id);
       await loadRefs();
     } catch (e) {
       console.error(e);
-      alert((e as Error)?.message || "Failed to delete");
+      alert((e as Error)?.message || t("admin.support.refs.deleteFailed"));
     } finally {
       setDeletingRef(null);
     }
@@ -308,9 +320,9 @@ export default function AdminSupportPage() {
     senderType: string;
     senderUserId: string | null;
   }) => {
-    if (m.senderType === "AI") return "AI";
-    if (convDetail && m.senderUserId === convDetail.userId) return "User";
-    return "Human Support";
+    if (m.senderType === "AI") return t("admin.support.sender.ai");
+    if (convDetail && m.senderUserId === convDetail.userId) return t("admin.support.sender.user");
+    return t("admin.support.sender.humanSupport");
   };
 
   const statusConfig: Record<
@@ -318,28 +330,28 @@ export default function AdminSupportPage() {
     { label: string; className: string; desc: string }
   > = {
     OPEN: {
-      label: "Open",
+      label: t("admin.support.status.OPEN.label"),
       className:
         "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-950/50 dark:text-blue-200 dark:border-blue-800",
-      desc: "AI chat only — you cannot reply",
+      desc: t("admin.support.status.OPEN.desc"),
     },
     HANDOFF_REQUESTED: {
-      label: "Handoff requested",
+      label: t("admin.support.status.HANDOFF_REQUESTED.label"),
       className:
         "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/50 dark:text-amber-200 dark:border-amber-700",
-      desc: "User asked for human — change status to Human taken to reply",
+      desc: t("admin.support.status.HANDOFF_REQUESTED.desc"),
     },
     HUMAN_TAKEN: {
-      label: "Human taken",
+      label: t("admin.support.status.HUMAN_TAKEN.label"),
       className:
         "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-200 dark:border-emerald-800",
-      desc: "You are chatting — AI will not reply",
+      desc: t("admin.support.status.HUMAN_TAKEN.desc"),
     },
     CLOSED: {
-      label: "Closed",
+      label: t("admin.support.status.CLOSED.label"),
       className:
         "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
-      desc: "Conversation ended",
+      desc: t("admin.support.status.CLOSED.desc"),
     },
   };
 
@@ -361,18 +373,18 @@ export default function AdminSupportPage() {
     <AdminLayout>
       <div className="p-6 space-y-6">
         <div>
-          <h1 className="text-2xl font-bold">AI Support</h1>
+          <h1 className="text-2xl font-bold">{t("admin.support.page.title")}</h1>
           <p className="text-muted-foreground">
-            Manage support conversations and reference manuals.
+            {t("admin.support.page.subtitle")}
           </p>
         </div>
 
         {/* Reference documents */}
         <Card>
           <CardHeader>
-            <CardTitle>Reference PDFs (Company / Provider Manual)</CardTitle>
+            <CardTitle>{t("admin.support.refs.title")}</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Upload or replace PDFs and re-index for RAG.
+              {t("admin.support.refs.subtitle")}
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -383,17 +395,21 @@ export default function AdminSupportPage() {
                   setRefUploadSlug(e.target.value);
                   setRefUploadName(
                     e.target.value === "company_manual"
-                      ? "Company Manual"
-                      : "Provider Manual",
+                      ? t("admin.support.refs.companyManual")
+                      : t("admin.support.refs.providerManual"),
                   );
                 }}
                 className="border rounded px-3 py-2"
               >
-                <option value="company_manual">Company Manual</option>
-                <option value="provider_manual">Provider Manual</option>
+                <option value="company_manual">
+                  {t("admin.support.refs.companyManual")}
+                </option>
+                <option value="provider_manual">
+                  {t("admin.support.refs.providerManual")}
+                </option>
               </select>
               <Input
-                placeholder="Display name"
+                placeholder={t("admin.support.refs.displayNamePlaceholder")}
                 value={refUploadName}
                 onChange={(e) => setRefUploadName(e.target.value)}
                 className="max-w-[200px]"
@@ -413,18 +429,20 @@ export default function AdminSupportPage() {
                 ) : (
                   <Upload className="h-4 w-4" />
                 )}
-                {uploadingRef ? " Uploading…" : " Upload PDF"}
+                {uploadingRef
+                  ? ` ${t("admin.support.refs.uploading")}`
+                  : ` ${t("admin.support.refs.uploadPdf")}`}
               </Button>
             </div>
             <div className="border rounded overflow-hidden">
               <table className="w-full text-sm">
                 <thead className="bg-muted">
                   <tr>
-                    <th className="text-left p-2">Name</th>
-                    <th className="text-left p-2">Slug</th>
-                    <th className="text-left p-2">Indexed</th>
-                    <th className="text-left p-2">Chunks</th>
-                    <th className="text-left p-2">Actions</th>
+                    <th className="text-left p-2">{t("admin.support.refs.table.name")}</th>
+                    <th className="text-left p-2">{t("admin.support.refs.table.slug")}</th>
+                    <th className="text-left p-2">{t("admin.support.refs.table.indexed")}</th>
+                    <th className="text-left p-2">{t("admin.support.refs.table.chunks")}</th>
+                    <th className="text-left p-2">{t("admin.support.refs.table.actions")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -434,7 +452,7 @@ export default function AdminSupportPage() {
                       <td className="p-2">{r.slug}</td>
                       <td className="p-2">
                         {r.indexedAt
-                          ? new Date(r.indexedAt).toLocaleString()
+                          ? new Date(r.indexedAt).toLocaleString(intlLocale)
                           : "—"}
                       </td>
                       <td className="p-2">{r.chunksCount}</td>
@@ -450,7 +468,7 @@ export default function AdminSupportPage() {
                           ) : (
                             <RefreshCw className="h-4 w-4" />
                           )}
-                          Re-index
+                          {t("admin.support.refs.table.reindex")}
                         </Button>
                         <Button
                           variant="outline"
@@ -464,7 +482,7 @@ export default function AdminSupportPage() {
                           ) : (
                             <Trash2 className="h-4 w-4" />
                           )}
-                          Remove
+                          {t("admin.support.refs.table.remove")}
                         </Button>
                       </td>
                     </tr>
@@ -475,7 +493,7 @@ export default function AdminSupportPage() {
                         colSpan={5}
                         className="p-4 text-muted-foreground text-center"
                       >
-                        No reference documents yet. Upload a PDF above.
+                        {t("admin.support.refs.table.empty")}
                       </td>
                     </tr>
                   )}
@@ -489,21 +507,21 @@ export default function AdminSupportPage() {
         <Card>
           <CardHeader>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <CardTitle>Conversations</CardTitle>
+              <CardTitle>{t("admin.support.conversations.title")}</CardTitle>
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="border rounded-md px-3 py-2 text-sm bg-background max-w-[200px]"
               >
-                <option value="">All statuses</option>
-                <option value="OPEN">Open</option>
-                <option value="HANDOFF_REQUESTED">Handoff requested</option>
-                <option value="HUMAN_TAKEN">Human taken</option>
-                <option value="CLOSED">Closed</option>
+                <option value="">{t("admin.support.conversations.filter.allStatuses")}</option>
+                <option value="OPEN">{t("admin.support.status.OPEN.label")}</option>
+                <option value="HANDOFF_REQUESTED">{t("admin.support.status.HANDOFF_REQUESTED.label")}</option>
+                <option value="HUMAN_TAKEN">{t("admin.support.status.HUMAN_TAKEN.label")}</option>
+                <option value="CLOSED">{t("admin.support.status.CLOSED.label")}</option>
               </select>
             </div>
             <div className="flex flex-wrap gap-2 mt-2 text-xs">
-              <span className="text-muted-foreground">Status:</span>
+              <span className="text-muted-foreground">{t("admin.support.conversations.statusLabel")}</span>
               {(
                 ["OPEN", "HANDOFF_REQUESTED", "HUMAN_TAKEN", "CLOSED"] as const
               ).map((s) => (
@@ -562,9 +580,7 @@ export default function AdminSupportPage() {
                           </p>
                         )}
                         {unread && (
-                          <p className="text-xs text-primary font-medium mt-0.5">
-                            New messages
-                          </p>
+                          <p className="text-xs text-primary font-medium mt-0.5">{t("admin.support.conversations.newMessages")}</p>
                         )}
                       </li>
                     );
@@ -576,7 +592,7 @@ export default function AdminSupportPage() {
             <div className="flex-1 min-w-0 border rounded flex flex-col max-h-[500px]">
               {!convDetail ? (
                 <div className="p-8 text-center text-muted-foreground">
-                  Select a conversation
+                  {t("admin.support.conversations.selectPrompt")}
                 </div>
               ) : (
                 <>
@@ -591,12 +607,12 @@ export default function AdminSupportPage() {
                           onChange={(e) => updateStatus(e.target.value)}
                           className={`rounded-md border px-2 py-1 text-sm font-medium ${statusConfig[convDetail.status]?.className ?? ""} bg-background`}
                         >
-                          <option value="OPEN">Open</option>
+                          <option value="OPEN">{t("admin.support.status.OPEN.label")}</option>
                           <option value="HANDOFF_REQUESTED">
-                            Handoff requested
+                            {t("admin.support.status.HANDOFF_REQUESTED.label")}
                           </option>
-                          <option value="HUMAN_TAKEN">Human taken</option>
-                          <option value="CLOSED">Closed</option>
+                          <option value="HUMAN_TAKEN">{t("admin.support.status.HUMAN_TAKEN.label")}</option>
+                          <option value="CLOSED">{t("admin.support.status.CLOSED.label")}</option>
                         </select>
                         {convDetail.status !== "CLOSED" && (
                           <Button
@@ -604,7 +620,7 @@ export default function AdminSupportPage() {
                             size="sm"
                             onClick={closeConversation}
                           >
-                            <X className="h-4 w-4" /> Close
+                            <X className="h-4 w-4" /> {t("admin.support.actions.close")}
                           </Button>
                         )}
                       </div>
@@ -639,14 +655,14 @@ export default function AdminSupportPage() {
                                     rel="noopener noreferrer"
                                     className="text-xs text-primary underline"
                                   >
-                                    Attachment
+                                    {t("admin.support.attachment.label")}
                                   </a>
                                 );
                               })}
                             </div>
                           )}
                           <p className="text-xs text-muted-foreground mt-1">
-                            {new Date(m.createdAt).toLocaleString()}
+                            {new Date(m.createdAt).toLocaleString(intlLocale)}
                           </p>
                         </div>
                       </div>
@@ -655,17 +671,14 @@ export default function AdminSupportPage() {
                   {convDetail.status === "OPEN" && (
                     <div className="p-3 border-t bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800 rounded-b">
                       <p className="text-sm text-blue-800 dark:text-blue-200">
-                        Conversation is with AI. You can reply after the user
-                        triggers a handoff or after you change status to{" "}
-                        <strong>Human taken</strong>.
+                        {t("admin.support.hints.open")}
                       </p>
                     </div>
                   )}
                   {convDetail.status === "HANDOFF_REQUESTED" && (
                     <div className="p-3 border-t bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-700 rounded-b">
                       <p className="text-sm text-amber-800 dark:text-amber-200">
-                        Change status to <strong>Human taken</strong> above to
-                        start replying to the user.
+                        {t("admin.support.hints.handoffRequested")}
                       </p>
                     </div>
                   )}
@@ -675,7 +688,7 @@ export default function AdminSupportPage() {
                         <div className="flex flex-wrap gap-2">
                           {replyAttachments.map((url, i) => (
                             <span key={i} className="text-xs text-primary">
-                              Image attached
+                              {t("admin.support.reply.imageAttached")}
                               <button
                                 type="button"
                                 className="ml-1 text-destructive"
@@ -713,7 +726,7 @@ export default function AdminSupportPage() {
                           )}
                         </Button>
                         <Textarea
-                          placeholder="Reply as human support..."
+                          placeholder={t("admin.support.reply.placeholder")}
                           value={reply}
                           onChange={(e) => setReply(e.target.value)}
                           rows={2}
@@ -729,7 +742,7 @@ export default function AdminSupportPage() {
                           {sending ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
                           ) : (
-                            "Send"
+                            t("admin.support.reply.send")
                           )}
                         </Button>
                       </div>
@@ -737,8 +750,7 @@ export default function AdminSupportPage() {
                   )}
                   {convDetail.status === "CLOSED" && (
                     <div className="p-3 border-t bg-slate-100 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 text-sm rounded-b">
-                      This conversation is closed. Change status above to
-                      reopen.
+                      {t("admin.support.hints.closed")}
                     </div>
                   )}
                 </>

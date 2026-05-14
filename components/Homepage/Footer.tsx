@@ -2,6 +2,8 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import { useI18n } from "@/contexts/I18nProvider";
+import { pickLocalizedField } from "@/lib/i18n/cmsField";
 
 interface AdminSettings {
   platformName?: string;
@@ -11,6 +13,7 @@ interface AdminSettings {
 }
 
 const Footer = () => {
+  const { t, locale } = useI18n();
   const [settings, setSettings] = useState<AdminSettings | null>(null);
 
   useEffect(() => {
@@ -34,11 +37,14 @@ const Footer = () => {
     fetchSettings();
   }, []);
 
-  // Fallback values if settings are not loaded
-  const platformName = settings?.platformName || "TechConnex";
+  const platformName =
+    pickLocalizedField(settings as Record<string, unknown> | undefined, "platformName", locale) ||
+    settings?.platformName ||
+    "TechConnex";
   const platformDescription =
+    pickLocalizedField(settings as Record<string, unknown> | undefined, "platformDescription", locale) ||
     settings?.platformDescription ||
-    "Connecting technology professionals with opportunities. Your trusted platform for tech services, talent, and innovation.";
+    t("home.footer.defaultDescription");
   const supportEmail = settings?.supportEmail || "info@techconnex.com";
   const contactPhone = settings?.contactPhone || "+1 (234) 567-890";
 
@@ -108,7 +114,7 @@ const Footer = () => {
           <div className="col-span-1 md:col-span-2 lg:col-span-2 space-y-4">
             <div>
               <h4 className="text-sm font-semibold mb-2 text-gray-900">
-                Contact Us
+                {t("home.footer.contactUs")}
               </h4>
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
@@ -167,7 +173,7 @@ const Footer = () => {
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center justify-center w-10 h-10 rounded-full text-gray-600 hover:text-gray-900 hover:bg-blue-100/80 transition-colors"
-              aria-label={`Follow us on ${name}`}
+              aria-label={t("home.footer.followUs", { name })}
             >
               {icon}
             </a>
@@ -178,20 +184,19 @@ const Footer = () => {
         <div className="border-t border-blue-200/40 pt-6">
           <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm text-gray-600 mb-3">
             <Link href="/privacy" className="hover:text-gray-900 transition">
-              Privacy Policy
+              {t("home.footer.privacy")}
             </Link>
             <span aria-hidden>·</span>
             <Link href="/terms" className="hover:text-gray-900 transition">
-              Terms of Service
+              {t("home.footer.terms")}
             </Link>
             <span aria-hidden>·</span>
             <Link href="/cookies" className="hover:text-gray-900 transition">
-              Cookie Policy
+              {t("home.footer.cookies")}
             </Link>
           </div>
           <div className="text-center text-gray-600 text-sm">
-            © {new Date().getFullYear()} CYBERNET CONSULTING SDN. BHD. All rights
-            reserved.
+            {t("home.footer.copyright", { year: new Date().getFullYear() })}
           </div>
         </div>
       </div>

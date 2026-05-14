@@ -1,10 +1,12 @@
 "use client"
 
+import { useI18n } from "@/contexts/I18nProvider"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Download, FileText } from "lucide-react"
 import { KycDoc } from "./types"
+import { docStatusLabel } from "./verification-i18n-maps"
 import { getAttachmentUrl, getR2DownloadUrl } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 
@@ -26,6 +28,7 @@ interface DocumentsCardProps {
 }
 
 export function DocumentsCard({ documents }: DocumentsCardProps) {
+  const { t } = useI18n()
   const { toast } = useToast()
 
   const handleDownload = async (doc: KycDoc) => {
@@ -42,8 +45,11 @@ export function DocumentsCard({ documents }: DocumentsCardProps) {
     } catch (error: unknown) {
       console.error("Failed to download document:", error)
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to download document",
+        title: t("admin.users.toast.errorTitle"),
+        description:
+          error instanceof Error
+            ? error.message
+            : t("admin.verifications.toast.downloadDocumentFailed"),
         variant: "destructive",
       })
     }
@@ -52,7 +58,9 @@ export function DocumentsCard({ documents }: DocumentsCardProps) {
   return (
     <Card>
       <CardHeader className="px-4 sm:px-6 pt-4 sm:pt-6">
-        <CardTitle className="text-base sm:text-lg">Submitted Documents</CardTitle>
+        <CardTitle className="text-base sm:text-lg">
+          {t("admin.verifications.documentsCard.title")}
+        </CardTitle>
       </CardHeader>
       <CardContent className="p-4 sm:p-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
@@ -64,11 +72,13 @@ export function DocumentsCard({ documents }: DocumentsCardProps) {
                   <span className="font-medium text-sm sm:text-base truncate">{doc.type}</span>
                 </div>
                 <Badge variant="outline" className={`text-xs flex-shrink-0 ${getDocumentStatusColor(doc.status)}`}>
-                  {doc.status}
+                  {docStatusLabel(doc.status, t)}
                 </Badge>
               </div>
               <p className="text-xs sm:text-sm text-gray-500 mb-3 truncate" title={doc.filename}>
-                Filename: {doc.filename}
+                {t("admin.verifications.documentsCard.filename", {
+                  name: doc.filename,
+                })}
               </p>
               <Button
                 variant="outline"
@@ -77,7 +87,7 @@ export function DocumentsCard({ documents }: DocumentsCardProps) {
                 onClick={() => handleDownload(doc)}
               >
                 <Download className="w-3 h-3 sm:w-4 sm:h-4 mr-2" />
-                Download
+                {t("admin.verifications.documentsCard.download")}
               </Button>
             </div>
           ))}

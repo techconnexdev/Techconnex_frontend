@@ -24,13 +24,38 @@ import {
   Star,
   MapPin,
   MessageSquare,
-  Loader2,
 } from "lucide-react";
 import ProviderCard from "./sections/ProviderCard";
+import { CustomerProviderHourlyRate } from "./sections/CustomerProviderHourlyRate";
 import type { Provider, Option } from "./types";
 import { getProviderAiDrafts, getProfileImageUrl } from "@/lib/api";
 import { CustomerProvidersTour } from "../CustomerProvidersTour";
 import { getUserFriendlyErrorMessage } from "@/lib/errors";
+import { useI18n } from "@/contexts/I18nProvider";
+import type { MessageKey } from "@/lib/i18n/messages";
+import { CustomerProviderGridSkeleton } from "@/components/customer/CustomerPageSkeletons";
+
+function ratingOptionLabel(
+  value: string,
+  fallback: string,
+  t: (key: MessageKey, vars?: Record<string, string | number>) => string,
+): string {
+  const map: Record<string, MessageKey> = {
+    all: "customer.providers.rating.all",
+    "5.0+": "customer.providers.rating.v5_0",
+    "4.8+": "customer.providers.rating.v4_8",
+    "4.5+": "customer.providers.rating.v4_5",
+    "4.0+": "customer.providers.rating.v4_0",
+    "3.5+": "customer.providers.rating.v3_5",
+    "3.0+": "customer.providers.rating.v3_0",
+    "2.5+": "customer.providers.rating.v2_5",
+    "2.0+": "customer.providers.rating.v2_0",
+    "1.5+": "customer.providers.rating.v1_5",
+    "1.0+": "customer.providers.rating.v1_0",
+  };
+  const key = map[value];
+  return key ? t(key) : fallback;
+}
 
 // Extended provider type for recommended providers with AI-specific fields
 type RecommendedProvider = Provider & {
@@ -47,9 +72,12 @@ type RecommendedProvider = Provider & {
 /** Props come from the server page */
 export default function FindProvidersClient({
   ratings,
+  viewerPreferredCurrency,
 }: {
   ratings: Option[];
+  viewerPreferredCurrency?: string;
 }) {
+  const { t, locale } = useI18n();
   const [searchQuery, setSearchQuery] = useState("");
   const [ratingFilter, setRatingFilter] = useState(ratings[0]?.value ?? "all");
   const [verifiedFilter, setVerifiedFilter] = useState("all"); // all | verified | unverified
@@ -137,7 +165,7 @@ export default function FindProvidersClient({
             .filter(Boolean) as string[];
           if (profileIds.length > 0) {
             try {
-              const draftRes = await getProviderAiDrafts(profileIds);
+              const draftRes = await getProviderAiDrafts(profileIds, locale);
               if (draftRes?.success && Array.isArray(draftRes.drafts)) {
                 const draftMap = new Map(
                   draftRes.drafts.map(
@@ -176,7 +204,7 @@ export default function FindProvidersClient({
     };
 
     fetchProviders();
-  }, [searchQuery, ratingFilter, verifiedFilter]);
+  }, [searchQuery, ratingFilter, verifiedFilter, locale]);
 
   // Fetch recommended providers (same 2-hour cache as provider AI Recommended Opportunities)
   const fetchRecommendedProviders = useCallback(async () => {
@@ -196,6 +224,7 @@ export default function FindProvidersClient({
 
       const params = new URLSearchParams();
       if (userId) params.append("userId", userId);
+      if (locale && locale.trim()) params.append("lang", locale.trim());
 
       const token =
         typeof window !== "undefined" ? localStorage.getItem("token") : null;
@@ -218,11 +247,14 @@ export default function FindProvidersClient({
             profileId: (provider.profileId as string | undefined) || null,
             name: provider.name as string,
             specialty:
-              (provider.major as string | undefined) || "ICT Professional",
+              (provider.major as string | undefined) ||
+              t("customer.providers.defaultMajor"),
             rating: (provider.rating as number | undefined) || 0,
             completedJobs: (provider.completedJobs as number | undefined) || 0,
             hourlyRate: (provider.hourlyRate as number | undefined) || 0,
-            location: (provider.location as string | undefined) || "Malaysia",
+            location:
+              (provider.location as string | undefined) ||
+              t("customer.providers.defaultLocation"),
             avatar: getProfileImageUrl(provider.avatar as string | undefined),
             skills: Array.isArray(provider.skills)
               ? (provider.skills as string[])
@@ -245,6 +277,10 @@ export default function FindProvidersClient({
             specialties: Array.isArray(provider.specialties)
               ? (provider.specialties as string[])
               : [],
+            preferredCurrency:
+              typeof provider.preferredCurrency === "string"
+                ? (provider.preferredCurrency as string)
+                : undefined,
           }),
         );
 
@@ -258,16 +294,13 @@ export default function FindProvidersClient({
       }
     } catch (err) {
       setErrorRecommended(
-        getUserFriendlyErrorMessage(
-          err,
-          "customer providers recommended",
-        ),
+        getUserFriendlyErrorMessage(err, "customer providers recommended"),
       );
       setRecommendedProviders([]);
     } finally {
       setLoadingRecommended(false);
     }
-  }, []);
+  }, [t, locale]);
 
   useEffect(() => {
     fetchRecommendedProviders();
@@ -301,10 +334,10 @@ export default function FindProvidersClient({
       >
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-            Find ICT Professionals
+            {t("customer.providers.find.title")}
           </h1>
           <p className="text-sm sm:text-base text-gray-600 mt-1">
-            Discover and hire top-rated ICT experts for your projects
+            {t("customer.providers.find.subtitle")}
           </p>
         </div>
         <div className="flex gap-2 sm:gap-3 w-full sm:w-auto">
@@ -318,7 +351,7 @@ export default function FindProvidersClient({
               className="w-full sm:w-auto text-xs sm:text-sm"
             >
               <Heart className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-              Saved Providers
+              {t("customer.providers.find.savedCta")}
             </Button>
           </Link>
         </div>
@@ -331,7 +364,7 @@ export default function FindProvidersClient({
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
               <Input
-                placeholder="Search by name, skills..."
+                placeholder={t("customer.providers.find.searchPlaceholder")}
                 className="pl-10 text-sm sm:text-base"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -340,12 +373,14 @@ export default function FindProvidersClient({
 
             <Select value={ratingFilter} onValueChange={setRatingFilter}>
               <SelectTrigger className="text-sm sm:text-base w-full">
-                <SelectValue placeholder="All Ratings" />
+                <SelectValue
+                  placeholder={t("customer.providers.find.ratingPlaceholder")}
+                />
               </SelectTrigger>
               <SelectContent>
                 {ratings.map((r) => (
                   <SelectItem key={r.value} value={r.value}>
-                    {r.label}
+                    {ratingOptionLabel(r.value, r.label, t)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -353,12 +388,20 @@ export default function FindProvidersClient({
 
             <Select value={verifiedFilter} onValueChange={setVerifiedFilter}>
               <SelectTrigger className="text-sm sm:text-base w-full">
-                <SelectValue placeholder="Verification Status" />
+                <SelectValue
+                  placeholder={t("customer.providers.find.verifiedPlaceholder")}
+                />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Providers</SelectItem>
-                <SelectItem value="verified">Verified Only</SelectItem>
-                <SelectItem value="unverified">Unverified Only</SelectItem>
+                <SelectItem value="all">
+                  {t("customer.providers.filter.allProviders")}
+                </SelectItem>
+                <SelectItem value="verified">
+                  {t("customer.providers.filter.verifiedOnly")}
+                </SelectItem>
+                <SelectItem value="unverified">
+                  {t("customer.providers.filter.unverifiedOnly")}
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -366,43 +409,70 @@ export default function FindProvidersClient({
       </Card>
 
       {/* Tabs */}
-      <Tabs defaultValue="all" className="space-y-4 sm:space-y-6" data-tour-step="3">
+      <Tabs
+        defaultValue="all"
+        className="space-y-4 sm:space-y-6"
+        data-tour-step="3"
+      >
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
           <TabsList>
-            <TabsTrigger value="all">All</TabsTrigger>
-            <TabsTrigger value="recommended">AI Recommended</TabsTrigger>
+            <TabsTrigger value="all">
+              {t("customer.providers.tab.all")}
+            </TabsTrigger>
+            <TabsTrigger value="recommended">
+              {t("customer.providers.tab.aiRecommended")}
+            </TabsTrigger>
           </TabsList>
           <Select defaultValue="rating">
             <SelectTrigger className="w-full sm:w-48 text-sm sm:text-base">
-              <SelectValue placeholder="Sort by" />
+              <SelectValue
+                placeholder={t("customer.providers.sort.placeholder")}
+              />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="rating">Highest Rated</SelectItem>
-              <SelectItem value="price-low">Price: Low to High</SelectItem>
-              <SelectItem value="price-high">Price: High to Low</SelectItem>
-              <SelectItem value="experience">Most Experienced</SelectItem>
+              <SelectItem value="rating">
+                {t("customer.providers.sort.rating")}
+              </SelectItem>
+              <SelectItem value="price-low">
+                {t("customer.providers.sort.priceLow")}
+              </SelectItem>
+              <SelectItem value="price-high">
+                {t("customer.providers.sort.priceHigh")}
+              </SelectItem>
+              <SelectItem value="experience">
+                {t("customer.providers.sort.experience")}
+              </SelectItem>
             </SelectContent>
           </Select>
         </div>
 
         {/* All Providers Tab */}
-        <TabsContent value="all" className="space-y-4 sm:space-y-6" data-tour-step="4">
+        <TabsContent
+          value="all"
+          className="space-y-4 sm:space-y-6"
+          data-tour-step="4"
+        >
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
             <p className="text-sm sm:text-base text-gray-600">
-              {filteredProviders.length} providers found
+              {t("customer.providers.countFound", {
+                count: String(filteredProviders.length),
+              })}
             </p>
           </div>
           {loading ? (
-            <div className="text-center py-8 sm:py-12">
-              <Loader2 className="w-8 h-8 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-4 animate-spin" />
-              <p className="text-sm sm:text-base text-gray-600">
-                Loading providers...
-              </p>
-            </div>
+            <CustomerProviderGridSkeleton
+              loadingLabel={t("customer.providers.loading.list")}
+              count={6}
+              recommended={false}
+            />
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 lg:gap-6">
               {filteredProviders.map((p) => (
-                <ProviderCard key={p.id} provider={p} />
+                <ProviderCard
+                  key={p.id}
+                  provider={p}
+                  viewerPreferredCurrency={viewerPreferredCurrency}
+                />
               ))}
             </div>
           )}
@@ -425,27 +495,41 @@ export default function FindProvidersClient({
                   const remainingHours = Math.floor(remainingMinutes / 60);
                   const remainingMins = remainingMinutes % 60;
 
+                  const updatedText =
+                    ageMinutes === 0
+                      ? t("customer.providers.cache.justNow")
+                      : ageMinutes === 1
+                        ? t("customer.providers.cache.updatedOneMinute")
+                        : t("customer.providers.cache.updatedMinutes", {
+                            n: String(ageMinutes),
+                          });
+
+                  let nextPart = "";
+                  if (remainingMs > 0) {
+                    if (remainingHours > 0) {
+                      nextPart = t(
+                        "customer.providers.cache.nextHoursMinutes",
+                        {
+                          h: String(remainingHours),
+                          m: String(remainingMins),
+                        },
+                      );
+                    } else {
+                      nextPart = t("customer.providers.cache.nextMinutes", {
+                        m: String(remainingMins),
+                      });
+                    }
+                  }
+
                   return (
                     <>
-                      <span>
-                        Updated: {ageMinutes} minute
-                        {ageMinutes !== 1 ? "s" : ""} ago
-                      </span>
-                      {remainingMs > 0 && (
+                      <span>{updatedText}</span>
+                      {nextPart ? (
                         <>
                           {" • "}
-                          <span>
-                            Next refresh: in{" "}
-                            {remainingHours > 0
-                              ? `${remainingHours} hour${
-                                  remainingHours !== 1 ? "s" : ""
-                                } `
-                              : ""}
-                            {remainingMins} minute
-                            {remainingMins !== 1 ? "s" : ""}
-                          </span>
+                          <span>{nextPart}</span>
                         </>
-                      )}
+                      ) : null}
                     </>
                   );
                 })()}
@@ -453,12 +537,11 @@ export default function FindProvidersClient({
             )}
 
           {loadingRecommended ? (
-            <div className="text-center py-8 sm:py-12">
-              <Loader2 className="w-8 h-8 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-4 animate-spin" />
-              <p className="text-sm sm:text-base text-gray-600">
-                Loading recommended providers...
-              </p>
-            </div>
+            <CustomerProviderGridSkeleton
+              loadingLabel={t("customer.providers.loading.recommended")}
+              count={4}
+              recommended
+            />
           ) : errorRecommended ? (
             <Card>
               <CardContent className="p-12 text-center">
@@ -466,14 +549,14 @@ export default function FindProvidersClient({
                   <span className="text-red-600 text-xl">⚠️</span>
                 </div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                  Error loading recommendations
+                  {t("customer.providers.recommended.errorTitle")}
                 </h3>
                 <p className="text-gray-600 mb-4">{errorRecommended}</p>
                 <Button
                   onClick={() => window.location.reload()}
                   variant="outline"
                 >
-                  Try Again
+                  {t("customer.providers.recommended.tryAgain")}
                 </Button>
               </CardContent>
             </Card>
@@ -484,11 +567,10 @@ export default function FindProvidersClient({
                   <Sparkles className="w-8 h-8 text-gray-400" />
                 </div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                  No recommended providers found
+                  {t("customer.providers.recommended.emptyTitle")}
                 </h3>
                 <p className="text-gray-600">
-                  Create a project request to get AI-matched provider
-                  recommendations!
+                  {t("customer.providers.recommended.emptyBody")}
                 </p>
               </CardContent>
             </Card>
@@ -506,7 +588,9 @@ export default function FindProvidersClient({
                       <div className="absolute top-2 right-2 sm:top-3 sm:right-3 opacity-0 lg:group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
                         <div className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-full text-xs font-medium shadow-md">
                           <Sparkles className="w-3 h-3" />
-                          <span className="hidden sm:inline">AI Insights</span>
+                          <span className="hidden sm:inline">
+                            {t("customer.providers.badge.aiInsights")}
+                          </span>
                         </div>
                       </div>
                     )}
@@ -536,13 +620,15 @@ export default function FindProvidersClient({
                                       : "bg-yellow-100 text-yellow-700 border-yellow-300"
                                 }`}
                               >
-                                {provider.matchScore}% match
+                                {t("customer.providers.matchPercent", {
+                                  score: String(provider.matchScore),
+                                })}
                               </Badge>
                             )}
                             {!provider.verified && (
                               <Badge className="text-xs bg-gray-100 text-gray-700 border-gray-300 shrink-0">
                                 <AlertTriangle className="w-3 h-3 mr-1" />
-                                Not Verified
+                                {t("customer.providers.badge.notVerified")}
                               </Badge>
                             )}
                           </div>
@@ -551,7 +637,9 @@ export default function FindProvidersClient({
                           </p>
                           {provider.recommendedFor && (
                             <p className="text-xs text-blue-600 mt-1 font-medium">
-                              Recommended for: {provider.recommendedFor.title}
+                              {t("customer.providers.recommendedFor", {
+                                title: provider.recommendedFor.title,
+                              })}
                             </p>
                           )}
                           <div className="flex items-center gap-1 mt-1.5 flex-wrap">
@@ -560,11 +648,15 @@ export default function FindProvidersClient({
                               {provider.rating.toFixed(1)}
                             </span>
                             <span className="text-xs sm:text-sm text-gray-500">
-                              ({provider.completedJobs} jobs)
+                              {t("customer.providers.jobsShort", {
+                                count: String(provider.completedJobs),
+                              })}
                             </span>
                             {(provider.yearsExperience ?? 0) > 0 && (
                               <span className="text-xs text-gray-500">
-                                • {provider.yearsExperience} years exp.
+                                {t("customer.providers.yearsExpShort", {
+                                  years: String(provider.yearsExperience),
+                                })}
                               </span>
                             )}
                           </div>
@@ -614,9 +706,15 @@ export default function FindProvidersClient({
                               </Badge>
                             )}
                           </div>
-                          <p className="text-xs sm:text-sm font-medium text-blue-600 mt-1.5 sm:mt-2">
-                            RM{provider.hourlyRate}/hour
-                          </p>
+                          <div className="mt-1.5 sm:mt-2">
+                            <CustomerProviderHourlyRate
+                              provider={provider}
+                              viewerPreferredCurrency={viewerPreferredCurrency}
+                              primaryClassName="text-xs sm:text-sm font-medium text-blue-600"
+                              secondaryClassName="text-[11px] sm:text-xs font-medium text-blue-600/90"
+                              captionClassName="text-[10px] text-blue-600/70"
+                            />
+                          </div>
                         </div>
                       </div>
 
@@ -639,10 +737,10 @@ export default function FindProvidersClient({
                             >
                               <Sparkles className="w-3.5 h-3.5 shrink-0" />
                               <span className="hidden sm:inline">
-                                Hover to see AI insights
+                                {t("customer.providers.hoverAiInsights")}
                               </span>
                               <span className="sm:hidden">
-                                Tap to see AI insights
+                                {t("customer.providers.tapAiInsights")}
                               </span>
                               <ChevronRight
                                 className={`w-3 h-3 shrink-0 transition-transform ${
@@ -664,13 +762,15 @@ export default function FindProvidersClient({
                                   <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600" />
                                 </div>
                                 <p className="text-xs sm:text-sm font-semibold text-blue-900">
-                                  Why this provider is recommended:
+                                  {t("customer.providers.whyRecommended")}
                                 </p>
                                 {/* Close button for mobile */}
                                 <button
                                   onClick={() => setExpandedProviderId(null)}
                                   className="ml-auto lg:hidden text-blue-600 hover:text-blue-800 p-1"
-                                  aria-label="Close insights"
+                                  aria-label={t(
+                                    "customer.providers.closeInsightsAria",
+                                  )}
                                 >
                                   <span className="text-lg">×</span>
                                 </button>
@@ -732,7 +832,7 @@ export default function FindProvidersClient({
                             variant="outline"
                             className="w-full text-xs sm:text-sm group-hover:border-blue-600 group-hover:text-blue-600 transition-colors"
                           >
-                            View Profile
+                            {t("customer.providers.viewProfile")}
                             <ChevronRight className="w-3.5 h-3.5 ml-1.5 group-hover:translate-x-1 transition-transform" />
                           </Button>
                         </Link>
@@ -752,7 +852,7 @@ export default function FindProvidersClient({
                               className="w-full text-xs sm:text-sm group-hover:bg-blue-600 group-hover:text-white transition-all duration-300"
                             >
                               <MessageSquare className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                              Contact
+                              {t("customer.providers.contact")}
                             </Button>
                           </Link>
                         )}

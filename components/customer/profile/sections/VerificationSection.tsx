@@ -35,6 +35,8 @@ import { API_BASE } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { getUserFriendlyErrorMessage } from "@/lib/errors";
 import type { UploadedDocument } from "../types";
+import { useI18n } from "@/contexts/I18nProvider";
+import type { MessageKey } from "@/lib/i18n/messages/en";
 
 type Props = {
   documents: UploadedDocument[];
@@ -50,6 +52,7 @@ export default function VerificationSection({
   userId,
 }: Props) {
   const { toast } = useToast();
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [reuploadTargetId, setReuploadTargetId] = useState<string | null>(null);
@@ -83,21 +86,48 @@ export default function VerificationSection({
       : XCircle;
 
   const isProvider = documentType === "PROVIDER_ID";
-  const title = isProvider ? "Provider Verification Status" : "Company Verification Status";
-  const description = isProvider
-    ? "Upload required documents to verify your identity as a provider"
-    : "Upload required documents to verify and authorize your company";
-  const requiredDocs = isProvider
+  const title = t(
+    isProvider
+      ? "customer.profile.verification.titleProvider"
+      : "customer.profile.verification.titleCompany",
+  );
+  const description = t(
+    isProvider
+      ? "customer.profile.verification.descProvider"
+      : "customer.profile.verification.descCompany",
+  );
+  const requiredDocs: { labelKey: MessageKey; hintKey: MessageKey }[] = isProvider
     ? [
-        { label: "Government-issued ID", hint: "Passport, NRIC or driving license" },
-        { label: "Proof of address", hint: "Utility bill or bank statement (within 3 months)" },
-        { label: "Professional credentials (optional)", hint: "Certifications or licenses" },
+        {
+          labelKey: "customer.profile.verification.req.id.label",
+          hintKey: "customer.profile.verification.req.id.hint",
+        },
+        {
+          labelKey: "customer.profile.verification.req.address.label",
+          hintKey: "customer.profile.verification.req.address.hint",
+        },
+        {
+          labelKey: "customer.profile.verification.req.cred.label",
+          hintKey: "customer.profile.verification.req.cred.hint",
+        },
       ]
     : [
-        { label: "Business Registration (SSM)", hint: "Required for verification" },
-        { label: "Tax Identification Number", hint: "Required for verification" },
-        { label: "Bank Account Statement", hint: "Required for verification" },
-        { label: "Director's Identification", hint: "Required for verification" },
+        {
+          labelKey: "customer.profile.verification.req.ssm.label",
+          hintKey: "customer.profile.verification.req.ssm.hint",
+        },
+        {
+          labelKey: "customer.profile.verification.req.tax.label",
+          hintKey: "customer.profile.verification.req.tax.hint",
+        },
+        {
+          labelKey: "customer.profile.verification.req.bank.label",
+          hintKey: "customer.profile.verification.req.bank.hint",
+        },
+        {
+          labelKey: "customer.profile.verification.req.director.label",
+          hintKey: "customer.profile.verification.req.director.hint",
+        },
       ];
 
   const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -107,16 +137,16 @@ export default function VerificationSection({
     // ✅ Check if user accidentally selected a folder
     if (f.type === "" && f.size === 0) {
       return toast({
-        title: "Invalid selection",
-        description: "You cannot upload a folder. Please select a valid file.",
+        title: t("customer.profile.verification.toast.invalidFolder"),
+        description: t("customer.profile.verification.toast.invalidFolderDesc"),
         variant: "destructive",
       });
     }
 
     if (f.size > 10 * 1024 * 1024)
       return toast({
-        title: "File too large",
-        description: "Max 10MB",
+        title: t("customer.projects.new.toast.fileTooLargeTitle"),
+        description: t("customer.profile.verification.toast.max10mb"),
         variant: "destructive",
       });
     const ok = [
@@ -127,8 +157,8 @@ export default function VerificationSection({
     ].includes(f.type);
     if (!ok)
       return toast({
-        title: "Invalid file type",
-        description: "PDF, JPEG, PNG only",
+        title: t("customer.projects.new.toast.invalidFileTitle"),
+        description: t("customer.profile.verification.toast.typesPdfJpeg"),
         variant: "destructive",
       });
     setFile(f);
@@ -137,8 +167,8 @@ export default function VerificationSection({
   const upload = async () => {
     if (!file) {
       return toast({
-        title: "Missing information",
-        description: "Please select a file to upload.",
+        title: t("customer.profile.verification.toast.missingFile"),
+        description: t("customer.profile.verification.toast.missingFileDesc"),
         variant: "destructive",
       });
     }
@@ -146,9 +176,12 @@ export default function VerificationSection({
     // Validate file size (50MB max for documents)
     const maxSize = 50 * 1024 * 1024; // 50 MB
     if (file.size > maxSize) {
+      const mb = maxSize / (1024 * 1024);
       return toast({
-        title: "File too large",
-        description: `Maximum file size is ${(maxSize / (1024 * 1024)).toFixed(0)} MB`,
+        title: t("customer.projects.new.toast.fileTooLargeTitle"),
+        description: t("customer.profile.verification.toast.max50", {
+          mb: mb.toFixed(0),
+        }),
         variant: "destructive",
       });
     }
@@ -300,12 +333,12 @@ export default function VerificationSection({
 
       setReuploadTargetId(null);
       toast({
-        title: "Document Uploaded",
-        description: "Pending verification.",
+        title: t("customer.profile.verification.toast.uploadedTitle"),
+        description: t("customer.profile.verification.toast.uploadedDesc"),
       });
     } catch (err: unknown) {
       toast({
-        title: "Upload failed",
+        title: t("customer.profile.verification.toast.uploadFailed"),
         description: getUserFriendlyErrorMessage(
           err,
           "customer profile verification upload",
@@ -318,8 +351,8 @@ export default function VerificationSection({
   const handleDownload = async (doc: UploadedDocument) => {
     if (!doc.fileUrl) {
       return toast({
-        title: "Download unavailable",
-        description: "File URL not available for this document.",
+        title: t("customer.profile.verification.toast.downloadUnavailable"),
+        description: t("customer.profile.verification.toast.downloadUnavailableDesc"),
         variant: "destructive",
       });
     }
@@ -345,7 +378,7 @@ export default function VerificationSection({
       }
     } catch (error: unknown) {
       toast({
-        title: "Download failed",
+        title: t("customer.profile.verification.toast.downloadFailed"),
         description: getUserFriendlyErrorMessage(
           error,
           "customer profile verification download",
@@ -378,12 +411,12 @@ export default function VerificationSection({
           >
             <StatusIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1" />
             {status === "verified"
-              ? "Verified"
+              ? t("customer.profile.verification.badge.verified")
               : status === "pending"
-              ? "Pending Review"
+              ? t("customer.profile.verification.badge.pending")
               : status === "action_required"
-              ? "Action Required"
-              : "Not Verified"}
+              ? t("customer.profile.verification.badge.action")
+              : t("customer.profile.verification.badge.notVerified")}
           </Badge>
         </div>
       </CardHeader>
@@ -413,17 +446,17 @@ export default function VerificationSection({
               <div className="flex-1 min-w-0">
                 <h4 className="font-semibold text-sm sm:text-base mb-1">
                   {status === "action_required"
-                    ? "Action Required"
+                    ? t("customer.profile.verification.alert.actionTitle")
                     : status === "pending"
-                    ? "Documents Under Review"
-                    : "Complete Your Verification"}
+                    ? t("customer.profile.verification.alert.pendingTitle")
+                    : t("customer.profile.verification.alert.completeTitle")}
                 </h4>
                 <p className="text-xs sm:text-sm text-gray-600 break-words">
                   {status === "action_required"
-                    ? "Some documents were rejected. Please review and resubmit."
+                    ? t("customer.profile.verification.alert.actionBody")
                     : status === "pending"
-                    ? "Review typically takes 1–2 business days."
-                    : "Upload the required verification documents to unlock all features."}
+                    ? t("customer.profile.verification.alert.pendingBody")
+                    : t("customer.profile.verification.alert.completeBody")}
                 </p>
               </div>
             </div>
@@ -432,17 +465,19 @@ export default function VerificationSection({
 
         {/* Required list (kept brief) */}
         <div className="space-y-2.5 sm:space-y-3">
-          <h3 className="text-base sm:text-lg font-semibold">Required Documents</h3>
+          <h3 className="text-base sm:text-lg font-semibold">
+            {t("customer.profile.verification.requiredTitle")}
+          </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
-            {requiredDocs.map(({ label, hint }) => (
+            {requiredDocs.map(({ labelKey, hintKey }) => (
               <div
-                key={label}
+                key={labelKey}
                 className="p-3 border rounded-lg bg-gray-50 flex items-start gap-2"
               >
                 <FileText className="w-5 h-5 text-blue-600 mt-0.5" />
                 <div>
-                  <p className="font-medium text-sm">{label}</p>
-                  <p className="text-xs text-gray-500">{hint}</p>
+                  <p className="font-medium text-sm">{t(labelKey)}</p>
+                  <p className="text-xs text-gray-500">{t(hintKey)}</p>
                 </div>
               </div>
             ))}
@@ -454,22 +489,28 @@ export default function VerificationSection({
         {/* Upload button & dialog */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
           <div className="flex-1 min-w-0">
-            <h3 className="text-base sm:text-lg font-semibold">Uploaded Documents</h3>
+            <h3 className="text-base sm:text-lg font-semibold">
+              {t("customer.profile.verification.uploadedTitle")}
+            </h3>
             <p className="text-xs sm:text-sm text-gray-500">
-              Manage your verification documents
+              {t("customer.profile.verification.uploadedDesc")}
             </p>
           </div>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
               <Button disabled={status === "verified" || status === "pending"} className="text-xs sm:text-sm w-full sm:w-auto">
                 <Upload className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                Upload Document
+                {t("customer.profile.verification.uploadBtn")}
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-xl sm:max-w-md max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle className="text-base sm:text-lg">Upload Verification Document</DialogTitle>
-                <DialogDescription className="text-xs sm:text-sm">PDF, JPEG, PNG (Max 10MB)</DialogDescription>
+                <DialogTitle className="text-base sm:text-lg">
+                  {t("customer.profile.verification.dialogTitle")}
+                </DialogTitle>
+                <DialogDescription className="text-xs sm:text-sm">
+                  {t("customer.profile.verification.dialogDesc")}
+                </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 {/* <div>
@@ -488,7 +529,7 @@ export default function VerificationSection({
                   </Select>
                 </div> */}
                 <div>
-                  <Label>Select File</Label>
+                  <Label>{t("customer.profile.verification.selectFile")}</Label>
                   <Input
                     type="file"
                     accept=".pdf,.jpg,.jpeg,.png"
@@ -498,10 +539,10 @@ export default function VerificationSection({
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setOpen(false)}>
-                  Cancel
+                  {t("customer.profile.cancel")}
                 </Button>
                 <Button onClick={upload} disabled={!file}>
-                  Upload Document
+                  {t("customer.profile.verification.uploadSubmit")}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -513,9 +554,11 @@ export default function VerificationSection({
           {documents.length === 0 ? (
             <div className="text-center py-6 sm:py-8 border rounded-lg bg-gray-50 px-4">
               <FileText className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-2" />
-              <p className="text-sm sm:text-base text-gray-600">No documents uploaded yet</p>
+              <p className="text-sm sm:text-base text-gray-600">
+                {t("customer.profile.verification.emptyTitle")}
+              </p>
               <p className="text-xs sm:text-sm text-gray-500">
-                Upload your verification documents to get started
+                {t("customer.profile.verification.emptyDesc")}
               </p>
             </div>
           ) : (
@@ -533,38 +576,48 @@ export default function VerificationSection({
                         {doc.status === "approved" && (
                           <Badge className="bg-green-100 text-green-800 text-[10px] sm:text-xs flex-shrink-0">
                             <CheckCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1" />
-                            Verified
+                            {t("customer.profile.verification.badgeDoc.verified")}
                           </Badge>
                         )}
                         {doc.status === "pending" && (
                           <Badge className="bg-yellow-100 text-yellow-800 text-[10px] sm:text-xs flex-shrink-0">
                             <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1" />
-                            Uploaded
+                            {t("customer.profile.verification.badgeDoc.uploaded")}
                           </Badge>
                         )}
                         {doc.status === "rejected" && (
                           <Badge className="bg-red-100 text-red-800 text-[10px] sm:text-xs flex-shrink-0">
                             <XCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1" />
-                            Rejected
+                            {t("customer.profile.verification.badgeDoc.rejected")}
                           </Badge>
                         )}
                       </div>
                       <p className="text-xs sm:text-sm text-gray-600 break-words">{doc.type}</p>
                       <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 mt-1.5 sm:mt-2 text-[10px] sm:text-xs text-gray-500">
                         <span className="whitespace-nowrap">{doc.size}</span>
-                        <span className="break-words">Uploaded: {doc.uploadDate}</span>
+                        <span className="break-words">
+                          {t("customer.profile.verification.uploadedLabel")}{" "}
+                          {doc.uploadDate}
+                        </span>
                       </div>
                       {doc.status === "rejected" && doc.rejectionReason && (
                         <div className="mt-2 p-2 sm:p-2.5 bg-red-50 border border-red-200 rounded text-xs sm:text-sm text-red-700">
-                          <strong>Reason:</strong> <span className="break-words">{doc.rejectionReason}</span>
+                          <strong>{t("customer.profile.verification.reason")}</strong>{" "}
+                          <span className="break-words">{doc.rejectionReason}</span>
                           {doc.reviewedBy && (
                             <div className="text-[10px] sm:text-xs text-red-700 mt-1 break-words">
-                              <strong>Reviewed by:</strong> {doc.reviewedBy}
+                              <strong>
+                                {t("customer.profile.verification.reviewedBy")}
+                              </strong>{" "}
+                              {doc.reviewedBy}
                             </div>
                           )}
                           {doc.reviewedAt && (
                             <div className="text-[10px] sm:text-xs text-red-700 mt-1 break-words">
-                              <strong>Reviewed at:</strong> {doc.reviewedAt}
+                              <strong>
+                                {t("customer.profile.verification.reviewedAt")}
+                              </strong>{" "}
+                              {doc.reviewedAt}
                             </div>
                           )}
                         </div>
@@ -594,7 +647,7 @@ export default function VerificationSection({
                           }}
                           className="text-xs sm:text-sm"
                         >
-                          Reupload
+                          {t("customer.profile.verification.reupload")}
                         </Button>
                         {/* <Button
                           variant="outline"

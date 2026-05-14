@@ -1,16 +1,5 @@
 import { Metadata } from "next";
-import BetaBanner from "@/components/BetaBanner";
-import Header from "@/components/Homepage/Header";
-import Hero from "@/components/Homepage/Hero";
-import Brand from "@/components/Homepage/Brand";
-import { Features } from "@/components/Homepage/Features";
-import Services from "@/components/Homepage/Services/Services";
-import Milestone from "@/components/Homepage/Milestone";
-import Footer from "@/components/Homepage/Footer";
-import { WorldMapDemo } from "@/components/Homepage/WorldMap";
-import ParallaxGallery from "@/components/Homepage/ParallaxGallery";
-import TourSchedule from "@/components/Homepage/TourSchedule";
-import VideoPlayer from "@/components/Homepage/VideoPlayer";
+import HomeShell from "@/components/Homepage/HomeShell";
 import { fetchHomepageData } from "@/lib/homepage-api";
 
 export const metadata: Metadata = {
@@ -57,25 +46,5 @@ export const metadata: Metadata = {
 export default async function LandingPage() {
   const homepageData = await fetchHomepageData();
 
-  return (
-    <div className="relative isolate">
-      <BetaBanner />
-      <Header />
-      <main className="overflow-x-hidden">
-        <Hero />
-        <VideoPlayer />
-        <Brand />
-        <Features />
-        <Services />
-        <Milestone />
-        <ParallaxGallery latestJobs={homepageData?.latestJobs ?? undefined} />
-        <TourSchedule
-          topFreelancers={homepageData?.topFreelancers ?? undefined}
-          topCompanies={homepageData?.topCompanies ?? undefined}
-        />
-        <WorldMapDemo />
-        <Footer />
-      </main>
-    </div>
-  );
+  return <HomeShell homepageData={homepageData} />;
 }

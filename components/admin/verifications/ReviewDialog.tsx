@@ -1,5 +1,6 @@
 "use client"
 
+import { useI18n } from "@/contexts/I18nProvider"
 import {
   Dialog,
   DialogContent,
@@ -35,6 +36,7 @@ export function ReviewDialog({
   onReject,
   onClose,
 }: ReviewDialogProps) {
+  const { t } = useI18n()
   if (!user) return null
 
   const hasPendingDocuments = user.documents?.some((doc) => doc.status === "uploaded")
@@ -43,9 +45,11 @@ export function ReviewDialog({
     <Dialog open={!!user} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-4xl max-h-[85vh] sm:max-h-[80vh] overflow-y-auto w-[95vw] sm:w-full">
         <DialogHeader>
-          <DialogTitle className="text-lg sm:text-xl">Verification Review - {user.name}</DialogTitle>
+          <DialogTitle className="text-lg sm:text-xl">
+            {t("admin.verifications.dialog.title", { name: user.name })}
+          </DialogTitle>
           <DialogDescription className="text-sm">
-            Review all submitted documents and user information
+            {t("admin.verifications.dialog.description")}
           </DialogDescription>
         </DialogHeader>
 
@@ -80,11 +84,11 @@ export function ReviewDialog({
                 className="text-red-600 border-red-300 hover:bg-red-50 w-full sm:w-auto"
               >
                 <XCircle className="w-4 h-4 mr-2" />
-                Reject
+                {t("admin.verifications.dialog.reject")}
               </Button>
               <Button onClick={() => onApprove(user.id)} className="bg-green-600 hover:bg-green-700 w-full sm:w-auto">
                 <CheckCircle className="w-4 h-4 mr-2" />
-                Approve
+                {t("admin.verifications.dialog.approve")}
               </Button>
             </>
           )}

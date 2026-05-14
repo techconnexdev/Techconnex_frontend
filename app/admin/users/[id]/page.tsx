@@ -5,7 +5,7 @@ import { useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AdminLayout } from "@/components/admin-layout"
-import { getAdminUserById, suspendUser, activateUser, updateAdminUser, getResumeByUserId, getR2DownloadUrl, adminSendNotification } from "@/lib/api"
+import { getAdminUserById, suspendUser, activateUser, restoreDeletedUser, updateAdminUser, getResumeByUserId, getR2DownloadUrl, adminSendNotification } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 import { Loader2, CheckCircle } from "lucide-react"
 import {
@@ -19,7 +19,9 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
+import { useI18n } from "@/contexts/I18nProvider"
 import { UserHeader } from "@/components/admin/users/UserHeader"
 import { StatusBadges } from "@/components/admin/users/StatusBadges"
 import { BasicInformationCard } from "@/components/admin/users/BasicInformationCard"
@@ -36,9 +38,21 @@ type UserData = Record<string, unknown> & {
   [key: string]: unknown
 }
 
+type PayoutMethod = {
+  id: string
+  type: string
+  label?: string
+  bankName?: string
+  accountNumber?: string
+  accountHolder?: string
+  accountEmail?: string
+  walletId?: string
+}
+
 export default function AdminUserDetailPage() {
   const params = useParams()
   const userId = params.id as string
+  const { t } = useI18n()
   const { toast } = useToast()
   
   const [loading, setLoading] = useState(true)
@@ -63,14 +77,14 @@ export default function AdminUserDetailPage() {
       }
     } catch (error: unknown) {
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to load user data",
+        title: t("admin.users.toast.errorTitle"),
+        description: error instanceof Error ? error.message : t("admin.users.detail.toast.loadFailed"),
         variant: "destructive",
       })
     } finally {
       setLoading(false)
     }
-  }, [userId, toast])
+  }, [userId, toast, t])
 
   useEffect(() => {
     loadUserData()
@@ -106,8 +120,8 @@ export default function AdminUserDetailPage() {
       window.open(downloadUrl.downloadUrl, "_blank")
     } catch (error: unknown) {
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to download resume",
+        title: t("admin.users.toast.errorTitle"),
+        description: error instanceof Error ? error.message : t("admin.users.detail.toast.downloadResumeFailed"),
         variant: "destructive",
       })
     }
@@ -202,16 +216,16 @@ export default function AdminUserDetailPage() {
       const response = await updateAdminUser(userId, formData as unknown as Record<string, unknown>)
       if (response.success) {
         toast({
-          title: "Success",
-          description: "User updated successfully",
+          title: t("admin.users.toast.successTitle"),
+          description: t("admin.users.detail.toast.updateSuccess"),
         })
         setIsEditing(false)
         loadUserData()
       }
     } catch (error: unknown) {
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to update user",
+        title: t("admin.users.toast.errorTitle"),
+        description: error instanceof Error ? error.message : t("admin.users.detail.toast.updateFailed"),
         variant: "destructive",
       })
     } finally {
@@ -254,7 +268,7 @@ export default function AdminUserDetailPage() {
   }
 
   const handleSuspend = async () => {
-    if (!confirm("Are you sure you want to suspend this user? They will not be able to login until activated.")) {
+    if (!confirm(t("admin.users.detail.confirm.suspend"))) {
       return
     }
 
@@ -263,15 +277,15 @@ export default function AdminUserDetailPage() {
       const response = await suspendUser(userId)
       if (response.success) {
         toast({
-          title: "Success",
-          description: "User suspended successfully",
+          title: t("admin.users.toast.successTitle"),
+          description: t("admin.users.toast.userSuspended"),
         })
         loadUserData()
       }
     } catch (error: unknown) {
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to suspend user",
+        title: t("admin.users.toast.errorTitle"),
+        description: error instanceof Error ? error.message : t("admin.users.toast.suspendFailed"),
         variant: "destructive",
       })
     } finally {
@@ -280,7 +294,7 @@ export default function AdminUserDetailPage() {
   }
 
   const handleActivate = async () => {
-    if (!confirm("Are you sure you want to activate this user?")) {
+    if (!confirm(t("admin.users.detail.confirm.activate"))) {
       return
     }
 
@@ -289,15 +303,41 @@ export default function AdminUserDetailPage() {
       const response = await activateUser(userId)
       if (response.success) {
         toast({
-          title: "Success",
-          description: "User activated successfully",
+          title: t("admin.users.toast.successTitle"),
+          description: t("admin.users.toast.userActivated"),
         })
         loadUserData()
       }
     } catch (error: unknown) {
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to activate user",
+        title: t("admin.users.toast.errorTitle"),
+        description: error instanceof Error ? error.message : t("admin.users.toast.activateFailed"),
+        variant: "destructive",
+      })
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleRestoreDeleted = async () => {
+    if (!confirm(t("admin.users.detail.confirm.restore"))) {
+      return
+    }
+
+    try {
+      setActionLoading(true)
+      const response = await restoreDeletedUser(userId)
+      if (response.success) {
+        toast({
+          title: t("admin.users.toast.successTitle"),
+          description: t("admin.users.toast.accountRestored"),
+        })
+        loadUserData()
+      }
+    } catch (error: unknown) {
+      toast({
+        title: t("admin.users.toast.errorTitle"),
+        description: error instanceof Error ? error.message : t("admin.users.toast.restoreFailed"),
         variant: "destructive",
       })
     } finally {
@@ -306,7 +346,7 @@ export default function AdminUserDetailPage() {
   }
 
   const openNotifyDialog = () => {
-    setNotifyTitle("Message from TechConnex")
+    setNotifyTitle(t("admin.users.notify.defaultTitle"))
     setNotifyContent("")
     setNotifyOpen(true)
   }
@@ -322,16 +362,16 @@ export default function AdminUserDetailPage() {
         content: notifyContent.trim(),
       })
       toast({
-        title: "Success",
-        description: "Notification sent successfully",
+        title: t("admin.users.toast.successTitle"),
+        description: t("admin.users.toast.notificationSent"),
       })
       setNotifyOpen(false)
       setNotifyTitle("")
       setNotifyContent("")
     } catch (error: unknown) {
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to send notification",
+        title: t("admin.users.toast.errorTitle"),
+        description: error instanceof Error ? error.message : t("admin.users.toast.notificationSendFailed"),
         variant: "destructive",
       })
     } finally {
@@ -344,7 +384,7 @@ export default function AdminUserDetailPage() {
       <AdminLayout>
         <div className="flex items-center justify-center min-h-[400px] px-4 sm:px-6 lg:px-0">
           <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin" />
-          <span className="ml-2 text-sm sm:text-base">Loading user data...</span>
+          <span className="ml-2 text-sm sm:text-base">{t("admin.users.detail.loading")}</span>
         </div>
       </AdminLayout>
     )
@@ -354,9 +394,9 @@ export default function AdminUserDetailPage() {
     return (
       <AdminLayout>
         <div className="text-center py-8 sm:py-12 px-4 sm:px-6 lg:px-0">
-          <p className="text-sm sm:text-base text-gray-500">User not found</p>
+          <p className="text-sm sm:text-base text-gray-500">{t("admin.users.detail.notFound")}</p>
           <Link href="/admin/users">
-            <Button className="mt-3 sm:mt-4 text-xs sm:text-sm">Back to Users</Button>
+            <Button className="mt-3 sm:mt-4 text-xs sm:text-sm">{t("admin.users.detail.backToUsers")}</Button>
           </Link>
         </div>
       </AdminLayout>
@@ -531,6 +571,27 @@ export default function AdminUserDetailPage() {
     : []
 
   const allProjects = [...projectsAsProvider, ...projectsAsCustomer]
+  const payoutMethods: PayoutMethod[] =
+    isProvider &&
+    user.providerProfile &&
+    typeof user.providerProfile === "object" &&
+    Array.isArray((user.providerProfile as Record<string, unknown>).payoutMethods)
+      ? ((user.providerProfile as Record<string, unknown>).payoutMethods as Array<Record<string, unknown>>)
+          .filter((m) => m.id && m.type)
+          .map((m) => ({
+            id: String(m.id),
+            type: String(m.type),
+            label: typeof m.label === "string" ? m.label : undefined,
+            bankName: typeof m.bankName === "string" ? m.bankName : undefined,
+            accountNumber:
+              typeof m.accountNumber === "string" ? m.accountNumber : undefined,
+            accountHolder:
+              typeof m.accountHolder === "string" ? m.accountHolder : undefined,
+            accountEmail:
+              typeof m.accountEmail === "string" ? m.accountEmail : undefined,
+            walletId: typeof m.walletId === "string" ? m.walletId : undefined,
+          }))
+      : []
 
   return (
     <AdminLayout>
@@ -552,6 +613,7 @@ export default function AdminUserDetailPage() {
           onSave={handleSave}
           onSuspend={handleSuspend}
           onActivate={handleActivate}
+          onRestoreDeleted={userStatus === "DELETED" ? handleRestoreDeleted : undefined}
           onSendNotification={openNotifyDialog}
         />
 
@@ -569,8 +631,9 @@ export default function AdminUserDetailPage() {
             className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 py-3 px-4 -mx-4 sm:mx-0 sm:rounded-lg bg-amber-50 border border-amber-200 shadow-sm"
           >
             <p className="text-sm text-amber-900">
-              <strong>Editing this user.</strong> Update Basic Information, Profile, or any section below and click{" "}
-              <strong>Save changes</strong> when done.
+              {t("admin.users.detail.editBannerBeforeSave")}{" "}
+              <strong>{t("admin.users.detail.editBannerSave")}</strong>{" "}
+              {t("admin.users.detail.editBannerAfterSave")}
             </p>
             <div className="flex gap-2 flex-shrink-0">
               <Button
@@ -580,7 +643,7 @@ export default function AdminUserDetailPage() {
                 disabled={saving}
                 className="border-amber-300 text-amber-900 hover:bg-amber-100"
               >
-                Cancel
+                {t("admin.users.header.cancel")}
               </Button>
               <Button
                 size="sm"
@@ -591,12 +654,12 @@ export default function AdminUserDetailPage() {
                 {saving ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Saving...
+                    {t("admin.users.common.saving")}
                   </>
                 ) : (
                   <>
                     <CheckCircle className="w-4 h-4 mr-2" />
-                    Save changes
+                    {t("admin.users.header.saveChanges")}
                   </>
                 )}
               </Button>
@@ -605,11 +668,16 @@ export default function AdminUserDetailPage() {
         )}
 
         <Tabs defaultValue="overview" className="space-y-4 sm:space-y-6">
-          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto">
-            <TabsTrigger value="overview" className="text-xs sm:text-sm px-2 sm:px-4">Overview</TabsTrigger>
-            <TabsTrigger value="profile" className="text-xs sm:text-sm px-2 sm:px-4">Profile</TabsTrigger>
-            {kycDocuments.length > 0 && <TabsTrigger value="documents" className="text-xs sm:text-sm px-2 sm:px-4">Documents</TabsTrigger>}
-            {allProjects.length > 0 && <TabsTrigger value="projects" className="text-xs sm:text-sm px-2 sm:px-4">Projects</TabsTrigger>}
+          <TabsList
+            className={`grid w-full h-auto ${
+              isProvider ? "grid-cols-3 sm:grid-cols-5" : "grid-cols-2 sm:grid-cols-4"
+            }`}
+          >
+            <TabsTrigger value="overview" className="text-xs sm:text-sm px-2 sm:px-4">{t("admin.users.detail.tab.overview")}</TabsTrigger>
+            <TabsTrigger value="profile" className="text-xs sm:text-sm px-2 sm:px-4">{t("admin.users.detail.tab.profile")}</TabsTrigger>
+            {isProvider && <TabsTrigger value="payments" className="text-xs sm:text-sm px-2 sm:px-4">{t("admin.users.detail.tab.payments")}</TabsTrigger>}
+            {kycDocuments.length > 0 && <TabsTrigger value="documents" className="text-xs sm:text-sm px-2 sm:px-4">{t("admin.users.detail.tab.documents")}</TabsTrigger>}
+            {allProjects.length > 0 && <TabsTrigger value="projects" className="text-xs sm:text-sm px-2 sm:px-4">{t("admin.users.detail.tab.projects")}</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="overview" className="space-y-4 sm:space-y-6">
@@ -654,6 +722,70 @@ export default function AdminUserDetailPage() {
             )}
           </TabsContent>
 
+          {isProvider && (
+            <TabsContent value="payments" className="space-y-4 sm:space-y-6">
+              <Card>
+                <CardHeader className="p-4 sm:p-6">
+                  <CardTitle className="text-lg sm:text-xl">
+                    {t("admin.users.detail.payments.title")}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 sm:p-6 space-y-3 sm:space-y-4">
+                  {payoutMethods.length === 0 ? (
+                    <p className="text-sm text-gray-500">
+                      {t("admin.users.detail.payments.empty")}
+                    </p>
+                  ) : (
+                    payoutMethods.map((method) => (
+                      <div
+                        key={method.id}
+                        className="rounded-lg border p-3 sm:p-4 space-y-1"
+                      >
+                        <p className="text-sm font-medium">
+                          {method.label || method.type}
+                        </p>
+                        <p className="text-xs text-gray-600">
+                          {t("admin.users.detail.payments.type", { type: method.type })}
+                        </p>
+                        {method.bankName && (
+                          <p className="text-xs text-gray-600">
+                            {t("admin.users.detail.payments.bank", { name: method.bankName })}
+                          </p>
+                        )}
+                        {method.accountHolder && (
+                          <p className="text-xs text-gray-600">
+                            {t("admin.users.detail.payments.accountHolder", {
+                              name: method.accountHolder,
+                            })}
+                          </p>
+                        )}
+                        {method.accountNumber && (
+                          <p className="text-xs text-gray-600">
+                            {t("admin.users.detail.payments.accountNumber", {
+                              number: method.accountNumber,
+                            })}
+                          </p>
+                        )}
+                        {method.accountEmail && (
+                          <p className="text-xs text-gray-600">
+                            {t("admin.users.detail.payments.accountEmail", {
+                              email: method.accountEmail,
+                            })}
+                          </p>
+                        )}
+                        {method.walletId && (
+                          <p className="text-xs text-gray-600">
+                            {t("admin.users.detail.payments.walletId", { id: method.walletId })}
+                          </p>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
+
           {kycDocuments.length > 0 && (
             <TabsContent value="documents" className="space-y-4 sm:space-y-6">
               <KycDocumentsCard documents={kycDocuments} />
@@ -671,29 +803,29 @@ export default function AdminUserDetailPage() {
         <Dialog open={notifyOpen} onOpenChange={setNotifyOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Send notification</DialogTitle>
+              <DialogTitle>{t("admin.users.dialog.notify.title")}</DialogTitle>
               <DialogDescription>
-                Send a notification to {userName}
+                {t("admin.users.dialog.notify.description", { name: userName })}
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
-                <Label htmlFor="notify-title">Title</Label>
+                <Label htmlFor="notify-title">{t("admin.users.dialog.notify.titleLabel")}</Label>
                 <Input
                   id="notify-title"
                   value={notifyTitle}
                   onChange={(e) => setNotifyTitle(e.target.value)}
-                  placeholder="Notification title"
+                  placeholder={t("admin.users.dialog.notify.titlePlaceholder")}
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="notify-content">Message</Label>
+                <Label htmlFor="notify-content">{t("admin.users.dialog.notify.messageLabel")}</Label>
                 <Textarea
                   id="notify-content"
                   className="min-h-[100px]"
                   value={notifyContent}
                   onChange={(e) => setNotifyContent(e.target.value)}
-                  placeholder="Notification message"
+                  placeholder={t("admin.users.dialog.notify.messagePlaceholder")}
                 />
               </div>
             </div>
@@ -702,7 +834,7 @@ export default function AdminUserDetailPage() {
                 variant="outline"
                 onClick={() => setNotifyOpen(false)}
               >
-                Cancel
+                {t("admin.users.common.cancel")}
               </Button>
               <Button
                 onClick={handleSendNotification}
@@ -715,7 +847,7 @@ export default function AdminUserDetailPage() {
                 {actionLoading ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
-                  "Send"
+                  t("admin.users.common.send")
                 )}
               </Button>
             </DialogFooter>

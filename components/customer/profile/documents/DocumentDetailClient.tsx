@@ -8,12 +8,23 @@ import { Separator } from "@/components/ui/separator";
 import { ArrowLeft, Download, FileText, CheckCircle, XCircle, Clock, Eye, Trash2, Upload, Calendar, User as UserIcon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { DocumentDetail } from "./types";
+import { useI18n } from "@/contexts/I18nProvider";
+import type { MessageKey } from "@/lib/i18n/messages/en";
 
 
 
 export default function DocumentDetailClient({ document }: { document: DocumentDetail }) {
   const router = useRouter();
   const { toast } = useToast();
+  const { t, locale } = useI18n();
+  const dateLocale =
+    locale === "ar" ? "ar" : locale === "id" ? "id-ID" : "en-US";
+
+  const docStatusLabel = (s: string) => {
+    const key = `customer.profile.document.status.${s}` as MessageKey;
+    const out = t(key);
+    return out === key ? s.replace(/_/g, " ") : out;
+  };
 
   const getStatusColor = (s: string) =>
     s === "approved" ? "bg-green-100 text-green-800"
@@ -26,8 +37,18 @@ export default function DocumentDetailClient({ document }: { document: DocumentD
     : s === "rejected" ? <XCircle className="w-4 h-4" />
     : <FileText className="w-4 h-4" />;
 
-  const handleDownload = () => toast({ title: "Downloading Document", description: "Your document is being downloaded." });
-  const handleDelete = () => { toast({ title: "Document Deleted", description: "The document has been removed." }); router.back(); };
+  const handleDownload = () =>
+    toast({
+      title: t("customer.profile.document.downloadingTitle"),
+      description: t("customer.profile.document.downloadingDesc"),
+    });
+  const handleDelete = () => {
+    toast({
+      title: t("customer.profile.document.deletedTitle"),
+      description: t("customer.profile.document.deletedDesc"),
+    });
+    router.back();
+  };
 
   return (
     <div className="space-y-8">
@@ -38,14 +59,27 @@ export default function DocumentDetailClient({ document }: { document: DocumentD
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Document Details</h1>
+            <h1 className="text-3xl font-bold text-gray-900">
+              {t("customer.profile.document.title")}
+            </h1>
             <p className="text-gray-600">{document.name}</p>
           </div>
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" onClick={handleDownload}><Download className="w-4 h-4 mr-2" />Download</Button>
-          <Button variant="outline"><Eye className="w-4 h-4 mr-2" />View Document</Button>
-          {document.status === "rejected" && <Button><Upload className="w-4 h-4 mr-2" />Reupload</Button>}
+          <Button variant="outline" onClick={handleDownload}>
+            <Download className="w-4 h-4 mr-2" />
+            {t("customer.profile.document.download")}
+          </Button>
+          <Button variant="outline">
+            <Eye className="w-4 h-4 mr-2" />
+            {t("customer.profile.document.view")}
+          </Button>
+          {document.status === "rejected" && (
+            <Button>
+              <Upload className="w-4 h-4 mr-2" />
+              {t("customer.profile.document.reupload")}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -58,14 +92,23 @@ export default function DocumentDetailClient({ document }: { document: DocumentD
                 <FileText className="w-8 h-8 text-blue-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-500">Document Status</p>
-                <p className="text-2xl font-bold text-gray-900 capitalize">{document.status.replace("_"," ")}</p>
-                <p className="text-sm text-gray-500 mt-1">Last updated: {new Date(document.uploadDate).toLocaleString()}</p>
+                <p className="text-sm text-gray-500">
+                  {t("customer.profile.document.statusLabel")}
+                </p>
+                <p className="text-2xl font-bold text-gray-900 capitalize">
+                  {docStatusLabel(document.status)}
+                </p>
+                <p className="text-sm text-gray-500 mt-1">
+                  {t("customer.profile.document.lastUpdated")}{" "}
+                  {new Date(document.uploadDate).toLocaleString(dateLocale)}
+                </p>
               </div>
             </div>
             <Badge className={`${getStatusColor(document.status)} text-lg px-4 py-2`}>
               {getStatusIcon(document.status)}
-              <span className="ml-2 capitalize">{document.status.replace("_"," ")}</span>
+              <span className="ml-2 capitalize">
+                {docStatusLabel(document.status)}
+              </span>
             </Badge>
           </div>
         </CardContent>
@@ -76,17 +119,33 @@ export default function DocumentDetailClient({ document }: { document: DocumentD
           {/* Overview */}
           <Card>
             <CardHeader>
-              <CardTitle>Document Overview</CardTitle>
-              <CardDescription>Basic information about this document</CardDescription>
+              <CardTitle>{t("customer.profile.document.overviewTitle")}</CardTitle>
+              <CardDescription>
+                {t("customer.profile.document.overviewDesc")}
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <KV k="Document Type" v={document.type} />
-                <KV k="Document Number" v={document.documentNumber} />
-                <KV k="File Size" v={document.size} />
-                <KV k="Version" v={document.version} />
-                <KV k="Upload Date" v={new Date(document.uploadDate).toLocaleDateString()} icon={<Calendar className="w-4 h-4 text-gray-400" />} />
-                <KV k="Reviewed Date" v={document.reviewDate ? new Date(document.reviewDate).toLocaleDateString() : "-"} icon={<Calendar className="w-4 h-4 text-gray-400" />} />
+                <KV k={t("customer.profile.document.field.type")} v={document.type} />
+                <KV k={t("customer.profile.document.field.number")} v={document.documentNumber} />
+                <KV k={t("customer.profile.document.field.size")} v={document.size} />
+                <KV k={t("customer.profile.document.field.version")} v={document.version} />
+                <KV
+                  k={t("customer.profile.document.field.uploadDate")}
+                  v={new Date(document.uploadDate).toLocaleDateString(dateLocale)}
+                  icon={<Calendar className="w-4 h-4 text-gray-400" />}
+                />
+                <KV
+                  k={t("customer.profile.document.field.reviewDate")}
+                  v={
+                    document.reviewDate
+                      ? new Date(document.reviewDate).toLocaleDateString(
+                          dateLocale,
+                        )
+                      : "-"
+                  }
+                  icon={<Calendar className="w-4 h-4 text-gray-400" />}
+                />
               </div>
               <Separator />
               {document.description && <p className="text-gray-700">{document.description}</p>}
@@ -96,17 +155,38 @@ export default function DocumentDetailClient({ document }: { document: DocumentD
           {/* Verification details */}
           <Card>
             <CardHeader>
-              <CardTitle>Verification Details</CardTitle>
-              <CardDescription>Official document information</CardDescription>
+              <CardTitle>{t("customer.profile.document.verifyTitle")}</CardTitle>
+              <CardDescription>
+                {t("customer.profile.document.verifyDesc")}
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <KV k="Document Type" v={document.verificationDetails.documentType} />
-                <KV k="Registration Number" v={document.verificationDetails.registrationNumber} />
-                <KV k="Issue Date" v={new Date(document.verificationDetails.issueDate).toLocaleDateString()} />
-                <KV k="Expiry Date" v={new Date(document.verificationDetails.expiryDate).toLocaleDateString()} />
+                <KV
+                  k={t("customer.profile.document.field.type")}
+                  v={document.verificationDetails.documentType}
+                />
+                <KV
+                  k={t("customer.profile.document.field.registration")}
+                  v={document.verificationDetails.registrationNumber}
+                />
+                <KV
+                  k={t("customer.profile.document.field.issueDate")}
+                  v={new Date(
+                    document.verificationDetails.issueDate,
+                  ).toLocaleDateString(dateLocale)}
+                />
+                <KV
+                  k={t("customer.profile.document.field.expiryDate")}
+                  v={new Date(
+                    document.verificationDetails.expiryDate,
+                  ).toLocaleDateString(dateLocale)}
+                />
                 <div className="col-span-2">
-                  <KV k="Issuing Authority" v={document.verificationDetails.issuingAuthority} />
+                  <KV
+                    k={t("customer.profile.document.field.issuingAuthority")}
+                    v={document.verificationDetails.issuingAuthority}
+                  />
                 </div>
               </div>
             </CardContent>
@@ -134,8 +214,12 @@ export default function DocumentDetailClient({ document }: { document: DocumentD
                     </div>
                     <div className="flex-1 pb-8">
                       <p className="font-medium">{e.description}</p>
-                      <p className="text-sm text-gray-500">{new Date(e.timestamp).toLocaleString()}</p>
-                      <p className="text-sm text-gray-500">By: {e.user}</p>
+                      <p className="text-sm text-gray-500">
+                        {new Date(e.timestamp).toLocaleString(dateLocale)}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {t("customer.profile.document.by")} {e.user}
+                      </p>
                     </div>
                   </div>
                 ))}
@@ -147,8 +231,10 @@ export default function DocumentDetailClient({ document }: { document: DocumentD
           {document.notes.length > 0 && (
             <Card>
               <CardHeader>
-                <CardTitle>Review Notes</CardTitle>
-                <CardDescription>Comments from the verification team</CardDescription>
+                <CardTitle>{t("customer.profile.document.notesTitle")}</CardTitle>
+                <CardDescription>
+                  {t("customer.profile.document.notesDesc")}
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {document.notes.map((n, i) => (
@@ -158,7 +244,9 @@ export default function DocumentDetailClient({ document }: { document: DocumentD
                       <div className="flex-1">
                         <div className="flex items-center justify-between mb-2">
                           <p className="font-medium text-blue-900">{n.user}</p>
-                          <p className="text-sm text-blue-600">{new Date(n.timestamp).toLocaleString()}</p>
+                          <p className="text-sm text-blue-600">
+                            {new Date(n.timestamp).toLocaleString(dateLocale)}
+                          </p>
                         </div>
                         <p className="text-sm text-blue-800">{n.message}</p>
                       </div>
@@ -174,52 +262,92 @@ export default function DocumentDetailClient({ document }: { document: DocumentD
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Document Metadata</CardTitle>
-              <CardDescription>Technical information</CardDescription>
+              <CardTitle>{t("customer.profile.document.metadataTitle")}</CardTitle>
+              <CardDescription>
+                {t("customer.profile.document.metadataDesc")}
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <KV k="Uploaded By" v={document.metadata.uploadedBy} />
+              <KV
+                k={t("customer.profile.document.field.uploadedBy")}
+                v={document.metadata.uploadedBy}
+              />
               <Separator />
-              <KV k="IP Address" v={document.metadata.ipAddress} />
+              <KV
+                k={t("customer.profile.document.field.ip")}
+                v={document.metadata.ipAddress}
+              />
               <Separator />
-              <KV k="MIME Type" v={document.metadata.mimeType} />
+              <KV
+                k={t("customer.profile.document.field.mime")}
+                v={document.metadata.mimeType}
+              />
               <Separator />
               <div>
-                <p className="text-sm text-gray-500">File Hash</p>
+                <p className="text-sm text-gray-500">
+                  {t("customer.profile.document.field.fileHash")}
+                </p>
                 <p className="text-xs font-mono text-gray-600 break-all">{document.metadata.fileHash}</p>
               </div>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader><CardTitle>Quick Actions</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle>{t("customer.profile.document.quickActions")}</CardTitle>
+            </CardHeader>
             <CardContent className="space-y-2">
-              <Button variant="outline" className="w-full justify-start bg-transparent" onClick={handleDownload}>
-                <Download className="w-4 h-4 mr-2" />Download Document
+              <Button
+                variant="outline"
+                className="w-full justify-start bg-transparent"
+                onClick={handleDownload}
+              >
+                <Download className="w-4 h-4 mr-2" />
+                {t("customer.profile.document.downloadFull")}
               </Button>
-              <Button variant="outline" className="w-full justify-start bg-transparent">
-                <Eye className="w-4 h-4 mr-2" />View Document
+              <Button
+                variant="outline"
+                className="w-full justify-start bg-transparent"
+              >
+                <Eye className="w-4 h-4 mr-2" />
+                {t("customer.profile.document.viewFull")}
               </Button>
               {document.status === "rejected" && (
                 <Button className="w-full justify-start">
-                  <Upload className="w-4 h-4 mr-2" />Reupload Document
+                  <Upload className="w-4 h-4 mr-2" />
+                  {t("customer.profile.document.reuploadFull")}
                 </Button>
               )}
               <Separator className="my-2" />
-              <Button variant="outline" className="w-full justify-start text-red-600 hover:text-red-700 bg-transparent" onClick={handleDelete}>
-                <Trash2 className="w-4 h-4 mr-2" />Delete Document
+              <Button
+                variant="outline"
+                className="w-full justify-start text-red-600 hover:text-red-700 bg-transparent"
+                onClick={handleDelete}
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                {t("customer.profile.document.delete")}
               </Button>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader><CardTitle>Document Preview</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle>{t("customer.profile.document.previewTitle")}</CardTitle>
+            </CardHeader>
             <CardContent>
               <div className="aspect-[3/4] bg-gray-100 rounded-lg flex items-center justify-center">
                 <div className="text-center">
                   <FileText className="w-16 h-16 text-gray-400 mx-auto mb-2" />
-                  <p className="text-sm text-gray-500">Preview not available</p>
-                  <Button variant="outline" size="sm" className="mt-2 bg-transparent">View Full Document</Button>
+                  <p className="text-sm text-gray-500">
+                    {t("customer.profile.document.previewUnavailable")}
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 bg-transparent"
+                  >
+                    {t("customer.profile.document.viewFullBtn")}
+                  </Button>
                 </div>
               </div>
             </CardContent>

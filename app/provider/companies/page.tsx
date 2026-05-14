@@ -1,8 +1,7 @@
 // app/provider/companies/page.tsx
-import { ProviderLayout } from "@/components/provider-layout";
 import FindCompaniesClient from "@/components/provider/companies/FindCompaniesClient";
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 900;
 
 export default async function CompaniesPage() {
   let locations = [
@@ -27,7 +26,7 @@ export default async function CompaniesPage() {
 
   try {
     const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/companies/filters`, {
-      cache: 'no-store'
+      next: { revalidate: 900 },
     });
     
     if (response.ok) {
@@ -43,14 +42,14 @@ export default async function CompaniesPage() {
   }
 
   return (
-    <ProviderLayout>
+    
       <FindCompaniesClient
         industries={[]}
         locations={locations}
         companySizes={[]}
         ratings={ratings}
       />
-    </ProviderLayout>
+    
   );
 }
 

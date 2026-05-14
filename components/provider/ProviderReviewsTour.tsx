@@ -1,56 +1,59 @@
 "use client";
 
-import { CustomerDashboardTour, type TourStep } from "@/components/customer/CustomerDashboardTour";
-
-const PROVIDER_REVIEWS_STEPS: TourStep[] = [
-  {
-    target: '[data-tour-step="0"]',
-    title: "Reviews & Feedback",
-    content:
-      "Manage reviews you leave for clients and feedback you receive. Write reviews for completed projects, read reviews from companies, and respond to feedback.",
-  },
-  {
-    target: '[data-tour-step="1"]',
-    title: "Write Review",
-    content:
-      "Click here to leave a review for a completed or disputed project. Rate Communication, Clarity, Payment, and Professionalism, then add your feedback.",
-  },
-  {
-    target: '[data-tour-step="2"]',
-    title: "Stats cards",
-    content:
-      "Total Reviews (given + received), Average Rating (from reviews you received), and Pending Reviews (completed projects awaiting your review).",
-  },
-  {
-    target: '[data-tour-step="3"]',
-    title: "Search & filters",
-    content:
-      "Search by company or project name. Filter by star rating (1–5) and sort by Newest, Oldest, Highest rating, or Lowest rating.",
-  },
-  {
-    target: '[data-tour-step="4"]',
-    title: "Tabs",
-    content:
-      "Reviews Given: reviews you wrote for clients. Reviews Received: feedback from companies about your work. Pending: completed projects you haven't reviewed yet.",
-  },
-  {
-    target: '[data-tour-step="5"]',
-    title: "Review list",
-    content:
-      "Your reviews or received reviews appear here. Edit or delete your reviews. Reply to reviews you received. For Pending tab, click Write Review on any project to leave feedback.",
-  },
-  {
-    target: '[data-tour-step="6"]',
-    title: "Navigation menu",
-    content:
-      "Use this menu to go to Dashboard, Opportunities, Messages, Earnings, and other sections.",
-  },
-];
+import { useMemo } from "react";
+import {
+  CustomerDashboardTour,
+  type TourStep,
+} from "@/components/customer/CustomerDashboardTour";
+import { useI18n } from "@/contexts/I18nProvider";
 
 export function ProviderReviewsTour() {
+  const { t } = useI18n();
+
+  const steps: TourStep[] = useMemo(
+    () => [
+      {
+        target: '[data-tour-step="0"]',
+        title: t("provider.reviews.tour.step0.title"),
+        content: t("provider.reviews.tour.step0.content"),
+      },
+      {
+        target: '[data-tour-step="1"]',
+        title: t("provider.reviews.tour.step1.title"),
+        content: t("provider.reviews.tour.step1.content"),
+      },
+      {
+        target: '[data-tour-step="2"]',
+        title: t("provider.reviews.tour.step2.title"),
+        content: t("provider.reviews.tour.step2.content"),
+      },
+      {
+        target: '[data-tour-step="3"]',
+        title: t("provider.reviews.tour.step3.title"),
+        content: t("provider.reviews.tour.step3.content"),
+      },
+      {
+        target: '[data-tour-step="4"]',
+        title: t("provider.reviews.tour.step4.title"),
+        content: t("provider.reviews.tour.step4.content"),
+      },
+      {
+        target: '[data-tour-step="5"]',
+        title: t("provider.reviews.tour.step5.title"),
+        content: t("provider.reviews.tour.step5.content"),
+      },
+      {
+        target: '[data-tour-step="6"]',
+        title: t("provider.reviews.tour.step6.title"),
+        content: t("provider.reviews.tour.step6.content"),
+      },
+    ],
+    [t],
+  );
+
   return (
     <CustomerDashboardTour
-      steps={PROVIDER_REVIEWS_STEPS}
+      steps={steps}
       storageKeyPrefix="provider-reviews-tour-done"
     />
   );

@@ -32,13 +32,52 @@ import {
   Briefcase,
   BarChart3,
 } from "lucide-react"
-import { CustomerLayout } from "@/components/customer-layout"
 import { useToast } from "@/hooks/use-toast"
+import { useI18n } from "@/contexts/I18nProvider"
+import type { MessageKey } from "@/lib/i18n/messages/en"
+
+function getBudgetProjectStatusLabel(
+  status: string,
+  t: (key: MessageKey, vars?: Record<string, string | number>) => string,
+) {
+  const map: Record<string, MessageKey> = {
+    completed: "customer.billing.budget.status.completed",
+    in_progress: "customer.billing.budget.status.in_progress",
+    pending: "customer.billing.budget.status.pending",
+  }
+  return map[status] ? t(map[status]) : status.replace(/_/g, " ")
+}
+
+function getBillingStatusLabel(
+  status: string,
+  t: (key: MessageKey, vars?: Record<string, string | number>) => string,
+) {
+  const s = status.toLowerCase().replace(/\s+/g, "_")
+  const paymentKeys: Record<string, MessageKey> = {
+    completed: "customer.payments.status.completed",
+    pending: "customer.payments.status.pending",
+    processing: "customer.payments.status.processing",
+    failed: "customer.payments.status.failed",
+  }
+  const billingKeys: Record<string, MessageKey> = {
+    paid: "customer.billing.status.paid",
+    scheduled: "customer.billing.status.scheduled",
+    overdue: "customer.billing.status.overdue",
+    refunded: "customer.billing.status.refunded",
+    approved: "customer.billing.status.approved",
+  }
+  if (paymentKeys[s]) return t(paymentKeys[s])
+  if (billingKeys[s]) return t(billingKeys[s])
+  return status.replace(/_/g, " ")
+}
 
 export default function BudgetDetailPage() {
   const router = useRouter()
   const params = useParams()
   const { toast } = useToast()
+  const { t, locale } = useI18n()
+  const dateLocale =
+    locale === "id" ? "id-ID" : locale === "ar" ? "ar" : "en-US"
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
 
@@ -148,8 +187,8 @@ export default function BudgetDetailPage() {
 
   const handleSaveEdit = () => {
     toast({
-      title: "Budget Updated",
-      description: "Your budget has been updated successfully.",
+      title: t("customer.billing.budget.toastUpdatedTitle"),
+      description: t("customer.billing.budget.toastUpdatedDesc"),
     })
     setEditDialogOpen(false)
   }
@@ -160,15 +199,15 @@ export default function BudgetDetailPage() {
 
   const handleConfirmDelete = () => {
     toast({
-      title: "Budget Deleted",
-      description: "The budget has been deleted successfully.",
+      title: t("customer.billing.budget.toastDeletedTitle"),
+      description: t("customer.billing.budget.toastDeletedDesc"),
     })
     setDeleteDialogOpen(false)
     router.push("/customer/billing")
   }
 
   return (
-    <CustomerLayout>
+    
       <div className="space-y-8">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -177,18 +216,20 @@ export default function BudgetDetailPage() {
               <ArrowLeft className="w-4 h-4" />
             </Button>
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">{budget.category} Budget</h1>
-              <p className="text-gray-600">Detailed budget overview and analytics</p>
+              <h1 className="text-3xl font-bold text-gray-900">
+                {budget.category} {t("customer.billing.budget.titleSuffix")}
+              </h1>
+              <p className="text-gray-600">{t("customer.billing.budget.subtitle")}</p>
             </div>
           </div>
           <div className="flex gap-3">
             <Button variant="outline" onClick={handleEdit}>
               <Edit className="w-4 h-4 mr-2" />
-              Edit Budget
+              {t("customer.billing.budget.edit")}
             </Button>
             <Button variant="outline" className="text-red-600 hover:text-red-700 bg-transparent" onClick={handleDelete}>
               <Trash2 className="w-4 h-4 mr-2" />
-              Delete
+              {t("customer.billing.budget.delete")}
             </Button>
           </div>
         </div>
@@ -199,7 +240,9 @@ export default function BudgetDetailPage() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-500">Total Allocated</p>
+                  <p className="text-sm text-gray-500">
+                    {t("customer.billing.budget.totalAllocated")}
+                  </p>
                   <p className="text-2xl font-bold">RM{budget.allocated.toLocaleString()}</p>
                 </div>
                 <DollarSign className="w-8 h-8 text-blue-600" />
@@ -210,10 +253,16 @@ export default function BudgetDetailPage() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-500">Total Spent</p>
+                  <p className="text-sm text-gray-500">
+                    {t("customer.billing.budget.totalSpent")}
+                  </p>
                   <p className="text-2xl font-bold">RM{budget.spent.toLocaleString()}</p>
                   <div className="flex items-center mt-1 text-sm text-gray-500">
-                    <span>{percentage.toFixed(0)}% used</span>
+                    <span>
+                      {t("customer.billing.budget.percentUsed", {
+                        n: percentage.toFixed(0),
+                      })}
+                    </span>
                   </div>
                 </div>
                 <TrendingUp className="w-8 h-8 text-orange-600" />
@@ -224,10 +273,16 @@ export default function BudgetDetailPage() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-500">Remaining</p>
+                  <p className="text-sm text-gray-500">
+                    {t("customer.billing.budget.remaining")}
+                  </p>
                   <p className="text-2xl font-bold text-green-600">RM{budget.remaining.toLocaleString()}</p>
                   <div className="flex items-center mt-1 text-sm text-gray-500">
-                    <span>{(100 - percentage).toFixed(0)}% left</span>
+                    <span>
+                      {t("customer.billing.budget.percentLeft", {
+                        n: (100 - percentage).toFixed(0),
+                      })}
+                    </span>
                   </div>
                 </div>
                 <CheckCircle className="w-8 h-8 text-green-600" />
@@ -238,10 +293,12 @@ export default function BudgetDetailPage() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-500">Active Projects</p>
+                  <p className="text-sm text-gray-500">
+                    {t("customer.billing.budget.activeProjects")}
+                  </p>
                   <p className="text-2xl font-bold">{budget.projects}</p>
                   <div className="flex items-center mt-1 text-sm text-gray-500">
-                    <span>In progress</span>
+                    <span>{t("customer.billing.budget.inProgress")}</span>
                   </div>
                 </div>
                 <Briefcase className="w-8 h-8 text-purple-600" />
@@ -255,13 +312,17 @@ export default function BudgetDetailPage() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle>Budget Progress</CardTitle>
-                <CardDescription>{budget.period} budget utilization</CardDescription>
+                <CardTitle>{t("customer.billing.budget.progressTitle")}</CardTitle>
+                <CardDescription>
+                  {t("customer.billing.budget.progressDesc", {
+                    period: budget.period,
+                  })}
+                </CardDescription>
               </div>
               {isOverBudget && (
                 <Badge className="bg-red-100 text-red-800">
                   <AlertCircle className="w-3 h-3 mr-1" />
-                  Near Limit
+                  {t("customer.billing.budget.nearLimit")}
                 </Badge>
               )}
             </div>
@@ -269,15 +330,25 @@ export default function BudgetDetailPage() {
           <CardContent className="space-y-4">
             <div>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">Overall Progress</span>
+                <span className="text-sm font-medium">
+                  {t("customer.billing.budget.overallProgress")}
+                </span>
                 <span className="font-medium">
                   RM{budget.spent.toLocaleString()} / RM{budget.allocated.toLocaleString()}
                 </span>
               </div>
               <Progress value={percentage} className={`h-3 ${isOverBudget ? "bg-red-100" : ""}`} />
               <div className="flex items-center justify-between mt-2 text-sm text-gray-500">
-                <span>{percentage.toFixed(1)}% utilized</span>
-                <span>RM{budget.remaining.toLocaleString()} remaining</span>
+                <span>
+                  {t("customer.billing.budget.percentUtilized", {
+                    n: percentage.toFixed(1),
+                  })}
+                </span>
+                <span>
+                  {t("customer.billing.budget.withAmountRemaining", {
+                    amount: `RM${budget.remaining.toLocaleString()}`,
+                  })}
+                </span>
               </div>
             </div>
 
@@ -285,19 +356,31 @@ export default function BudgetDetailPage() {
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="text-center p-4 bg-gray-50 rounded-lg">
-                <div className="text-sm text-gray-500 mb-1">Start Date</div>
-                <div className="font-semibold">{new Date(budget.startDate).toLocaleDateString()}</div>
+                <div className="text-sm text-gray-500 mb-1">
+                  {t("customer.billing.budget.startDate")}
+                </div>
+                <div className="font-semibold">
+                  {new Date(budget.startDate).toLocaleDateString(dateLocale)}
+                </div>
               </div>
               <div className="text-center p-4 bg-gray-50 rounded-lg">
-                <div className="text-sm text-gray-500 mb-1">End Date</div>
-                <div className="font-semibold">{new Date(budget.endDate).toLocaleDateString()}</div>
+                <div className="text-sm text-gray-500 mb-1">
+                  {t("customer.billing.budget.endDate")}
+                </div>
+                <div className="font-semibold">
+                  {new Date(budget.endDate).toLocaleDateString(dateLocale)}
+                </div>
               </div>
               <div className="text-center p-4 bg-gray-50 rounded-lg">
-                <div className="text-sm text-gray-500 mb-1">Avg. Weekly</div>
+                <div className="text-sm text-gray-500 mb-1">
+                  {t("customer.billing.budget.avgWeekly")}
+                </div>
                 <div className="font-semibold">RM{avgWeeklySpend.toLocaleString()}</div>
               </div>
               <div className="text-center p-4 bg-gray-50 rounded-lg">
-                <div className="text-sm text-gray-500 mb-1">Projected Total</div>
+                <div className="text-sm text-gray-500 mb-1">
+                  {t("customer.billing.budget.projectedTotal")}
+                </div>
                 <div className="font-semibold">RM{projectedTotal.toLocaleString()}</div>
               </div>
             </div>
@@ -306,17 +389,25 @@ export default function BudgetDetailPage() {
 
         <Tabs defaultValue="projects" className="space-y-6">
           <TabsList>
-            <TabsTrigger value="projects">Projects</TabsTrigger>
-            <TabsTrigger value="transactions">Transactions</TabsTrigger>
-            <TabsTrigger value="analytics">Analytics</TabsTrigger>
+            <TabsTrigger value="projects">
+              {t("customer.billing.budget.tabProjects")}
+            </TabsTrigger>
+            <TabsTrigger value="transactions">
+              {t("customer.billing.budget.tabTransactions")}
+            </TabsTrigger>
+            <TabsTrigger value="analytics">
+              {t("customer.billing.budget.tabAnalytics")}
+            </TabsTrigger>
           </TabsList>
 
           {/* Projects Tab */}
           <TabsContent value="projects" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Project Breakdown</CardTitle>
-                <CardDescription>Budget allocation across active projects</CardDescription>
+                <CardTitle>{t("customer.billing.budget.breakdownTitle")}</CardTitle>
+                <CardDescription>
+                  {t("customer.billing.budget.breakdownDesc")}
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-6">
@@ -326,18 +417,28 @@ export default function BudgetDetailPage() {
                         <div>
                           <h4 className="font-semibold">{project.name}</h4>
                           <div className="flex items-center gap-2 mt-1">
-                            <Badge className={getStatusColor(project.status)}>{project.status.replace("_", " ")}</Badge>
+                            <Badge className={getStatusColor(project.status)}>
+                              {getBudgetProjectStatusLabel(project.status, t)}
+                            </Badge>
                           </div>
                         </div>
                         <div className="text-right">
                           <p className="font-semibold">
                             RM{project.spent.toLocaleString()} / RM{project.allocated.toLocaleString()}
                           </p>
-                          <p className="text-sm text-gray-500">RM{project.remaining.toLocaleString()} remaining</p>
+                          <p className="text-sm text-gray-500">
+                            {t("customer.billing.budget.withAmountRemaining", {
+                              amount: `RM${project.remaining.toLocaleString()}`,
+                            })}
+                          </p>
                         </div>
                       </div>
                       <Progress value={project.progress} className="h-2" />
-                      <p className="text-sm text-gray-500">{project.progress.toFixed(0)}% complete</p>
+                      <p className="text-sm text-gray-500">
+                        {t("customer.billing.budget.percentComplete", {
+                          n: project.progress.toFixed(0),
+                        })}
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -349,8 +450,10 @@ export default function BudgetDetailPage() {
           <TabsContent value="transactions" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Related Transactions</CardTitle>
-                <CardDescription>All transactions under this budget</CardDescription>
+                <CardTitle>{t("customer.billing.budget.relatedTitle")}</CardTitle>
+                <CardDescription>
+                  {t("customer.billing.budget.relatedDesc")}
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
@@ -364,7 +467,10 @@ export default function BudgetDetailPage() {
                           <h3 className="font-semibold">{transaction.project}</h3>
                           <p className="text-sm text-gray-500">{transaction.description}</p>
                           <p className="text-xs text-gray-400">
-                            {transaction.provider} • {new Date(transaction.date).toLocaleDateString()}
+                            {transaction.provider} •{" "}
+                            {new Date(transaction.date).toLocaleDateString(
+                              dateLocale,
+                            )}
                           </p>
                         </div>
                       </div>
@@ -373,7 +479,7 @@ export default function BudgetDetailPage() {
                         <div className="flex items-center gap-2 mt-1">
                           <Badge className={getStatusColor(transaction.status)}>
                             <CheckCircle className="w-3 h-3 mr-1" />
-                            {transaction.status}
+                            {getBillingStatusLabel(transaction.status, t)}
                           </Badge>
                         </div>
                       </div>
@@ -388,8 +494,10 @@ export default function BudgetDetailPage() {
           <TabsContent value="analytics" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Spending Trends</CardTitle>
-                <CardDescription>Weekly spending analysis</CardDescription>
+                <CardTitle>{t("customer.billing.budget.analyticsTitle")}</CardTitle>
+                <CardDescription>
+                  {t("customer.billing.budget.analyticsDesc")}
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-6">
@@ -405,16 +513,20 @@ export default function BudgetDetailPage() {
                         </div>
                         <Progress value={weekPercentage} className="h-2" />
                         <div className="flex items-center justify-between text-sm text-gray-500">
-                          <span>{weekPercentage.toFixed(0)}% of weekly budget</span>
+                          <span>
+                            {t("customer.billing.budget.percentOfWeekly", {
+                              n: weekPercentage.toFixed(0),
+                            })}
+                          </span>
                           {weekPercentage > 80 ? (
                             <span className="text-orange-600 flex items-center">
                               <TrendingUp className="w-3 h-3 mr-1" />
-                              High
+                              {t("customer.billing.budget.high")}
                             </span>
                           ) : (
                             <span className="text-green-600 flex items-center">
                               <TrendingDown className="w-3 h-3 mr-1" />
-                              Normal
+                              {t("customer.billing.budget.normal")}
                             </span>
                           )}
                         </div>
@@ -429,17 +541,23 @@ export default function BudgetDetailPage() {
                   <div className="text-center p-4 bg-blue-50 rounded-lg">
                     <BarChart3 className="w-8 h-8 text-blue-600 mx-auto mb-2" />
                     <div className="text-2xl font-bold text-blue-600">RM{avgWeeklySpend.toLocaleString()}</div>
-                    <div className="text-sm text-gray-600">Avg. Weekly Spend</div>
+                    <div className="text-sm text-gray-600">
+                      {t("customer.billing.budget.avgWeeklySpendLabel")}
+                    </div>
                   </div>
                   <div className="text-center p-4 bg-green-50 rounded-lg">
                     <TrendingUp className="w-8 h-8 text-green-600 mx-auto mb-2" />
                     <div className="text-2xl font-bold text-green-600">{percentage.toFixed(0)}%</div>
-                    <div className="text-sm text-gray-600">Budget Utilized</div>
+                    <div className="text-sm text-gray-600">
+                      {t("customer.billing.budget.budgetUtilized")}
+                    </div>
                   </div>
                   <div className="text-center p-4 bg-purple-50 rounded-lg">
                     <Calendar className="w-8 h-8 text-purple-600 mx-auto mb-2" />
                     <div className="text-2xl font-bold text-purple-600">{budget.projects}</div>
-                    <div className="text-sm text-gray-600">Active Projects</div>
+                    <div className="text-sm text-gray-600">
+                      {t("customer.billing.budget.activeProjects")}
+                    </div>
                   </div>
                 </div>
               </CardContent>
@@ -451,47 +569,67 @@ export default function BudgetDetailPage() {
         <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Edit Budget</DialogTitle>
-              <DialogDescription>Update your budget allocation and settings.</DialogDescription>
+              <DialogTitle>{t("customer.billing.budget.dialogEditTitle")}</DialogTitle>
+              <DialogDescription>
+                {t("customer.billing.budget.dialogEditDesc")}
+              </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <div>
-                <Label htmlFor="edit-category">Category</Label>
+                <Label htmlFor="edit-category">
+                  {t("customer.billing.editBudget.category")}
+                </Label>
                 <Input id="edit-category" defaultValue={budget.category} />
               </div>
               <div>
-                <Label htmlFor="edit-allocated">Allocated Amount (RM)</Label>
+                <Label htmlFor="edit-allocated">
+                  {t("customer.billing.editBudget.allocated")}
+                </Label>
                 <Input id="edit-allocated" type="number" defaultValue={budget.allocated} />
               </div>
               <div>
-                <Label htmlFor="edit-period">Period</Label>
+                <Label htmlFor="edit-period">
+                  {t("customer.billing.editBudget.period")}
+                </Label>
                 <Select defaultValue={budget.period.toLowerCase()}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="monthly">Monthly</SelectItem>
-                    <SelectItem value="quarterly">Quarterly</SelectItem>
-                    <SelectItem value="yearly">Yearly</SelectItem>
+                    <SelectItem value="monthly">
+                      {t("customer.billing.editBudget.monthly")}
+                    </SelectItem>
+                    <SelectItem value="quarterly">
+                      {t("customer.billing.editBudget.quarterly")}
+                    </SelectItem>
+                    <SelectItem value="yearly">
+                      {t("customer.billing.editBudget.yearly")}
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="edit-start">Start Date</Label>
+                  <Label htmlFor="edit-start">
+                    {t("customer.billing.budget.startDate")}
+                  </Label>
                   <Input id="edit-start" type="date" defaultValue={budget.startDate} />
                 </div>
                 <div>
-                  <Label htmlFor="edit-end">End Date</Label>
+                  <Label htmlFor="edit-end">
+                    {t("customer.billing.budget.endDate")}
+                  </Label>
                   <Input id="edit-end" type="date" defaultValue={budget.endDate} />
                 </div>
               </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
-                Cancel
+                {t("customer.billing.editBudget.cancel")}
               </Button>
-              <Button onClick={handleSaveEdit}>Save Changes</Button>
+              <Button onClick={handleSaveEdit}>
+                {t("customer.billing.editBudget.save")}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -500,33 +638,35 @@ export default function BudgetDetailPage() {
         <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Delete Budget</DialogTitle>
+              <DialogTitle>{t("customer.billing.budget.dialogDeleteTitle")}</DialogTitle>
               <DialogDescription>
-                Are you sure you want to delete this budget? This action cannot be undone.
+                {t("customer.billing.budget.dialogDeleteDesc")}
               </DialogDescription>
             </DialogHeader>
             <div className="p-4 bg-red-50 rounded-lg border border-red-200">
               <div className="flex items-start space-x-3">
                 <AlertCircle className="w-5 h-5 text-red-600 mt-0.5" />
                 <div>
-                  <h4 className="font-semibold text-red-900">Warning</h4>
+                  <h4 className="font-semibold text-red-900">
+                    {t("customer.billing.budget.warning")}
+                  </h4>
                   <p className="text-sm text-red-700 mt-1">
-                    Deleting this budget will remove all associated data and cannot be recovered.
+                    {t("customer.billing.budget.warningBody")}
                   </p>
                 </div>
               </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
-                Cancel
+                {t("customer.billing.editBudget.cancel")}
               </Button>
               <Button variant="destructive" onClick={handleConfirmDelete}>
-                Delete Budget
+                {t("customer.billing.budget.dialogDeleteConfirm")}
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
-    </CustomerLayout>
+    
   )
 }

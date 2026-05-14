@@ -1,3 +1,5 @@
+import { CustomerRequestsListSkeleton } from "@/components/customer/CustomerPageSkeletons";
+
 export default function Loading() {
-  return null
+  return <CustomerRequestsListSkeleton loadingLabel="Loading requests" />;
 }

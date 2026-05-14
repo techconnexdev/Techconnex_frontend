@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { createProject } from "@/lib/api";
+import { MIN_MONETARY_AMOUNT } from "@/lib/amount-constraints";
 
 type NewProjectForm = {
   title: string;
@@ -124,7 +125,11 @@ export default function NewProjectClient() {
     const min = Number(form.budgetMin || 0);
     const max = Number(form.budgetMax || 0);
     if (!min) e.budgetMin = "Enter a minimum budget.";
+    else if (min < MIN_MONETARY_AMOUNT)
+      e.budgetMin = `Minimum budget must be at least ${MIN_MONETARY_AMOUNT}.`;
     if (!max) e.budgetMax = "Enter a maximum budget.";
+    else if (max < MIN_MONETARY_AMOUNT)
+      e.budgetMax = `Maximum budget must be at least ${MIN_MONETARY_AMOUNT}.`;
     if (min && max && min > max)
       e.budgetMax = "Max budget must be ≥ min budget.";
     if (!form.timeline.trim()) e.timeline = "Provide a rough timeline.";
@@ -153,9 +158,11 @@ export default function NewProjectClient() {
         category: form.category,
         budgetMin: Number(form.budgetMin || 0),
         budgetMax: Number(form.budgetMax || 0),
+        currencyCode: "MYR",
         timeline: form.timeline,
         priority: form.priority,
         skills: form.skills,
+        ndaSigned: form.ndaSigned,
         requirements: form.requirements,
         deliverables: form.deliverables,
       };
@@ -288,7 +295,7 @@ export default function NewProjectClient() {
                     htmlFor="budgetMin"
                     className="flex items-center gap-1"
                   >
-                    Minimum Budget (RM)
+                    Minimum Budget
                     {errors.budgetMin && (
                       <span className="text-red-600">*</span>
                     )}
@@ -296,6 +303,8 @@ export default function NewProjectClient() {
                   <Input
                     id="budgetMin"
                     type="number"
+                    min={MIN_MONETARY_AMOUNT}
+                    step="0.01"
                     placeholder="5000"
                     value={form.budgetMin}
                     onChange={(e) => set("budgetMin", e.target.value)}
@@ -306,7 +315,7 @@ export default function NewProjectClient() {
                     htmlFor="budgetMax"
                     className="flex items-center gap-1"
                   >
-                    Maximum Budget (RM)
+                    Maximum Budget
                     {errors.budgetMax && (
                       <span className="text-red-600">*</span>
                     )}
@@ -314,6 +323,8 @@ export default function NewProjectClient() {
                   <Input
                     id="budgetMax"
                     type="number"
+                    min={MIN_MONETARY_AMOUNT}
+                    step="0.01"
                     placeholder="15000"
                     value={form.budgetMax}
                     onChange={(e) => set("budgetMax", e.target.value)}

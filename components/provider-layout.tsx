@@ -3,6 +3,7 @@
 import type React from "react";
 
 import { useEffect, useState, useRef, useMemo } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -17,9 +18,10 @@ import {
 import {
   getNotificationCategory,
   DISPLAY_CATEGORIES,
-  CATEGORY_LABELS,
   CATEGORY_COLORS,
+  type NotificationCategory,
 } from "@/lib/notification-categories";
+import { NOTIFICATION_CATEGORY_I18N_KEYS } from "@/lib/app-layout-notification-categories";
 import {
   Home,
   Briefcase,
@@ -46,40 +48,30 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
-import Link from "next/link";
+import { PrefetchNavLink } from "@/components/PrefetchNavLink";
 import { usePathname, useRouter } from "next/navigation";
 import { getProfileImageUrl, getUnreadMessageCount } from "@/lib/api";
 import BetaBanner from "@/components/BetaBanner";
 import { SupportChatWidget } from "@/components/support/SupportChatWidget";
+import { FloatingMessagesWidget } from "@/components/messages/FloatingMessagesWidget";
 import { ProviderCompletionProvider } from "@/contexts/ProviderCompletionContext";
 import { ProfileCompletionWidget } from "@/components/provider/ProfileCompletionWidget";
 import { clearOnboardingCache } from "@/components/provider/ProviderOnboardingPromptDialog";
+import { UserLocaleSync } from "@/components/UserLocaleSync";
 import Image from "next/image";
+import { queryKeys } from "@/lib/query-keys";
+import { fetchProviderLayoutProfile } from "@/lib/queries/provider-layout-profile";
+import { useI18n } from "@/contexts/I18nProvider";
+import type { LucideIcon } from "lucide-react";
+import {
+  formatNotificationTimestamp,
+  getLocalizedNotificationText,
+  notificationIntlLocale,
+} from "@/lib/notifications/notification-display-i18n";
 
 interface ProviderLayoutProps {
   children: React.ReactNode;
 }
-
-type ProviderProfile = {
-  id?: string;
-  name?: string;
-  email?: string;
-  profileImageUrl?: string;
-  user?: {
-    name?: string;
-    email?: string;
-  };
-  resume?: {
-    fileUrl?: string;
-  };
-  data?: {
-    user?: {
-      name?: string;
-      email?: string;
-    };
-  };
-  [key: string]: unknown;
-};
 
 type Notification = {
   id: string;
@@ -87,6 +79,9 @@ type Notification = {
   content: string;
   createdAt: string | number | Date;
   isRead?: boolean;
+  type?: string;
+  metadata?: unknown;
+  eventType?: string;
   [key: string]: unknown;
 };
 
@@ -105,7 +100,17 @@ type GroupedNotification = {
   content: string;
 };
 
+type ProviderNavItem = {
+  id: string;
+  href: string;
+  icon: LucideIcon;
+  label: string;
+};
+
 export function ProviderLayout({ children }: ProviderLayoutProps) {
+  const { t, locale } = useI18n();
+  const intlLocale = notificationIntlLocale(locale);
+  const queryClient = useQueryClient();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
@@ -116,13 +121,29 @@ export function ProviderLayout({ children }: ProviderLayoutProps) {
     routerRef.current = router;
   }, [router]);
 
-  // Profile state
-  const [profile, setProfile] = useState<ProviderProfile | null>(null);
-  const [profileLoading, setProfileLoading] = useState(true);
+  const [authReady, setAuthReady] = useState(false);
+
+  const {
+    data: profile,
+    isPending: profileQueryPending,
+    isError: profileQueryError,
+  } = useQuery({
+    queryKey: queryKeys.provider.profile,
+    queryFn: fetchProviderLayoutProfile,
+    enabled: authReady,
+    staleTime: 1000 * 60 * 30,
+    gcTime: 1000 * 60 * 60,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: true,
+  });
+
+  /** True until role check passes and profile query has settled (cached data = no flicker). */
+  const profileLoading = !authReady || profileQueryPending;
 
   // Notifications state (grouped by project + type when fetched with ?grouped=1)
   const [notifications, setNotifications] = useState<GroupedNotification[]>([]);
   const [notificationsLoading, setNotificationsLoading] = useState(true);
+  const [markingAllRead, setMarkingAllRead] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedNotification, setSelectedNotification] =
     useState<Notification | null>(null);
@@ -133,17 +154,15 @@ export function ProviderLayout({ children }: ProviderLayoutProps) {
 
   // Logout function
   const handleLogout = () => {
-    // Clear user data from localStorage
+    queryClient.removeQueries({ queryKey: queryKeys.provider.profile });
     localStorage.removeItem("user");
     localStorage.removeItem("token");
 
     // Clear onboarding dialog cache so it re-validates on next login
     clearOnboardingCache();
 
-    // Clear any other session data
     sessionStorage.clear();
 
-    // Redirect to login page
     router.push("/auth/login");
   };
 
@@ -208,53 +227,39 @@ export function ProviderLayout({ children }: ProviderLayoutProps) {
       content: group.content,
       createdAt: group.latestAt,
       isRead: true,
+      type: group.type,
+      eventType: group.eventType,
     });
     setModalOpen(true);
   };
 
   useEffect(() => {
-    // Check if user is authenticated
-    const checkAuth = async () => {
-      if (typeof window === "undefined") return;
+    if (typeof window === "undefined") return;
 
-      console.log("🔐 Checking authentication...");
-      const user = localStorage.getItem("user");
-      const token = localStorage.getItem("token");
+    const user = localStorage.getItem("user");
+    const token = localStorage.getItem("token");
 
-      console.log(
-        "📦 User data from localStorage:",
-        user ? "exists" : "missing",
-      );
-      console.log("🔑 Token from localStorage:", token ? "exists" : "missing");
+    if (!user || !token) {
+      routerRef.current.push("/auth/login");
+      return;
+    }
 
-      if (!user || !token) {
-        console.log("❌ No user or token found, redirecting to login");
-        // User is not authenticated, redirect to login
-        routerRef.current.push("/auth/login");
-        return;
-      }
-
-      // Try to get user id and role from localStorage
-      let userId = null;
-      let userData: { id?: string; role?: string[] } | null = null;
-      try {
-        userData = JSON.parse(user);
-        userId = userData?.id;
-        console.log("👤 User ID extracted:", userId);
-      } catch (e) {
-        console.error("❌ Error parsing user data:", e);
-        routerRef.current.push("/auth/login");
-        return;
-      }
-
+    try {
+      const userData = JSON.parse(user) as {
+        id?: string;
+        role?: string | string[];
+      };
+      const userId = userData?.id ?? null;
       if (!userId) {
-        console.log("❌ No user ID found, redirecting to login");
         routerRef.current.push("/auth/login");
         return;
       }
 
-      // Only providers can access provider routes
-      const roles = Array.isArray(userData?.role) ? userData.role : (userData?.role ? [userData.role] : []);
+      const roles = Array.isArray(userData.role)
+        ? userData.role
+        : userData.role
+          ? [userData.role]
+          : [];
       if (!roles.includes("PROVIDER")) {
         if (roles.includes("CUSTOMER")) {
           routerRef.current.push("/customer/dashboard");
@@ -265,42 +270,18 @@ export function ProviderLayout({ children }: ProviderLayoutProps) {
         }
         return;
       }
-      const API_URL =
-        process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
-      // Fetch user profile
-      try {
-        const endpoint = `${API_URL}/provider/profile/`; // ✅ updated endpoint
-        console.log("🌐 Fetching profile from:", endpoint);
 
-        const res = await fetch(endpoint, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        if (!res.ok) {
-          throw new Error("Failed to fetch profile");
-        }
+      setAuthReady(true);
+    } catch {
+      routerRef.current.push("/auth/login");
+    }
+  }, []);
 
-        const response = await res.json();
-        // The API returns { success: true, data: profile }
-        const profileData = response.data || response;
-        console.log(
-          "✅ Profile fetched successfully:",
-          profileData?.user?.name || profileData?.name,
-        );
-        setProfile(profileData as ProviderProfile);
-      } catch (error) {
-        console.error("❌ Error fetching profile:", error);
-        setProfile(null);
-        routerRef.current.push("/auth/login");
-      } finally {
-        setProfileLoading(false);
-        console.log("✅ Authentication check completed");
-      }
-    };
-
-    checkAuth();
-  }, []); // Remove router dependency to prevent infinite re-renders
+  useEffect(() => {
+    if (profileQueryError) {
+      routerRef.current.push("/auth/login");
+    }
+  }, [profileQueryError]);
 
   // Fetch notifications (grouped by project + type)
   useEffect(() => {
@@ -336,6 +317,46 @@ export function ProviderLayout({ children }: ProviderLayoutProps) {
     return map;
   }, [notifications]);
 
+  const unreadNotificationIds = useMemo(() => {
+    return Array.from(
+      new Set(
+        notifications
+          .filter((n) => !n.isRead)
+          .flatMap((n) => n.notificationIds ?? []),
+      ),
+    );
+  }, [notifications]);
+
+  const handleMarkAllAsRead = async () => {
+    if (markingAllRead || unreadNotificationIds.length === 0) return;
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+    const previousNotifications = notifications;
+
+    setMarkingAllRead(true);
+    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+
+    try {
+      const res = await fetch(`${API_URL}/notifications/read-bulk`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ ids: unreadNotificationIds }),
+      });
+
+      if (!res.ok) throw new Error("Failed to mark all notifications as read");
+    } catch (error) {
+      console.error("Failed to mark all notifications as read", error);
+      setNotifications(previousNotifications);
+    } finally {
+      setMarkingAllRead(false);
+    }
+  };
+
   // Fetch unread message count
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -363,138 +384,189 @@ export function ProviderLayout({ children }: ProviderLayoutProps) {
     return () => clearInterval(interval);
   }, []);
 
-  const navigation = [
-    { name: "Dashboard", href: "/provider/dashboard", icon: Home },
-    { name: "My Projects", href: "/provider/projects", icon: Briefcase },
-    { name: "Opportunities", href: "/provider/opportunities", icon: Target },
-    { name: "Find Companies", href: "/provider/companies", icon: Building2 },
-    { name: "Messages", href: "/provider/messages", icon: MessageSquare },
-    { name: "Reviews", href: "/provider/reviews", icon: Star },
-    { name: "Earnings", href: "/provider/earnings", icon: DollarSign },
-    { name: "Profile", href: "/provider/profile", icon: User },
-    { name: "Settings", href: "/provider/settings", icon: Settings },
-  ];
+  const navigation = useMemo((): ProviderNavItem[] => {
+    return [
+      {
+        id: "dashboard",
+        href: "/provider/dashboard",
+        icon: Home,
+        label: t("app.layout.nav.dashboard"),
+      },
+      {
+        id: "projects",
+        href: "/provider/projects",
+        icon: Briefcase,
+        label: t("app.layout.nav.myProjects"),
+      },
+      {
+        id: "opportunities",
+        href: "/provider/opportunities",
+        icon: Target,
+        label: t("provider.layout.nav.opportunities"),
+      },
+      {
+        id: "companies",
+        href: "/provider/companies",
+        icon: Building2,
+        label: t("provider.layout.nav.findCompanies"),
+      },
+      {
+        id: "messages",
+        href: "/provider/messages",
+        icon: MessageSquare,
+        label: t("app.layout.nav.messages"),
+      },
+      {
+        id: "reviews",
+        href: "/provider/reviews",
+        icon: Star,
+        label: t("app.layout.nav.reviews"),
+      },
+      {
+        id: "earnings",
+        href: "/provider/earnings",
+        icon: DollarSign,
+        label: t("provider.layout.nav.earnings"),
+      },
+      {
+        id: "profile",
+        href: "/provider/profile",
+        icon: User,
+        label: t("app.layout.nav.profile"),
+      },
+      {
+        id: "settings",
+        href: "/provider/settings",
+        icon: Settings,
+        label: t("app.layout.nav.settings"),
+      },
+    ];
+  }, [t]);
 
   const isActive = (href: string) =>
     pathname === href || pathname.startsWith(href + "/");
 
   return (
     <ProviderCompletionProvider>
-    <div className="min-h-screen bg-gray-50">
-      {/* Mobile sidebar */}
-      <div
-        className={`fixed inset-0 z-50 lg:hidden ${
-          sidebarOpen ? "block" : "hidden"
-        }`}
-      >
+      <UserLocaleSync />
+      <div className="min-h-screen bg-gray-50">
+        {/* Mobile sidebar */}
         <div
-          className="fixed inset-0 bg-gray-600 bg-opacity-75"
-          onClick={() => setSidebarOpen(false)}
-        />
-        <div className="fixed inset-y-0 left-0 flex w-full max-w-xs flex-col bg-white">
-          <div className="flex h-16 items-center justify-between px-4 border-b">
-            <div className="flex items-center space-x-2">
-              <Image
-                src="/logo.png"
-                alt="TechConnex"
-                width={40}
-                height={40}
-                className="h-10 w-10 rounded-xl object-contain"
-              />
-              <span className="text-xl font-bold text-gray-900">
-                Techconnex
-              </span>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setSidebarOpen(false)}
-            >
-              <X className="w-5 h-5" />
-            </Button>
-          </div>
-          <nav className="flex-1 px-4 py-4 space-y-2">
-            {navigation.map((item) => (
-              <Link
-                key={item.name}
-                href={item.href}
-                className={`flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors relative ${
-                  isActive(item.href)
-                    ? "bg-blue-100 text-blue-700"
-                    : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-                }`}
-                onClick={() => setSidebarOpen(false)}
-              >
-                <item.icon className="w-5 h-5 mr-3" />
-                {item.name}
-                {item.name === "Messages" && unreadMessageCount > 0 && (
-                  <Badge className="ml-auto bg-red-500 text-white text-xs min-w-[20px] h-5 flex items-center justify-center px-1.5">
-                    {unreadMessageCount > 99 ? "99+" : unreadMessageCount}
-                  </Badge>
-                )}
-              </Link>
-            ))}
-          </nav>
-        </div>
-      </div>
-
-      {/* Desktop sidebar */}
-      <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col" data-tour-step="6">
-        <div className="flex flex-col flex-grow bg-white border-r border-gray-200">
-          <div className="flex items-center h-16 px-4 border-b">
-            <div className="flex items-center space-x-2">
-              <Image
-                src="/logo.png"
-                alt="TechConnex"
-                width={40}
-                height={40}
-                className="h-10 w-10 rounded-xl object-contain"
-              />
-              <span className="text-xl font-bold text-gray-900">
-                Techconnex
-              </span>
-            </div>
-          </div>
-          <nav className="flex-1 px-4 py-4 space-y-2">
-            {navigation.map((item) => (
-              <Link
-                key={item.name}
-                href={item.href}
-                className={`flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors relative ${
-                  isActive(item.href)
-                    ? "bg-blue-100 text-blue-700"
-                    : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-                }`}
-              >
-                <item.icon className="w-5 h-5 mr-3" />
-                {item.name}
-                {item.name === "Messages" && unreadMessageCount > 0 && (
-                  <Badge className="ml-auto bg-red-500 text-white text-xs min-w-[20px] h-5 flex items-center justify-center px-1.5">
-                    {unreadMessageCount > 99 ? "99+" : unreadMessageCount}
-                  </Badge>
-                )}
-              </Link>
-            ))}
-          </nav>
-        </div>
-      </div>
-
-      {/* Main content */}
-      <div className="lg:pl-64">
-        <BetaBanner />
-        {/* Top header */}
-        <header className="bg-white border-b border-gray-200 px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
+          className={`fixed inset-0 z-50 lg:hidden ${
+            sidebarOpen ? "block" : "hidden"
+          }`}
+        >
+          <div
+            className="fixed inset-0 bg-gray-600 bg-opacity-75"
+            onClick={() => setSidebarOpen(false)}
+          />
+          <div className="fixed inset-y-0 left-0 flex w-full max-w-xs flex-col bg-white">
+            <div className="flex h-16 items-center justify-between px-4 border-b">
+              <div className="flex items-center space-x-2">
+                <Image
+                  src="/logo.png"
+                  alt={t("app.layout.brandAlt")}
+                  width={40}
+                  height={40}
+                  className="h-10 w-10 rounded-xl object-contain"
+                />
+                <span className="text-xl font-bold text-gray-900">
+                  {t("app.layout.brandTitle")}
+                </span>
+              </div>
               <Button
                 variant="ghost"
                 size="sm"
-                className="lg:hidden mr-2"
-                onClick={() => setSidebarOpen(true)}
+                onClick={() => setSidebarOpen(false)}
               >
-                <Menu className="w-5 h-5" />
+                <X className="w-5 h-5" />
               </Button>
-              {/* <div className="hidden sm:block">
+            </div>
+            <nav className="flex-1 px-4 py-4 space-y-2">
+              {navigation.map((item) => (
+                <PrefetchNavLink
+                  key={item.href}
+                  href={item.href}
+                  className={`flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors relative ${
+                    isActive(item.href)
+                      ? "bg-blue-100 text-blue-700"
+                      : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                  }`}
+                  onClick={() => setSidebarOpen(false)}
+                >
+                  <item.icon className="w-5 h-5 mr-3" />
+                  {item.label}
+                  {item.id === "messages" && unreadMessageCount > 0 && (
+                    <Badge className="ml-auto bg-red-500 text-white text-xs min-w-[20px] h-5 flex items-center justify-center px-1.5">
+                      {unreadMessageCount > 99 ? "99+" : unreadMessageCount}
+                    </Badge>
+                  )}
+                </PrefetchNavLink>
+              ))}
+            </nav>
+          </div>
+        </div>
+
+        {/* Desktop sidebar */}
+        <div
+          className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col"
+          data-tour-step="6"
+        >
+          <div className="flex flex-col flex-grow bg-white border-r border-gray-200">
+            <div className="flex items-center h-16 px-4 border-b">
+              <div className="flex items-center space-x-2">
+                <Image
+                  src="/logo.png"
+                  alt={t("app.layout.brandAlt")}
+                  width={40}
+                  height={40}
+                  className="h-10 w-10 rounded-xl object-contain"
+                />
+                <span className="text-xl font-bold text-gray-900">
+                  {t("app.layout.brandTitle")}
+                </span>
+              </div>
+            </div>
+            <nav className="flex-1 px-4 py-4 space-y-2">
+              {navigation.map((item) => (
+                <PrefetchNavLink
+                  key={item.href}
+                  href={item.href}
+                  className={`flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors relative ${
+                    isActive(item.href)
+                      ? "bg-blue-100 text-blue-700"
+                      : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                  }`}
+                >
+                  <item.icon className="w-5 h-5 mr-3" />
+                  {item.label}
+                  {item.id === "messages" && unreadMessageCount > 0 && (
+                    <Badge className="ml-auto bg-red-500 text-white text-xs min-w-[20px] h-5 flex items-center justify-center px-1.5">
+                      {unreadMessageCount > 99 ? "99+" : unreadMessageCount}
+                    </Badge>
+                  )}
+                </PrefetchNavLink>
+              ))}
+            </nav>
+          </div>
+        </div>
+
+        {/* Main content */}
+        <div className="lg:pl-64">
+          <BetaBanner />
+          {/* Top header */}
+          <header className="bg-white border-b border-gray-200 px-4 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="lg:hidden mr-2"
+                  onClick={() => setSidebarOpen(true)}
+                >
+                  <Menu className="w-5 h-5" />
+                </Button>
+                {/* <div className="hidden sm:block">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                   <input
@@ -504,377 +576,509 @@ export function ProviderLayout({ children }: ProviderLayoutProps) {
                   />
                 </div>
               </div> */}
-            </div>
+              </div>
 
-            <div className="flex items-center space-x-2 sm:space-x-4">
-              <ProfileCompletionWidget />
-              <DropdownMenu
-                onOpenChange={(open) => !open && setSelectedCategory(null)}
-              >
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="relative">
-                    <Bell className="w-5 h-5" />
-                    <Badge className="absolute -top-1 -right-1 w-5 h-5 flex items-center justify-center p-0 text-xs bg-red-500">
-                      {
-                        notifications.filter(
-                          (n: GroupedNotification) => !n.isRead,
-                        ).length
-                      }
-                    </Badge>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  className="w-80 min-h-[200px] max-h-[420px] p-0"
-                  align="end"
-                  forceMount
+              <div className="flex items-center space-x-2 sm:space-x-4">
+                <ProfileCompletionWidget />
+                <DropdownMenu
+                  onOpenChange={(open) => !open && setSelectedCategory(null)}
                 >
-                  <div className="flex flex-col">
-                    <div className="px-4 py-3 border-b">
-                      <DropdownMenuLabel className="font-medium text-gray-900 p-0">
-                        {selectedCategory ? (
-                          <button
-                            type="button"
-                            onClick={() => setSelectedCategory(null)}
-                            className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 -ml-1"
-                          >
-                            <ChevronLeft className="w-4 h-4" />
-                            {CATEGORY_LABELS[selectedCategory as keyof typeof CATEGORY_LABELS]}
-                          </button>
-                        ) : (
-                          "Notifications"
-                        )}
-                      </DropdownMenuLabel>
-                    </div>
-                    <div className="overflow-y-auto max-h-[360px]">
-                      {notificationsLoading ? (
-                        <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-                          Loading...
-                        </div>
-                      ) : notifications.length === 0 ? (
-                        <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-                          No notifications
-                        </div>
-                      ) : selectedCategory ? (
-                        (notificationsByCategory[selectedCategory] ?? []).map(
-                          (n) => (
-                            <DropdownMenuItem
-                              key={n.id}
-                              onClick={() => handleNotificationClick(n)}
-                              className={`flex flex-col items-start gap-1 py-3 px-4 rounded-none border-b last:border-b-0 cursor-pointer ${
-                                n.isRead ? "opacity-60" : ""
-                              }`}
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="relative">
+                      <Bell className="w-5 h-5" />
+                      <Badge className="absolute -top-1 -right-1 w-5 h-5 flex items-center justify-center p-0 text-xs bg-red-500">
+                        {
+                          notifications.filter(
+                            (n: GroupedNotification) => !n.isRead,
+                          ).length
+                        }
+                      </Badge>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    className="w-80 min-h-[200px] max-h-[420px] p-0"
+                    align="end"
+                    forceMount
+                  >
+                    <div className="flex flex-col">
+                      <div className="px-4 py-3 border-b flex items-center justify-between gap-2">
+                        <DropdownMenuLabel className="font-medium text-gray-900 p-0">
+                          {selectedCategory ? (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedCategory(null)}
+                              className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 -ml-1"
                             >
-                              <span className="font-medium text-left">
-                                {n.count > 1 ? (
-                                  n.type === "proposal" &&
-                                  n.eventType === "new_proposal" ? (
-                                    <>
-                                      You received {n.count} new proposals for
-                                      &quot;{n.projectName}&quot;
-                                    </>
-                                  ) : n.type === "milestone" ? (
-                                    <>
-                                      {n.count} milestone updates for &quot;
-                                      {n.projectName}&quot;
-                                    </>
-                                  ) : (
-                                    <>
-                                      {n.title} for &quot;{n.projectName}&quot;
-                                      (+{n.count - 1} more)
-                                    </>
-                                  )
-                                ) : (
-                                  String(n.title)
-                                )}
-                              </span>
-                              <span className="text-xs text-muted-foreground">
-                                {new Date(n.latestAt).toLocaleString()}
-                              </span>
-                              {n.count === 1 && (
-                                <span className="text-sm text-gray-600 line-clamp-2 text-left">
-                                  {String(n.content)}
-                                </span>
+                              <ChevronLeft className="w-4 h-4" />
+                              {t(
+                                NOTIFICATION_CATEGORY_I18N_KEYS[
+                                  selectedCategory as NotificationCategory
+                                ],
                               )}
-                            </DropdownMenuItem>
-                          ),
-                        )
-                      ) : (
-                        <div className="py-2">
-                          {DISPLAY_CATEGORIES.filter(
-                            (cat) =>
-                              (notificationsByCategory[cat]?.length ?? 0) > 0,
-                          ).map((category) => {
-                            const count =
-                              notificationsByCategory[category]?.length ?? 0;
-                            const unreadCount =
-                              notificationsByCategory[category]?.filter(
-                                (n) => !n.isRead,
-                              ).length ?? 0;
-                            const color =
-                              CATEGORY_COLORS[
-                                category as keyof typeof CATEGORY_COLORS
-                              ];
-                            return (
-                              <button
-                                key={category}
-                                type="button"
-                                onClick={() => setSelectedCategory(category)}
-                                className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors border-l-4"
-                                style={{
-                                  borderLeftColor: color,
-                                }}
-                              >
-                                <div
-                                  className="w-3 h-3 rounded-full shrink-0"
-                                  style={{ backgroundColor: color }}
-                                />
-                                <span className="flex-1 font-medium text-gray-900">
-                                  {CATEGORY_LABELS[
-                                    category as keyof typeof CATEGORY_LABELS
-                                  ]}
-                                </span>
-                                <Badge
-                                  variant={unreadCount > 0 ? "default" : "secondary"}
-                                  className={
-                                    unreadCount > 0
-                                      ? "bg-red-500"
-                                      : "bg-gray-200 text-gray-700"
-                                  }
-                                >
-                                  {count}
-                                </Badge>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    className="relative h-8 w-8 rounded-full"
-                  >
-                    <Avatar className="h-8 w-8">
-                      <AvatarImage
-                        src={getProfileImageUrl(
-                          profile?.profileImageUrl || undefined,
+                            </button>
+                          ) : (
+                            t("app.layout.notifications.title")
+                          )}
+                        </DropdownMenuLabel>
+                        {!selectedCategory && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs"
+                            onClick={handleMarkAllAsRead}
+                            disabled={
+                              markingAllRead ||
+                              notificationsLoading ||
+                              unreadNotificationIds.length === 0
+                            }
+                          >
+                            {markingAllRead
+                              ? t("app.layout.notifications.marking")
+                              : t("app.layout.notifications.markAllRead")}
+                          </Button>
                         )}
-                        alt={profile?.user?.name || profile?.name || "User"}
-                      />
-                      <AvatarFallback className="bg-gray-100 text-gray-600 text-xs font-semibold">
-                        {profile && (profile.user?.name || profile.name)
-                          ? String(profile.user?.name || profile.name)
-                              .split(" ")
-                              .map((n: string) => n[0])
-                              .join("")
-                              .toUpperCase()
-                          : "U"}
-                      </AvatarFallback>
-                    </Avatar>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-56" align="end" forceMount>
-                  <DropdownMenuLabel className="font-normal">
-                    <div className="flex flex-col space-y-1">
-                      <p className="text-sm font-medium leading-none">
-                        {profileLoading
-                          ? "Loading..."
-                          : profile && (profile.user?.name || profile.name)
-                            ? profile.user?.name || profile.name
-                            : "Unknown User"}
-                      </p>
-                      <p className="text-xs leading-none text-muted-foreground">
-                        {profileLoading
-                          ? "Loading..."
-                          : profile && (profile.user?.email || profile.email)
-                            ? profile.user?.email || profile.email
-                            : "-"}
-                      </p>
+                      </div>
+                      <div className="overflow-y-auto max-h-[360px]">
+                        {notificationsLoading ? (
+                          <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+                            {t("app.layout.notifications.loading")}
+                          </div>
+                        ) : notifications.length === 0 ? (
+                          <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+                            {t("app.layout.notifications.empty")}
+                          </div>
+                        ) : selectedCategory ? (
+                          (notificationsByCategory[selectedCategory] ?? []).map(
+                            (n) => {
+                              const locSingle =
+                                n.count === 1
+                                  ? getLocalizedNotificationText(
+                                      {
+                                        title: n.title,
+                                        content: n.content,
+                                        type: n.type,
+                                        eventType: n.eventType,
+                                      },
+                                      t,
+                                    )
+                                  : null;
+                              const groupedTitleLoc =
+                                n.count > 1 &&
+                                !(
+                                  n.type === "proposal" &&
+                                  n.eventType === "new_proposal"
+                                ) &&
+                                n.type !== "milestone"
+                                  ? getLocalizedNotificationText(
+                                      {
+                                        title: n.title,
+                                        content: n.content,
+                                        type: n.type,
+                                        eventType: n.eventType,
+                                      },
+                                      t,
+                                    )
+                                  : null;
+                              return (
+                              <DropdownMenuItem
+                                key={n.id}
+                                onClick={() => handleNotificationClick(n)}
+                                className={`flex flex-col items-start gap-1 py-3 px-4 rounded-none border-b last:border-b-0 cursor-pointer ${
+                                  n.isRead ? "opacity-60" : ""
+                                }`}
+                              >
+                                <span className="font-medium text-left">
+                                  {n.count > 1
+                                    ? n.type === "proposal" &&
+                                      n.eventType === "new_proposal"
+                                      ? t(
+                                          "app.layout.notifications.groupProposals",
+                                          {
+                                            count: n.count,
+                                            project: n.projectName,
+                                          },
+                                        )
+                                      : n.type === "milestone"
+                                        ? t(
+                                            "app.layout.notifications.groupMilestones",
+                                            {
+                                              count: n.count,
+                                              project: n.projectName,
+                                            },
+                                          )
+                                        : t(
+                                            "app.layout.notifications.groupFallback",
+                                            {
+                                              title:
+                                                groupedTitleLoc?.title ??
+                                                String(n.title),
+                                              project: n.projectName,
+                                              more: n.count - 1,
+                                            },
+                                          )
+                                    : (locSingle?.title ?? String(n.title))}
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  {formatNotificationTimestamp(
+                                    n.latestAt,
+                                    intlLocale,
+                                  )}
+                                </span>
+                                {n.count === 1 && (
+                                  <span className="text-sm text-gray-600 line-clamp-2 text-left">
+                                    {locSingle?.content ?? String(n.content)}
+                                  </span>
+                                )}
+                              </DropdownMenuItem>
+                            );
+                            },
+                          )
+                        ) : (
+                          <div className="py-2">
+                            {DISPLAY_CATEGORIES.filter(
+                              (cat) =>
+                                (notificationsByCategory[cat]?.length ?? 0) > 0,
+                            ).map((category) => {
+                              const count =
+                                notificationsByCategory[category]?.length ?? 0;
+                              const unreadCount =
+                                notificationsByCategory[category]?.filter(
+                                  (n) => !n.isRead,
+                                ).length ?? 0;
+                              const color =
+                                CATEGORY_COLORS[
+                                  category as keyof typeof CATEGORY_COLORS
+                                ];
+                              return (
+                                <button
+                                  key={category}
+                                  type="button"
+                                  onClick={() => setSelectedCategory(category)}
+                                  className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors border-l-4"
+                                  style={{
+                                    borderLeftColor: color,
+                                  }}
+                                >
+                                  <div
+                                    className="w-3 h-3 rounded-full shrink-0"
+                                    style={{ backgroundColor: color }}
+                                  />
+                                  <span className="flex-1 font-medium text-gray-900">
+                                    {t(
+                                      NOTIFICATION_CATEGORY_I18N_KEYS[category],
+                                    )}
+                                  </span>
+                                  <Badge
+                                    variant={
+                                      unreadCount > 0 ? "default" : "secondary"
+                                    }
+                                    className={
+                                      unreadCount > 0
+                                        ? "bg-red-500"
+                                        : "bg-gray-200 text-gray-700"
+                                    }
+                                  >
+                                    {count}
+                                  </Badge>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                  onClick={() => router.push("/provider/profile")}
-                  >
-                    <User className="mr-2 h-4 w-4" />
-                    <span>Profile</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                  onClick={() => router.push("/provider/earnings")}
-                  >
-                    <DollarSign className="mr-2 h-4 w-4" />
-                    <span>Earnings</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                  onClick={() => router.push("/provider/settings")}
-                  >
-                    <Settings className="mr-2 h-4 w-4" />
-                    <span>Settings</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleLogout}>
-                    <LogOut className="mr-2 h-4 w-4" />
-                    <span>Log out</span>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </div>
-        </header>
+                  </DropdownMenuContent>
+                </DropdownMenu>
 
-        {/* Page content */}
-        <main className="p-6">
-          {profileLoading ? (
-            <div className="flex items-center justify-center min-h-[400px]">
-              <div className="text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                <p className="text-gray-600">Loading...</p>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      className="relative h-8 w-8 rounded-full"
+                    >
+                      <Avatar className="h-8 w-8">
+                        <AvatarImage
+                          src={
+                            profileLoading
+                              ? undefined
+                              : getProfileImageUrl(
+                                  profile?.profileImageUrl || undefined,
+                                )
+                          }
+                          alt={
+                            profile?.user?.name ||
+                            profile?.name ||
+                            t("app.layout.userMenu.avatarAlt")
+                          }
+                        />
+                        <AvatarFallback className="bg-gray-100 text-gray-600 text-xs font-semibold">
+                          {profile && (profile.user?.name || profile.name)
+                            ? String(profile.user?.name || profile.name)
+                                .split(" ")
+                                .map((n: string) => n[0])
+                                .join("")
+                                .toUpperCase()
+                            : "U"}
+                        </AvatarFallback>
+                      </Avatar>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-56" align="end" forceMount>
+                    <DropdownMenuLabel className="font-normal">
+                      <div className="flex flex-col space-y-1">
+                        <p className="text-sm font-medium leading-none">
+                          {profileLoading
+                            ? t("app.layout.notifications.loading")
+                            : profile && (profile.user?.name || profile.name)
+                              ? profile.user?.name || profile.name
+                              : t("app.layout.userMenu.unknownUser")}
+                        </p>
+                        <p className="text-xs leading-none text-muted-foreground">
+                          {profileLoading
+                            ? t("app.layout.notifications.loading")
+                            : profile && (profile.user?.email || profile.email)
+                              ? profile.user?.email || profile.email
+                              : "-"}
+                        </p>
+                      </div>
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={() => router.push("/provider/profile")}
+                    >
+                      <User className="mr-2 h-4 w-4" />
+                      <span>{t("app.layout.userMenu.profile")}</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => router.push("/provider/earnings")}
+                    >
+                      <DollarSign className="mr-2 h-4 w-4" />
+                      <span>{t("app.layout.userMenu.earnings")}</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => router.push("/provider/settings")}
+                    >
+                      <Settings className="mr-2 h-4 w-4" />
+                      <span>{t("app.layout.userMenu.settings")}</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleLogout}>
+                      <LogOut className="mr-2 h-4 w-4" />
+                      <span>{t("app.layout.userMenu.logOut")}</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
-          ) : (
-            children
-          )}
-        </main>
-      </div>
-      {/* Notification modal */}
-      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="max-w-lg p-6 mx-auto">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-semibold">
-              Notification
-            </DialogTitle>
-            <DialogClose className="absolute right-4 top-4">
-              <X className="w-5 h-5" />
-            </DialogClose>
-          </DialogHeader>
-          <DialogDescription className="mt-4 text-sm text-gray-700">
-            {selectedNotification ? (
-              <div className="flex flex-col space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-md font-medium">
-                    {String(selectedNotification.title)}
-                  </h3>
-                  <span className="text-xs text-muted-foreground">
-                    {new Date(selectedNotification.createdAt).toLocaleString()}
-                  </span>
+          </header>
+
+          {/* Page content */}
+          <main className="p-6">
+            {profileLoading ? (
+              <div className="flex items-center justify-center min-h-[400px]">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                  <p className="text-gray-600">{t("app.layout.mainLoading")}</p>
                 </div>
-                <p className="text-sm">
-                  {String(selectedNotification.content)}
-                </p>
-                {/* Payment transfer proof button */}
-                {(() => {
-                  if (
-                    !selectedNotification.type ||
-                    typeof selectedNotification.type !== "string" ||
-                    !selectedNotification.type.includes("PAYMENT") ||
-                    !selectedNotification.metadata ||
-                    typeof selectedNotification.metadata !== "object"
-                  ) {
-                    return null;
-                  }
-
-                  const metadata = selectedNotification.metadata as {
-                    reference?: string;
-                    transferProofUrl?: string;
-                    photoUrl?: string;
-                    bankTransferRef?: string;
-                    paymentId?: string;
-                  };
-                  const photoUrl =
-                    metadata.reference ||
-                    metadata.transferProofUrl ||
-                    metadata.photoUrl ||
-                    metadata.bankTransferRef;
-
-                  // Show button if there's a photo URL (even if it's a text reference that looks like a URL) or payment ID
-                  if (photoUrl || metadata.paymentId) {
-                    // Check if reference looks like a URL (contains http, https, or is a file path)
-                    const isUrlOrPath =
-                      photoUrl &&
-                      (photoUrl.startsWith("http://") ||
-                        photoUrl.startsWith("https://") ||
-                        photoUrl.includes("/") ||
-                        photoUrl.includes("\\"));
-
-                    return (
-                      <div className="mt-4 pt-4 border-t">
-                        <Button
-                          variant="outline"
-                          className="w-full"
-                          onClick={() => {
-                            if (photoUrl) {
-                              // Check if it's a full URL
-                              if (
-                                photoUrl.startsWith("http://") ||
-                                photoUrl.startsWith("https://")
-                              ) {
-                                window.open(photoUrl, "_blank");
-                              } else if (
-                                photoUrl.includes("/") ||
-                                photoUrl.includes("\\")
-                              ) {
-                                // It's likely an R2 key or path, construct the URL
-                                const API_URL =
-                                  process.env.NEXT_PUBLIC_API_URL ||
-                                  process.env.NEXT_PUBLIC_API_URL ||
-                                  "http://localhost:4000";
-                                const cleanPath = photoUrl.startsWith("/")
-                                  ? photoUrl
-                                  : `/${photoUrl}`;
-                                window.open(`${API_URL}${cleanPath}`, "_blank");
-                              } else {
-                                // It's likely an R2 key, construct the URL
-                                const API_URL =
-                                  process.env.NEXT_PUBLIC_API_URL ||
-                                  process.env.NEXT_PUBLIC_API_URL ||
-                                  "http://localhost:4000";
-                                window.open(
-                                  `${API_URL}/uploads/${photoUrl}`,
-                                  "_blank",
-                                );
-                              }
-                            } else if (metadata.paymentId) {
-                              // Navigate to payment details if paymentId is available
-                              router.push(`/provider/earnings`);
-                            }
-                          }}
-                        >
-                          <DollarSign className="w-4 h-4 mr-2" />
-                          {photoUrl && isUrlOrPath
-                            ? "View Payment Receipt"
-                            : metadata.paymentId
-                              ? "View Payment Details"
-                              : "View Payment"}
-                        </Button>
-                      </div>
-                    );
-                  }
-                  return null;
-                })()}
               </div>
             ) : (
-              "No notification details available."
+              children
             )}
-          </DialogDescription>
-          <DialogFooter className="mt-4">
-            <Button
-              variant="default"
-              onClick={() => setModalOpen(false)}
-              className="w-full"
-            >
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </main>
+        </div>
+        {/* Notification modal */}
+        <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+          <DialogContent className="mx-auto max-w-xl overflow-hidden p-0">
+            <DialogHeader className="border-b bg-gradient-to-r from-blue-50 via-white to-indigo-50 p-6">
+              <DialogTitle className="flex items-center gap-2 text-lg font-semibold text-slate-900">
+                <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-700">
+                  <Bell className="h-4 w-4" />
+                </span>
+                {t("app.layout.notificationModal.title")}
+              </DialogTitle>
+              <DialogClose className="absolute right-4 top-4 rounded-full p-1 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900">
+                <X className="h-5 w-5" />
+              </DialogClose>
+            </DialogHeader>
+            <DialogDescription asChild>
+              <div className="p-6">
+                {selectedNotification ? (
+                  <div className="space-y-4">
+                    <div className="rounded-lg border bg-slate-50/70 p-4">
+                      <div className="mb-2 flex items-start justify-between gap-4">
+                        <h3 className="text-base font-semibold text-slate-900">
+                          {
+                            getLocalizedNotificationText(
+                              {
+                                title: String(selectedNotification.title),
+                                content: String(selectedNotification.content),
+                                type:
+                                  typeof selectedNotification.type === "string"
+                                    ? selectedNotification.type
+                                    : undefined,
+                                metadata: selectedNotification.metadata,
+                                eventType:
+                                  typeof selectedNotification.eventType ===
+                                  "string"
+                                    ? selectedNotification.eventType
+                                    : undefined,
+                              },
+                              t,
+                            ).title
+                          }
+                        </h3>
+                        <span className="shrink-0 text-xs text-slate-500">
+                          {formatNotificationTimestamp(
+                            selectedNotification.createdAt,
+                            intlLocale,
+                          )}
+                        </span>
+                      </div>
+                      <p className="text-sm leading-6 text-slate-700">
+                        {
+                          getLocalizedNotificationText(
+                            {
+                              title: String(selectedNotification.title),
+                              content: String(selectedNotification.content),
+                              type:
+                                typeof selectedNotification.type === "string"
+                                  ? selectedNotification.type
+                                  : undefined,
+                              metadata: selectedNotification.metadata,
+                              eventType:
+                                typeof selectedNotification.eventType ===
+                                "string"
+                                  ? selectedNotification.eventType
+                                  : undefined,
+                            },
+                            t,
+                          ).content
+                        }
+                      </p>
+                    </div>
+                    {/* Payment transfer proof button */}
+                    {(() => {
+                      if (
+                        !selectedNotification.type ||
+                        typeof selectedNotification.type !== "string" ||
+                        !selectedNotification.type.includes("PAYMENT") ||
+                        !selectedNotification.metadata ||
+                        typeof selectedNotification.metadata !== "object"
+                      ) {
+                        return null;
+                      }
 
-      <SupportChatWidget />
-    </div>
+                      const metadata = selectedNotification.metadata as {
+                        reference?: string;
+                        transferProofUrl?: string;
+                        photoUrl?: string;
+                        bankTransferRef?: string;
+                        paymentId?: string;
+                      };
+                      const photoUrl =
+                        metadata.reference ||
+                        metadata.transferProofUrl ||
+                        metadata.photoUrl ||
+                        metadata.bankTransferRef;
+
+                      // Show button if there's a photo URL (even if it's a text reference that looks like a URL) or payment ID
+                      if (photoUrl || metadata.paymentId) {
+                        // Check if reference looks like a URL (contains http, https, or is a file path)
+                        const isUrlOrPath =
+                          photoUrl &&
+                          (photoUrl.startsWith("http://") ||
+                            photoUrl.startsWith("https://") ||
+                            photoUrl.includes("/") ||
+                            photoUrl.includes("\\"));
+
+                        return (
+                          <div className="rounded-lg border bg-white p-4">
+                            <Button
+                              variant="outline"
+                              className="w-full"
+                              onClick={() => {
+                                if (photoUrl) {
+                                  // Check if it's a full URL
+                                  if (
+                                    photoUrl.startsWith("http://") ||
+                                    photoUrl.startsWith("https://")
+                                  ) {
+                                    window.open(photoUrl, "_blank");
+                                  } else if (
+                                    photoUrl.includes("/") ||
+                                    photoUrl.includes("\\")
+                                  ) {
+                                    // It's likely an R2 key or path, construct the URL
+                                    const API_URL =
+                                      process.env.NEXT_PUBLIC_API_URL ||
+                                      process.env.NEXT_PUBLIC_API_URL ||
+                                      "http://localhost:4000";
+                                    const cleanPath = photoUrl.startsWith("/")
+                                      ? photoUrl
+                                      : `/${photoUrl}`;
+                                    window.open(
+                                      `${API_URL}${cleanPath}`,
+                                      "_blank",
+                                    );
+                                  } else {
+                                    // It's likely an R2 key, construct the URL
+                                    const API_URL =
+                                      process.env.NEXT_PUBLIC_API_URL ||
+                                      process.env.NEXT_PUBLIC_API_URL ||
+                                      "http://localhost:4000";
+                                    window.open(
+                                      `${API_URL}/uploads/${photoUrl}`,
+                                      "_blank",
+                                    );
+                                  }
+                                } else if (metadata.paymentId) {
+                                  // Navigate to payment details if paymentId is available
+                                  router.push(`/provider/earnings`);
+                                }
+                              }}
+                            >
+                              <DollarSign className="w-4 h-4 mr-2" />
+                              {photoUrl && isUrlOrPath
+                                ? t("app.layout.notificationModal.viewReceipt")
+                                : metadata.paymentId
+                                  ? t(
+                                      "app.layout.notificationModal.viewPaymentDetails",
+                                    )
+                                  : t(
+                                      "app.layout.notificationModal.viewPayment",
+                                    )}
+                            </Button>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed bg-slate-50 p-4 text-sm text-slate-600">
+                    {t("app.layout.notificationModal.empty")}
+                  </div>
+                )}
+              </div>
+            </DialogDescription>
+            <DialogFooter className="border-t bg-slate-50 px-6 py-4">
+              <Button
+                variant="default"
+                onClick={() => setModalOpen(false)}
+                className="w-full sm:w-auto"
+              >
+                {t("app.layout.notificationModal.close")}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <SupportChatWidget />
+        {!profileLoading && !pathname.startsWith("/provider/messages") && (
+          <FloatingMessagesWidget fullPageHref="/provider/messages" />
+        )}
+      </div>
     </ProviderCompletionProvider>
   );
 }

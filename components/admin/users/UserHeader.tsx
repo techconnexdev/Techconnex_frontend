@@ -9,11 +9,13 @@ import {
   Edit,
   Loader2,
   MessageSquare,
+  RotateCcw,
   Save,
   X,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useI18n } from "@/contexts/I18nProvider";
 
 interface UserHeaderProps {
   userName: string;
@@ -32,6 +34,8 @@ interface UserHeaderProps {
   onSave: () => void;
   onSuspend: () => void;
   onActivate: () => void;
+  /** Clear soft-delete (settings.deletedAt) — shown when status is DELETED */
+  onRestoreDeleted?: () => void;
   onSendNotification?: () => void;
 }
 
@@ -52,8 +56,10 @@ export function UserHeader({
   onSave,
   onSuspend,
   onActivate,
+  onRestoreDeleted,
   onSendNotification,
 }: UserHeaderProps) {
+  const { t } = useI18n();
   const router = useRouter();
 
   const handleContact = () => {
@@ -71,8 +77,8 @@ export function UserHeader({
     }
     router.push(
       `/admin/messages?userId=${userId}&name=${encodeURIComponent(
-        userName
-      )}&avatar=${encodeURIComponent(avatar)}`
+        userName,
+      )}&avatar=${encodeURIComponent(avatar)}`,
     );
   };
 
@@ -106,8 +112,8 @@ export function UserHeader({
               disabled={saving}
               className="w-full sm:w-auto text-xs sm:text-sm"
             >
-              <X className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-              Cancel
+              <X className="w-3.5 h-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
+              {t("admin.users.header.cancel")}
             </Button>
             <Button
               onClick={onSave}
@@ -116,13 +122,13 @@ export function UserHeader({
             >
               {saving ? (
                 <>
-                  <Loader2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2 animate-spin" />
-                  Saving...
+                  <Loader2 className="w-3.5 h-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2 animate-spin" />
+                  {t("admin.users.common.saving")}
                 </>
               ) : (
                 <>
-                  <Save className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                  Save Changes
+                  <Save className="w-3.5 h-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
+                  {t("admin.users.header.saveChanges")}
                 </>
               )}
             </Button>
@@ -131,17 +137,17 @@ export function UserHeader({
           <>
             <Button variant="outline" onClick={handleContact}>
               <MessageSquare className="w-4 h-4 mr-2" />
-              Message
+              {t("admin.users.header.message")}
             </Button>
             {onSendNotification && (
               <Button variant="outline" onClick={onSendNotification}>
                 <Bell className="w-4 h-4 mr-2" />
-                Send notification
+                {t("admin.users.header.sendNotification")}
               </Button>
             )}
             <Button variant="outline" onClick={onEdit}>
               <Edit className="w-4 h-4 mr-2" />
-              Edit User
+              {t("admin.users.header.editUser")}
             </Button>
             {userStatus === "ACTIVE" ? (
               <Button
@@ -150,17 +156,31 @@ export function UserHeader({
                 disabled={actionLoading}
                 className="w-full sm:w-auto text-xs sm:text-sm"
               >
-                <Ban className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                Suspend User
+                <Ban className="w-3.5 h-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
+                {t("admin.users.actions.suspendUser")}
               </Button>
-            ) : (
+            ) : userStatus === "SUSPENDED" ? (
               <Button
                 onClick={onActivate}
                 disabled={actionLoading}
                 className="w-full sm:w-auto text-xs sm:text-sm"
               >
-                <CheckCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                Activate User
+                <CheckCircle className="w-3.5 h-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
+                {t("admin.users.actions.activateUser")}
+              </Button>
+            ) : onRestoreDeleted ? (
+              <Button
+                variant="secondary"
+                onClick={onRestoreDeleted}
+                disabled={actionLoading}
+                className="w-full sm:w-auto text-xs sm:text-sm"
+              >
+                <RotateCcw className="w-3.5 h-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
+                {t("admin.users.actions.restoreAccount")}
+              </Button>
+            ) : (
+              <Button disabled className="w-full sm:w-auto text-xs sm:text-sm">
+                {t("admin.users.header.deletedAccount")}
               </Button>
             )}
           </>

@@ -1,3 +1,5 @@
+import { ProviderProfilePageSkeleton } from "@/components/provider/ProviderProfileSkeletons";
+
 export default function Loading() {
-  return null
+  return <ProviderProfilePageSkeleton loadingLabel="Loading profile" />;
 }

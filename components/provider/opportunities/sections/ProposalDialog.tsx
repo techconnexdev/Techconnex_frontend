@@ -15,7 +15,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Paperclip, Send } from "lucide-react";
 import { formatBidAmountDisplay, parseBidAmountInput } from "@/lib/utils";
+import { formatTimeline } from "@/lib/timeline-utils";
 import type { Opportunity, ProposalDraft } from "../types";
+import { useI18n } from "@/contexts/I18nProvider";
 
 export default function ProposalDialog({
   open,
@@ -32,6 +34,8 @@ export default function ProposalDialog({
   opportunity: Opportunity | null;
   onSubmit: () => void;
 }) {
+  const { t } = useI18n();
+
   const addFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     setDraft({ ...draft, attachments: [...draft.attachments, ...files] });
@@ -42,25 +46,31 @@ export default function ProposalDialog({
       attachments: draft.attachments.filter((_, idx) => idx !== i),
     });
 
+  const title = opportunity?.title ?? "";
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-xl">Submit Proposal</DialogTitle>
+          <DialogTitle className="text-xl">{t("provider.opportunities.proposal.title")}</DialogTitle>
           <DialogDescription>
-            Submit your proposal for “{opportunity?.title}”.
+            {t("provider.opportunities.proposal.subtitle", { title })}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="bid">Your Bid Amount (RM) *</Label>
+              <Label htmlFor="bid">
+                {t("provider.opportunities.proposal.bidLabel", {
+                  currency: opportunity?.currencyCode ?? "MYR",
+                })}
+              </Label>
               <Input
                 id="bid"
                 type="text"
                 inputMode="decimal"
-                placeholder="15,000.00"
+                placeholder={t("provider.opportunities.proposal.bidPlaceholder")}
                 value={formatBidAmountDisplay(draft.bidAmount)}
                 onChange={(e) =>
                   setDraft({
@@ -70,44 +80,53 @@ export default function ProposalDialog({
                 }
               />
               <p className="text-xs text-gray-500 mt-1">
-                Client budget: {opportunity?.budget}
+                {t("provider.opportunities.proposal.clientBudget", {
+                  budget: opportunity?.budget ?? "—",
+                })}
               </p>
             </div>
             <div>
-              <Label htmlFor="time">Delivery Timeline *</Label>
+              <Label htmlFor="time">{t("provider.opportunities.proposal.deliveryTimeline")}</Label>
               <Input
                 id="time"
-                placeholder="e.g., 6 weeks, by Dec 15"
+                placeholder={t("provider.opportunities.proposal.deliveryTextPh")}
                 value={draft.timeline}
                 onChange={(e) =>
                   setDraft({ ...draft, timeline: e.target.value })
                 }
               />
+              <p className="text-xs text-gray-500 mt-1">
+                {t("provider.opportunities.proposal.companyTimeline", {
+                  value: opportunity?.timeline
+                    ? formatTimeline(opportunity.timeline)
+                    : t("customer.dashboard.timelineNotSpecified"),
+                })}
+              </p>
             </div>
           </div>
 
           <div>
-            <Label htmlFor="cover">Cover Letter *</Label>
+            <Label htmlFor="cover">{t("provider.opportunities.proposal.coverLetter")}</Label>
             <Textarea
               id="cover"
               className="min-h-[120px]"
-              placeholder="Introduce yourself and explain why you're the best fit…"
+              placeholder={t("provider.opportunities.proposal.coverPlaceholder")}
               value={draft.coverLetter}
               onChange={(e) =>
                 setDraft({ ...draft, coverLetter: e.target.value })
               }
             />
             <p className="text-xs text-gray-500 mt-1">
-              {draft.coverLetter.length}/1000 characters
+              {t("provider.opportunities.proposal.charCount", { n: draft.coverLetter.length })}
             </p>
           </div>
 
           <div>
-            <Label htmlFor="milestones">Project Milestones (Optional)</Label>
+            <Label htmlFor="milestones">{t("provider.opportunities.proposal.milestonesOptional")}</Label>
             <Textarea
               id="milestones"
               className="min-h-[100px]"
-              placeholder="Break down your project into milestones…"
+              placeholder={t("provider.opportunities.proposal.milestonesTextPh")}
               value={draft.milestones}
               onChange={(e) =>
                 setDraft({ ...draft, milestones: e.target.value })
@@ -116,7 +135,7 @@ export default function ProposalDialog({
           </div>
 
           <div>
-            <Label>Attachments (Optional)</Label>
+            <Label>{t("provider.opportunities.proposal.attachments")}</Label>
             <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
               <input
                 id="file-upload"
@@ -129,10 +148,10 @@ export default function ProposalDialog({
               <label htmlFor="file-upload" className="cursor-pointer">
                 <Paperclip className="w-8 h-8 mx-auto text-gray-400 mb-2" />
                 <p className="text-sm text-gray-600">
-                  Click to upload portfolio, resume, or relevant documents
+                  {t("provider.opportunities.proposal.uploadHint")}
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
-                  PDF, DOC, DOCX, TXT, JPG, PNG (Max 10MB each)
+                  {t("provider.opportunities.proposal.uploadTypes")}
                 </p>
               </label>
             </div>
@@ -149,7 +168,7 @@ export default function ProposalDialog({
                       size="sm"
                       onClick={() => removeFile(i)}
                     >
-                      Remove
+                      {t("provider.opportunities.proposal.remove")}
                     </Button>
                   </div>
                 ))}
@@ -159,21 +178,21 @@ export default function ProposalDialog({
 
           <Card className="bg-gray-50">
             <CardContent className="p-4">
-              <h4 className="font-semibold mb-2">Proposal Summary</h4>
+              <h4 className="font-semibold mb-2">{t("provider.opportunities.proposal.summaryTitle")}</h4>
               <div className="space-y-1 text-sm">
                 <div className="flex justify-between">
-                  <span>Your Bid:</span>
+                  <span>{t("provider.opportunities.proposal.summaryBid")}</span>
                   <span className="font-semibold">
                     RM {draft.bidAmount || "0"}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Timeline:</span>
-                  <span>{draft.timeline || "Not specified"}</span>
+                  <span>{t("provider.opportunities.proposal.summaryTimeline")}</span>
+                  <span>{draft.timeline || t("provider.profile.notSpecified")}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Attachments:</span>
-                  <span>{draft.attachments.length} files</span>
+                  <span>{t("provider.opportunities.proposal.summaryAttachments")}</span>
+                  <span>{t("provider.opportunities.proposal.filesCount", { n: draft.attachments.length })}</span>
                 </div>
               </div>
             </CardContent>
@@ -182,11 +201,11 @@ export default function ProposalDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("provider.opportunities.proposal.cancel")}
           </Button>
           <Button onClick={onSubmit}>
             <Send className="w-4 h-4 mr-2" />
-            Submit Proposal
+            {t("provider.opportunities.submitProposal")}
           </Button>
         </DialogFooter>
       </DialogContent>

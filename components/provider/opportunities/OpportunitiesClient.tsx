@@ -10,8 +10,10 @@ import OpportunityCard from "./sections/OpportunityCard";
 import DetailsDialog from "./sections/DetailsDialog";
 import ProposalDialog from "./sections/ProposalDialog";
 import type { Opportunity, ProposalDraft } from "./types";
+import { useI18n } from "@/contexts/I18nProvider";
 
 export default function OpportunitiesClient({ opportunities: initial }: { opportunities: Opportunity[] }) {
+  const { t } = useI18n();
   const [opportunities, setOpportunities] = useState<Opportunity[]>(initial);
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
@@ -48,7 +50,6 @@ export default function OpportunitiesClient({ opportunities: initial }: { opport
 
   const submitProposal = () => {
     if (!selected) return;
-    // mock update: mark as submitted and increment proposals
     setOpportunities((prev) =>
       prev.map((opp) =>
         opp.id === selected.id ? { ...opp, hasSubmitted: true, proposals: opp.proposals + 1 } : opp
@@ -59,19 +60,23 @@ export default function OpportunitiesClient({ opportunities: initial }: { opport
 
   return (
     <div className="space-y-8">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Job Opportunities</h1>
-          <p className="text-gray-600">Discover projects that match your skills and expertise</p>
+          <h1 className="text-3xl font-bold">{t("provider.opportunities.title")}</h1>
+          <p className="text-gray-600">{t("provider.opportunities.subtitle")}</p>
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" className="gap-2"><Filter className="w-4 h-4" />Advanced Filters</Button>
-          <Button className="gap-2"><Zap className="w-4 h-4" />AI Recommendations</Button>
+          <Button variant="outline" className="gap-2">
+            <Filter className="w-4 h-4" />
+            {t("provider.opportunities.demo.advancedFilters")}
+          </Button>
+          <Button className="gap-2">
+            <Zap className="w-4 h-4" />
+            {t("provider.opportunities.demo.aiRecommendations")}
+          </Button>
         </div>
       </div>
 
-      {/* Filters */}
       <Card>
         <CardContent className="p-6">
           <FiltersBar
@@ -83,17 +88,16 @@ export default function OpportunitiesClient({ opportunities: initial }: { opport
         </CardContent>
       </Card>
 
-      {/* Lists */}
       <Tabs defaultValue="recommended" className="space-y-6">
         <TabsList>
-          <TabsTrigger value="recommended">Recommended</TabsTrigger>
-          <TabsTrigger value="recent">Most Recent</TabsTrigger>
-          <TabsTrigger value="budget">Highest Budget</TabsTrigger>
+          <TabsTrigger value="recommended">{t("provider.opportunities.tab.recommended")}</TabsTrigger>
+          <TabsTrigger value="recent">{t("provider.opportunities.demo.tabMostRecent")}</TabsTrigger>
+          <TabsTrigger value="budget">{t("provider.opportunities.demo.tabHighestBudget")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="recommended" className="space-y-6">
           {filtered.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">No opportunities found.</div>
+            <div className="text-center py-12 text-gray-500">{t("provider.opportunities.empty.title")}</div>
           ) : (
             filtered.map((o) => (
               <OpportunityCard
@@ -106,11 +110,14 @@ export default function OpportunitiesClient({ opportunities: initial }: { opport
           )}
         </TabsContent>
 
-        <TabsContent value="recent"><div className="text-center py-12 text-gray-500">Recent opportunities coming soon.</div></TabsContent>
-        <TabsContent value="budget"><div className="text-center py-12 text-gray-500">Highest budget sort coming soon.</div></TabsContent>
+        <TabsContent value="recent">
+          <div className="text-center py-12 text-gray-500">{t("provider.opportunities.demo.recentSoon")}</div>
+        </TabsContent>
+        <TabsContent value="budget">
+          <div className="text-center py-12 text-gray-500">{t("provider.opportunities.demo.budgetSoon")}</div>
+        </TabsContent>
       </Tabs>
 
-      {/* Dialogs */}
       <DetailsDialog
         open={detailsOpen}
         onOpenChange={setDetailsOpen}

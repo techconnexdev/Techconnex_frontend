@@ -1,0 +1,310 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<!--
+  TechConnex — enterprise beta invitation (Resend / Mustache-style variables)
+
+  Use {{ variable }} when merging. If your stack uses {{{ name }}} (triple) for HTML escape, switch delimiters — names should stay plain text.
+
+  Personalisation
+    {{preheader}}
+    {{first_name}}
+    {{company_name}}
+
+  Banner
+    {{banner_badge}}       e.g. Private beta
+    {{banner_message}}
+
+  Links & assets (full URLs)
+    {{cta_url}}  {{cta_label}}
+    {{privacy_url}}  {{terms_url}}  {{cookies_url}}  {{website_url}}
+    {{logo_mark_url}}  {{hero_image_url}}  {{footer_mark_url}}
+
+  Copy blocks (optional overrides)
+    {{hero_tagline}}
+    {{value_prop_title}}  {{value_prop_body}}
+    {{closing_paragraph}}
+    {{compliance_footer}}
+
+  Sign-off
+    {{sender_name}}   {{sender_team}}
+    {{year}}
+
+  Default asset URLs (swap in merge if needed):
+    logo_mark_url:   https://resend-attachments.s3.amazonaws.com/bfb4719f-8abf-4791-8910-33867a7780d8
+    hero_image_url:  https://resend-attachments.s3.amazonaws.com/978c19d7-eb38-4dd4-a168-5ef516ab22f0
+    footer_mark_url: https://resend-attachments.s3.amazonaws.com/4f8cbda5-0a46-4904-a152-f8216bffc194
+-->
+<html dir="ltr" lang="en">
+  <head>
+    <meta content="width=device-width" name="viewport" />
+    <meta content="text/html; charset=UTF-8" http-equiv="Content-Type" />
+    <meta name="x-apple-disable-message-reformatting" />
+    <meta content="IE=edge" http-equiv="X-UA-Compatible" />
+    <meta content="telephone=no,address=no,email=no,date=no,url=no" name="format-detection" />
+    <link rel="preload" as="image" href="https://resend-attachments.s3.amazonaws.com/978c19d7-eb38-4dd4-a168-5ef516ab22f0" />
+    <link rel="preload" as="image" href="https://resend-attachments.s3.amazonaws.com/4f8cbda5-0a46-4904-a152-f8216bffc194" />
+    <style type="text/css">
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+      body, table, td, p, a { -webkit-font-smoothing: antialiased; }
+      @media only screen and (max-width: 620px) {
+        .email-container { width: 100% !important; border-radius: 0 !important; }
+        .mobile-pad { padding-left: 22px !important; padding-right: 22px !important; }
+        .header-pad { padding: 28px 22px 24px !important; }
+        .hero-title { font-size: 34px !important; line-height: 1.05 !important; }
+        .hero-sub { font-size: 15px !important; letter-spacing: 0.1em !important; }
+        .gradient-panel-pad { padding: 18px 14px 26px !important; }
+        .footer-pad { padding: 22px !important; }
+      }
+    </style>
+  </head>
+  <body style="margin:0;padding:0;background-color:#fafafa;">
+    <div style="display:none;overflow:hidden;line-height:1px;opacity:0;max-height:0;max-width:0;">
+      {{preheader}}
+    </div>
+
+    <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color:#fafafa;">
+      <tr>
+        <td align="center" style="padding:28px 14px;">
+          <table role="presentation" class="email-container" border="0" cellpadding="0" cellspacing="0" width="600" style="width:600px;max-width:600px;background-color:#ffffff;border-radius:24px;overflow:hidden;box-shadow:0 24px 80px rgba(45,109,252,0.12),0 2px 8px rgba(15,23,42,0.06);">
+
+            <tr>
+              <td style="padding:11px 20px;background:linear-gradient(90deg,#2563eb 0%,#4f46e5 100%);text-align:center;">
+                <span style="display:inline-block;margin-right:8px;padding:3px 8px;border-radius:6px;background:rgba(255,255,255,0.22);font-family:'Inter',Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:0.06em;color:#ffffff;text-transform:uppercase;">{{banner_badge}}</span>
+                <span style="font-family:'Inter',Arial,sans-serif;font-size:13px;line-height:1.5;color:#ffffff;">{{banner_message}}</span>
+              </td>
+            </tr>
+
+            <tr>
+              <td class="header-pad" style="padding:36px 44px 12px;background-color:#ffffff;">
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" align="center">
+                  <tr>
+                    <td style="vertical-align:middle;padding-right:12px;">
+                      <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="background:linear-gradient(135deg,#2D6DFC,#614EF8);border-radius:12px;width:44px;height:44px;">
+                        <tr>
+                          <td align="center" valign="middle" style="padding:0;">
+                            <img alt="TechConnex" src="{{logo_mark_url}}" width="28" height="28" style="display:block;border:0;outline:none;text-decoration:none;" />
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                    <td style="vertical-align:middle;">
+                      <p style="margin:0;font-family:'Inter',Arial,sans-serif;font-size:22px;font-weight:800;letter-spacing:-0.5px;line-height:1;">
+                        <span style="color:#0a0a0a;">Tech</span><span style="color:#2D6DFC;">Connex</span>
+                      </p>
+                      <p style="margin:4px 0 0;font-family:'Inter',Arial,sans-serif;font-size:12px;font-weight:500;letter-spacing:0.14em;text-transform:uppercase;color:#64748b;">Malaysia · Talent · Projects</p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr>
+              <td align="center" style="padding:8px 44px 0;background-color:#ffffff;">
+                <h1 class="hero-title" style="margin:0;font-family:'Inter',Arial,sans-serif;font-size:42px;font-weight:300;line-height:1.02;letter-spacing:-0.02em;color:#0a0a0a;">
+                  Smart Tech.
+                </h1>
+                <p class="hero-sub" style="margin:10px 0 0;font-family:'Inter',Arial,sans-serif;font-size:17px;font-weight:700;line-height:1.15;letter-spacing:0.14em;text-transform:uppercase;color:#2D6DFC;">
+                  Meaningful Connections.
+                </p>
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" align="center" style="margin-top:14px;">
+                  <tr>
+                    <td style="height:4px;width:420px;max-width:82vw;border-radius:999px;background:linear-gradient(90deg,#0E3CC8 0%,#2D6DFC 45%,#614EF8 100%);font-size:0;line-height:0;">&nbsp;</td>
+                  </tr>
+                </table>
+                <p style="margin:18px 0 0;font-family:'Inter',Arial,sans-serif;font-size:15px;line-height:1.55;color:#64748b;">
+                  {{hero_tagline}}
+                </p>
+              </td>
+            </tr>
+
+            <tr>
+              <td class="gradient-panel-pad" style="padding:28px 36px 8px;background-color:#ffffff;">
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="border-radius:28px 28px 0 0;background:linear-gradient(90deg,#2D6DFC 0%,#614EF8 100%);box-shadow:0 28px 90px rgba(45,109,252,0.22);">
+                  <tr>
+                    <td align="center" style="padding:28px 20px 0;">
+                      <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="border-radius:14px;border:10px solid #09090b;background:#09090b;box-shadow:0 28px 70px rgba(0,0,0,0.45);max-width:504px;">
+                        <tr>
+                          <td style="padding:0;line-height:0;">
+                            <img alt="TechConnex platform preview — dashboard and discovery for projects and talent." src="{{hero_image_url}}" width="504" style="display:block;width:100%;max-width:504px;height:auto;border:0;outline:none;text-decoration:none;border-radius:6px;" />
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="height:24px;line-height:24px;font-size:0;">&nbsp;</td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <tr>
+              <td class="mobile-pad" style="padding:36px 44px 40px;background-color:#ffffff;">
+                <p style="margin:0 0 14px;font-family:'Inter',Arial,sans-serif;font-size:17px;font-weight:600;color:#0f172a;">Hello {{first_name}},</p>
+
+                <p style="margin:0 0 18px;font-family:'Inter',Arial,sans-serif;font-size:15px;line-height:1.75;color:#475569;">
+                  Given <strong style="color:#0f172a;">{{company_name}}</strong>’s scale of operations, placing the right technology specialists quickly — without the extended cycles typical of traditional hiring — is exactly what <strong style="color:#0f172a;">TechConnex</strong> is built for. We would like to invite you to evaluate our AI-assisted platform: it connects enterprises with skilled professionals for structured, project-based collaboration, with workflows designed for clarity from intake through delivery.
+                </p>
+
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 22px;border-radius:14px;border:1px solid rgba(45,109,252,0.18);border-left:4px solid #2D6DFC;background:linear-gradient(180deg,#f8fafc 0%,#f1f5f9 100%);">
+                  <tr>
+                    <td style="padding:18px 20px;">
+                      <p style="margin:0;font-family:'Inter',Arial,sans-serif;font-size:14px;line-height:1.7;color:#475569;">
+                        We are launching our <strong style="color:#0f172a;">beta for Malaysia</strong> and inviting a limited cohort of enterprises and innovation leaders to explore the product and share feedback. <strong style="color:#0f172a;">{{company_name}}</strong> is on our shortlist for this wave.
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+
+                <p style="margin:0 0 22px;font-family:'Inter',Arial,sans-serif;font-size:15px;line-height:1.75;color:#475569;">
+                  Intelligent matching and milestone-based execution help initiative owners route work to relevant specialists — shortening sourcing time while keeping progress observable for stakeholders who need accountability.
+                </p>
+
+                <p style="margin:0 0 14px;font-family:'Inter',Arial,sans-serif;font-size:13px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#64748b;">Capabilities</p>
+
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 10px;">
+                  <tr>
+                    <td width="28" valign="top" style="padding-top:3px;font-family:'Inter',Arial,sans-serif;font-size:15px;color:#2D6DFC;line-height:1.5;">•</td>
+                    <td valign="top">
+                      <p style="margin:0;font-family:'Inter',Arial,sans-serif;font-size:14px;line-height:1.65;color:#475569;"><strong style="color:#0f172a;">Structured initiatives</strong> — publish scoped work and review proposals from qualified professionals.</p>
+                    </td>
+                  </tr>
+                </table>
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 10px;">
+                  <tr>
+                    <td width="28" valign="top" style="padding-top:3px;font-family:'Inter',Arial,sans-serif;font-size:15px;color:#2D6DFC;line-height:1.5;">•</td>
+                    <td valign="top">
+                      <p style="margin:0;font-family:'Inter',Arial,sans-serif;font-size:14px;line-height:1.65;color:#475569;"><strong style="color:#0f172a;">AI-assisted matching</strong> — surface relevant capability faster against requirements you define.</p>
+                    </td>
+                  </tr>
+                </table>
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 10px;">
+                  <tr>
+                    <td width="28" valign="top" style="padding-top:3px;font-family:'Inter',Arial,sans-serif;font-size:15px;color:#2D6DFC;line-height:1.5;">•</td>
+                    <td valign="top">
+                      <p style="margin:0;font-family:'Inter',Arial,sans-serif;font-size:14px;line-height:1.65;color:#475569;"><strong style="color:#0f172a;">Specialist depth</strong> — development, design, AI/ML, mobile, cloud, security, and adjacent disciplines.</p>
+                    </td>
+                  </tr>
+                </table>
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 10px;">
+                  <tr>
+                    <td width="28" valign="top" style="padding-top:3px;font-family:'Inter',Arial,sans-serif;font-size:15px;color:#2D6DFC;line-height:1.5;">•</td>
+                    <td valign="top">
+                      <p style="margin:0;font-family:'Inter',Arial,sans-serif;font-size:14px;line-height:1.65;color:#475569;"><strong style="color:#0f172a;">Milestone governance</strong> — aligned checkpoints for transparent execution.</p>
+                    </td>
+                  </tr>
+                </table>
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 28px;">
+                  <tr>
+                    <td width="28" valign="top" style="padding-top:3px;font-family:'Inter',Arial,sans-serif;font-size:15px;color:#2D6DFC;line-height:1.5;">•</td>
+                    <td valign="top">
+                      <p style="margin:0;font-family:'Inter',Arial,sans-serif;font-size:14px;line-height:1.65;color:#475569;"><strong style="color:#0f172a;">Operational visibility</strong> — centralised communication and progress signals for programme leads.</p>
+                    </td>
+                  </tr>
+                </table>
+
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 32px;border-radius:16px;border:1px solid rgba(97,78,248,0.2);background:linear-gradient(135deg,rgba(45,109,252,0.06) 0%,rgba(97,78,248,0.08) 100%);">
+                  <tr>
+                    <td align="center" style="padding:22px 24px;">
+                      <p style="margin:0 0 8px;font-family:'Inter',Arial,sans-serif;font-size:14px;font-weight:700;color:#0f172a;">{{value_prop_title}}</p>
+                      <p style="margin:0;font-family:'Inter',Arial,sans-serif;font-size:13px;line-height:1.65;color:#64748b;">{{value_prop_body}}</p>
+                    </td>
+                  </tr>
+                </table>
+
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 32px;">
+                  <tr>
+                    <td align="center">
+                      <!--[if mso]>
+                      <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="{{cta_url}}" style="height:48px;v-text-anchor:middle;width:280px;" arcsize="50%" strokecolor="#2D6DFC" fillcolor="#2D6DFC">
+                        <w:anchorlock/>
+                        <center style="color:#ffffff;font-family:Arial,sans-serif;font-size:15px;font-weight:bold;">{{cta_label}}</center>
+                      </v:roundrect>
+                      <![endif]-->
+                      <!--[if !mso]><!-- -->
+                      <a href="{{cta_url}}" target="_blank" rel="noopener noreferrer nofollow" style="display:inline-block;padding:14px 40px;border-radius:999px;font-family:'Inter',Arial,sans-serif;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;background:linear-gradient(90deg,#2D6DFC 0%,#614EF8 100%);box-shadow:0 10px 36px rgba(45,109,252,0.35);">
+                        {{cta_label}}
+                      </a>
+                      <!--<![endif]-->
+                    </td>
+                  </tr>
+                </table>
+
+                <p style="margin:0 0 16px;font-family:'Inter',Arial,sans-serif;font-size:15px;line-height:1.75;color:#475569;">
+                  Account controls and policy links:
+                </p>
+
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 28px;border-radius:14px;border:1px solid #e2e8f0;background:#f8fafc;">
+                  <tr>
+                    <td style="padding:16px 20px;">
+                      <p style="margin:0 0 10px;font-family:'Inter',Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#94a3b8;">Legal</p>
+                      <p style="margin:6px 0;font-family:'Inter',Arial,sans-serif;font-size:13px;">
+                        <a href="{{privacy_url}}" target="_blank" rel="noopener noreferrer nofollow" style="color:#2D6DFC;text-decoration:none;font-weight:600;">Privacy Policy</a>
+                      </p>
+                      <p style="margin:6px 0;font-family:'Inter',Arial,sans-serif;font-size:13px;">
+                        <a href="{{terms_url}}" target="_blank" rel="noopener noreferrer nofollow" style="color:#2D6DFC;text-decoration:none;font-weight:600;">Terms of Service</a>
+                      </p>
+                      <p style="margin:6px 0;font-family:'Inter',Arial,sans-serif;font-size:13px;">
+                        <a href="{{cookies_url}}" target="_blank" rel="noopener noreferrer nofollow" style="color:#2D6DFC;text-decoration:none;font-weight:600;">Cookie Policy</a>
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+
+                <p style="margin:0 0 18px;font-family:'Inter',Arial,sans-serif;font-size:15px;line-height:1.75;color:#475569;">
+                  {{closing_paragraph}}
+                </p>
+                <p style="margin:0 0 28px;font-family:'Inter',Arial,sans-serif;font-size:15px;line-height:1.75;color:#475569;">
+                  Thank you for considering TechConnex. We would welcome the opportunity to support technology and talent programmes at <strong style="color:#0f172a;">{{company_name}}</strong>.
+                </p>
+
+                <p style="margin:0 0 4px;font-family:'Inter',Arial,sans-serif;font-size:15px;color:#475569;">Best regards,</p>
+                <p style="margin:0;font-family:'Inter',Arial,sans-serif;font-size:14px;line-height:1.55;color:#64748b;">
+                  <span style="font-weight:700;color:#2D6DFC;">{{sender_name}}</span>
+                </p>
+                <p style="margin:6px 0 0;font-family:'Inter',Arial,sans-serif;font-size:13px;line-height:1.5;color:#94a3b8;">{{sender_team}}</p>
+              </td>
+            </tr>
+
+            <tr>
+              <td class="footer-pad" align="center" style="padding:24px 44px;background-color:#f8fafc;border-top:1px solid #e2e8f0;">
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" align="center" style="margin:0 auto 14px;">
+                  <tr>
+                    <td style="vertical-align:middle;padding-right:8px;">
+                      <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="background:linear-gradient(135deg,#2D6DFC,#614EF8);border-radius:8px;width:28px;height:28px;">
+                        <tr>
+                          <td align="center" valign="middle" style="padding:0;">
+                            <img alt="TechConnex" src="{{footer_mark_url}}" width="16" height="16" style="display:block;border:0;" />
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                    <td style="vertical-align:middle;">
+                      <p style="margin:0;font-family:'Inter',Arial,sans-serif;font-size:13px;font-weight:700;color:#0f172a;">TechConnex</p>
+                    </td>
+                  </tr>
+                </table>
+                <table role="presentation" border="0" cellpadding="0" cellspacing="0" align="center">
+                  <tr>
+                    <td style="padding:0 6px;"><a href="{{privacy_url}}" style="font-family:'Inter',Arial,sans-serif;font-size:12px;color:#94a3b8;text-decoration:none;">Privacy</a></td>
+                    <td style="padding:0 4px;color:#cbd5e1;font-size:12px;">·</td>
+                    <td style="padding:0 6px;"><a href="{{terms_url}}" style="font-family:'Inter',Arial,sans-serif;font-size:12px;color:#94a3b8;text-decoration:none;">Terms</a></td>
+                    <td style="padding:0 4px;color:#cbd5e1;font-size:12px;">·</td>
+                    <td style="padding:0 6px;"><a href="{{cookies_url}}" style="font-family:'Inter',Arial,sans-serif;font-size:12px;color:#94a3b8;text-decoration:none;">Cookies</a></td>
+                    <td style="padding:0 4px;color:#cbd5e1;font-size:12px;">·</td>
+                    <td style="padding:0 6px;"><a href="{{website_url}}" style="font-family:'Inter',Arial,sans-serif;font-size:12px;color:#94a3b8;text-decoration:none;">Website</a></td>
+                  </tr>
+                </table>
+                <p style="margin:14px 0 0;font-family:'Inter',Arial,sans-serif;font-size:11px;line-height:1.65;color:#cbd5e1;text-align:center;">
+                  {{compliance_footer}}<br /><br />
+                  © {{year}} TechConnex. All rights reserved.
+                  <a href="{{website_url}}" target="_blank" rel="noopener noreferrer nofollow" style="color:#94a3b8;text-decoration:underline;">techconnex.vip</a>
+                </p>
+              </td>
+            </tr>
+
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

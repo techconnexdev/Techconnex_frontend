@@ -18,7 +18,6 @@ import {
 } from "lucide-react";
 import io, { Socket } from "socket.io-client";
 import { useSearchParams } from "next/navigation";
-import { ProviderLayout } from "@/components/provider-layout";
 import { ProviderMessagesTour } from "@/components/provider/ProviderMessagesTour";
 import Link from "next/link";
 import Image from "next/image";
@@ -30,6 +29,8 @@ import {
 import { getUserFriendlyErrorMessage } from "@/lib/errors";
 import { ReportConversationDialog } from "@/components/messages/ReportConversationDialog";
 import { toast } from "@/lib/toast";
+import { useI18n } from "@/contexts/I18nProvider";
+import { TranslatedMessageText } from "@/components/messages/TranslatedMessageText";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -74,6 +75,9 @@ type ServiceRequest = {
 };
 
 export default function CustomerMessagesPage() {
+  const { t, locale } = useI18n();
+  const dateLocale =
+    locale === "id" ? "id-ID" : locale === "ar" ? "ar" : "en";
   const searchParams = useSearchParams();
   const userIdParam = searchParams.get("userId");
   const chatName = searchParams.get("name");
@@ -93,6 +97,7 @@ export default function CustomerMessagesPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const selectedChatRef = useRef<string | null>(null);
   const [showAttachmentPicker, setShowAttachmentPicker] = useState(false);
+  const [attachmentUploading, setAttachmentUploading] = useState(false);
   const [pendingAttachmentUrl, setPendingAttachmentUrl] = useState<
     string | null
   >(null);
@@ -171,7 +176,11 @@ export default function CustomerMessagesPage() {
     // In your socket connection, add error handling:
     newSocket.on("message_error", (error: { error: string }) => {
       console.error("❌ Message sending failed:", error.error);
-      alert(`Failed to send message: ${error.error}`);
+      toast.error(
+        t("provider.messages.toast.socketSendFailed", {
+          error: error.error,
+        }),
+      );
 
       // Remove the optimistic message
       setMessages((prev) => prev.filter((msg) => msg.id.startsWith("temp-")));
@@ -310,7 +319,7 @@ export default function CustomerMessagesPage() {
     return () => {
       newSocket.close();
     };
-  }, [token, currentUserId]);
+  }, [token, currentUserId, t]);
 
   // Fetch conversations list
   const fetchConversations = useCallback(async () => {
@@ -336,7 +345,11 @@ export default function CustomerMessagesPage() {
         console.log("✅ Conversations data:", data.data);
         setConversations(data.data);
       } else {
-        console.error("❌ Failed to fetch conversations:", data.message);
+        toast.error(
+          typeof data.message === "string" && data.message.trim()
+            ? data.message
+            : t("provider.messages.toast.loadConversationsFailed"),
+        );
       }
     } catch (error) {
       toast.error(
@@ -349,7 +362,7 @@ export default function CustomerMessagesPage() {
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, t]);
 
   // Fetch messages for a specific conversation
   const fetchMessages = useCallback(
@@ -360,7 +373,7 @@ export default function CustomerMessagesPage() {
       try {
         if (!skipLoadingCheck) setLoading(true);
         const response = await fetch(
-          `${API_URL}/messages?otherUserId=${otherUserId}`,
+          `${API_URL}/messages?otherUserId=${otherUserId}&translate=0`,
           {
             headers: {
               Authorization: `Bearer ${token}`,
@@ -381,7 +394,11 @@ export default function CustomerMessagesPage() {
             ),
           );
         } else {
-          console.error("Failed to fetch messages:", data.message);
+          toast.error(
+            typeof data.message === "string" && data.message.trim()
+              ? data.message
+              : t("provider.messages.toast.loadMessagesFailed"),
+          );
         }
       } catch (error) {
         toast.error(
@@ -394,7 +411,18 @@ export default function CustomerMessagesPage() {
         if (!skipLoadingCheck) setLoading(false);
       }
     },
-    [token, loading],
+    [token, loading, t],
+  );
+
+  const handleMessageTranslated = useCallback(
+    (messageId: string, newContent: string) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId ? { ...m, content: newContent } : m,
+        ),
+      );
+    },
+    [],
   );
 
   // Load conversations on mount
@@ -478,32 +506,81 @@ export default function CustomerMessagesPage() {
     event: React.ChangeEvent<HTMLInputElement>,
   ) => {
     const file = event.target.files?.[0];
-    if (!file || !token || !socket || !selectedChat) return;
+    const resetFileInput = () => {
+      event.target.value = "";
+    };
 
-    const formData = new FormData();
-    formData.append("file", file);
+    if (!file) return;
 
-    // Upload file to backend
-    const res = await fetch(`${API_URL}/messages/upload`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-      body: formData,
-    });
-
-    const data = await res.json();
-    if (!data.success) {
-      alert("File upload failed");
+    if (!token || !socket || !selectedChat) {
+      toast.error(t("provider.messages.toast.attachSessionRequired"));
+      resetFileInput();
       return;
     }
-    // Show project list picker for attachment if available
-    // Always show attachment picker after upload
-    setPendingAttachmentUrl(data.fileUrl);
-    setShowAttachmentPicker(true);
-    return;
+
+    setAttachmentUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch(`${API_URL}/messages/upload`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+
+      const raw = await res.text();
+      let data: { success?: boolean; fileUrl?: string; message?: string } = {};
+      if (raw) {
+        try {
+          data = JSON.parse(raw) as typeof data;
+        } catch {
+          data = {};
+        }
+      }
+
+      if (!res.ok || !data.success) {
+        const serverMsg =
+          typeof data.message === "string" && data.message.trim()
+            ? data.message
+            : null;
+        toast.error(
+          serverMsg ||
+            getUserFriendlyErrorMessage(
+              !res.ok ? new Error(`HTTP ${res.status}`) : undefined,
+              "provider messages file upload",
+            ) ||
+            t("provider.messages.toast.fileUploadFailed"),
+        );
+        return;
+      }
+
+      if (!data.fileUrl) {
+        toast.error(t("provider.messages.toast.fileUploadFailed"));
+        return;
+      }
+
+      setPendingAttachmentUrl(data.fileUrl);
+      setShowAttachmentPicker(true);
+    } catch (err) {
+      toast.error(
+        getUserFriendlyErrorMessage(err, "provider messages file upload"),
+      );
+    } finally {
+      setAttachmentUploading(false);
+      resetFileInput();
+    }
   };
   // Helper to send attachment after project selection
   const sendAttachmentMessage = (projectId?: string) => {
-    if (!pendingAttachmentUrl || !socket || !selectedChat) return;
+    if (!pendingAttachmentUrl) {
+      toast.error(t("provider.messages.toast.attachmentMissing"));
+      return;
+    }
+    if (!socket || !selectedChat) {
+      toast.error(t("provider.messages.toast.attachSessionRequired"));
+      return;
+    }
     const messageData: {
       senderId: string | undefined;
       receiverId: string | null;
@@ -522,7 +599,13 @@ export default function CustomerMessagesPage() {
       messageData,
       (response: { success?: boolean; error?: string }) => {
         if (!response?.success) {
-          alert("Failed to send file: " + response.error);
+          toast.error(
+            response?.error
+              ? t("provider.messages.toast.fileSendFailed", {
+                  error: response.error,
+                })
+              : t("provider.messages.toast.fileSendFailedUnknown"),
+          );
         }
       },
     );
@@ -537,8 +620,15 @@ export default function CustomerMessagesPage() {
     console.log("selectedChat:", selectedChat);
     console.log("socket connected:", socket?.connected);
 
-    if (!newMessage.trim() || !selectedChat || !socket) {
-      console.log("❌ Cannot send - missing requirements");
+    if (!newMessage.trim()) {
+      return;
+    }
+    if (!selectedChat) {
+      toast.error(t("provider.messages.toast.selectConversationFirst"));
+      return;
+    }
+    if (!socket) {
+      toast.error(t("provider.messages.toast.cannotSendNotConnected"));
       return;
     }
 
@@ -565,12 +655,14 @@ export default function CustomerMessagesPage() {
         createdAt: new Date().toISOString(),
         sender: {
           id: currentUserId!,
-          name: (user?.name as string) || "You",
+          name: (user?.name as string) || t("customer.messages.selfLabel"),
           email: (user?.email as string) || "",
         },
         receiver: {
           id: selectedChat,
-          name: selectedConversation?.name || "Unknown",
+          name:
+            selectedConversation?.name ||
+            t("customer.messages.unknownUser"),
           email: selectedConversation?.email || "",
         },
       };
@@ -597,11 +689,16 @@ export default function CustomerMessagesPage() {
             setMessages((prev) =>
               prev.filter((msg) => msg.id !== optimisticMessage.id),
             );
+            const rawError =
+              typeof response?.error === "string" && response.error.trim()
+                ? response.error.trim()
+                : null;
             toast.error(
-              getUserFriendlyErrorMessage(
-                undefined,
-                "provider messages send",
-              ),
+              rawError ||
+                getUserFriendlyErrorMessage(
+                  undefined,
+                  "provider messages send",
+                ),
             );
           }
         },
@@ -666,16 +763,18 @@ export default function CustomerMessagesPage() {
 
   if (!token || !user) {
     return (
-      <ProviderLayout>
+      
         <div className="flex items-center justify-center h-64">
-          <p className="text-gray-500">Please log in to view messages</p>
+          <p className="text-gray-500">
+            {t("customer.messages.loginRequired")}
+          </p>
         </div>
-      </ProviderLayout>
+      
     );
   }
 
   return (
-    <ProviderLayout>
+    <>
       <ProviderMessagesTour />
       <div className="h-[calc(100vh-8rem)] flex flex-col md:flex-row gap-4 md:gap-6">
         {/* 🧾 Conversations List */}
@@ -690,20 +789,22 @@ export default function CustomerMessagesPage() {
           >
             <CardHeader className="pb-3 flex-shrink-0">
               <CardTitle className="flex items-center justify-between text-base md:text-lg">
-                <span>Messages</span>
+                <span>{t("customer.messages.title")}</span>
                 <Badge
                   variant={isConnected ? "default" : "secondary"}
                   className={`text-xs ${
                     isConnected ? "bg-green-500" : "bg-gray-500"
                   }`}
                 >
-                  {isConnected ? "Online" : "Offline"}
+                  {isConnected
+                    ? t("customer.messages.connectionOnline")
+                    : t("customer.messages.connectionOffline")}
                 </Badge>
               </CardTitle>
               <div className="relative mt-2">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <Input
-                  placeholder="Search conversations..."
+                  placeholder={t("customer.messages.searchPlaceholder")}
                   className="pl-10 text-sm"
                 />
               </div>
@@ -748,7 +849,7 @@ export default function CustomerMessagesPage() {
                               <span className="text-xs text-gray-500">
                                 {new Date(
                                   conversation.lastMessageAt,
-                                ).toLocaleTimeString([], {
+                                ).toLocaleTimeString(dateLocale, {
                                   hour: "2-digit",
                                   minute: "2-digit",
                                 })}
@@ -761,7 +862,8 @@ export default function CustomerMessagesPage() {
                             </div>
                           </div>
                           <p className="text-xs md:text-sm text-gray-600 line-clamp-2">
-                            {conversation.lastMessage || "No messages yet"}
+                            {conversation.lastMessage ||
+                              t("customer.messages.lastMessageEmpty")}
                           </p>
                         </div>
                       </div>
@@ -771,7 +873,7 @@ export default function CustomerMessagesPage() {
               )}
               {conversations.length === 0 && !loading && (
                 <div className="text-center py-8 text-gray-500 text-sm">
-                  No conversations yet
+                  {t("customer.messages.noConversations")}
                 </div>
               )}
             </CardContent>
@@ -798,6 +900,7 @@ export default function CustomerMessagesPage() {
                         variant="ghost"
                         size="icon"
                         className="md:hidden mr-1"
+                        aria-label={t("customer.messages.backToListAria")}
                         onClick={() => {
                           setShowConversationsList(true);
                           setSelectedChat(null);
@@ -829,8 +932,8 @@ export default function CustomerMessagesPage() {
                         </Link>
                         <p className="text-xs text-gray-500">
                           {selectedConversation.online
-                            ? "Online"
-                            : "Last seen recently"}
+                            ? t("customer.messages.partnerOnline")
+                            : t("customer.messages.partnerLastSeen")}
                         </p>
                       </div>
                     </div>
@@ -840,6 +943,7 @@ export default function CustomerMessagesPage() {
                         size="sm"
                         onClick={() => setReportDialogOpen(true)}
                         className="text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+                        aria-label={t("customer.messages.report.title")}
                       >
                         <Flag className="w-4 h-4" />
                       </Button>
@@ -848,7 +952,7 @@ export default function CustomerMessagesPage() {
                 ) : (
                   <div className="text-center w-full py-4">
                     <p className="text-gray-500 text-sm md:text-base">
-                      Select a conversation to start chatting
+                      {t("customer.messages.selectConversation")}
                     </p>
                   </div>
                 )}
@@ -865,7 +969,7 @@ export default function CustomerMessagesPage() {
                 <>
                   {messages.length === 0 && selectedChat && (
                     <p className="text-center text-gray-400 text-sm mt-8">
-                      No messages yet. Start the conversation!
+                      {t("customer.messages.emptyThread")}
                     </p>
                   )}
 
@@ -910,7 +1014,7 @@ export default function CustomerMessagesPage() {
                                 const fileName =
                                   fileUrl.split("/").pop() ||
                                   fileUrl.split("\\").pop() ||
-                                  "attachment";
+                                  t("customer.messages.attachmentAlt");
 
                                 return (
                                   <div key={index} className="mt-2">
@@ -922,7 +1026,7 @@ export default function CustomerMessagesPage() {
                                       >
                                         <Image
                                           src={attachmentUrl}
-                                          alt="Attachment"
+                                          alt={t("customer.messages.attachmentAlt")}
                                           width={200}
                                           height={200}
                                           className="rounded-lg max-w-[150px] md:max-w-[200px] border object-contain"
@@ -971,13 +1075,32 @@ export default function CustomerMessagesPage() {
                                   href={`/provider/opportunities/${message.attachments[0]}`}
                                   className="mt-2 inline-block text-xs font-medium text-blue-600 hover:underline"
                                 >
-                                  View Project
+                                  {t("customer.messages.viewProject")}
                                 </a>
                               </div>
                             ) : (
-                              <p className="text-xs md:text-sm break-words">
-                                {message.content}
-                              </p>
+                              <TranslatedMessageText
+                                messageId={message.id}
+                                content={message.content}
+                                isOwn={isOwn}
+                                targetLocale={locale}
+                                token={token}
+                                translateLabel={t(
+                                  "messages.translate.translate",
+                                )}
+                                translatingLabel={t(
+                                  "messages.translate.translating",
+                                )}
+                                onContentReplaced={handleMessageTranslated}
+                                onTranslateFailed={(reason) =>
+                                  toast.error(
+                                    reason?.trim() || t("messages.translate.failed"),
+                                  )
+                                }
+                                className={
+                                  isOwn ? "text-white" : "text-gray-900"
+                                }
+                              />
                             )}
                             <p
                               className={`text-[10px] md:text-xs mt-1 ${
@@ -985,7 +1108,7 @@ export default function CustomerMessagesPage() {
                               }`}
                             >
                               {new Date(message.createdAt).toLocaleTimeString(
-                                [],
+                                dateLocale,
                                 {
                                   hour: "2-digit",
                                   minute: "2-digit",
@@ -1011,20 +1134,40 @@ export default function CustomerMessagesPage() {
               <div className="border-t p-2 md:p-4 relative flex-shrink-0">
                 {!canChat ? (
                   <div className="rounded-lg bg-amber-50 border border-amber-200 p-4 text-center text-sm text-amber-800">
-                    Messaging is disabled for this conversation. One user has
-                    reported the other.
+                    {t("customer.messages.messagingDisabled")}
                   </div>
                 ) : (
                   <>
+                    {attachmentUploading && (
+                      <div
+                        className="mb-2 flex items-center gap-2 rounded-md border border-blue-100 bg-blue-50/80 px-3 py-2 text-xs text-blue-900 md:text-sm"
+                        role="status"
+                        aria-live="polite"
+                      >
+                        <Loader2 className="h-4 w-4 shrink-0 animate-spin text-blue-600" />
+                        <span>{t("provider.messages.attachUploading")}</span>
+                      </div>
+                    )}
                     <div className="flex items-end gap-1 md:gap-2">
                       <div className="flex items-center gap-1 md:gap-2 flex-shrink-0">
                         <Button
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 md:h-10 md:w-10"
+                          disabled={attachmentUploading}
+                          aria-busy={attachmentUploading}
+                          aria-label={
+                            attachmentUploading
+                              ? t("provider.messages.attachUploadingAria")
+                              : t("provider.messages.attachFileAria")
+                          }
                           onClick={() => fileInputRef.current?.click()}
                         >
-                          <Paperclip className="w-4 h-4 md:w-5 md:h-5" />
+                          {attachmentUploading ? (
+                            <Loader2 className="w-4 h-4 md:w-5 md:h-5 animate-spin text-blue-600" />
+                          ) : (
+                            <Paperclip className="w-4 h-4 md:w-5 md:h-5" />
+                          )}
                         </Button>
                         <input
                           type="file"
@@ -1036,7 +1179,7 @@ export default function CustomerMessagesPage() {
 
                       <div className="flex-1 min-w-0">
                         <Textarea
-                          placeholder="Type your message..."
+                          placeholder={t("customer.messages.inputPlaceholder")}
                           value={newMessage}
                           onChange={(e) => {
                             console.log("Typed:", e.target.value);
@@ -1055,6 +1198,7 @@ export default function CustomerMessagesPage() {
                         onClick={handleSendMessage}
                         disabled={!newMessage.trim() || !selectedChat}
                         className="bg-blue-500 hover:bg-blue-600 text-white h-8 w-8 md:h-10 md:w-10 flex-shrink-0 p-0"
+                        aria-label={t("provider.messages.sendAria")}
                       >
                         <Send className="w-4 h-4" />
                       </Button>
@@ -1062,8 +1206,7 @@ export default function CustomerMessagesPage() {
                     {showAttachmentPicker && (
                       <div className="absolute bottom-14 md:bottom-16 left-2 md:left-4 bg-white border rounded-lg p-2 max-h-60 overflow-y-auto shadow-lg z-10 w-[calc(100%-1rem)] md:w-64">
                         <div className="p-2 text-sm text-gray-700">
-                          This file is associated with a project. Please select
-                          a project to continue:
+                          {t("customer.messages.attachmentPickerHint")}
                         </div>
                         {projects.length > 0 ? (
                           projects.map((proj) => (
@@ -1082,7 +1225,7 @@ export default function CustomerMessagesPage() {
                           ))
                         ) : (
                           <p className="text-sm text-gray-500">
-                            No open projects
+                            {t("customer.messages.noOpenProjects")}
                           </p>
                         )}
                         <div className="p-2 border-t">
@@ -1090,7 +1233,7 @@ export default function CustomerMessagesPage() {
                             onClick={() => sendAttachmentMessage()}
                             className="w-full"
                           >
-                            Send without project
+                            {t("customer.messages.sendWithoutProject")}
                           </Button>
                         </div>
                       </div>
@@ -1111,6 +1254,6 @@ export default function CustomerMessagesPage() {
           onReportSubmitted={() => setCanChat(false)}
         />
       )}
-    </ProviderLayout>
+    </>
   );
 }

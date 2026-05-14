@@ -40,15 +40,19 @@ import {
   MessageSquare,
   Bell,
   Megaphone,
+  RotateCcw,
 } from "lucide-react"
 import { AdminLayout } from "@/components/admin-layout"
-import { getAdminUsers, getAdminUserStats, suspendUser, activateUser, getProfileImageUrl, createAdminUser, exportAdminUsers, adminSendNotification, adminBroadcastNotification } from "@/lib/api"
+import { getAdminUsers, getAdminUserStats, suspendUser, activateUser, restoreDeletedUser, getProfileImageUrl, createAdminUser, exportAdminUsers, adminSendNotification, adminBroadcastNotification } from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
+import { useI18n } from "@/contexts/I18nProvider"
+import type { MessageKey } from "@/lib/i18n/messages"
 import Link from "next/link"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 
 export default function AdminUsersPage() {
+  const { t } = useI18n()
   const { toast } = useToast()
   const [loading, setLoading] = useState(true)
   const [users, setUsers] = useState<Array<Record<string, unknown>>>([])
@@ -65,6 +69,7 @@ export default function AdminUsersPage() {
   const [selectedUser, setSelectedUser] = useState<Record<string, unknown> | null>(null)
   const [suspendDialogOpen, setSuspendDialogOpen] = useState(false)
   const [activateDialogOpen, setActivateDialogOpen] = useState(false)
+  const [restoreDialogOpen, setRestoreDialogOpen] = useState(false)
   const [addUserDialogOpen, setAddUserDialogOpen] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
   const [createLoading, setCreateLoading] = useState(false)
@@ -100,22 +105,22 @@ export default function AdminUsersPage() {
       } else {
         console.error("Failed to load users:", response.error)
         toast({
-          title: "Error",
-          description: response.error || "Failed to load users",
+          title: t("admin.users.toast.errorTitle"),
+          description: response.error || t("admin.users.toast.loadUsersFailed"),
           variant: "destructive",
         })
       }
     } catch (error: unknown) {
       console.error("Error loading users:", error)
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to load users",
+        title: t("admin.users.toast.errorTitle"),
+        description: error instanceof Error ? error.message : t("admin.users.toast.loadUsersFailed"),
         variant: "destructive",
       })
     } finally {
       setLoading(false)
     }
-  }, [searchQuery, statusFilter, roleFilter, toast])
+  }, [searchQuery, statusFilter, roleFilter, toast, t])
 
   const loadStats = async () => {
     try {
@@ -129,12 +134,8 @@ export default function AdminUsersPage() {
   }
 
   useEffect(() => {
-    loadUsers()
-    loadStats()
-  }, [loadUsers])
-
-  useEffect(() => {
-    loadUsers()
+    void loadUsers()
+    void loadStats()
   }, [loadUsers])
 
   const handleSuspendClick = (user: Record<string, unknown>) => {
@@ -147,9 +148,14 @@ export default function AdminUsersPage() {
     setActivateDialogOpen(true)
   }
 
+  const handleRestoreClick = (user: Record<string, unknown>) => {
+    setSelectedUser(user)
+    setRestoreDialogOpen(true)
+  }
+
   const openNotifyDialog = (user: Record<string, unknown>) => {
     setNotifyTarget(user)
-    setNotifyTitle("Message from TechConnex")
+    setNotifyTitle(t("admin.users.notify.defaultTitle"))
     setNotifyContent("")
     setNotifyOpen(true)
   }
@@ -165,8 +171,8 @@ export default function AdminUsersPage() {
         content: notifyContent.trim(),
       })
       toast({
-        title: "Success",
-        description: "Notification sent successfully",
+        title: t("admin.users.toast.successTitle"),
+        description: t("admin.users.toast.notificationSent"),
       })
       setNotifyOpen(false)
       setNotifyTarget(null)
@@ -174,8 +180,8 @@ export default function AdminUsersPage() {
       setNotifyContent("")
     } catch (error: unknown) {
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to send notification",
+        title: t("admin.users.toast.errorTitle"),
+        description: error instanceof Error ? error.message : t("admin.users.toast.notificationSendFailed"),
         variant: "destructive",
       })
     } finally {
@@ -194,16 +200,16 @@ export default function AdminUsersPage() {
       })
       const count = (res as { count?: number })?.count ?? 0
       toast({
-        title: "Success",
-        description: `Announcement sent to ${count} user(s). It will appear under Announcements in their notifications.`,
+        title: t("admin.users.toast.successTitle"),
+        description: t("admin.users.toast.broadcastSent", { count: String(count) }),
       })
       setBroadcastOpen(false)
       setBroadcastTitle("")
       setBroadcastContent("")
     } catch (error: unknown) {
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to send announcement",
+        title: t("admin.users.toast.errorTitle"),
+        description: error instanceof Error ? error.message : t("admin.users.toast.broadcastFailed"),
         variant: "destructive",
       })
     } finally {
@@ -219,8 +225,8 @@ export default function AdminUsersPage() {
       const response = await suspendUser(selectedUser.id as string)
       if (response.success) {
         toast({
-          title: "Success",
-          description: "User suspended successfully",
+          title: t("admin.users.toast.successTitle"),
+          description: t("admin.users.toast.userSuspended"),
         })
         setSuspendDialogOpen(false)
         setSelectedUser(null)
@@ -229,8 +235,8 @@ export default function AdminUsersPage() {
       }
     } catch (error: unknown) {
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to suspend user",
+        title: t("admin.users.toast.errorTitle"),
+        description: error instanceof Error ? error.message : t("admin.users.toast.suspendFailed"),
         variant: "destructive",
       })
     } finally {
@@ -246,8 +252,8 @@ export default function AdminUsersPage() {
       const response = await activateUser(selectedUser.id as string)
       if (response.success) {
         toast({
-          title: "Success",
-          description: "User activated successfully",
+          title: t("admin.users.toast.successTitle"),
+          description: t("admin.users.toast.userActivated"),
         })
         setActivateDialogOpen(false)
         setSelectedUser(null)
@@ -256,8 +262,35 @@ export default function AdminUsersPage() {
       }
     } catch (error: unknown) {
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to activate user",
+        title: t("admin.users.toast.errorTitle"),
+        description: error instanceof Error ? error.message : t("admin.users.toast.activateFailed"),
+        variant: "destructive",
+      })
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const confirmRestore = async () => {
+    if (!selectedUser) return
+
+    try {
+      setActionLoading(true)
+      const response = await restoreDeletedUser(selectedUser.id as string)
+      if (response.success) {
+        toast({
+          title: t("admin.users.toast.successTitle"),
+          description: t("admin.users.toast.accountRestored"),
+        })
+        setRestoreDialogOpen(false)
+        setSelectedUser(null)
+        loadUsers()
+        loadStats()
+      }
+    } catch (error: unknown) {
+      toast({
+        title: t("admin.users.toast.errorTitle"),
+        description: error instanceof Error ? error.message : t("admin.users.toast.restoreFailed"),
         variant: "destructive",
       })
     } finally {
@@ -285,14 +318,14 @@ export default function AdminUsersPage() {
         await navigator.clipboard.writeText(generatedPassword)
         setPasswordCopied(true)
         toast({
-          title: "Copied!",
-          description: "Password copied to clipboard",
+          title: t("admin.users.toast.copiedTitle"),
+          description: t("admin.users.toast.passwordCopiedDesc"),
         })
         setTimeout(() => setPasswordCopied(false), 2000)
       } catch {
         toast({
-          title: "Error",
-          description: "Failed to copy password",
+          title: t("admin.users.toast.errorTitle"),
+          description: t("admin.users.toast.copyPasswordFailed"),
           variant: "destructive",
         })
       }
@@ -303,8 +336,8 @@ export default function AdminUsersPage() {
   const handleAddUser = async () => {
     if (!formData.name || !formData.email) {
       toast({
-        title: "Validation Error",
-        description: "Name and email are required",
+        title: t("admin.users.toast.validationTitle"),
+        description: t("admin.users.toast.nameEmailRequired"),
         variant: "destructive",
       })
       return
@@ -325,8 +358,8 @@ export default function AdminUsersPage() {
 
       if (response.success) {
         toast({
-          title: "Success",
-          description: "User created successfully",
+          title: t("admin.users.toast.successTitle"),
+          description: t("admin.users.toast.userCreated"),
         })
         setAddUserDialogOpen(false)
         setFormData({
@@ -342,8 +375,8 @@ export default function AdminUsersPage() {
       }
     } catch (error: unknown) {
       toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to create user",
+        title: t("admin.users.toast.errorTitle"),
+        description: error instanceof Error ? error.message : t("admin.users.toast.createUserFailed"),
         variant: "destructive",
       })
     } finally {
@@ -366,6 +399,8 @@ export default function AdminUsersPage() {
         return "bg-green-100 text-green-800"
       case "SUSPENDED":
         return "bg-red-100 text-red-800"
+      case "DELETED":
+        return "bg-amber-100 text-amber-800"
       default:
         return "bg-gray-100 text-gray-800"
     }
@@ -380,15 +415,27 @@ export default function AdminUsersPage() {
     }
 
   const getPrimaryRole = (roles: string[]) => {
-    if (!roles || !Array.isArray(roles)) return "Unknown"
-    if (roles.includes("PROVIDER")) return "Provider"
-    if (roles.includes("CUSTOMER")) return "Customer"
-    if (roles.includes("ADMIN")) return "Admin"
-    return roles[0] || "Unknown"
+    if (!roles || !Array.isArray(roles)) return t("admin.users.role.unknown")
+    if (roles.includes("PROVIDER")) return t("admin.users.role.provider")
+    if (roles.includes("CUSTOMER")) return t("admin.users.role.customer")
+    if (roles.includes("ADMIN")) return t("admin.users.role.admin")
+    const raw = roles[0]
+    if (raw === "PROVIDER" || raw === "CUSTOMER" || raw === "ADMIN") {
+      return t(`admin.users.roleBadge.${raw}` as MessageKey)
+    }
+    return raw || t("admin.users.role.unknown")
+  }
+
+  const accountStatusLabel = (status: string | undefined) => {
+    const key = (status || "ACTIVE").toUpperCase()
+    if (key === "ACTIVE" || key === "SUSPENDED" || key === "DELETED") {
+      return t(`admin.users.statusBadge.${key}` as MessageKey)
+    }
+    return status || t("admin.users.statusBadge.ACTIVE")
   }
 
   const formatDate = (dateString: string) => {
-    if (!dateString) return "—"
+    if (!dateString) return t("admin.users.common.emDash")
     try {
       return new Date(dateString).toLocaleDateString()
     } catch {
@@ -402,8 +449,8 @@ export default function AdminUsersPage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">User Management</h1>
-            <p className="text-sm sm:text-base text-gray-600 mt-1">Manage all platform users and their activities</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{t("admin.users.page.title")}</h1>
+            <p className="text-sm sm:text-base text-gray-600 mt-1">{t("admin.users.page.subtitle")}</p>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
             <Button
@@ -424,16 +471,16 @@ export default function AdminUsersPage() {
                   document.body.removeChild(link)
                   URL.revokeObjectURL(url)
                   toast({
-                    title: "Export successful",
-                    description: "Users exported as PDF",
+                    title: t("admin.users.export.successTitle"),
+                    description: t("admin.users.export.successDesc"),
                   })
                 } catch (err) {
                   toast({
-                    title: "Export failed",
+                    title: t("admin.users.export.failTitle"),
                     description:
                       err instanceof Error
                         ? err.message
-                        : "Failed to export users",
+                        : t("admin.users.export.failDesc"),
                     variant: "destructive",
                   })
                 }
@@ -441,11 +488,11 @@ export default function AdminUsersPage() {
               className="w-full sm:w-auto text-xs sm:text-sm"
             >
               <Filter className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-              Export Data
+              {t("admin.users.export.button")}
             </Button>
             <Button onClick={() => setAddUserDialogOpen(true)} className="w-full sm:w-auto text-xs sm:text-sm">
               <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-              Add User
+              {t("admin.users.addUser.button")}
             </Button>
           </div>
         </div>
@@ -456,7 +503,7 @@ export default function AdminUsersPage() {
             <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs sm:text-sm font-medium text-gray-600">Total Users</p>
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">{t("admin.users.stats.totalUsers")}</p>
                   <p className="text-xl sm:text-2xl font-bold text-gray-900 truncate">{stats.totalUsers}</p>
                 </div>
                 <Users className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600 flex-shrink-0 ml-2" />
@@ -468,7 +515,7 @@ export default function AdminUsersPage() {
             <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs sm:text-sm font-medium text-gray-600">Active</p>
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">{t("admin.users.stats.active")}</p>
                   <p className="text-xl sm:text-2xl font-bold text-green-600 truncate">{stats.activeUsers}</p>
                 </div>
                 <CheckCircle className="w-6 h-6 sm:w-8 sm:h-8 text-green-600 flex-shrink-0 ml-2" />
@@ -480,7 +527,7 @@ export default function AdminUsersPage() {
             <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs sm:text-sm font-medium text-gray-600">Suspended</p>
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">{t("admin.users.stats.suspended")}</p>
                   <p className="text-xl sm:text-2xl font-bold text-red-600 truncate">{stats.suspendedUsers || 0}</p>
                 </div>
                 <AlertTriangle className="w-6 h-6 sm:w-8 sm:h-8 text-red-600 flex-shrink-0 ml-2" />
@@ -492,7 +539,7 @@ export default function AdminUsersPage() {
             <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs sm:text-sm font-medium text-gray-600">Providers</p>
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">{t("admin.users.stats.providers")}</p>
                   <p className="text-xl sm:text-2xl font-bold text-blue-600 truncate">{stats.providers}</p>
                 </div>
                 <Users className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600 flex-shrink-0 ml-2" />
@@ -504,7 +551,7 @@ export default function AdminUsersPage() {
             <CardContent className="p-4 sm:p-6">
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs sm:text-sm font-medium text-gray-600">Customers</p>
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">{t("admin.users.stats.customers")}</p>
                   <p className="text-xl sm:text-2xl font-bold text-purple-600 truncate">{stats.customers}</p>
                 </div>
                 <Building className="w-6 h-6 sm:w-8 sm:h-8 text-purple-600 flex-shrink-0 ml-2" />
@@ -518,16 +565,16 @@ export default function AdminUsersPage() {
           <CardHeader className="p-4 sm:p-6">
             <CardTitle className="text-lg sm:text-xl flex items-center gap-2">
               <Megaphone className="w-5 h-5 text-sky-600" />
-              Announcements
+              {t("admin.users.announcements.title")}
             </CardTitle>
             <CardDescription className="text-xs sm:text-sm">
-              Send a notification to all users. It will appear under &quot;Announcements&quot; in their notification dropdown (provider, customer, and admin layouts).
+              {t("admin.users.announcements.description")}
             </CardDescription>
           </CardHeader>
           <CardContent className="p-4 sm:p-6 pt-0">
             <Button
               onClick={() => {
-                setBroadcastTitle("Message from TechConnex")
+                setBroadcastTitle(t("admin.users.notify.defaultTitle"))
                 setBroadcastContent("")
                 setBroadcastOpen(true)
               }}
@@ -535,7 +582,7 @@ export default function AdminUsersPage() {
               className="w-full sm:w-auto"
             >
               <Megaphone className="w-4 h-4 mr-2" />
-              Send notification to all users
+              {t("admin.users.announcements.cta")}
             </Button>
           </CardContent>
         </Card>
@@ -548,7 +595,7 @@ export default function AdminUsersPage() {
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   <Input
-                    placeholder="Search users by name or email..."
+                    placeholder={t("admin.users.filters.searchPlaceholder")}
                     className="pl-9 sm:pl-10 text-sm sm:text-base"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -557,23 +604,24 @@ export default function AdminUsersPage() {
               </div>
               <Select value={roleFilter} onValueChange={setRoleFilter}>
                 <SelectTrigger className="w-full sm:w-48 text-sm sm:text-base">
-                  <SelectValue placeholder="All Roles" />
+                  <SelectValue placeholder={t("admin.users.filters.allRoles")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Roles</SelectItem>
-                  <SelectItem value="PROVIDER">Providers</SelectItem>
-                  <SelectItem value="CUSTOMER">Customers</SelectItem>
-                  <SelectItem value="ADMIN">Admins</SelectItem>
+                  <SelectItem value="all">{t("admin.users.filters.allRoles")}</SelectItem>
+                  <SelectItem value="PROVIDER">{t("admin.users.filters.roleProviders")}</SelectItem>
+                  <SelectItem value="CUSTOMER">{t("admin.users.filters.roleCustomers")}</SelectItem>
+                  <SelectItem value="ADMIN">{t("admin.users.filters.roleAdmins")}</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="w-full sm:w-48 text-sm sm:text-base">
-                  <SelectValue placeholder="All Status" />
+                  <SelectValue placeholder={t("admin.users.filters.allStatus")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="ACTIVE">Active</SelectItem>
-                    <SelectItem value="SUSPENDED">Suspended</SelectItem>
+                  <SelectItem value="all">{t("admin.users.filters.allStatus")}</SelectItem>
+                    <SelectItem value="ACTIVE">{t("admin.users.filters.statusActive")}</SelectItem>
+                    <SelectItem value="SUSPENDED">{t("admin.users.filters.statusSuspended")}</SelectItem>
+                    <SelectItem value="DELETED">{t("admin.users.filters.statusDeleted")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -583,34 +631,34 @@ export default function AdminUsersPage() {
         {/* Users Table */}
         <Card>
           <CardHeader className="p-4 sm:p-6">
-            <CardTitle className="text-lg sm:text-xl">Users ({users.length})</CardTitle>
-            <CardDescription className="text-xs sm:text-sm">Manage user accounts and permissions</CardDescription>
+            <CardTitle className="text-lg sm:text-xl">{t("admin.users.table.title", { count: String(users.length) })}</CardTitle>
+            <CardDescription className="text-xs sm:text-sm">{t("admin.users.table.description")}</CardDescription>
           </CardHeader>
           <CardContent className="p-0 sm:p-4 sm:p-6">
             {loading ? (
               <div className="flex items-center justify-center py-8 sm:py-12 px-4 sm:px-0">
                 <Loader2 className="h-6 w-6 sm:h-8 sm:w-8 animate-spin" />
-                <span className="ml-2 text-sm sm:text-base">Loading users...</span>
+                <span className="ml-2 text-sm sm:text-base">{t("admin.users.table.loading")}</span>
               </div>
             ) : (
             <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-xs sm:text-sm">User</TableHead>
-                  <TableHead className="text-xs sm:text-sm">Role</TableHead>
-                  <TableHead className="text-xs sm:text-sm">Status</TableHead>
-                    <TableHead className="text-xs sm:text-sm">Projects/Stats</TableHead>
-                  <TableHead className="text-xs sm:text-sm">Rating</TableHead>
-                    <TableHead className="text-xs sm:text-sm">Joined</TableHead>
-                  <TableHead className="text-right text-xs sm:text-sm">Actions</TableHead>
+                  <TableHead className="text-xs sm:text-sm">{t("admin.users.table.col.user")}</TableHead>
+                  <TableHead className="text-xs sm:text-sm">{t("admin.users.table.col.role")}</TableHead>
+                  <TableHead className="text-xs sm:text-sm">{t("admin.users.table.col.status")}</TableHead>
+                    <TableHead className="text-xs sm:text-sm">{t("admin.users.table.col.projectsStats")}</TableHead>
+                  <TableHead className="text-xs sm:text-sm">{t("admin.users.table.col.rating")}</TableHead>
+                    <TableHead className="text-xs sm:text-sm">{t("admin.users.table.col.joined")}</TableHead>
+                  <TableHead className="text-right text-xs sm:text-sm">{t("admin.users.table.col.actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                   {users.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center py-8 sm:py-12 text-sm sm:text-base text-gray-500">
-                        No users found
+                        {t("admin.users.table.empty")}
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -668,22 +716,34 @@ export default function AdminUsersPage() {
                     </TableCell>
                     <TableCell className="p-3 sm:p-4">
                       <Badge className={`${getStatusColor(userStatus || "")} text-xs`}>
-                              {userStatus || "ACTIVE"}
+                              {accountStatusLabel(userStatus)}
                       </Badge>
                     </TableCell>
                     <TableCell className="p-3 sm:p-4">
                             {isProvider ? (
                               <div>
-                                <p className="font-medium text-xs sm:text-sm">{(profile?.totalProjects as number || 0)} projects</p>
+                                <p className="font-medium text-xs sm:text-sm">
+                                  {t("admin.users.table.projectsCount", {
+                                    count: String((profile?.totalProjects as number) || 0),
+                                  })}
+                                </p>
                                 <p className="text-xs text-gray-500">
-                                  RM {Number(profile?.totalEarnings || 0).toLocaleString()} earned
+                                  {t("admin.users.table.earned", {
+                                    amount: Number(profile?.totalEarnings || 0).toLocaleString(),
+                                  })}
                                 </p>
                               </div>
                             ) : (
                       <div>
-                                <p className="font-medium text-xs sm:text-sm">{(profile?.projectsPosted as number || 0)} posted</p>
+                                <p className="font-medium text-xs sm:text-sm">
+                                  {t("admin.users.table.postedCount", {
+                                    count: String((profile?.projectsPosted as number) || 0),
+                                  })}
+                                </p>
                         <p className="text-xs text-gray-500">
-                                  RM {Number(profile?.totalSpend || 0).toLocaleString()} spent
+                                  {t("admin.users.table.spent", {
+                                    amount: Number(profile?.totalSpend || 0).toLocaleString(),
+                                  })}
                         </p>
                       </div>
                             )}
@@ -695,7 +755,7 @@ export default function AdminUsersPage() {
                                 <span className="ml-1 font-medium text-xs sm:text-sm">{Number(profile.rating).toFixed(1)}</span>
                         </div>
                       ) : (
-                        <span className="text-xs sm:text-sm text-gray-400">No rating</span>
+                        <span className="text-xs sm:text-sm text-gray-400">{t("admin.users.table.noRating")}</span>
                       )}
                     </TableCell>
                     <TableCell className="p-3 sm:p-4">
@@ -709,11 +769,11 @@ export default function AdminUsersPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="text-xs sm:text-sm">
-                          <DropdownMenuLabel className="text-xs sm:text-sm">Actions</DropdownMenuLabel>
+                          <DropdownMenuLabel className="text-xs sm:text-sm">{t("admin.users.table.actionsLabel")}</DropdownMenuLabel>
                                 <DropdownMenuItem asChild>
                                   <Link href={`/admin/users/${user.id}`} className="text-xs sm:text-sm">
                             <Eye className="mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                            View Profile
+                            {t("admin.users.actions.viewProfile")}
                                   </Link>
                           </DropdownMenuItem>
                                 <DropdownMenuItem asChild>
@@ -722,12 +782,12 @@ export default function AdminUsersPage() {
                                     className="text-xs sm:text-sm"
                                   >
                                     <MessageSquare className="mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                                    Message
+                                    {t("admin.users.actions.message")}
                                   </Link>
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => openNotifyDialog(user)} className="text-xs sm:text-sm">
                                   <Bell className="mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                                  Send notification
+                                  {t("admin.users.actions.sendNotification")}
                                 </DropdownMenuItem>
                           <DropdownMenuSeparator />
                                 {user.status === "ACTIVE" ? (
@@ -736,16 +796,28 @@ export default function AdminUsersPage() {
                                     onClick={() => handleSuspendClick(user)}
                                   >
                               <Ban className="mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                              Suspend User
+                              {t("admin.users.actions.suspendUser")}
                             </DropdownMenuItem>
-                          ) : (
+                                ) : user.status === "SUSPENDED" ? (
                                   <DropdownMenuItem
                                     className="text-green-600 text-xs sm:text-sm"
                                     onClick={() => handleActivateClick(user)}
                                   >
                               <CheckCircle className="mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                              Activate User
+                              {t("admin.users.actions.activateUser")}
                             </DropdownMenuItem>
+                                ) : user.status === "DELETED" ? (
+                                  <DropdownMenuItem
+                                    className="text-sky-700 text-xs sm:text-sm"
+                                    onClick={() => handleRestoreClick(user)}
+                                  >
+                                    <RotateCcw className="mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                                    {t("admin.users.actions.restoreAccount")}
+                                  </DropdownMenuItem>
+                                ) : (
+                                  <DropdownMenuItem disabled className="text-xs sm:text-sm">
+                                    {t("admin.users.actions.unknownStatus")}
+                                  </DropdownMenuItem>
                           )}
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -765,9 +837,11 @@ export default function AdminUsersPage() {
         <Dialog open={suspendDialogOpen} onOpenChange={setSuspendDialogOpen}>
           <DialogContent className="p-4 sm:p-6">
             <DialogHeader>
-              <DialogTitle className="text-lg sm:text-xl">Suspend User</DialogTitle>
+              <DialogTitle className="text-lg sm:text-xl">{t("admin.users.dialog.suspend.title")}</DialogTitle>
               <DialogDescription className="text-xs sm:text-sm">
-                Are you sure you want to suspend {selectedUser?.name as string}? They will not be able to login until activated.
+                {t("admin.users.dialog.suspend.description", {
+                  name: String(selectedUser?.name ?? ""),
+                })}
               </DialogDescription>
             </DialogHeader>
             <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
@@ -777,7 +851,7 @@ export default function AdminUsersPage() {
                 disabled={actionLoading}
                 className="w-full sm:w-auto text-xs sm:text-sm"
               >
-                Cancel
+                {t("admin.users.common.cancel")}
               </Button>
               <Button
                 variant="destructive"
@@ -788,10 +862,10 @@ export default function AdminUsersPage() {
                 {actionLoading ? (
                   <>
                     <Loader2 className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin" />
-                    Suspending...
+                    {t("admin.users.dialog.suspend.working")}
                   </>
                 ) : (
-                  "Suspend User"
+                  t("admin.users.dialog.suspend.confirm")
                 )}
               </Button>
             </DialogFooter>
@@ -802,9 +876,11 @@ export default function AdminUsersPage() {
         <Dialog open={activateDialogOpen} onOpenChange={setActivateDialogOpen}>
           <DialogContent className="p-4 sm:p-6">
             <DialogHeader>
-              <DialogTitle className="text-lg sm:text-xl">Activate User</DialogTitle>
+              <DialogTitle className="text-lg sm:text-xl">{t("admin.users.dialog.activate.title")}</DialogTitle>
               <DialogDescription className="text-xs sm:text-sm">
-                Are you sure you want to activate {selectedUser?.name as string}? They will be able to login again.
+                {t("admin.users.dialog.activate.description", {
+                  name: String(selectedUser?.name ?? ""),
+                })}
               </DialogDescription>
             </DialogHeader>
             <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
@@ -814,7 +890,7 @@ export default function AdminUsersPage() {
                 disabled={actionLoading}
                 className="w-full sm:w-auto text-xs sm:text-sm"
               >
-                Cancel
+                {t("admin.users.common.cancel")}
               </Button>
               <Button
                 onClick={confirmActivate}
@@ -824,10 +900,48 @@ export default function AdminUsersPage() {
                 {actionLoading ? (
                   <>
                     <Loader2 className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin" />
-                    Activating...
+                    {t("admin.users.dialog.activate.working")}
                   </>
                 ) : (
-                  "Activate User"
+                  t("admin.users.dialog.activate.confirm")
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Restore deleted account */}
+        <Dialog open={restoreDialogOpen} onOpenChange={setRestoreDialogOpen}>
+          <DialogContent className="p-4 sm:p-6">
+            <DialogHeader>
+              <DialogTitle className="text-lg sm:text-xl">{t("admin.users.dialog.restore.title")}</DialogTitle>
+              <DialogDescription className="text-xs sm:text-sm">
+                {t("admin.users.dialog.restore.description", {
+                  name: String(selectedUser?.name ?? ""),
+                })}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="flex-col sm:flex-row gap-2 sm:gap-0">
+              <Button
+                variant="outline"
+                onClick={() => setRestoreDialogOpen(false)}
+                disabled={actionLoading}
+                className="w-full sm:w-auto text-xs sm:text-sm"
+              >
+                {t("admin.users.common.cancel")}
+              </Button>
+              <Button
+                onClick={confirmRestore}
+                disabled={actionLoading}
+                className="w-full sm:w-auto text-xs sm:text-sm"
+              >
+                {actionLoading ? (
+                  <>
+                    <Loader2 className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin" />
+                    {t("admin.users.dialog.restore.working")}
+                  </>
+                ) : (
+                  t("admin.users.dialog.restore.confirm")
                 )}
               </Button>
             </DialogFooter>
@@ -838,18 +952,18 @@ export default function AdminUsersPage() {
         <Dialog open={addUserDialogOpen} onOpenChange={setAddUserDialogOpen}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
             <DialogHeader>
-              <DialogTitle className="text-lg sm:text-xl">Add New User</DialogTitle>
+              <DialogTitle className="text-lg sm:text-xl">{t("admin.users.dialog.addUser.title")}</DialogTitle>
               <DialogDescription className="text-xs sm:text-sm">
-                Create a new user account. A password will be automatically generated.
+                {t("admin.users.dialog.addUser.description")}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-3 sm:space-y-4 py-3 sm:py-4">
               {/* Name */}
               <div className="space-y-2">
-                <Label htmlFor="name" className="text-xs sm:text-sm">Name *</Label>
+                <Label htmlFor="name" className="text-xs sm:text-sm">{t("admin.users.dialog.addUser.name")}</Label>
                 <Input
                   id="name"
-                  placeholder="Enter full name"
+                  placeholder={t("admin.users.dialog.addUser.namePlaceholder")}
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="text-sm sm:text-base"
@@ -858,11 +972,11 @@ export default function AdminUsersPage() {
 
               {/* Email */}
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-xs sm:text-sm">Email *</Label>
+                <Label htmlFor="email" className="text-xs sm:text-sm">{t("admin.users.dialog.addUser.email")}</Label>
                 <Input
                   id="email"
                   type="email"
-                  placeholder="Enter email address"
+                  placeholder={t("admin.users.dialog.addUser.emailPlaceholder")}
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="text-sm sm:text-base"
@@ -871,11 +985,11 @@ export default function AdminUsersPage() {
 
               {/* Phone */}
               <div className="space-y-2">
-                <Label htmlFor="phone" className="text-xs sm:text-sm">Phone Number</Label>
+                <Label htmlFor="phone" className="text-xs sm:text-sm">{t("admin.users.dialog.addUser.phone")}</Label>
                 <Input
                   id="phone"
                   type="tel"
-                  placeholder="Enter phone number (optional)"
+                  placeholder={t("admin.users.dialog.addUser.phonePlaceholder")}
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                   className="text-sm sm:text-base"
@@ -884,7 +998,7 @@ export default function AdminUsersPage() {
 
               {/* Role */}
               <div className="space-y-2">
-                <Label htmlFor="role" className="text-xs sm:text-sm">Role *</Label>
+                <Label htmlFor="role" className="text-xs sm:text-sm">{t("admin.users.dialog.addUser.role")}</Label>
                 <Select
                   value={formData.role}
                   onValueChange={(value: "ADMIN" | "PROVIDER" | "CUSTOMER") =>
@@ -892,19 +1006,19 @@ export default function AdminUsersPage() {
                   }
                 >
                   <SelectTrigger id="role" className="text-sm sm:text-base">
-                    <SelectValue placeholder="Select role" />
+                    <SelectValue placeholder={t("admin.users.dialog.addUser.rolePlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="ADMIN">Admin</SelectItem>
-                    <SelectItem value="PROVIDER">Provider</SelectItem>
-                    <SelectItem value="CUSTOMER">Customer</SelectItem>
+                    <SelectItem value="ADMIN">{t("admin.users.role.admin")}</SelectItem>
+                    <SelectItem value="PROVIDER">{t("admin.users.role.provider")}</SelectItem>
+                    <SelectItem value="CUSTOMER">{t("admin.users.role.customer")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               {/* Generated Password */}
               <div className="space-y-2">
-                <Label className="text-xs sm:text-sm">Generated Password</Label>
+                <Label className="text-xs sm:text-sm">{t("admin.users.dialog.addUser.generatedPassword")}</Label>
                 <div className="flex flex-col sm:flex-row gap-2">
                   <Input
                     type="text"
@@ -918,7 +1032,7 @@ export default function AdminUsersPage() {
                       variant="outline"
                       size="icon"
                       onClick={copyPassword}
-                      title="Copy password"
+                      title={t("admin.users.dialog.addUser.copyPasswordTitle")}
                       className="flex-shrink-0"
                     >
                       {passwordCopied ? (
@@ -933,12 +1047,12 @@ export default function AdminUsersPage() {
                       onClick={generatePassword}
                       className="text-xs sm:text-sm"
                     >
-                      Regenerate
+                      {t("admin.users.dialog.addUser.regenerate")}
                     </Button>
                   </div>
                 </div>
                 <p className="text-xs sm:text-sm text-gray-500">
-                  This password will be used for the initial login. Make sure to copy it before closing this dialog.
+                  {t("admin.users.dialog.addUser.passwordHint")}
                 </p>
               </div>
             </div>
@@ -959,7 +1073,7 @@ export default function AdminUsersPage() {
                 disabled={createLoading}
                 className="w-full sm:w-auto text-xs sm:text-sm"
               >
-                Cancel
+                {t("admin.users.common.cancel")}
               </Button>
               <Button
                 onClick={handleAddUser}
@@ -969,10 +1083,10 @@ export default function AdminUsersPage() {
                 {createLoading ? (
                   <>
                     <Loader2 className="mr-1.5 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin" />
-                    Creating...
+                    {t("admin.users.dialog.addUser.creating")}
                   </>
                 ) : (
-                  "Create User"
+                  t("admin.users.dialog.addUser.create")
                 )}
               </Button>
             </DialogFooter>
@@ -983,30 +1097,32 @@ export default function AdminUsersPage() {
         <Dialog open={notifyOpen} onOpenChange={setNotifyOpen}>
           <DialogContent className="p-4 sm:p-6">
             <DialogHeader>
-              <DialogTitle className="text-lg sm:text-xl">Send notification</DialogTitle>
+              <DialogTitle className="text-lg sm:text-xl">{t("admin.users.dialog.notify.title")}</DialogTitle>
               <DialogDescription className="text-xs sm:text-sm">
-                Send a notification to {notifyTarget?.name as string || "the user"}
+                {t("admin.users.dialog.notify.description", {
+                  name: String(notifyTarget?.name ?? t("admin.users.dialog.notify.descriptionFallback")),
+                })}
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
-                <Label htmlFor="notify-title">Title</Label>
+                <Label htmlFor="notify-title">{t("admin.users.dialog.notify.titleLabel")}</Label>
                 <Input
                   id="notify-title"
                   value={notifyTitle}
                   onChange={(e) => setNotifyTitle(e.target.value)}
-                  placeholder="Notification title"
+                  placeholder={t("admin.users.dialog.notify.titlePlaceholder")}
                   className="text-sm sm:text-base"
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="notify-content">Message</Label>
+                <Label htmlFor="notify-content">{t("admin.users.dialog.notify.messageLabel")}</Label>
                 <Textarea
                   id="notify-content"
                   className="min-h-[100px] text-sm sm:text-base"
                   value={notifyContent}
                   onChange={(e) => setNotifyContent(e.target.value)}
-                  placeholder="Notification message"
+                  placeholder={t("admin.users.dialog.notify.messagePlaceholder")}
                 />
               </div>
             </div>
@@ -1016,7 +1132,7 @@ export default function AdminUsersPage() {
                 onClick={() => setNotifyOpen(false)}
                 disabled={actionLoading}
               >
-                Cancel
+                {t("admin.users.common.cancel")}
               </Button>
               <Button
                 onClick={handleSendNotification}
@@ -1029,7 +1145,7 @@ export default function AdminUsersPage() {
                 {actionLoading ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
-                  "Send"
+                  t("admin.users.common.send")
                 )}
               </Button>
             </DialogFooter>
@@ -1042,31 +1158,31 @@ export default function AdminUsersPage() {
             <DialogHeader>
               <DialogTitle className="text-lg sm:text-xl flex items-center gap-2">
                 <Megaphone className="w-5 h-5 text-sky-600" />
-                Send announcement to all users
+                {t("admin.users.dialog.broadcast.title")}
               </DialogTitle>
               <DialogDescription className="text-xs sm:text-sm">
-                This notification will be sent to every user and shown under &quot;Announcements&quot; in their notification bell.
+                {t("admin.users.dialog.broadcast.description")}
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="grid gap-2">
-                <Label htmlFor="broadcast-title">Title</Label>
+                <Label htmlFor="broadcast-title">{t("admin.users.dialog.broadcast.titleLabel")}</Label>
                 <Input
                   id="broadcast-title"
                   value={broadcastTitle}
                   onChange={(e) => setBroadcastTitle(e.target.value)}
-                  placeholder="Announcement title"
+                  placeholder={t("admin.users.dialog.broadcast.titlePlaceholder")}
                   className="text-sm sm:text-base"
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="broadcast-content">Message</Label>
+                <Label htmlFor="broadcast-content">{t("admin.users.dialog.broadcast.messageLabel")}</Label>
                 <Textarea
                   id="broadcast-content"
                   className="min-h-[120px] text-sm sm:text-base"
                   value={broadcastContent}
                   onChange={(e) => setBroadcastContent(e.target.value)}
-                  placeholder="Announcement message"
+                  placeholder={t("admin.users.dialog.broadcast.messagePlaceholder")}
                 />
               </div>
             </div>
@@ -1076,7 +1192,7 @@ export default function AdminUsersPage() {
                 onClick={() => setBroadcastOpen(false)}
                 disabled={broadcastLoading}
               >
-                Cancel
+                {t("admin.users.common.cancel")}
               </Button>
               <Button
                 onClick={handleBroadcastNotification}
@@ -1089,7 +1205,7 @@ export default function AdminUsersPage() {
                 {broadcastLoading ? (
                   <Loader2 className="w-4 h-4 animate-spin mr-2" />
                 ) : null}
-                Send to all users
+                {t("admin.users.dialog.broadcast.sendAll")}
               </Button>
             </DialogFooter>
           </DialogContent>

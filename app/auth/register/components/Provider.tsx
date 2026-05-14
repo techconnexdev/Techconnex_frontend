@@ -41,6 +41,7 @@ import { Checkbox, CheckboxIndicator } from "@radix-ui/react-checkbox";
 import { PhoneInputField } from "./PhoneInputField";
 import { getUserFriendlyErrorMessage } from "@/lib/errors";
 import { toast } from "@/lib/toast";
+import { useI18n } from "@/contexts/I18nProvider";
 
 const fadeInUp = {
   initial: { opacity: 0, y: 30 },
@@ -216,6 +217,7 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
   editCertification,
   setEditCertification,
 }) => {
+  const { t } = useI18n();
   const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
   const isStrongPassword = (pwd: string) =>
@@ -229,7 +231,7 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
 
     // Validate file type
     if (file.type !== "application/pdf") {
-      toast.error("Invalid file type: Only PDF files are allowed for resumes.");
+      toast.error(t("auth.providerRegister.resumePdfOnlyToast"));
       if (e.target) {
         e.target.value = ""; // Reset input
       }
@@ -239,7 +241,11 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
     // Validate file size (50MB max for documents)
     const maxSize = 50 * 1024 * 1024; // 50 MB
     if (file.size > maxSize) {
-      toast.error(`File size exceeds limit. Maximum size is ${(maxSize / (1024 * 1024)).toFixed(0)} MB`);
+      toast.error(
+        t("auth.providerRegister.fileSizeExceeded", {
+          mb: (maxSize / (1024 * 1024)).toFixed(0),
+        }),
+      );
       if (e.target) {
         e.target.value = ""; // Reset input
       }
@@ -265,19 +271,35 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
         // Handle R2 upload errors
         const errorMessage = uploadError instanceof Error ? uploadError.message : String(uploadError);
         if (errorMessage.includes("network") || errorMessage.includes("fetch")) {
-          throw new Error("Network error: Unable to connect to upload service. Please check your internet connection and try again.");
+          throw new Error(t("auth.providerRegister.error.networkUpload"));
         }
         if (errorMessage.includes("size") || errorMessage.includes("limit")) {
-          throw new Error(`File size error: ${errorMessage}`);
+          throw new Error(
+            t("auth.providerRegister.error.fileSizeDetail", {
+              message: errorMessage,
+            }),
+          );
         }
         if (errorMessage.includes("type") || errorMessage.includes("format")) {
-          throw new Error(`File type error: ${errorMessage}`);
+          throw new Error(
+            t("auth.providerRegister.error.fileTypeDetail", {
+              message: errorMessage,
+            }),
+          );
         }
-        throw new Error(`Upload failed: ${errorMessage || "Unknown error occurred during file upload"}`);
+        throw new Error(
+          t("auth.providerRegister.error.uploadFailed", {
+            message:
+              errorMessage ||
+              t("auth.providerRegister.error.unknown"),
+          }),
+        );
       }
 
       if (!uploadResult.success) {
-        throw new Error(uploadResult.error || "Failed to upload resume to R2");
+        throw new Error(
+          uploadResult.error || t("auth.providerRegister.error.uploadR2"),
+        );
       }
 
       // Send R2 key to backend for AI analysis
@@ -300,27 +322,45 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
         const errorMessage = fetchError instanceof Error ? fetchError.message : String(fetchError);
         const errorName = fetchError instanceof Error ? fetchError.name : "";
         if (errorMessage.includes("network") || errorMessage.includes("fetch") || errorName === "TypeError") {
-          throw new Error("Network error: Unable to connect to server. Please check your internet connection and try again.");
+          throw new Error(t("auth.providerRegister.error.networkServer"));
         }
-        throw new Error(`Server connection failed: ${errorMessage || "Unknown error"}`);
+        throw new Error(
+          t("auth.providerRegister.error.serverConnection", {
+            message:
+              errorMessage || t("auth.providerRegister.error.unknown"),
+          }),
+        );
       }
 
       if (!res.ok) {
-        let errorMessage = "Resume analysis failed";
+        let errorMessage = t("auth.providerRegister.error.resumeAnalysis");
         try {
           const errorText = await res.text();
           const errorJson = JSON.parse(errorText);
           errorMessage = errorJson.error || errorJson.message || errorMessage;
         } catch {
-          errorMessage = `Server error: ${res.status} ${res.statusText}`;
+          errorMessage = t("auth.providerRegister.error.serverStatus", {
+            status: String(res.status),
+            statusText: res.statusText,
+          });
         }
 
         if (res.status === 400) {
-          throw new Error(`Validation error: ${errorMessage}`);
+          throw new Error(
+            t("auth.providerRegister.error.validation", { message: errorMessage }),
+          );
         } else if (res.status === 401 || res.status === 403) {
-          throw new Error(`Authorization error: ${errorMessage}`);
+          throw new Error(
+            t("auth.providerRegister.error.authorization", {
+              message: errorMessage,
+            }),
+          );
         } else if (res.status >= 500) {
-          throw new Error(`Server error: ${errorMessage}. Please try again later.`);
+          throw new Error(
+            t("auth.providerRegister.error.serverWithMessage", {
+              message: errorMessage,
+            }),
+          );
         }
         throw new Error(errorMessage);
       }
@@ -329,7 +369,7 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
       try {
         result = await res.json();
       } catch {
-        throw new Error("Server response error: Invalid response from server. Please try again.");
+        throw new Error(t("auth.providerRegister.error.invalidServerResponse"));
       }
 
       setCvExtractedData(result.data as Record<string, unknown>);
@@ -531,18 +571,18 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
           className="space-y-6"
         >
           <div className="text-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">Account Setup</h2>
+            <h2 className="text-2xl font-bold text-gray-900">{t("auth.account.title")}</h2>
             <p className="text-gray-600">
-              Let&apos;s start with your basic information
+              {t("auth.account.subtitle")}
             </p>
           </div>
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Full Name *</Label>
+              <Label htmlFor="name">{t("auth.fields.fullNameLabel")}</Label>
               <Input
                 id="name"
-                placeholder="Enter your full name"
+                placeholder={t("auth.fields.fullNamePlaceholder")}
                 className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                 value={formData.name}
                 onChange={(e) => handleInputChange("name", e.target.value)}
@@ -551,14 +591,14 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="email">Email Address *</Label>
+              <Label htmlFor="email">{t("auth.fields.emailLabel")}</Label>
               <div className="relative">
                 <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                 <Input
                   ref={emailRef}
                   id="email"
                   type="email"
-                  placeholder="Enter your email"
+                  placeholder={t("auth.login.emailPlaceholder")}
                   className="pl-10 bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                   value={formData.email}
                   onChange={(e) => handleInputChange("email", e.target.value)}
@@ -568,12 +608,11 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
               </div>
 
               <p className="text-xs text-gray-500">
-                We&apos;ll use this email <strong>now</strong> when you click{" "}
-                <em>Next</em> to check availability.
+                {t("auth.fields.emailHint")}
               </p>
 
               {emailStatus === "checking" && (
-                <p className="text-xs text-gray-500">Checking email…</p>
+                <p className="text-xs text-gray-500">{t("auth.fields.checkingEmail")}</p>
               )}
               {fieldErrors.email && (
                 <p className="text-xs text-red-600">{fieldErrors.email}</p>
@@ -581,28 +620,27 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
               {emailStatus === "available" &&
                 !fieldErrors.email &&
                 formData.email && (
-                  <p className="text-xs text-green-600">Email is available.</p>
+                  <p className="text-xs text-green-600">{t("auth.fields.emailAvailable")}</p>
                 )}
             </div>
 
             <PhoneInputField
               id="phone"
-              label="Phone Number *"
+              label={t("auth.fields.phoneLabel")}
               value={formData.phone}
               onChange={(val) => handleInputChange("phone", val)}
-              defaultCountry="MY"
-              placeholder="Enter phone number"
+              placeholder={t("auth.fields.phonePlaceholder")}
               required
             />
 
             <div className="space-y-2">
-              <Label htmlFor="password">Password *</Label>
+              <Label htmlFor="password">{t("auth.fields.password")} *</Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
-                  placeholder="Create a strong password"
+                  placeholder={t("auth.fields.passwordCreate")}
                   className="pl-10 pr-10 bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                   value={formData.password}
                   onChange={(e) =>
@@ -625,13 +663,13 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirm Password *</Label>
+              <Label htmlFor="confirmPassword">{t("auth.fields.confirmPassword")} *</Label>
               <div className="relative">
                 <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                 <Input
                   id="confirmPassword"
                   type={showPassword ? "text" : "password"}
-                  placeholder="Re-enter your password"
+                  placeholder={t("auth.fields.passwordConfirmPlaceholder")}
                   className="pl-10 bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                   value={formData.confirmPassword}
                   onChange={(e) =>
@@ -644,14 +682,13 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
               {!isStrongPassword(formData.password) &&
                 formData.password.length > 0 && (
                   <p className="text-xs text-red-600">
-                    Use at least 8 characters with uppercase, lowercase, number,
-                    and symbol.
+                    {t("auth.fields.passwordRules")}
                   </p>
                 )}
               {formData.confirmPassword &&
                 formData.password !== formData.confirmPassword && (
                   <p className="text-xs text-red-600">
-                    Passwords do not match.
+                    {t("auth.fields.passwordMismatch")}
                   </p>
                 )}
             </div>
@@ -669,10 +706,11 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
         >
           {/* CV Upload Section */}
           <div className="space-y-2 border-t pt-6">
-            <Label htmlFor="resume">Resume (PDF only) *</Label>
+            <Label htmlFor="resume">
+              {t("auth.providerRegister.resumePdfLabel")}
+            </Label>
             <p className="text-sm text-gray-600 mb-4">
-              Upload your CV to get AI-powered assistance filling out your
-              profile
+              {t("auth.providerRegister.resumeUploadIntro")}
             </p>
             <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center bg-white/50 hover:border-blue-400 transition-colors">
               <input
@@ -695,10 +733,10 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                       className="w-10 h-10 mx-auto mb-4 border-4 border-blue-600 border-t-transparent rounded-full"
                     />
                     <p className="text-lg font-medium text-blue-600 mb-2">
-                      AI is analyzing your resume...
+                      {t("auth.providerRegister.analyzingResume")}
                     </p>
                     <p className="text-sm text-gray-500">
-                      This will help fill your profile automatically
+                      {t("auth.providerRegister.analyzingResumeHint")}
                     </p>
                   </div>
                 ) : (
@@ -710,14 +748,14 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                           {resumeFile.name}
                         </p>
                         <p className="text-sm text-gray-500">
-                          Click to change file
+                          {t("auth.providerRegister.clickChangeFile")}
                         </p>
                         {aiProcessingComplete && (
                           <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg">
                             <div className="flex items-center justify-center">
                               <CheckCircle className="w-5 h-5 text-green-600 mr-2" />
                               <span className="text-green-700 font-medium">
-                                Resume uploaded & AI processed!
+                                {t("auth.providerRegister.resumeProcessedBadge")}
                               </span>
                             </div>
                           </div>
@@ -726,16 +764,16 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                     ) : (
                       <div>
                         <p className="text-lg font-medium text-gray-600 mb-2">
-                          Upload your resume
+                          {t("auth.providerRegister.uploadResumeTitle")}
                         </p>
                         <p className="text-sm text-gray-500 mb-4">
-                          PDF files only, max 5MB
+                          {t("auth.providerRegister.uploadResumeHintPdf")}
                         </p>
                         <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg mb-4">
                           <div className="flex items-center justify-center">
                             <Zap className="w-5 h-5 text-blue-600 mr-2" />
                             <span className="text-blue-700 font-medium text-sm">
-                              AI will auto-fill your profile from your CV!
+                              {t("auth.providerRegister.aiAutoFillHint")}
                             </span>
                           </div>
                         </div>
@@ -768,7 +806,7 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                 <div className="flex items-center mb-4">
                   <Zap className="w-6 h-6 text-blue-600 mr-2" />
                   <h3 className="text-lg font-semibold text-blue-900">
-                    AI Extracted Information
+                    {t("auth.providerRegister.aiExtractedTitle")}
                   </h3>
                 </div>
 
@@ -777,7 +815,7 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                   {bio && (
                     <div>
                       <Label className="text-sm font-medium text-blue-800">
-                        Professional Summary:
+                        {t("auth.providerRegister.aiSummaryLabel")}
                       </Label>
                       <p className="text-sm text-blue-700 bg-white/50 p-3 rounded border mt-1">
                         {bio}
@@ -789,7 +827,9 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                   {skills && skills.length > 0 && (
                     <div>
                       <Label className="text-sm font-medium text-blue-800">
-                        Skills Found ({skills.length}):
+                        {t("auth.providerRegister.aiSkillsFound", {
+                          count: skills.length,
+                        })}
                       </Label>
                       <div className="flex flex-wrap gap-2 mt-2">
                         {skills.map(
@@ -807,7 +847,9 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                   {languages && languages.length > 0 && (
                     <div>
                       <Label className="text-sm font-medium text-blue-800">
-                        Languages ({languages.length}):
+                        {t("auth.providerRegister.aiLanguages", {
+                          count: languages.length,
+                        })}
                       </Label>
                       <div className="flex flex-wrap gap-2 mt-2">
                         {languages.map(
@@ -826,7 +868,7 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                     {yearsExp && (
                       <div>
                         <Label className="text-sm font-medium text-blue-800">
-                          Experience:
+                          {t("auth.providerRegister.aiExperienceLabel")}
                         </Label>
                         <p className="text-sm text-blue-700">
                           {yearsExp}
@@ -836,10 +878,12 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                     {hourlyRate && (
                       <div>
                         <Label className="text-sm font-medium text-blue-800">
-                          Suggested Rate:
+                          {t("auth.providerRegister.aiSuggestedRate")}
                         </Label>
                         <p className="text-sm text-blue-700">
-                          RM {hourlyRate}/hour
+                          {t("auth.providerRegister.aiSuggestedRateValue", {
+                            rate: hourlyRate,
+                          })}
                         </p>
                       </div>
                     )}
@@ -849,7 +893,7 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                   {location && (
                     <div>
                       <Label className="text-sm font-medium text-blue-800">
-                        Location:
+                        {t("auth.providerRegister.aiLocationLabel")}
                       </Label>
                       <p className="text-sm text-blue-700 bg-white/50 p-2 rounded border mt-1">
                         {location}
@@ -861,7 +905,7 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                   {portfolioUrls && portfolioUrls.length > 0 && (
                     <div>
                       <Label className="text-sm font-medium text-blue-800">
-                        Portfolio Links:
+                        {t("auth.providerRegister.aiPortfolioLinks")}
                       </Label>
                       <ul className="list-disc pl-5 text-sm text-blue-700 mt-1">
                         {portfolioUrls.map(
@@ -886,7 +930,7 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                   {officialWebsite && (
                     <div>
                       <Label className="text-sm font-medium text-blue-800">
-                        Official Website:
+                        {t("auth.providerRegister.aiOfficialWebsite")}
                       </Label>
                       <p className="text-sm text-blue-700">
                         <a
@@ -905,7 +949,7 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                   {certifications && certifications.length > 0 && (
                     <div>
                       <Label className="text-sm font-medium text-blue-800">
-                        Certifications:
+                        {t("auth.providerRegister.aiCertifications")}
                       </Label>
                       <div className="space-y-3 mt-2">
                         {certifications.map(
@@ -932,7 +976,7 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                                 </p>
                                 {certSerial && (
                                   <p className="text-xs mt-1 text-blue-800">
-                                    Serial:{" "}
+                                    {t("auth.providerRegister.aiSerialPrefix")}{" "}
                                     <span className="font-mono">
                                       {certSerial}
                                     </span>
@@ -946,7 +990,7 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                                       rel="noopener noreferrer"
                                       className="underline text-blue-700 hover:text-blue-900"
                                     >
-                                      View Certificate
+                                      {t("auth.providerRegister.aiViewCertificate")}
                                     </a>
                                   </p>
                                 )}
@@ -966,19 +1010,19 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                   className="bg-blue-600 hover:bg-blue-700 text-white"
                 >
                   <CheckCircle className="w-4 h-4 mr-2" />
-                  Apply This Information
+                  {t("auth.providerRegister.applyAiData")}
                 </Button>
                 <Button
                   onClick={() => setShowAIResults(false)}
                   variant="outline"
                   className="bg-white/50"
                 >
-                  Skip & Fill Manually
+                  {t("auth.providerRegister.skipFillManually")}
                 </Button>
               </div>
 
               <p className="text-xs text-blue-600 mt-3">
-                💡 You can review and edit all information in the next steps
+                {t("auth.providerRegister.aiFooterHint")}
               </p>
             </motion.div>
             );
@@ -986,47 +1030,54 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
 
           <div className="text-center mb-6">
             <h2 className="text-2xl font-bold text-gray-900">
-              Profile & CV Upload
+              {t("auth.providerRegister.profileCvSectionTitle")}
             </h2>
             <p className="text-gray-600">
-              Tell clients about yourself and upload your resume for AI
-              assistance
+              {t("auth.providerRegister.profileCvSectionSubtitle")}
             </p>
           </div>
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="major">Major/Title *</Label>
+              <Label htmlFor="major">
+                {t("auth.providerRegister.majorLabel")}
+              </Label>
               <Input
                 id="major"
-                placeholder="e.g., Full Stack Developer, UI/UX Designer, Data Scientist..."
+                placeholder={t("auth.providerRegister.majorPlaceholder")}
                 className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                 value={formData.major}
                 onChange={(e) => handleInputChange("major", e.target.value)}
                 required
               />
               <p className="text-xs text-gray-500">
-                Your professional title or major specialization
+                {t("auth.providerRegister.majorHint")}
               </p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="bio">Professional Bio *</Label>
+              <Label htmlFor="bio">
+                {t("auth.providerRegister.bioLabel")}
+              </Label>
               <Textarea
                 id="bio"
-                placeholder="Tell clients about your experience, expertise, and what makes you unique..."
+                placeholder={t("auth.providerRegister.bioPlaceholder")}
                 className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500 min-h-[120px]"
                 maxLength={500}
                 value={formData.bio}
                 onChange={(e) => handleInputChange("bio", e.target.value)}
               />
               <p className="text-xs text-gray-500">
-                {formData.bio.length}/500 characters
+                {t("auth.providerRegister.bioCharCount", {
+                  count: formData.bio.length,
+                })}
               </p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="location">Location (State) *</Label>
+              <Label htmlFor="location">
+                {t("auth.providerRegister.locationStateLabel")}
+              </Label>
               <div className="relative">
                 <MapPin className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                 <Select
@@ -1036,7 +1087,11 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                   }
                 >
                   <SelectTrigger className="pl-10 bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500">
-                    <SelectValue placeholder="Select your state" />
+                    <SelectValue
+                      placeholder={t(
+                        "auth.providerRegister.selectStatePlaceholder",
+                      )}
+                    />
                   </SelectTrigger>
                   <SelectContent>
                     {/* Always show predefined Malaysian states */}
@@ -1062,13 +1117,15 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="website">Website/Portfolio URL</Label>
+              <Label htmlFor="website">
+                {t("auth.providerRegister.websitePortfolioLabel")}
+              </Label>
               <div className="relative">
                 <Globe className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                 <Input
                   id="website"
                   type="url"
-                  placeholder="https://your-website.com"
+                  placeholder={t("auth.providerRegister.websitePlaceholder")}
                   className="pl-10 bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                   value={formData.website}
                   onChange={(e) => handleInputChange("website", e.target.value)}
@@ -1080,34 +1137,45 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
           {/* KYC Section */}
           <div className="space-y-4 mt-8 p-4 border rounded-lg bg-white/50">
             <h3 className="text-lg font-semibold text-gray-900">
-              KYC Verification (Provider)
+              {t("auth.providerRegister.kycSectionProviderTitle")}
             </h3>
             <p className="text-sm text-gray-600">
-              Upload a valid <strong>Passport</strong> or <strong>IC</strong>{" "}
-              image for verification.
+              {t("auth.providerRegister.kycUploadIntro")}
             </p>
 
             <div className="space-y-2">
-              <Label htmlFor="kycDocType">Document Type *</Label>
+              <Label htmlFor="kycDocType">
+                {t("auth.providerRegister.kycDocTypeLabel")}
+              </Label>
               <Select
                 value={kycDocType}
                 onValueChange={(v) => setKycDocType(v as "PASSPORT" | "IC")}
               >
                 <SelectTrigger className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500">
-                  <SelectValue placeholder="Select KYC document type" />
+                  <SelectValue
+                    placeholder={t(
+                      "auth.providerRegister.selectKycTypePlaceholder",
+                    )}
+                  />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="PASSPORT">Passport</SelectItem>
-                  <SelectItem value="IC">IC</SelectItem>
+                  <SelectItem value="PASSPORT">
+                    {t("auth.providerRegister.kycTypePassport")}
+                  </SelectItem>
+                  <SelectItem value="IC">
+                    {t("auth.providerRegister.kycTypeIc")}
+                  </SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-gray-500">
-                Accepted types: JPG, PNG, or PDF (max ~10MB)
+                {t("auth.providerRegister.kycFileTypesHint")}
               </p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="kycFile">KYC Document *</Label>
+              <Label htmlFor="kycFile">
+                {t("auth.providerRegister.kycFileLabel")}
+              </Label>
               <Input
                 id="kycFile"
                 type="file"
@@ -1117,14 +1185,15 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
               />
               {kycFile && (
                 <p className="text-xs text-green-700">
-                  Selected: <span className="font-medium">{kycFile.name}</span>
+                  {t("auth.companyRegister.selectedFile")}{" "}
+                  <span className="font-medium">{kycFile.name}</span>
                 </p>
               )}
             </div>
 
             {kycDocType === "" && (
               <p className="text-xs text-amber-600">
-                Please choose <strong>Passport</strong> or <strong>IC</strong>.
+                {t("auth.providerRegister.kycChooseTypeHint")}
               </p>
             )}
           </div>
@@ -1141,21 +1210,23 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
         >
           <div className="text-center mb-6">
             <h2 className="text-2xl font-bold text-gray-900">
-              Skills & Experience
+              {t("auth.providerRegister.skillsStepTitle")}
             </h2>
-            <p className="text-gray-600">Showcase your technical expertise</p>
+            <p className="text-gray-600">
+              {t("auth.providerRegister.skillsSectionTitle")}
+            </p>
           </div>
 
           <div className="space-y-6">
             {/* Skills Section */}
             <div className="space-y-4">
-              <Label>Technical Skills *</Label>
+              <Label>{t("auth.providerRegister.skillsLabel")}</Label>
 
               <div className="flex gap-2">
                 <Input
                   value={customSkill}
                   onChange={(e) => setCustomSkill(e.target.value)}
-                  placeholder="Type a skill and press Add"
+                  placeholder={t("auth.providerRegister.skillTypePlaceholder")}
                   className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                   onKeyPress={(e) =>
                     e.key === "Enter" &&
@@ -1174,7 +1245,9 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
               {selectedSkills.length > 0 && (
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">
-                    Selected Skills ({selectedSkills.length})
+                    {t("auth.providerRegister.selectedSkillsHeading", {
+                      count: selectedSkills.length,
+                    })}
                   </Label>
                   <div className="flex flex-wrap gap-2 p-3 border rounded-lg bg-white/50 max-h-32 overflow-y-auto">
                     {selectedSkills.map((skill) => (
@@ -1198,7 +1271,7 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
 
               <div className="space-y-2">
                 <Label className="text-sm font-medium">
-                  Popular Skills (click to add)
+                  {t("auth.providerRegister.popularSkillsHint")}
                 </Label>
                 <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-3 border rounded-lg bg-white/50">
                   {popularSkills
@@ -1219,13 +1292,15 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
 
             {/* Languages Section */}
             <div className="space-y-4">
-              <Label>Languages *</Label>
+              <Label>{t("auth.providerRegister.languagesLabel")}</Label>
 
               <div className="flex gap-2">
                 <Input
                   value={customLanguage}
                   onChange={(e) => setCustomLanguage(e.target.value)}
-                  placeholder="Type a language and press Add"
+                  placeholder={t(
+                    "auth.providerRegister.languageTypePlaceholder",
+                  )}
                   className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                   onKeyPress={(e) =>
                     e.key === "Enter" &&
@@ -1244,7 +1319,9 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
               {selectedLanguages.length > 0 && (
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">
-                    Selected Languages ({selectedLanguages.length})
+                    {t("auth.providerRegister.selectedLanguagesHeading", {
+                      count: selectedLanguages.length,
+                    })}
                   </Label>
                   <div className="flex flex-wrap gap-2 p-3 border rounded-lg bg-white/50">
                     {selectedLanguages.map((language) => (
@@ -1268,7 +1345,7 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
 
               <div className="space-y-2">
                 <Label className="text-sm font-medium">
-                  Common Languages (click to add)
+                  {t("auth.providerRegister.commonLanguagesHint")}
                 </Label>
                 <div className="flex flex-wrap gap-2 p-3 border rounded-lg bg-white/50">
                   {commonLanguages
@@ -1290,13 +1367,15 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
             {/* Experience and Rate */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="experience">Years of Experience</Label>
+                <Label htmlFor="experience">
+                  {t("auth.providerRegister.experienceLabel")}
+                </Label>
                 <Input
                   id="experience"
                   type="number"
                   min={0}
                   max={50}
-                  placeholder="e.g. 4"
+                  placeholder={t("auth.providerRegister.experiencePlaceholder")}
                   value={formData.yearsExperience}
                   onChange={(e) =>
                     handleInputChange("yearsExperience", e.target.value)
@@ -1305,11 +1384,13 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="hourlyRate">Hourly Rate (RM)</Label>
+                <Label htmlFor="hourlyRate">
+                  {t("auth.providerRegister.hourlyRateLabel")}
+                </Label>
                 <Input
                   id="hourlyRate"
                   type="number"
-                  placeholder="e.g., 50"
+                  placeholder={t("auth.providerRegister.hourlyPlaceholder")}
                   min="10"
                   max="1000"
                   className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
@@ -1334,27 +1415,28 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
         >
           <div className="text-center mb-6">
             <h2 className="text-2xl font-bold text-gray-900">
-              Portfolio & Links
+              {t("auth.providerRegister.portfolioStepTitle")}
             </h2>
             <p className="text-gray-600">
-              Showcase your work and professional profiles
+              {t("auth.providerRegister.portfolioStepSubtitle")}
             </p>
           </div>
 
           <div className="space-y-6">
             {/* Portfolio URLs */}
             <div className="space-y-4">
-              <Label>Portfolio URLs</Label>
+              <Label>{t("auth.providerRegister.portfolioUrlsLabel")}</Label>
               <p className="text-sm text-gray-600">
-                Add links to your GitHub, LinkedIn, or other professional
-                profiles
+                {t("auth.providerRegister.portfolioIntro")}
               </p>
 
               <div className="flex gap-2">
                 <Input
                   value={newPortfolioUrl}
                   onChange={(e) => setNewPortfolioUrl(e.target.value)}
-                  placeholder="https://github.com/yourusername"
+                  placeholder={t(
+                    "auth.providerRegister.portfolioUrlPlaceholder",
+                  )}
                   className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                   type="url"
                 />
@@ -1370,7 +1452,9 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
               {portfolioUrls.length > 0 && (
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">
-                    Portfolio Links ({portfolioUrls.length})
+                    {t("auth.providerRegister.portfolioLinksHeading", {
+                      count: portfolioUrls.length,
+                    })}
                   </Label>
                   <div className="space-y-2">
                     {portfolioUrls.map((url, index) => (
@@ -1402,9 +1486,9 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
               {portfolioUrls.length === 0 && (
                 <div className="text-center py-8 text-gray-500 border-2 border-dashed border-gray-200 rounded-lg">
                   <Globe className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                  <p>No portfolio links added yet</p>
+                  <p>{t("auth.providerRegister.noPortfolioLinks")}</p>
                   <p className="text-sm">
-                    Add links to showcase your work and professional profiles
+                    {t("auth.companyRegister.portfolioEmptyHint")}
                   </p>
                 </div>
               )}
@@ -1412,7 +1496,9 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
 
             {/* Popular Portfolio Platforms */}
             <div className="space-y-4">
-              <Label className="text-sm font-medium">Popular Platforms</Label>
+              <Label className="text-sm font-medium">
+                {t("auth.providerRegister.popularPlatforms")}
+              </Label>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {[
                   {
@@ -1460,9 +1546,11 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
           className="space-y-5"
         >
           <div className="text-center mb-4">
-            <h2 className="text-lg font-semibold text-gray-900">Certifications</h2>
+            <h2 className="text-lg font-semibold text-gray-900">
+              {t("auth.providerRegister.certificationsTitle")}
+            </h2>
             <p className="text-sm text-gray-600">
-              Add your professional certifications (optional). If added, each must have a valid date and either serial number or verification link.
+              {t("auth.providerRegister.certificationsIntro")}
             </p>
           </div>
 
@@ -1472,11 +1560,10 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                 <AlertCircle className="w-4 h-4 text-blue-600 mr-2 mt-0.5 shrink-0" />
                 <div>
                   <p className="text-sm font-medium text-gray-900">
-                    Why add certifications?
+                    {t("auth.providerRegister.certificationsWhyTitle")}
                   </p>
                   <p className="text-sm text-gray-600">
-                    Certifications help build trust with clients and showcase
-                    your expertise in specific technologies.
+                    {t("auth.providerRegister.certificationsWhyBody")}
                   </p>
                 </div>
               </div>
@@ -1484,14 +1571,18 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
 
             {/* Add New Certification */}
             <div className="space-y-4 p-4 border rounded-lg bg-white/50">
-              <h3 className="text-sm font-semibold text-gray-900">Add certification</h3>
+              <h3 className="text-sm font-semibold text-gray-900">
+                {t("auth.providerRegister.addCertTitle")}
+              </h3>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="certName">Certification Name</Label>
+                  <Label htmlFor="certName">
+                    {t("auth.providerRegister.certNameLabel")}
+                  </Label>
                   <Input
                     id="certName"
-                    placeholder="e.g., AWS Certified Solutions Architect"
+                    placeholder={t("auth.providerRegister.certNameExample")}
                     className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                     value={newCertification.name}
                     onChange={(e) =>
@@ -1503,10 +1594,12 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="certIssuer">Issuing Organization</Label>
+                  <Label htmlFor="certIssuer">
+                    {t("auth.providerRegister.certIssuerLabel")}
+                  </Label>
                   <Input
                     id="certIssuer"
-                    placeholder="e.g., Amazon Web Services"
+                    placeholder={t("auth.providerRegister.certIssuerExample")}
                     className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                     value={newCertification.issuer}
                     onChange={(e) =>
@@ -1521,7 +1614,9 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="certDate">Issue Date</Label>
+                  <Label htmlFor="certDate">
+                    {t("auth.providerRegister.certDateLabel")}
+                  </Label>
                   <Input
                     id="certDate"
                     type="date"
@@ -1539,11 +1634,13 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="certSerial">
-                      Serial Number (optional*)
+                      {t("auth.providerRegister.certSerialOptionalLabel")}
                     </Label>
                     <Input
                       id="certSerial"
-                      placeholder="e.g. ABC-123-XYZ"
+                      placeholder={t(
+                        "auth.providerRegister.certSerialPlaceholder",
+                      )}
                       className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                       value={newCertification.serialNumber || ""}
                       onChange={(e) =>
@@ -1556,12 +1653,14 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="certLink">
-                      Verification Link (optional*)
+                      {t("auth.providerRegister.certLinkOptionalLabel")}
                     </Label>
                     <Input
                       id="certLink"
                       type="url"
-                      placeholder="https://verify.issuer.com/cert/ABC-123"
+                      placeholder={t(
+                        "auth.providerRegister.certVerifyUrlPlaceholder",
+                      )}
                       className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                       value={newCertification.sourceUrl || ""}
                       onChange={(e) =>
@@ -1572,8 +1671,7 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                       }
                     />
                     <p className="text-xs text-gray-500">
-                      *At least one of Serial Number or Verification Link is
-                      required.
+                      {t("auth.providerRegister.certSerialOrLinkHint")}
                     </p>
                   </div>
                 </div>
@@ -1594,7 +1692,7 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                     }
                   >
                     <Award className="w-4 h-4 mr-2" />
-                    Add Certification
+                    {t("auth.providerRegister.addCertificationButton")}
                   </Button>
                 </div>
               </div>
@@ -1604,7 +1702,9 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
             {certifications.length > 0 && (
               <div className="space-y-3">
                 <h3 className="text-sm font-semibold text-gray-900">
-                  Your certifications ({certifications.length})
+                  {t("auth.providerRegister.yourCertifications", {
+                    count: certifications.length,
+                  })}
                 </h3>
                 <div className="space-y-2">
                   {certifications.map((cert, index) => (
@@ -1628,11 +1728,14 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                             <Calendar className="w-4 h-4 inline mr-1" />
                             {cert.issuedDate && !Number.isNaN(new Date(cert.issuedDate).getTime())
                               ? new Date(cert.issuedDate).toLocaleDateString()
-                              : cert.issuedDate || "—"}
+                              : cert.issuedDate ||
+                                t("auth.providerRegister.review.emDash")}
                           </p>
                           {cert.serialNumber && (
                             <p className="text-sm text-gray-500 mt-1">
-                              <span className="font-medium">Serial No:</span>{" "}
+                              <span className="font-medium">
+                                {t("auth.providerRegister.certSerialLabel")}
+                              </span>{" "}
                               {cert.serialNumber}
                             </p>
                           )}
@@ -1644,7 +1747,7 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                               rel="noopener noreferrer"
                               className="text-blue-600 hover:underline text-sm mt-1 inline-block"
                             >
-                              Verify Certificate ↗
+                              {t("auth.providerRegister.verifyCertificateLink")}
                             </a>
                           )}
                         </div>
@@ -1674,9 +1777,9 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
             {certifications.length === 0 && (
               <div className="text-center py-8 text-gray-500">
                 <Award className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                <p>No certifications added yet</p>
+                <p>{t("auth.providerRegister.noCertsYet")}</p>
                 <p className="text-sm">
-                  Add your professional certifications to stand out to clients
+                  {t("auth.providerRegister.noCertsSubtitle")}
                 </p>
               </div>
             )}
@@ -1685,12 +1788,12 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
             <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
               <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg">
                 <h3 className="text-lg font-semibold mb-4">
-                  Edit Certification
+                  {t("auth.providerRegister.certEditTitle")}
                 </h3>
 
                 <div className="space-y-3">
                   <Input
-                    placeholder="Certification Name"
+                    placeholder={t("auth.providerRegister.certNamePlaceholder")}
                     value={editCertification.name}
                     onChange={(e) =>
                       setEditCertification((prev) => prev ? ({
@@ -1700,7 +1803,7 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                     }
                   />
                   <Input
-                    placeholder="Issuer"
+                    placeholder={t("auth.providerRegister.issuerPlaceholder")}
                     value={editCertification.issuer}
                     onChange={(e) =>
                       setEditCertification((prev) => prev ? ({
@@ -1720,7 +1823,9 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                     }
                   />
                   <Input
-                    placeholder="Serial Number"
+                    placeholder={t(
+                      "auth.providerRegister.certSerialPlaceholder",
+                    )}
                     value={editCertification.serialNumber || ""}
                     onChange={(e) =>
                       setEditCertification((prev) => prev ? ({
@@ -1731,7 +1836,7 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                   />
                   <Input
                     type="url"
-                    placeholder="Verification Link"
+                    placeholder={t("auth.providerRegister.certLinkPlaceholder")}
                     value={editCertification.sourceUrl || ""}
                     onChange={(e) =>
                       setEditCertification((prev) => prev ? ({
@@ -1750,13 +1855,13 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                       setEditingIndex(null);
                     }}
                   >
-                    Cancel
+                    {t("auth.providerRegister.cancelButton")}
                   </Button>
                   <Button
                     className="bg-blue-600 hover:bg-blue-700"
                     onClick={handleSaveEditedCertification}
                   >
-                    Save Changes
+                    {t("auth.providerRegister.saveChangesButton")}
                   </Button>
                 </div>
               </div>
@@ -1774,10 +1879,10 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
         >
           <div className="text-center mb-4">
             <h2 className="text-lg font-semibold text-gray-900">
-              Review & Submit
+              {t("auth.providerRegister.reviewTitle")}
             </h2>
             <p className="text-sm text-gray-600">
-              Please review your information before submitting
+              {t("auth.providerRegister.reviewSubtitle")}
             </p>
           </div>
 
@@ -1785,20 +1890,32 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
             <div className="p-4 border rounded-lg bg-white/50">
               <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center">
                 <User className="w-4 h-4 mr-2" />
-                Account (Step 1)
+                {t("auth.providerRegister.review.accountSection")}
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
                 <div>
-                  <span className="text-gray-600">Full name:</span>
-                  <span className="ml-2 font-medium">{formData.name || "—"}</span>
+                  <span className="text-gray-600">
+                    {t("auth.providerRegister.reviewFullName")}
+                  </span>
+                  <span className="ml-2 font-medium">
+                    {formData.name || t("auth.providerRegister.review.emDash")}
+                  </span>
                 </div>
                 <div>
-                  <span className="text-gray-600">Email:</span>
-                  <span className="ml-2 font-medium">{formData.email || "—"}</span>
+                  <span className="text-gray-600">
+                    {t("auth.companyRegister.review.email")}
+                  </span>
+                  <span className="ml-2 font-medium">
+                    {formData.email || t("auth.providerRegister.review.emDash")}
+                  </span>
                 </div>
                 <div>
-                  <span className="text-gray-600">Phone:</span>
-                  <span className="ml-2 font-medium">{formData.phone || "—"}</span>
+                  <span className="text-gray-600">
+                    {t("auth.companyRegister.review.phone")}
+                  </span>
+                  <span className="ml-2 font-medium">
+                    {formData.phone || t("auth.providerRegister.review.emDash")}
+                  </span>
                 </div>
               </div>
             </div>
@@ -1806,31 +1923,57 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
             <div className="p-4 border rounded-lg bg-white/50">
               <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center">
                 <FileText className="w-4 h-4 mr-2" />
-                Profile & CV (Step 2)
+                {t("auth.providerRegister.review.profileCvStep")}
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
                 <div>
-                  <span className="text-gray-600">Location:</span>
-                  <span className="ml-2 font-medium">{formData.location || "—"}</span>
+                  <span className="text-gray-600">
+                    {t("auth.providerRegister.review.location")}
+                  </span>
+                  <span className="ml-2 font-medium">
+                    {formData.location || t("auth.providerRegister.review.emDash")}
+                  </span>
                 </div>
                 <div>
-                  <span className="text-gray-600">Major/Title:</span>
-                  <span className="ml-2 font-medium">{formData.major || "—"}</span>
+                  <span className="text-gray-600">
+                    {t("auth.providerRegister.review.major")}
+                  </span>
+                  <span className="ml-2 font-medium">
+                    {formData.major || t("auth.providerRegister.review.emDash")}
+                  </span>
                 </div>
                 {formData.bio?.trim() && (
                   <div className="md:col-span-2">
-                    <span className="text-gray-600">Bio:</span>
+                    <span className="text-gray-600">
+                      {t("auth.providerRegister.review.bio")}
+                    </span>
                     <p className="ml-2 mt-0.5 font-medium">{formData.bio}</p>
                   </div>
                 )}
                 <div>
-                  <span className="text-gray-600">Resume:</span>
-                  <span className="ml-2 font-medium">{resumeFile ? resumeFile.name : "—"}</span>
+                  <span className="text-gray-600">
+                    {t("auth.providerRegister.review.resume")}
+                  </span>
+                  <span className="ml-2 font-medium">
+                    {resumeFile
+                      ? resumeFile.name
+                      : t("auth.providerRegister.review.emDash")}
+                  </span>
                 </div>
                 <div>
-                  <span className="text-gray-600">KYC:</span>
+                  <span className="text-gray-600">
+                    {t("auth.providerRegister.review.kycLabel")}
+                  </span>
                   <span className="ml-2 font-medium">
-                    {kycDocType && kycFile ? `${kycDocType} (${kycFile.name})` : "—"}
+                    {kycDocType && kycFile
+                      ? `${
+                          kycDocType === "PASSPORT"
+                            ? t("auth.providerRegister.kycTypePassport")
+                            : kycDocType === "IC"
+                              ? t("auth.providerRegister.kycTypeIc")
+                              : kycDocType
+                        } (${kycFile.name})`
+                      : t("auth.providerRegister.review.emDash")}
                   </span>
                 </div>
               </div>
@@ -1839,37 +1982,66 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
             <div className="p-4 border rounded-lg bg-white/50">
               <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center">
                 <Award className="w-4 h-4 mr-2" />
-                Skills & Experience (Step 3)
+                {t("auth.providerRegister.review.skillsExpStep")}
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
                 <div>
-                  <span className="text-gray-600">Years of experience:</span>
-                  <span className="ml-2 font-medium">{formData.yearsExperience || "—"}</span>
-                </div>
-                <div>
-                  <span className="text-gray-600">Hourly rate:</span>
+                  <span className="text-gray-600">
+                    {t("auth.providerRegister.review.yearsExperience")}
+                  </span>
                   <span className="ml-2 font-medium">
-                    {formData.hourlyRate ? `RM ${formData.hourlyRate}` : "—"}
+                    {formData.yearsExperience ||
+                      t("auth.providerRegister.review.emDash")}
                   </span>
                 </div>
                 <div>
-                  <span className="text-gray-600">Availability:</span>
-                  <span className="ml-2 font-medium">{formData.availability || "—"}</span>
+                  <span className="text-gray-600">
+                    {t("auth.providerRegister.review.hourlyRate")}
+                  </span>
+                  <span className="ml-2 font-medium">
+                    {formData.hourlyRate
+                      ? t("auth.providerRegister.review.hourlyDisplay", {
+                          rate: formData.hourlyRate,
+                        })
+                      : t("auth.providerRegister.review.emDash")}
+                  </span>
                 </div>
                 <div>
-                  <span className="text-gray-600">Work preference:</span>
-                  <span className="ml-2 font-medium">{formData.workPreference || "—"}</span>
+                  <span className="text-gray-600">
+                    {t("auth.providerRegister.review.availability")}
+                  </span>
+                  <span className="ml-2 font-medium">
+                    {formData.availability ||
+                      t("auth.providerRegister.review.emDash")}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-600">
+                    {t("auth.providerRegister.review.workPreference")}
+                  </span>
+                  <span className="ml-2 font-medium">
+                    {formData.workPreference ||
+                      t("auth.providerRegister.review.emDash")}
+                  </span>
                 </div>
                 {selectedSkills.length > 0 && (
                   <div className="md:col-span-2">
-                    <span className="text-gray-600">Skills:</span>
-                    <span className="ml-2 font-medium">{selectedSkills.join(", ")}</span>
+                    <span className="text-gray-600">
+                      {t("auth.providerRegister.review.skills")}
+                    </span>
+                    <span className="ml-2 font-medium">
+                      {selectedSkills.join(", ")}
+                    </span>
                   </div>
                 )}
                 {selectedLanguages.length > 0 && (
                   <div className="md:col-span-2">
-                    <span className="text-gray-600">Languages:</span>
-                    <span className="ml-2 font-medium">{selectedLanguages.join(", ")}</span>
+                    <span className="text-gray-600">
+                      {t("auth.providerRegister.review.languages")}
+                    </span>
+                    <span className="ml-2 font-medium">
+                      {selectedLanguages.join(", ")}
+                    </span>
                   </div>
                 )}
               </div>
@@ -1878,7 +2050,7 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
             <div className="p-4 border rounded-lg bg-white/50">
               <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center">
                 <Link className="w-4 h-4 mr-2" />
-                Portfolio & Links (Step 4)
+                {t("auth.providerRegister.review.portfolioStep")}
               </h3>
               <div className="text-sm">
                 {portfolioUrls.length > 0 ? (
@@ -1897,7 +2069,9 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                     ))}
                   </ul>
                 ) : (
-                  <span className="text-gray-600">—</span>
+                  <span className="text-gray-600">
+                    {t("auth.providerRegister.review.emDash")}
+                  </span>
                 )}
               </div>
             </div>
@@ -1905,7 +2079,7 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
             <div className="p-4 border rounded-lg bg-white/50">
               <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center">
                 <Award className="w-4 h-4 mr-2" />
-                Certifications (Step 5)
+                {t("auth.providerRegister.review.certificationsStep")}
               </h3>
               <div className="text-sm">
                 {certifications.length > 0 ? (
@@ -1918,7 +2092,10 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                           <span className="text-gray-600"> ({cert.issuedDate})</span>
                         )}
                         {cert.serialNumber?.trim() && (
-                          <p className="mt-0.5 text-gray-600">Serial: {cert.serialNumber}</p>
+                          <p className="mt-0.5 text-gray-600">
+                            {t("auth.providerRegister.review.serialInList")}{" "}
+                            {cert.serialNumber}
+                          </p>
                         )}
                         {cert.sourceUrl?.trim() && (
                           <a
@@ -1927,14 +2104,16 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                             rel="noopener noreferrer"
                             className="text-blue-600 hover:text-blue-700 text-xs"
                           >
-                            Verification link
+                            {t("auth.providerRegister.review.verificationLink")}
                           </a>
                         )}
                       </li>
                     ))}
                   </ul>
                 ) : (
-                  <span className="text-gray-600">—</span>
+                  <span className="text-gray-600">
+                    {t("auth.providerRegister.review.emDash")}
+                  </span>
                 )}
               </div>
             </div>
@@ -1943,7 +2122,7 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
               <div className="p-4 border rounded-lg bg-white/50">
                 <h3 className="text-sm font-semibold text-gray-900 mb-2 flex items-center">
                   <Zap className="w-4 h-4 mr-2" />
-                  AI CV insights
+                  {t("auth.providerRegister.review.aiCvInsights")}
                 </h3>
                 <pre className="bg-gray-50 p-2 rounded border text-xs text-gray-700 whitespace-pre-wrap max-h-40 overflow-auto">
                   {JSON.stringify(cvExtractedData, null, 2)}
@@ -1953,7 +2132,7 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
 
             <div className="rounded-lg border border-gray-200 bg-gray-50/50 p-4">
               <p className="mb-3 text-sm font-medium text-gray-900">
-                Agreement
+                {t("auth.companyRegister.agreementTitle")}
               </p>
               <div className="flex items-start gap-4">
                 <Checkbox
@@ -1973,14 +2152,14 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                   htmlFor="terms"
                   className="cursor-pointer text-sm leading-snug text-gray-700"
                 >
-                  I agree to the{" "}
+                  {t("auth.agreeTo")}{" "}
                   <a
                     href="/terms"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="font-medium text-blue-600 underline hover:text-blue-700"
                   >
-                    Terms of Service
+                    {t("auth.register.termsLink")}
                   </a>
                   ,{" "}
                   <a
@@ -1989,16 +2168,16 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
                     rel="noopener noreferrer"
                     className="font-medium text-blue-600 underline hover:text-blue-700"
                   >
-                    Privacy Policy
+                    {t("auth.register.privacyLink")}
                   </a>
-                  , and{" "}
+                  {t("auth.register.agreeTermsCookies")}
                   <a
                     href="/cookies"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="font-medium text-blue-600 underline hover:text-blue-700"
                   >
-                    Cookie Policy
+                    {t("auth.register.cookieLink")}
                   </a>
                   .
                 </Label>
@@ -2006,7 +2185,7 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
             </div>
             {!formData.acceptedTerms && (
               <p className="text-sm text-red-600">
-                Please tick the box above to continue.
+                {t("auth.companyRegister.mustAcceptTerms")}
               </p>
             )}
           </div>
@@ -2014,7 +2193,13 @@ const ProviderRegistration: React.FC<ProviderRegistrationProps> = ({
       );
 
     default:
-      return <div>Provider step {currentStep} content</div>;
+      return (
+        <div>
+          {t("auth.providerRegister.devPlaceholderStep", {
+            step: String(currentStep),
+          })}
+        </div>
+      );
   }
 };
 

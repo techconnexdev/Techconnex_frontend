@@ -1,10 +1,8 @@
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ProviderLayout } from "@/components/provider-layout";
-
 export default function ProviderReviewsLoading() {
   return (
-    <ProviderLayout>
+    
       <div className="space-y-6">
         {/* Header Skeleton */}
         <div className="flex justify-between items-center">
@@ -123,6 +121,6 @@ export default function ProviderReviewsLoading() {
           </div>
         </div>
       </div>
-    </ProviderLayout>
+    
   );
 }

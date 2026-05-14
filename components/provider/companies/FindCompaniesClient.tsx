@@ -19,6 +19,9 @@ import type { Company, Option } from "./types";
 import { getCompanyAiDrafts, getProfileImageUrl } from "@/lib/api";
 import { getUserFriendlyErrorMessage } from "@/lib/errors";
 import { FriendlyErrorState } from "@/components/FriendlyErrorState";
+import { useI18n } from "@/contexts/I18nProvider";
+import { ProviderCompaniesListSkeleton } from "@/components/provider/ProviderCompaniesSkeletons";
+import { Skeleton } from "@/components/ui/skeleton";
 
 /** Props come from the server page */
 export default function FindCompaniesClient({
@@ -29,6 +32,7 @@ export default function FindCompaniesClient({
   companySizes: Option[];
   ratings: Option[];
 }) {
+  const { t, locale } = useI18n();
   const [searchQuery, setSearchQuery] = useState("");
   const [ratingFilter, setRatingFilter] = useState(ratings[0]?.value ?? "all");
   const [verifiedFilter, setVerifiedFilter] = useState("all"); // all | verified | unverified
@@ -86,7 +90,7 @@ export default function FindCompaniesClient({
           .filter(Boolean);
         if (profileIds.length > 0 && token) {
           try {
-            const draftRes = await getCompanyAiDrafts(profileIds);
+            const draftRes = await getCompanyAiDrafts(profileIds, locale);
             if (draftRes?.success && Array.isArray(draftRes.drafts)) {
               const draftMap = new Map(
                 draftRes.drafts.map((d: { referenceId: string; summary: string }) => [d.referenceId, d.summary])
@@ -119,7 +123,39 @@ export default function FindCompaniesClient({
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, ratingFilter, verifiedFilter]);
+  }, [searchQuery, ratingFilter, verifiedFilter, locale]);
+
+  const ratingLabel = useCallback(
+    (opt: Option) => {
+      switch (opt.value) {
+        case "all":
+          return t("provider.companies.filter.allRatings");
+        case "5.0+":
+          return t("provider.companies.rating.stars5");
+        case "4.8+":
+          return t("provider.companies.rating.stars48");
+        case "4.5+":
+          return t("provider.companies.rating.stars45");
+        case "4.0+":
+          return t("provider.companies.rating.stars40");
+        case "3.5+":
+          return t("provider.companies.rating.stars35");
+        case "3.0+":
+          return t("provider.companies.rating.stars30");
+        case "2.5+":
+          return t("provider.companies.rating.stars25");
+        case "2.0+":
+          return t("provider.companies.rating.stars20");
+        case "1.5+":
+          return t("provider.companies.rating.stars15");
+        case "1.0+":
+          return t("provider.companies.rating.stars10");
+        default:
+          return opt.label;
+      }
+    },
+    [t],
+  );
 
   useEffect(() => {
     fetchData();
@@ -153,16 +189,18 @@ export default function FindCompaniesClient({
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4" data-tour-step="0">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Find Companies</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+            {t("provider.companies.title")}
+          </h1>
           <p className="text-sm sm:text-base text-gray-600 mt-1">
-            Discover companies looking for ICT professionals
+            {t("provider.companies.subtitle")}
           </p>
         </div>
         <div className="flex gap-2 sm:gap-3 w-full sm:w-auto" data-tour-step="1">
           <Link href="/provider/companies/saved" className="w-full sm:w-auto">
             <Button variant="outline" className="w-full sm:w-auto text-xs sm:text-sm">
               <Heart className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-              Saved Companies
+              {t("provider.companies.savedCompanies")}
             </Button>
           </Link>
         </div>
@@ -175,7 +213,7 @@ export default function FindCompaniesClient({
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
               <Input
-                placeholder="Search by name, industry..."
+                placeholder={t("provider.companies.searchPlaceholder")}
                 className="pl-10 text-sm sm:text-base"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -184,12 +222,14 @@ export default function FindCompaniesClient({
 
             <Select value={ratingFilter} onValueChange={setRatingFilter}>
               <SelectTrigger className="text-sm sm:text-base">
-                <SelectValue placeholder="All Ratings" />
+                <SelectValue
+                  placeholder={t("provider.companies.filter.allRatings")}
+                />
               </SelectTrigger>
               <SelectContent>
                 {ratings.map((r) => (
                   <SelectItem key={r.value} value={r.value}>
-                    {r.label}
+                    {ratingLabel(r)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -197,12 +237,22 @@ export default function FindCompaniesClient({
 
             <Select value={verifiedFilter} onValueChange={setVerifiedFilter}>
               <SelectTrigger className="text-sm sm:text-base">
-                <SelectValue placeholder="Verification Status" />
+                <SelectValue
+                  placeholder={t(
+                    "provider.companies.filter.verificationPlaceholder",
+                  )}
+                />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Companies</SelectItem>
-                <SelectItem value="verified">Verified Only</SelectItem>
-                <SelectItem value="unverified">Unverified Only</SelectItem>
+                <SelectItem value="all">
+                  {t("provider.companies.filter.allCompanies")}
+                </SelectItem>
+                <SelectItem value="verified">
+                  {t("provider.companies.filter.verifiedOnly")}
+                </SelectItem>
+                <SelectItem value="unverified">
+                  {t("provider.companies.filter.unverifiedOnly")}
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -212,27 +262,43 @@ export default function FindCompaniesClient({
       {/* Results header + Grid */}
       <div data-tour-step="3">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 mb-4">
-          <p className="text-sm sm:text-base text-gray-600">
-            {filteredCompanies.length} companies found
-          </p>
-          <Select value={sortBy} onValueChange={setSortBy}>
+          {loading ? (
+            <Skeleton className="h-5 w-44 sm:w-56 max-w-full" aria-hidden />
+          ) : (
+            <p className="text-sm sm:text-base text-gray-600">
+              {t("provider.companies.resultsCount", {
+                n: filteredCompanies.length,
+              })}
+            </p>
+          )}
+          <Select value={sortBy} onValueChange={setSortBy} disabled={loading}>
             <SelectTrigger className="w-full sm:w-48 text-sm sm:text-base">
-              <SelectValue placeholder="Sort by" />
+              <SelectValue
+                placeholder={t("provider.companies.sort.placeholder")}
+              />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="rating">Highest Rated</SelectItem>
-              <SelectItem value="verified">Verified First</SelectItem>
-              <SelectItem value="projects">Most Projects</SelectItem>
-              <SelectItem value="newest">Newest</SelectItem>
+              <SelectItem value="rating">
+                {t("provider.companies.sort.highestRated")}
+              </SelectItem>
+              <SelectItem value="verified">
+                {t("provider.companies.sort.verifiedFirst")}
+              </SelectItem>
+              <SelectItem value="projects">
+                {t("provider.companies.sort.mostProjects")}
+              </SelectItem>
+              <SelectItem value="newest">
+                {t("provider.companies.sort.newest")}
+              </SelectItem>
             </SelectContent>
           </Select>
         </div>
 
       {/* Grid */}
       {loading ? (
-        <div className="text-center py-8 sm:py-12">
-          <p className="text-sm sm:text-base text-gray-600">Loading companies...</p>
-        </div>
+        <ProviderCompaniesListSkeleton
+          loadingLabel={t("provider.companies.loading")}
+        />
       ) : error ? (
         <FriendlyErrorState
           variant="block"

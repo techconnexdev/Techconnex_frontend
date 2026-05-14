@@ -1,10 +1,8 @@
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { CustomerLayout } from "@/components/customer-layout"
-
 export default function DocumentDetailLoading() {
   return (
-    <CustomerLayout>
+    
       <div className="space-y-8">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -69,6 +67,6 @@ export default function DocumentDetailLoading() {
           </div>
         </div>
       </div>
-    </CustomerLayout>
+    
   )
 }

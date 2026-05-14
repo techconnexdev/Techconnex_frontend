@@ -36,15 +36,13 @@ import {
   Download,
   RefreshCw,
   Loader2,
-  CheckCircle,
-  Plus,
   Sparkles,
   HelpCircle,
 } from "lucide-react";
-import { CustomerLayout } from "@/components/customer-layout";
 import { CustomerRequestsTour } from "@/components/customer/CustomerRequestsTour";
+import { CustomerRequestsListSkeleton } from "@/components/customer/CustomerPageSkeletons";
 import { useToast } from "@/hooks/use-toast";
-import { formatDurationDays, timelineToDays } from "@/lib/timeline-utils";
+import { formatDurationDays } from "@/lib/timeline-utils";
 import {
   getCompanyProjectRequests,
   getBidExplanation,
@@ -56,17 +54,12 @@ import {
   getAttachmentUrl,
   getR2DownloadUrl,
 } from "@/lib/api";
-import {
-  getCompanyProjectMilestones,
-  updateCompanyProjectMilestones,
-  approveCompanyMilestones,
-  type Milestone,
-} from "@/lib/api";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getUserFriendlyErrorMessage } from "@/lib/errors";
 import { FriendlyErrorState } from "@/components/FriendlyErrorState";
+import { useI18n } from "@/contexts/I18nProvider";
 
 interface ProviderRequest {
   id: string;
@@ -79,6 +72,10 @@ interface ProviderRequest {
   projectId: string;
   projectTitle: string;
   bidAmount: number;
+  bidAmountOriginal?: number;
+  bidCurrencyCode?: string;
+  bidConversionDate?: string;
+  currencyCode?: string;
   proposedTimeline: string;
   deliveryTime?: number; // days, for milestone duration validation
   coverLetter: string;
@@ -90,15 +87,50 @@ interface ProviderRequest {
   attachments: string[];
   milestones: Array<{
     title: string;
-    description?: string; // backend may not send, so optional
+    description?: string;
     amount: number;
-    dueDate: string;
+    dueDate?: string;
     order: number;
+    daysFromStart?: number;
   }>;
-  aiFitExplanation?: string | null;
+  aiFitExplanation?: string | Record<string, string> | null;
   matchScore?: number | null;
   rank?: number | null;
   isTopFive?: boolean;
+}
+
+function normalizeExplanationLocale(locale: string): "en" | "id" | "ar" {
+  const lower = String(locale || "en").toLowerCase();
+  if (lower.startsWith("id")) return "id";
+  if (lower.startsWith("ar")) return "ar";
+  return "en";
+}
+
+function getLocalizedAiFitExplanation(
+  value: string | Record<string, string> | null | undefined,
+  locale: string,
+): string {
+  if (typeof value === "string") return value.trim();
+  if (!value || typeof value !== "object") return "";
+  const localeKey = normalizeExplanationLocale(locale);
+  const byLocale = typeof value[localeKey] === "string" ? value[localeKey].trim() : "";
+  const en = typeof value.en === "string" ? value.en.trim() : "";
+  const id = typeof value.id === "string" ? value.id.trim() : "";
+  const ar = typeof value.ar === "string" ? value.ar.trim() : "";
+  return byLocale || en || id || ar || "";
+}
+
+function hasAiFitExplanationForLocale(
+  value: string | Record<string, string> | null | undefined,
+  locale: string,
+): boolean {
+  const localeKey = normalizeExplanationLocale(locale);
+  if (typeof value === "string") {
+    return localeKey === "en" && value.trim().length > 0;
+  }
+  if (!value || typeof value !== "object") return false;
+  const text = value[localeKey];
+  return typeof text === "string" && text.trim().length > 0;
 }
 
 interface ApiProposal {
@@ -106,6 +138,7 @@ interface ApiProposal {
   serviceRequest: {
     id: string;
     title: string;
+    currencyCode?: string;
   };
   provider: {
     id: string;
@@ -119,6 +152,9 @@ interface ApiProposal {
     skills: string[];
   };
   bidAmount: number;
+  bidAmountOriginal?: number;
+  bidCurrencyCode?: string;
+  bidConversionDate?: string;
   deliveryTime: number;
   coverLetter: string;
   status: "PENDING" | "ACCEPTED" | "REJECTED";
@@ -127,14 +163,106 @@ interface ApiProposal {
   milestones: Array<{
     title: string;
     amount: number;
-    dueDate: string;
+    dueDate?: string;
     order: number;
+    daysFromStart?: number;
+    description?: string;
   }>;
   attachmentUrls?: string[];
 }
 
+function pickFiniteNumber(v: unknown): number | undefined {
+  if (v == null || v === "") return undefined;
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+/** Map API / Prisma milestone records to a stable shape for UI (camelCase + numeric amount). */
+function normalizeProposalMilestoneFromApi(
+  raw: unknown,
+  index: number,
+): ProviderRequest["milestones"][number] {
+  const m =
+    raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const order = pickFiniteNumber(m.order ?? m.Order) ?? index + 1;
+  const amount = pickFiniteNumber(m.amount ?? m.Amount) ?? 0;
+  const daysFromStart = pickFiniteNumber(
+    m.daysFromStart ?? m.days_from_start ?? m.DaysFromStart,
+  );
+  const title = String(m.title ?? m.Title ?? "").trim();
+  const descVal = m.description ?? m.Description;
+  const description =
+    typeof descVal === "string"
+      ? descVal
+      : descVal != null && String(descVal).trim() !== ""
+        ? String(descVal)
+        : undefined;
+  const dueVal = m.dueDate ?? m.due_date ?? m.DueDate;
+  let dueDate: string | undefined;
+  if (dueVal instanceof Date && !isNaN(dueVal.getTime())) {
+    dueDate = dueVal.toISOString();
+  } else if (typeof dueVal === "string" && dueVal.trim()) {
+    dueDate = dueVal.trim();
+  }
+  const out: ProviderRequest["milestones"][number] = {
+    title,
+    amount,
+    order,
+  };
+  if (description !== undefined) out.description = description;
+  if (dueDate !== undefined) out.dueDate = dueDate;
+  if (daysFromStart !== undefined) out.daysFromStart = daysFromStart;
+  return out;
+}
+
+type MilestoneForDuration = {
+  daysFromStart?: number;
+  dueDate?: string;
+};
+
+/** Segment length in days for one milestone (for display). */
+function getMilestoneSegmentDays(
+  sorted: MilestoneForDuration[],
+  idx: number,
+  proposalDeliveryDays: number | undefined,
+): number {
+  const m = sorted[idx];
+  const prev = idx > 0 ? sorted[idx - 1] : undefined;
+  const prevDays = idx > 0 ? (prev?.daysFromStart ?? 0) : 0;
+  const currDays = m.daysFromStart ?? 0;
+  let segment = currDays > 0 ? currDays - prevDays : 0;
+
+  if (segment <= 0 && idx > 0 && m.dueDate && prev?.dueDate) {
+    const d0 = new Date(prev.dueDate).getTime();
+    const d1 = new Date(m.dueDate).getTime();
+    if (!isNaN(d0) && !isNaN(d1) && d1 >= d0) {
+      segment = Math.round((d1 - d0) / 86400000);
+    }
+  }
+
+  const noDaysFromStart = sorted.every(
+    (x) => x.daysFromStart == null || x.daysFromStart === 0,
+  );
+  if (
+    segment <= 0 &&
+    noDaysFromStart &&
+    proposalDeliveryDays != null &&
+    proposalDeliveryDays > 0
+  ) {
+    const n = sorted.length;
+    segment =
+      n === 1
+        ? proposalDeliveryDays
+        : Math.max(1, Math.round(proposalDeliveryDays / n));
+  }
+
+  return segment;
+}
+
 export default function CustomerRequestsPage() {
+  const { t, locale } = useI18n();
   const { toast: toastHook } = useToast();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -153,6 +281,10 @@ export default function CustomerRequestsPage() {
   const [viewDetailsOpen, setViewDetailsOpen] = useState(false);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
+  const [acceptConfirmOpen, setAcceptConfirmOpen] = useState(false);
+  const [acceptingRequest, setAcceptingRequest] = useState<ProviderRequest | null>(
+    null,
+  );
 
   // API state
   const [requests, setRequests] = useState<ProviderRequest[]>([]);
@@ -180,11 +312,12 @@ export default function CustomerRequestsPage() {
   const panelLeaveTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const fetchedExplanationIds = React.useRef<Set<string>>(new Set());
 
-  const DEFAULT_BID_SUMMARY =
-    "Review this proposal's bid amount, timeline, and milestones. Check the provider's profile and cover letter to assess how well they match your project.";
-  const getBidSummary = (stored: string | null | undefined, cached: string | undefined) => {
-    const text = (stored && stored.trim()) || (cached && cached.trim());
-    return text || DEFAULT_BID_SUMMARY;
+  const getBidSummary = (
+    stored: string | Record<string, string> | null | undefined,
+    cached: string | undefined,
+  ) => {
+    const text = getLocalizedAiFitExplanation(stored, locale) || (cached && cached.trim());
+    return text || t("customer.projects.detail.defaultBidSummary");
   };
 
   const asArray = <T,>(v: unknown): T[] => (Array.isArray(v) ? v : []);
@@ -193,61 +326,12 @@ export default function CustomerRequestsPage() {
     const n = Number(v);
     return Number.isFinite(n) ? n.toLocaleString() : fallback;
   };
-
-  const [milestonesOpen, setMilestonesOpen] = useState(false);
-  const [milestones, setMilestones] = useState<Milestone[]>([]);
-  const [milestoneApprovalState, setMilestoneApprovalState] = useState({
-    milestonesLocked: false,
-    companyApproved: false,
-    providerApproved: false,
-    milestonesApprovedAt: null as string | null,
-  });
-  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
-  const [savingMilestones, setSavingMilestones] = useState(false);
-  const [milestoneFinalizeOpen, setMilestoneFinalizeOpen] = useState(false);
-  const [milestoneErrors, setMilestoneErrors] = useState<Record<number, {
-    title?: string;
-    description?: string;
-    dueDate?: string;
-    durationAmount?: string;
-    durationUnit?: string;
-  }>>({});
-  const [originalMilestones, setOriginalMilestones] = useState<Milestone[]>([]);
-
-  const normalizeSequences = (items: Milestone[]) =>
-    items
-      .map((m, i) => ({ ...m, sequence: i + 1 }))
-      .sort((a, b) => a.sequence - b.sequence);
-
-  const addMilestone = () => {
-    setMilestones((prev) =>
-      normalizeSequences([
-        ...prev,
-        {
-          sequence: prev.length + 1,
-          title: "",
-          description: "",
-          amount: 0,
-          durationAmount: "",
-          durationUnit: "" as "day" | "week" | "month" | "",
-        },
-      ])
-    );
-  };
-
-  const updateMilestone = (i: number, patch: Partial<Milestone>) => {
-    setMilestones((prev) =>
-      normalizeSequences(
-        prev.map((m, idx) => (idx === i ? { ...m, ...patch } : m))
-      )
-    );
-  };
-
-  const removeMilestone = (i: number) => {
-    setMilestones((prev) =>
-      normalizeSequences(prev.filter((_, idx) => idx !== i))
-    );
-  };
+  const formatMoney = (amount: number, currencyCode?: string) =>
+    new Intl.NumberFormat("en-MY", {
+      style: "currency",
+      currency: currencyCode || "MYR",
+      maximumFractionDigits: 0,
+    }).format(amount || 0);
 
   // Fetch data from API
   const fetchData = React.useCallback(async () => {
@@ -292,7 +376,13 @@ export default function CustomerRequestsPage() {
             projectId: proposal.serviceRequest.id,
             projectTitle: proposal.serviceRequest.title,
             bidAmount: proposal.bidAmount,
-            proposedTimeline: `${proposal.deliveryTime} days`,
+            bidAmountOriginal: proposal.bidAmountOriginal,
+            bidCurrencyCode: proposal.bidCurrencyCode,
+            bidConversionDate: proposal.bidConversionDate,
+            currencyCode: proposal.serviceRequest.currencyCode || "MYR",
+            proposedTimeline: t("customer.requests.timelineDays", {
+              n: String(proposal.deliveryTime),
+            }),
             deliveryTime: typeof proposal.deliveryTime === "number" ? proposal.deliveryTime : undefined,
             coverLetter: proposal.coverLetter,
             status: proposal.status.toLowerCase() as
@@ -315,9 +405,15 @@ export default function CustomerRequestsPage() {
               ? proposal.attachmentUrls
               : [],
             milestones: Array.isArray(proposal.milestones)
-              ? proposal.milestones
+              ? proposal.milestones.map((raw, i) =>
+                  normalizeProposalMilestoneFromApi(raw, i),
+                )
               : [],
-            aiFitExplanation: (proposal as unknown as Record<string, unknown>).aiFitExplanation as string | undefined ?? null,
+            aiFitExplanation:
+              ((proposal as unknown as Record<string, unknown>).aiFitExplanation as
+                | string
+                | Record<string, string>
+                | undefined) ?? null,
             matchScore: (proposal as unknown as Record<string, unknown>).matchScore as number | undefined ?? null,
             rank: (proposal as unknown as Record<string, unknown>).rank as number | undefined ?? null,
             isTopFive: (proposal as unknown as Record<string, unknown>).isTopFive as boolean | undefined,
@@ -365,7 +461,7 @@ export default function CustomerRequestsPage() {
     } finally {
       setLoading(false);
     }
-  }, [searchQuery, statusFilter, projectFilter, sortBy]);
+  }, [searchQuery, statusFilter, projectFilter, sortBy, t]);
 
   useEffect(() => {
     fetchData();
@@ -401,12 +497,15 @@ export default function CustomerRequestsPage() {
   // Fetch AI explanation for proposals without stored aiFitExplanation
   useEffect(() => {
     if (!openExplanationId) return;
-    const hasStored = requests.find((r) => r.id === openExplanationId)?.aiFitExplanation;
-    if (hasStored) return;
+    const hasStoredForLocale = hasAiFitExplanationForLocale(
+      requests.find((r) => r.id === openExplanationId)?.aiFitExplanation,
+      locale,
+    );
+    if (hasStoredForLocale) return;
     if (fetchedExplanationIds.current.has(openExplanationId)) return;
     fetchedExplanationIds.current.add(openExplanationId);
     setExplanationLoading((prev) => ({ ...prev, [openExplanationId]: true }));
-    getBidExplanation(openExplanationId)
+    getBidExplanation(openExplanationId, locale)
       .then((r) => {
         if (r.success && r.explanation)
           setExplanationCache((prev) => ({ ...prev, [openExplanationId]: r.explanation! }));
@@ -415,7 +514,13 @@ export default function CustomerRequestsPage() {
       .finally(() =>
         setExplanationLoading((prev) => ({ ...prev, [openExplanationId]: false }))
       );
-  }, [openExplanationId, requests]);
+  }, [locale, openExplanationId, requests]);
+
+  useEffect(() => {
+    fetchedExplanationIds.current.clear();
+    setExplanationCache({});
+    setExplanationLoading({});
+  }, [locale]);
 
   // Since we're filtering on the server side, we can use requests directly
   const filteredRequests = requests.sort((a, b) => {
@@ -456,43 +561,17 @@ export default function CustomerRequestsPage() {
         )
       );
 
-      // Immediately load project milestones for edit (convert daysFromStart → duration)
-      if (projectId) {
-        const milestoneData = await getCompanyProjectMilestones(projectId);
-        const raw = Array.isArray(milestoneData.milestones)
-          ? milestoneData.milestones.map((m) => ({ ...m, sequence: m.order }))
-          : [];
-        const sorted = [...raw].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-        const withDuration = sorted.map((m, i) => {
-          const prev = sorted[i - 1] as { daysFromStart?: number } | undefined;
-          const currDays = (m as { daysFromStart?: number }).daysFromStart ?? 0;
-          const prevDays = prev?.daysFromStart ?? 0;
-          const durationDays = currDays - prevDays;
-          return {
-            ...m,
-            durationAmount: durationDays > 0 ? String(durationDays) : "",
-            durationUnit: (durationDays > 0 ? "day" : "") as "day" | "week" | "month" | "",
-          };
-        });
-        setMilestones(withDuration);
-        setOriginalMilestones(JSON.parse(JSON.stringify(withDuration)));
-        setMilestoneApprovalState({
-          milestonesLocked: milestoneData.milestonesLocked,
-          companyApproved: milestoneData.companyApproved,
-          providerApproved: milestoneData.providerApproved,
-          milestonesApprovedAt: milestoneData.milestonesApprovedAt,
-        });
-        setActiveProjectId(projectId);
-        setMilestonesOpen(true);
-      }
-
       toastHook({
-        title: "Request Accepted",
-        description: "Edit milestones and confirm to finalize.",
+        title: t("customer.requests.toast.acceptTitle"),
+        description: t("customer.requests.toast.acceptDesc"),
       });
+
+      if (projectId) {
+        router.push(`/customer/projects/${projectId}/milestones`);
+      }
     } catch (err) {
       toastHook({
-        title: "Error",
+        title: t("customer.requests.toast.errorTitle"),
         description: getUserFriendlyErrorMessage(
           err,
           "customer requests accept",
@@ -501,176 +580,6 @@ export default function CustomerRequestsPage() {
       });
     } finally {
       setProcessingId(null);
-    }
-  };
-
-  const handleSaveMilestones = async () => {
-    if (!activeProjectId) return;
-
-    type Err = { title?: string; description?: string; dueDate?: string; durationAmount?: string; durationUnit?: string };
-    const errors: Record<number, Err> = {};
-    let hasErrors = false;
-    milestones.forEach((m, idx) => {
-      const milestoneErrors: Err = {};
-      const mm = m as Milestone & { durationAmount?: string; durationUnit?: string };
-
-      if (!m.title || !m.title.trim()) {
-        milestoneErrors.title = "Title is required.";
-        hasErrors = true;
-      }
-      if (!m.description || !m.description.trim()) {
-        milestoneErrors.description = "Description is required.";
-        hasErrors = true;
-      }
-      const durAmount = mm.durationAmount != null ? String(mm.durationAmount).trim() : "";
-      const durUnit = mm.durationUnit || "";
-      if (!durAmount || Number(durAmount) <= 0) {
-        milestoneErrors.durationAmount = "Duration amount is required and must be > 0.";
-        hasErrors = true;
-      }
-      if (!durUnit) {
-        milestoneErrors.durationUnit = "Unit is required.";
-        hasErrors = true;
-      }
-      if (Object.keys(milestoneErrors).length > 0) errors[idx] = milestoneErrors;
-    });
-
-    const bidAmount = selectedRequest?.bidAmount || 0;
-    if (bidAmount > 0) {
-      const sumMilestones = milestones.reduce(
-        (sum: number, m: Milestone) => {
-          const val = Number(m.amount);
-          if (!isNaN(val)) return sum + val;
-          return sum;
-        },
-        0
-      );
-      if (sumMilestones !== bidAmount) {
-        const msg = `Total of milestones (RM ${sumMilestones.toLocaleString()}) must equal the bid amount (RM ${bidAmount.toLocaleString()}).`;
-        errors[-1] = { ...errors[-1], title: errors[-1]?.title ?? msg };
-        hasErrors = true;
-      }
-    }
-
-    if (hasErrors) {
-      setMilestoneErrors(errors);
-      toastHook({
-        title: "Validation Error",
-        description: "Please fill required fields and ensure milestone durations total equals the delivery timeline and amounts equal the bid.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setMilestoneErrors({});
-
-    try {
-      setSavingMilestones(true);
-      const sorted = normalizeSequences(milestones);
-      let cum = 0;
-      const payload = sorted.map((m) => {
-        const mm = m as Milestone & { durationAmount?: string; durationUnit?: string };
-        const d = timelineToDays(Number(mm.durationAmount || 0), mm.durationUnit || "");
-        cum += d;
-        return {
-          sequence: m.sequence ?? m.order,
-          title: m.title,
-          description: m.description ?? "",
-          amount: Number(m.amount),
-          daysFromStart: cum,
-        };
-      });
-      const res = await updateCompanyProjectMilestones(
-        activeProjectId,
-        payload as Milestone[]
-      );
-      setMilestoneApprovalState({
-        milestonesLocked: res.milestonesLocked,
-        companyApproved: res.companyApproved,
-        providerApproved: res.providerApproved,
-        milestonesApprovedAt: res.milestonesApprovedAt,
-      });
-      
-      // Refresh milestones from API and convert daysFromStart → duration for form
-      const milestoneData = await getCompanyProjectMilestones(activeProjectId);
-      type MilestoneRecord = Record<string, unknown> & { sequence: number; order?: number; daysFromStart?: number };
-      const rawRefreshed: MilestoneRecord[] = Array.isArray(milestoneData.milestones)
-        ? milestoneData.milestones.map((m: Record<string, unknown>) => ({
-            ...m,
-            sequence: (m.order as number) ?? (m.sequence as number) ?? 0,
-          })) as MilestoneRecord[]
-        : [];
-      const sortedRef = [...rawRefreshed].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-      const refreshedMilestones: Milestone[] = sortedRef.map((m, i) => {
-        const prev = sortedRef[i - 1];
-        const currDays = m.daysFromStart ?? 0;
-        const prevDays = prev?.daysFromStart ?? 0;
-        const durationDays = currDays - prevDays;
-        return {
-          ...m,
-          title: (m.title as string) ?? "",
-          description: (m.description as string) ?? "",
-          amount: Number(m.amount ?? 0),
-          durationAmount: durationDays > 0 ? String(durationDays) : "",
-          durationUnit: (durationDays > 0 ? "day" : "") as "day" | "week" | "month" | "",
-        } as Milestone;
-      });
-      setMilestones(refreshedMilestones);
-      setOriginalMilestones(JSON.parse(JSON.stringify(refreshedMilestones)));
-
-      toastHook({
-        title: "Milestones updated",
-        description: "Milestone changes have been saved.",
-      });
-    } catch (e) {
-      toastHook({
-        title: "Save failed",
-        description: getUserFriendlyErrorMessage(
-          e,
-          "customer requests save milestones",
-        ),
-        variant: "destructive",
-      });
-    } finally {
-      setSavingMilestones(false);
-    }
-  };
-
-  const handleApproveAcceptedMilestones = async () => {
-    if (!activeProjectId) return;
-
-    try {
-      const res = await approveCompanyMilestones(activeProjectId);
-
-      setMilestoneApprovalState({
-        milestonesLocked: res.milestonesLocked,
-        companyApproved: res.companyApproved,
-        providerApproved: res.providerApproved,
-        milestonesApprovedAt: res.milestonesApprovedAt,
-      });
-
-      // 1. Close the milestone editor dialog ALWAYS
-      setMilestonesOpen(false);
-
-      // 2. Toast feedback
-      toastHook({
-        title: "Milestones approved",
-        description: res.milestonesLocked
-          ? "Milestones are now locked. Work can start and payments will follow these milestones."
-          : "Waiting for provider to approve.",
-      });
-
-      // 3. Open summary / receipt dialog
-      setMilestoneFinalizeOpen(true);
-    } catch (e) {
-      toastHook({
-        title: "Approval failed",
-        description: getUserFriendlyErrorMessage(
-          e,
-          "customer requests approve milestones",
-        ),
-        variant: "destructive",
-      });
     }
   };
 
@@ -690,12 +599,12 @@ export default function CustomerRequestsPage() {
       setRejectReason("");
 
       toastHook({
-        title: "Request Rejected",
-        description: "The provider has been notified about the rejection.",
+        title: t("customer.requests.toast.rejectTitle"),
+        description: t("customer.requests.toast.rejectDesc"),
       });
     } catch (err) {
       toastHook({
-        title: "Error",
+        title: t("customer.requests.toast.errorTitle"),
         description: getUserFriendlyErrorMessage(
           err,
           "customer requests reject",
@@ -725,6 +634,16 @@ export default function CustomerRequestsPage() {
     }
   };
 
+  const getStatusLabel = (status: string) => {
+    if (status === "pending") return t("customer.requests.status.pending");
+    if (status === "accepted") return t("customer.requests.status.accepted");
+    if (status === "rejected") return t("customer.requests.status.rejected");
+    return status;
+  };
+
+  const dateLocale =
+    locale === "id" ? "id-ID" : locale === "ar" ? "ar" : "en";
+
   const displayStats = {
     total: stats.totalProposals,
     pending: requests.filter((r) => r.status === "pending").length,
@@ -733,7 +652,7 @@ export default function CustomerRequestsPage() {
   };
 
   return (
-    <CustomerLayout>
+    <>
       <CustomerRequestsTour />
       <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
         {/* Header */}
@@ -743,10 +662,10 @@ export default function CustomerRequestsPage() {
         >
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-              Provider Requests
+              {t("customer.requests.title")}
             </h1>
             <p className="text-sm sm:text-base text-gray-600 mt-1">
-              Manage requests from providers for your projects
+              {t("customer.requests.subtitle")}
             </p>
           </div>
           <div
@@ -771,12 +690,12 @@ export default function CustomerRequestsPage() {
                   document.body.removeChild(link);
                   URL.revokeObjectURL(url);
                   toastHook({
-                    title: "Export successful",
-                    description: "Requests exported as PDF",
+                    title: t("customer.requests.exportSuccessTitle"),
+                    description: t("customer.requests.exportSuccessDesc"),
                   });
                 } catch (err) {
                   toastHook({
-                    title: "Export failed",
+                    title: t("customer.requests.exportFailedTitle"),
                     description: getUserFriendlyErrorMessage(
                       err,
                       "customer requests export",
@@ -788,7 +707,7 @@ export default function CustomerRequestsPage() {
               className="w-full sm:w-auto border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 text-gray-700 font-medium transition-all duration-200"
             >
               <Download className="w-4 h-4 mr-2" />
-              Export
+              {t("customer.requests.export")}
             </Button>
             <Button 
               variant="outline" 
@@ -796,7 +715,7 @@ export default function CustomerRequestsPage() {
               onClick={() => window.location.reload()}
             >
               <RefreshCw className="w-4 h-4 mr-2" />
-              Refresh
+              {t("customer.requests.refresh")}
             </Button>
           </div>
         </div>
@@ -811,7 +730,7 @@ export default function CustomerRequestsPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs sm:text-sm font-medium text-gray-600">
-                    Total Requests
+                    {t("customer.requests.stats.total")}
                   </p>
                   <p className="text-xl sm:text-2xl font-bold text-gray-900">
                     {displayStats.total}
@@ -828,7 +747,9 @@ export default function CustomerRequestsPage() {
             <CardContent className="p-4 sm:p-5 lg:p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs sm:text-sm font-medium text-gray-600">Pending</p>
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">
+                    {t("customer.requests.stats.pending")}
+                  </p>
                   <p className="text-xl sm:text-2xl font-bold text-yellow-600">
                     {displayStats.pending}
                   </p>
@@ -844,7 +765,9 @@ export default function CustomerRequestsPage() {
             <CardContent className="p-4 sm:p-5 lg:p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs sm:text-sm font-medium text-gray-600">Accepted</p>
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">
+                    {t("customer.requests.stats.accepted")}
+                  </p>
                   <p className="text-xl sm:text-2xl font-bold text-green-600">
                     {displayStats.accepted}
                   </p>
@@ -860,7 +783,9 @@ export default function CustomerRequestsPage() {
             <CardContent className="p-4 sm:p-5 lg:p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs sm:text-sm font-medium text-gray-600">Rejected</p>
+                  <p className="text-xs sm:text-sm font-medium text-gray-600">
+                    {t("customer.requests.stats.rejected")}
+                  </p>
                   <p className="text-xl sm:text-2xl font-bold text-red-600">
                     {displayStats.rejected}
                   </p>
@@ -874,14 +799,14 @@ export default function CustomerRequestsPage() {
         </div>
 
         {/* Filters */}
-        <Card>
+        <Card data-tour-step="3">
           <CardContent className="p-4 sm:p-5 lg:p-6">
             <div className="flex flex-col lg:flex-row gap-3 sm:gap-4">
               <div className="flex-1">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                   <Input
-                    placeholder="Search by provider name or project..."
+                    placeholder={t("customer.requests.searchPlaceholder")}
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="pl-10 text-sm sm:text-base"
@@ -891,22 +816,22 @@ export default function CustomerRequestsPage() {
               <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 lg:gap-4">
                 <Select value={statusFilter} onValueChange={setStatusFilter}>
                   <SelectTrigger className="w-full sm:w-40 text-sm sm:text-base">
-                    <SelectValue placeholder="Status" />
+                    <SelectValue placeholder={t("customer.requests.statusPlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="accepted">Accepted</SelectItem>
-                    <SelectItem value="rejected">Rejected</SelectItem>
+                    <SelectItem value="all">{t("customer.requests.filter.status.all")}</SelectItem>
+                    <SelectItem value="pending">{t("customer.requests.filter.status.pending")}</SelectItem>
+                    <SelectItem value="accepted">{t("customer.requests.filter.status.accepted")}</SelectItem>
+                    <SelectItem value="rejected">{t("customer.requests.filter.status.rejected")}</SelectItem>
                   </SelectContent>
                 </Select>
 
                 <Select value={projectFilter} onValueChange={setProjectFilter}>
                   <SelectTrigger className="w-full sm:w-48 text-sm sm:text-base">
-                    <SelectValue placeholder="Project" />
+                    <SelectValue placeholder={t("customer.requests.projectPlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Projects</SelectItem>
+                    <SelectItem value="all">{t("customer.requests.filter.project.all")}</SelectItem>
                     {projectOptions.map((project) => (
                       <SelectItem key={project.id} value={project.id}>
                         {project.title}
@@ -917,15 +842,15 @@ export default function CustomerRequestsPage() {
 
                 <Select value={sortBy} onValueChange={setSortBy}>
                   <SelectTrigger className="w-full sm:w-40 text-sm sm:text-base">
-                    <SelectValue placeholder="Sort by" />
+                    <SelectValue placeholder={t("customer.requests.sortPlaceholder")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="newest">Newest</SelectItem>
-                    <SelectItem value="oldest">Oldest</SelectItem>
-                    <SelectItem value="highest-match">Highest match score</SelectItem>
-                    <SelectItem value="highest-bid">Highest Bid</SelectItem>
-                    <SelectItem value="lowest-bid">Lowest Bid</SelectItem>
-                    <SelectItem value="rating">Rating</SelectItem>
+                    <SelectItem value="newest">{t("customer.requests.sort.newest")}</SelectItem>
+                    <SelectItem value="oldest">{t("customer.requests.sort.oldest")}</SelectItem>
+                    <SelectItem value="highest-match">{t("customer.requests.sort.highestMatch")}</SelectItem>
+                    <SelectItem value="highest-bid">{t("customer.requests.sort.highestBid")}</SelectItem>
+                    <SelectItem value="lowest-bid">{t("customer.requests.sort.lowestBid")}</SelectItem>
+                    <SelectItem value="rating">{t("customer.requests.sort.rating")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -936,17 +861,9 @@ export default function CustomerRequestsPage() {
         {/* Requests List + AI summary panel (same design as project Bids tab) */}
         <div className="space-y-3 sm:space-y-4" data-tour-step="4">
           {loading ? (
-            <Card>
-              <CardContent className="p-8 sm:p-12 text-center">
-                <Loader2 className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-3 sm:mb-4 animate-spin" />
-                <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-1.5 sm:mb-2">
-                  Loading requests...
-                </h3>
-                <p className="text-sm sm:text-base text-gray-600">
-                  Please wait while we fetch your provider requests.
-                </p>
-              </CardContent>
-            </Card>
+            <CustomerRequestsListSkeleton
+              loadingLabel={`${t("customer.requests.loading.title")}. ${t("customer.requests.loading.hint")}`}
+            />
           ) : error ? (
             <Card>
               <CardContent className="p-8 sm:p-12 text-center">
@@ -962,10 +879,10 @@ export default function CustomerRequestsPage() {
               <CardContent className="p-8 sm:p-12 text-center">
                 <MessageSquare className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-3 sm:mb-4" />
                 <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-1.5 sm:mb-2">
-                  No requests found
+                  {t("customer.requests.empty.title")}
                 </h3>
                 <p className="text-sm sm:text-base text-gray-600">
-                  No provider requests match your current filters.
+                  {t("customer.requests.empty.body")}
                 </p>
               </CardContent>
             </Card>
@@ -1008,7 +925,7 @@ export default function CustomerRequestsPage() {
                                   <Sparkles className="w-4 h-4 text-blue-600" />
                                 </div>
                                 <span className="text-sm font-semibold text-gray-900 truncate">
-                                  {request.providerName || "Provider"}
+                                  {request.providerName || t("customer.requests.providerFallback")}
                                 </span>
                               </div>
                               <button
@@ -1018,18 +935,18 @@ export default function CustomerRequestsPage() {
                                   setOpenExplanationId(null);
                                 }}
                                 className="shrink-0 p-1.5 rounded-md text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                aria-label="Close"
+                                aria-label={t("customer.requests.closeAria")}
                               >
                                 <X className="w-4 h-4" />
                               </button>
                             </div>
                             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
-                              Why this bid fits
+                              {t("customer.requests.whyBidFits")}
                             </p>
                             {!request.aiFitExplanation && explanationLoading[request.id] ? (
                               <div className="flex items-center gap-2 text-sm text-gray-600">
                                 <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
-                                <span>Loading…</span>
+                                <span>{t("customer.requests.loadingShort")}</span>
                               </div>
                             ) : (
                               <p className="text-sm text-gray-700 leading-relaxed">
@@ -1074,7 +991,9 @@ export default function CustomerRequestsPage() {
                                 </h3>
                                 {request.matchScore != null && request.matchScore > 0 && (
                                   <span className="text-xs text-gray-500">
-                                    {request.matchScore}% match
+                                    {t("customer.requests.matchPercent", {
+                                      score: String(request.matchScore),
+                                    })}
                                   </span>
                                 )}
                                 <div className="flex items-center gap-1">
@@ -1090,10 +1009,10 @@ export default function CustomerRequestsPage() {
                                     setCardSummaryViewId((prev) => (prev === request.id ? null : request.id));
                                   }}
                                   className="lg:hidden inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-2 py-1"
-                                  aria-label="See why this bid fits"
+                                  aria-label={t("customer.requests.tapToSeeAria")}
                                 >
                                   <HelpCircle className="w-3.5 h-3.5" />
-                                  Tap here to see
+                                  {t("customer.requests.tapToSee")}
                                 </button>
                               </div>
 
@@ -1129,14 +1048,18 @@ export default function CustomerRequestsPage() {
                                     variant="secondary"
                                     className="text-[10px] leading-tight"
                                   >
-                                    +{asArray<string>(request.skills).length - 3} more
+                                    {t("customer.requests.skillsMore", {
+                                      n: String(asArray<string>(request.skills).length - 3),
+                                    })}
                                   </Badge>
                                 )}
                               </div>
 
                               {request.experience && (
                                 <p className="text-[11px] sm:text-[12px] text-gray-500 mt-1.5 sm:mt-2 line-clamp-1">
-                                  {request.experience} experience
+                                  {t("customer.requests.experienceSuffix", {
+                                    text: request.experience,
+                                  })}
                                 </p>
                               )}
                             </div>
@@ -1146,25 +1069,55 @@ export default function CustomerRequestsPage() {
                           <div className="lg:w-80 min-w-0 space-y-2.5 sm:space-y-3">
                             <div className="flex justify-between items-center">
                               <Badge className={`text-xs ${getStatusColor(request.status)}`}>
-                                {request.status.charAt(0).toUpperCase() +
-                                  request.status.slice(1)}
+                                {getStatusLabel(request.status)}
                               </Badge>
                               <span className="text-xs sm:text-sm text-gray-500">
                                 {request.submittedAt && !isNaN(new Date(request.submittedAt).getTime())
-                                  ? new Date(request.submittedAt).toLocaleDateString()
+                                  ? new Date(request.submittedAt).toLocaleDateString(dateLocale)
                                   : "—"}
                               </span>
                             </div>
 
                             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                               <div>
-                                <p className="text-xs sm:text-sm text-gray-600">Bid Amount</p>
-                                <p className="font-semibold text-base sm:text-lg">
-                                  RM{fmt(request.bidAmount)}
+                                <p className="text-xs sm:text-sm text-gray-600">
+                                  {t("customer.requests.bidAmount")}
                                 </p>
+                                <p className="font-semibold text-base sm:text-lg">
+                                  {formatMoney(
+                                    request.bidAmount,
+                                    request.currencyCode,
+                                  )}
+                                </p>
+                                {request.bidAmountOriginal != null && (
+                                  <p className="text-xs text-gray-500 mt-1">
+                                    {t("customer.requests.bidInProviderCurrency", {
+                                      currency: request.bidCurrencyCode || "MYR",
+                                      amount: formatMoney(
+                                        request.bidAmountOriginal,
+                                        request.bidCurrencyCode || "MYR",
+                                      ),
+                                    })}
+                                    {request.bidConversionDate ? (
+                                      <span className="text-gray-400">
+                                        {" "}
+                                        (
+                                        {t(
+                                          "customer.requests.bidFxSnapshotShort",
+                                          {
+                                            date: request.bidConversionDate,
+                                          },
+                                        )}
+                                        )
+                                      </span>
+                                    ) : null}
+                                  </p>
+                                )}
                               </div>
                               <div className="text-left sm:text-right">
-                                <p className="text-xs sm:text-sm text-gray-600">Timeline</p>
+                                <p className="text-xs sm:text-sm text-gray-600">
+                                  {t("customer.requests.timeline")}
+                                </p>
                                 <p className="font-medium text-sm sm:text-base">
                                   {request.proposedTimeline}
                                 </p>
@@ -1178,7 +1131,7 @@ export default function CustomerRequestsPage() {
                                 className="w-full min-h-[44px] sm:min-h-[40px] text-xs sm:text-sm justify-center bg-blue-600 hover:bg-blue-700 text-white shadow-sm font-medium"
                               >
                                 <MessageSquare className="w-4 h-4 mr-2 shrink-0" />
-                                <span className="truncate">Show details</span>
+                                <span className="truncate">{t("customer.requests.showDetails")}</span>
                               </Button>
                               <Link
                                 href={`/customer/providers/${request.providerId}`}
@@ -1190,7 +1143,7 @@ export default function CustomerRequestsPage() {
                                   className="w-full min-h-[44px] sm:min-h-[40px] text-xs sm:text-sm justify-center border-gray-300 hover:bg-gray-50 font-medium"
                                 >
                                   <Eye className="w-4 h-4 mr-2 shrink-0" />
-                                  <span className="truncate">View Profile</span>
+                                  <span className="truncate">{t("customer.requests.viewProfile")}</span>
                                 </Button>
                               </Link>
                             </div>
@@ -1250,26 +1203,27 @@ export default function CustomerRequestsPage() {
                             <Sparkles className="w-4 h-4 text-blue-600" />
                           </div>
                           <span className="text-sm font-semibold text-gray-900 truncate">
-                            {filteredRequests.find((r) => r.id === openExplanationId)?.providerName || "Provider"}
+                            {filteredRequests.find((r) => r.id === openExplanationId)?.providerName ||
+                              t("customer.requests.providerFallback")}
                           </span>
                         </div>
                         <button
                           type="button"
                           onClick={() => setOpenExplanationId(null)}
                           className="lg:hidden p-1.5 rounded-md text-gray-500 hover:bg-gray-100 focus:outline-none flex-shrink-0"
-                          aria-label="Close"
+                          aria-label={t("customer.requests.closeAria")}
                         >
                           <X className="w-4 h-4" />
                         </button>
                       </div>
                       <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
-                        Why this bid fits
+                        {t("customer.requests.whyBidFits")}
                       </p>
                       {!filteredRequests.find((r) => r.id === openExplanationId)?.aiFitExplanation &&
                       explanationLoading[openExplanationId] ? (
                         <div className="flex items-center gap-2 text-sm text-gray-600">
                           <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
-                          <span>Loading…</span>
+                          <span>{t("customer.requests.loadingShort")}</span>
                         </div>
                       ) : (
                         <p className="text-sm text-gray-700 leading-relaxed">
@@ -1294,11 +1248,12 @@ export default function CustomerRequestsPage() {
               <>
                 <DialogHeader className="space-y-1.5 text-left">
                   <DialogTitle className="text-lg sm:text-xl font-semibold tracking-tight">
-                    Request Details
+                    {t("customer.requests.detail.title")}
                   </DialogTitle>
                   <DialogDescription className="text-sm text-gray-600">
-                    Detailed information about {selectedRequest.providerName}&apos;s
-                    request
+                    {t("customer.requests.detail.description", {
+                      name: selectedRequest.providerName,
+                    })}
                   </DialogDescription>
                 </DialogHeader>
 
@@ -1334,7 +1289,11 @@ export default function CustomerRequestsPage() {
                           <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-3 sm:gap-x-4 gap-y-1 text-sm text-gray-600 mt-1.5">
                             <div className="flex items-center gap-1.5">
                               <Star className="w-4 h-4 text-yellow-400 fill-current flex-shrink-0" />
-                              <span>{selectedRequest.providerRating} rating</span>
+                              <span>
+                                {t("customer.requests.ratingSuffix", {
+                                  n: String(selectedRequest.providerRating),
+                                })}
+                              </span>
                             </div>
                             <div className="flex items-center gap-1.5">
                               <MapPin className="w-4 h-4 flex-shrink-0" />
@@ -1342,13 +1301,19 @@ export default function CustomerRequestsPage() {
                             </div>
                             <div className="flex items-center gap-1.5">
                               <Clock className="w-4 h-4 flex-shrink-0" />
-                              <span className="truncate">{selectedRequest.providerResponseTime} response time</span>
+                              <span className="truncate">
+                                {t("customer.requests.responseTimeSuffix", {
+                                  text: selectedRequest.providerResponseTime,
+                                })}
+                              </span>
                             </div>
                           </div>
 
                           {selectedRequest.experience && (
                             <p className="text-sm text-gray-600 mt-2 leading-relaxed break-words">
-                              {selectedRequest.experience} experience
+                              {t("customer.requests.experienceSuffix", {
+                                text: selectedRequest.experience,
+                              })}
                             </p>
                           )}
 
@@ -1366,7 +1331,9 @@ export default function CustomerRequestsPage() {
                               ))}
                             {asArray<string>(selectedRequest.skills).length > 4 && (
                               <Badge variant="secondary" className="text-xs leading-tight">
-                                +{asArray<string>(selectedRequest.skills).length - 4} more
+                                {t("customer.requests.skillsMore", {
+                                  n: String(asArray<string>(selectedRequest.skills).length - 4),
+                                })}
                               </Badge>
                             )}
                           </div>
@@ -1382,7 +1349,7 @@ export default function CustomerRequestsPage() {
                             className="flex items-center text-sm"
                           >
                             <Eye className="w-4 h-4 mr-1.5" />
-                            View Profile
+                            {t("customer.requests.viewProfile")}
                           </Button>
                         </Link>
                       </div>
@@ -1394,28 +1361,60 @@ export default function CustomerRequestsPage() {
                   {/* Project & Bid Info */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-5">
                     <div className="space-y-1">
-                      <h4 className="text-sm font-semibold text-gray-900 tracking-tight">Project</h4>
+                      <h4 className="text-sm font-semibold text-gray-900 tracking-tight">
+                        {t("customer.requests.detail.project")}
+                      </h4>
                       <p className="text-sm text-gray-700 leading-relaxed break-words">
                         {selectedRequest.projectTitle}
                       </p>
                     </div>
                     <div className="space-y-1">
-                      <h4 className="text-sm font-semibold text-gray-900 tracking-tight">Bid Amount</h4>
+                      <h4 className="text-sm font-semibold text-gray-900 tracking-tight">
+                        {t("customer.requests.detail.bidAmount")}
+                      </h4>
                       <p className="text-xl sm:text-2xl font-bold text-green-600">
-                        RM{fmt(selectedRequest.bidAmount)}
+                        {formatMoney(
+                          selectedRequest.bidAmount,
+                          selectedRequest.currencyCode,
+                        )}
                       </p>
+                      {selectedRequest.bidAmountOriginal != null && (
+                        <p className="text-xs text-gray-500">
+                          {t("customer.requests.bidInProviderCurrency", {
+                            currency:
+                              selectedRequest.bidCurrencyCode || "MYR",
+                            amount: formatMoney(
+                              selectedRequest.bidAmountOriginal,
+                              selectedRequest.bidCurrencyCode || "MYR",
+                            ),
+                          })}
+                          {selectedRequest.bidConversionDate ? (
+                            <span className="text-gray-400">
+                              {" "}
+                              (
+                              {t("customer.requests.bidFxSnapshotShort", {
+                                date: selectedRequest.bidConversionDate,
+                              })}
+                              )
+                            </span>
+                          ) : null}
+                        </p>
+                      )}
                     </div>
                     <div className="space-y-1">
-                      <h4 className="text-sm font-semibold text-gray-900 tracking-tight">Proposed Timeline</h4>
+                      <h4 className="text-sm font-semibold text-gray-900 tracking-tight">
+                        {t("customer.requests.detail.proposedTimeline")}
+                      </h4>
                       <p className="text-sm text-gray-700 leading-relaxed">
                         {selectedRequest.proposedTimeline}
                       </p>
                     </div>
                     <div className="space-y-1">
-                      <h4 className="text-sm font-semibold text-gray-900 tracking-tight">Status</h4>
+                      <h4 className="text-sm font-semibold text-gray-900 tracking-tight">
+                        {t("customer.requests.detail.status")}
+                      </h4>
                       <Badge className={`text-xs ${getStatusColor(selectedRequest.status)}`}>
-                        {selectedRequest.status.charAt(0).toUpperCase() +
-                          selectedRequest.status.slice(1)}
+                        {getStatusLabel(selectedRequest.status)}
                       </Badge>
                     </div>
                   </div>
@@ -1424,7 +1423,9 @@ export default function CustomerRequestsPage() {
 
                   {/* Cover Letter */}
                   <div className="space-y-2">
-                    <h4 className="text-sm font-semibold text-gray-900 tracking-tight">Cover Letter</h4>
+                    <h4 className="text-sm font-semibold text-gray-900 tracking-tight">
+                      {t("customer.requests.detail.coverLetter")}
+                    </h4>
                     <div className="bg-gray-50/80 p-4 rounded-lg border border-gray-100">
                       <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed break-words">
                         {selectedRequest.coverLetter}
@@ -1434,7 +1435,9 @@ export default function CustomerRequestsPage() {
 
                   {/* Skills */}
                   <div className="space-y-2">
-                    <h4 className="text-sm font-semibold text-gray-900 tracking-tight">Skills</h4>
+                    <h4 className="text-sm font-semibold text-gray-900 tracking-tight">
+                      {t("customer.requests.detail.skills")}
+                    </h4>
                     <div className="flex flex-wrap gap-2">
                       {asArray<string>(selectedRequest.skills).map((skill) => (
                         <Badge key={skill} variant="secondary" className="text-xs">
@@ -1468,7 +1471,7 @@ export default function CustomerRequestsPage() {
                     selectedRequest.milestones.length > 0 && (
                       <div className="space-y-3">
                         <h4 className="text-sm font-semibold text-gray-900 tracking-tight">
-                          Proposed Milestones
+                          {t("customer.requests.detail.proposedMilestones")}
                         </h4>
 
                         <div className="space-y-3">
@@ -1477,19 +1480,36 @@ export default function CustomerRequestsPage() {
                               (a, b) => (a.order ?? 0) - (b.order ?? 0),
                             );
                             return sorted.map((m, idx) => {
-                              const prev = sorted[idx - 1] as { daysFromStart?: number } | undefined;
-                              const currDays = (m as { daysFromStart?: number }).daysFromStart ?? 0;
-                              const prevDays = prev?.daysFromStart ?? 0;
-                              const durationDays = currDays - prevDays;
-                              const durationLabel =
-                                durationDays > 0
-                                  ? formatDurationDays(durationDays)
-                                  : (m as { dueDate?: string }).dueDate
-                                    ? `Due: ${new Date((m as { dueDate: string }).dueDate).toLocaleDateString()}`
+                              const dueDateStr = m.dueDate
+                                ? new Date(m.dueDate).toLocaleDateString(
+                                    dateLocale,
+                                  )
+                                : "";
+                              const segmentDays = getMilestoneSegmentDays(
+                                sorted,
+                                idx,
+                                selectedRequest.deliveryTime,
+                              );
+                              const spanText =
+                                segmentDays > 0
+                                  ? t("customer.requests.detail.duration", {
+                                      label: formatDurationDays(segmentDays),
+                                    })
+                                  : dueDateStr
+                                    ? t("customer.requests.detail.due", {
+                                        date: dueDateStr,
+                                      })
                                     : "—";
+                              const amountNum = Number(m.amount);
+                              const amountLabel = Number.isFinite(amountNum)
+                                ? formatMoney(
+                                    amountNum,
+                                    selectedRequest.currencyCode,
+                                  )
+                                : "—";
                               return (
                                 <Card
-                                  key={idx}
+                                  key={`${m.order ?? idx}-${idx}`}
                                   className="border border-gray-200"
                                 >
                                   <CardContent className="p-4 space-y-2">
@@ -1499,13 +1519,15 @@ export default function CustomerRequestsPage() {
                                           #{m.order || idx + 1}
                                         </Badge>
                                         <span className="font-medium text-sm text-gray-900 break-words">
-                                          {m.title || "Untitled milestone"}
+                                          {m.title || t("customer.requests.detail.untitledMilestone")}
                                         </span>
                                       </div>
                                       <div className="text-left sm:text-right flex-shrink-0">
-                                        <span className="text-xs text-gray-500 block">Amount</span>
+                                        <span className="text-xs text-gray-500 block">
+                                          {t("customer.requests.detail.amount")}
+                                        </span>
                                         <span className="text-base font-semibold text-gray-900">
-                                          RM {Number(m.amount || 0).toLocaleString()}
+                                          {amountLabel}
                                         </span>
                                       </div>
                                     </div>
@@ -1516,9 +1538,7 @@ export default function CustomerRequestsPage() {
                                     )}
                                     <div className="text-sm text-gray-600 flex items-center gap-1.5">
                                       <Clock className="w-4 h-4 flex-shrink-0" />
-                                      <span>
-                                        {durationDays > 0 ? `Duration: ${durationLabel}` : durationLabel}
-                                      </span>
+                                      <span>{spanText}</span>
                                     </div>
                                   </CardContent>
                                 </Card>
@@ -1534,7 +1554,7 @@ export default function CustomerRequestsPage() {
                     selectedRequest.attachments.length > 0 && (
                       <div className="space-y-3">
                         <h4 className="text-sm font-semibold text-gray-900 tracking-tight">
-                          Attachments
+                          {t("customer.requests.detail.attachments")}
                         </h4>
 
                         <div className="space-y-2">
@@ -1563,7 +1583,7 @@ export default function CustomerRequestsPage() {
                                     window.open(downloadUrl.downloadUrl, "_blank");
                                   } catch (error) {
                                     toastHook({
-                                      title: "Error",
+                                      title: t("customer.requests.toast.errorTitle"),
                                       description: getUserFriendlyErrorMessage(
                                         error,
                                         "customer requests attachment download",
@@ -1583,7 +1603,7 @@ export default function CustomerRequestsPage() {
                                     {fileName}
                                   </span>
                                   <span className="text-xs text-gray-500 leading-snug">
-                                    Click to preview / download
+                                    {t("customer.requests.detail.attachmentHint")}
                                   </span>
                                 </div>
 
@@ -1616,14 +1636,15 @@ export default function CustomerRequestsPage() {
                     <>
                       <Button
                         onClick={() => {
+                          setAcceptingRequest(selectedRequest);
+                          setAcceptConfirmOpen(true);
                           setViewDetailsOpen(false);
-                          handleAcceptRequest(selectedRequest.id);
                         }}
                         disabled={processingId === selectedRequest.id}
                         className="w-full sm:w-auto text-sm"
                       >
                         <Check className="w-4 h-4 mr-2" />
-                        Accept
+                        {t("customer.requests.detail.accept")}
                       </Button>
                       <Button
                         variant="outline"
@@ -1634,7 +1655,7 @@ export default function CustomerRequestsPage() {
                         className="w-full sm:w-auto text-sm border-red-200 hover:border-red-300 bg-white hover:bg-red-50 text-red-600 hover:text-red-700"
                       >
                         <X className="w-4 h-4 mr-2" />
-                        Reject
+                        {t("customer.requests.detail.reject")}
                       </Button>
                     </>
                   ) : (
@@ -1643,7 +1664,7 @@ export default function CustomerRequestsPage() {
                       onClick={() => setViewDetailsOpen(false)}
                       className="w-full sm:w-auto text-sm"
                     >
-                      Close
+                      {t("customer.requests.detail.close")}
                     </Button>
                   )}
                 </DialogFooter>
@@ -1652,27 +1673,116 @@ export default function CustomerRequestsPage() {
           </DialogContent>
         </Dialog>
 
+        <Dialog
+          open={acceptConfirmOpen}
+          onOpenChange={(open) => {
+            setAcceptConfirmOpen(open);
+            if (!open) setAcceptingRequest(null);
+          }}
+        >
+          <DialogContent className="max-w-xl sm:max-w-2xl p-5 sm:p-6">
+            <DialogHeader className="space-y-1.5 text-left">
+              <DialogTitle className="text-lg sm:text-xl font-semibold tracking-tight">
+                Continue with the same freelancer?
+              </DialogTitle>
+              <DialogDescription className="text-xs sm:text-sm text-gray-600">
+                Do you want to continue with this freelancer for the next milestone?
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3 sm:space-y-4">
+              <div className="rounded-md border border-gray-200 bg-gray-50 p-3 sm:p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm sm:text-base font-semibold text-gray-900 truncate">
+                      {acceptingRequest?.providerName || "Selected Provider"}
+                    </p>
+                    <p className="text-xs sm:text-sm text-gray-600 mt-1">
+                      {acceptingRequest?.providerLocation || "Location not specified"}
+                    </p>
+                  </div>
+                  <div className="shrink-0 rounded-md bg-blue-100 text-blue-800 px-2 py-1 text-xs sm:text-sm font-semibold">
+                    AI Match: {Math.round(acceptingRequest?.matchScore ?? 0)}%
+                  </div>
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-2 text-xs sm:text-sm text-gray-700">
+                  <p>
+                    <span className="font-medium">Bid:</span>{" "}
+                    {formatMoney(
+                      acceptingRequest?.bidAmount ?? 0,
+                      acceptingRequest?.currencyCode,
+                    )}
+                  </p>
+                  <p>
+                    <span className="font-medium">Timeline:</span>{" "}
+                    {acceptingRequest?.proposedTimeline || "—"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-md border border-blue-100 bg-blue-50/60 p-3 sm:p-4">
+                <p className="text-xs sm:text-sm font-semibold text-blue-900 mb-1">
+                  AI insight
+                </p>
+                <p className="text-xs sm:text-sm text-gray-700 whitespace-pre-wrap">
+                  {getBidSummary(
+                    acceptingRequest?.aiFitExplanation,
+                    acceptingRequest ? explanationCache[acceptingRequest.id] : undefined,
+                  )}
+                </p>
+              </div>
+            </div>
+            <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end pt-4 mt-2 border-t border-gray-100">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setAcceptConfirmOpen(false);
+                  setAcceptingRequest(null);
+                }}
+                disabled={
+                  !!acceptingRequest && processingId === acceptingRequest.id
+                }
+                className="w-full sm:w-auto text-sm"
+              >
+                No
+              </Button>
+              <Button
+                onClick={async () => {
+                  if (!acceptingRequest) return;
+                  const proposalId = acceptingRequest.id;
+                  setAcceptConfirmOpen(false);
+                  await handleAcceptRequest(proposalId);
+                }}
+                disabled={
+                  !!acceptingRequest && processingId === acceptingRequest.id
+                }
+                className="w-full sm:w-auto text-sm"
+              >
+                Yes
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         {/* Reject Dialog */}
         <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
           <DialogContent className="max-w-xl sm:max-w-2xl max-h-[90vh] overflow-y-auto p-5 sm:p-6">
             <DialogHeader className="space-y-1.5 text-left">
               <DialogTitle className="text-lg sm:text-xl font-semibold tracking-tight">
-                Reject Request
+                {t("customer.requests.reject.title")}
               </DialogTitle>
               <DialogDescription className="text-sm text-gray-600 leading-relaxed">
-                Please provide a reason for rejecting this request. This will
-                help the provider improve their future proposals.
+                {t("customer.requests.reject.description")}
               </DialogDescription>
             </DialogHeader>
 
             <div className="space-y-3 pt-1">
               <div className="space-y-2">
                 <Label htmlFor="rejectReason" className="text-sm font-semibold text-gray-900 tracking-tight">
-                  Reason for rejection
+                  {t("customer.requests.reject.reasonLabel")}
                 </Label>
                 <Textarea
                   id="rejectReason"
-                  placeholder="Please explain why you're rejecting this request..."
+                  placeholder={t("customer.requests.reject.placeholder")}
                   value={rejectReason}
                   onChange={(e) => setRejectReason(e.target.value)}
                   rows={4}
@@ -1687,7 +1797,7 @@ export default function CustomerRequestsPage() {
                 onClick={() => setRejectDialogOpen(false)}
                 className="w-full sm:w-auto border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 text-gray-700 font-medium transition-all duration-200"
               >
-                Cancel
+                {t("customer.requests.reject.cancel")}
               </Button>
               <Button
                 onClick={() =>
@@ -1702,12 +1812,12 @@ export default function CustomerRequestsPage() {
                 {processingId === selectedRequest?.id ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Rejecting...
+                    {t("customer.requests.reject.rejecting")}
                   </>
                 ) : (
                   <>
                     <X className="w-4 h-4 mr-2" />
-                    Reject Request
+                    {t("customer.requests.reject.confirm")}
                   </>
                 )}
               </Button>
@@ -1715,323 +1825,6 @@ export default function CustomerRequestsPage() {
           </DialogContent>
         </Dialog>
       </div>
-
-      <Dialog open={milestonesOpen} onOpenChange={setMilestonesOpen}>
-        <DialogContent className="max-w-xl sm:max-w-2xl lg:max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-base sm:text-lg">Edit Milestones</DialogTitle>
-            <DialogDescription className="text-xs sm:text-sm">
-              Company {milestoneApprovalState.companyApproved ? "✓" : "✗"} ·
-              Provider {milestoneApprovalState.providerApproved ? "✓" : "✗"}
-              {milestoneApprovalState.milestonesLocked && " · LOCKED"}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-3 sm:space-y-4">
-            {milestoneErrors[-1]?.title && (
-              <div className="p-2.5 sm:p-3 bg-red-50 border border-red-200 rounded-md">
-                <p className="text-xs sm:text-sm text-red-600 font-medium">
-                  {milestoneErrors[-1].title}
-                </p>
-              </div>
-            )}
-            {milestones.map((m, i) => (
-              <Card key={i}>
-                <CardContent className="p-3 sm:p-4 space-y-2.5 sm:space-y-3">
-                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 sm:gap-3">
-                    <div className="sm:col-span-1">
-                      <Label className="text-xs sm:text-sm">Seq</Label>
-                      <Input type="number" value={i + 1} disabled className="text-xs sm:text-sm" />
-                    </div>
-                    <div className="sm:col-span-4">
-                      <Label className="text-xs sm:text-sm">
-                        Title <span className="text-red-500">*</span>
-                      </Label>
-                      <Input
-                        value={m.title}
-                        onChange={(e) => {
-                          updateMilestone(i, { title: e.target.value });
-                          if (milestoneErrors[i]?.title) {
-                            setMilestoneErrors(prev => ({
-                              ...prev,
-                              [i]: { ...prev[i], title: undefined },
-                            }));
-                          }
-                        }}
-                        className={`text-xs sm:text-sm ${
-                          milestoneErrors[i]?.title
-                            ? "border-red-500 focus-visible:ring-red-500"
-                            : ""
-                        }`}
-                      />
-                      {milestoneErrors[i]?.title && (
-                        <p className="text-xs text-red-600 mt-1">
-                          {milestoneErrors[i].title}
-                        </p>
-                      )}
-                    </div>
-                    <div className="sm:col-span-3">
-                      <Label className="text-xs sm:text-sm">Amount</Label>
-                      <Input
-                        type="number"
-                        value={String(m.amount ?? 0)}
-                        onChange={(e) => {
-                          updateMilestone(i, { amount: Number(e.target.value) });
-                          // Clear sum error when amount changes
-                          if (milestoneErrors[-1]) {
-                            setMilestoneErrors(prev => {
-                              const newErrors = { ...prev };
-                              delete newErrors[-1];
-                              return newErrors;
-                            });
-                          }
-                        }}
-                        className="text-xs sm:text-sm"
-                      />
-                    </div>
-                    <div className="sm:col-span-4">
-                      <Label className="text-xs sm:text-sm">
-                        Duration <span className="text-red-500">*</span>
-                      </Label>
-                      <div className="flex gap-2 mt-1">
-                        <Input
-                          type="number"
-                          min={1}
-                          placeholder="e.g. 1"
-                          value={(m as Milestone & { durationAmount?: string }).durationAmount ?? ""}
-                          onChange={(e) => {
-                            updateMilestone(i, {
-                              durationAmount: e.target.value,
-                              durationUnit: (m as Milestone & { durationUnit?: string }).durationUnit || "",
-                            } as Partial<Milestone>);
-                            if (milestoneErrors[i]?.durationAmount || milestoneErrors[i]?.durationUnit) {
-                              setMilestoneErrors(prev => ({
-                                ...prev,
-                                [i]: { ...prev[i], durationAmount: undefined, durationUnit: undefined },
-                              }));
-                            }
-                            if (milestoneErrors[-1]) {
-                              setMilestoneErrors(prev => { const next = { ...prev }; delete next[-1]; return next; });
-                            }
-                          }}
-                          className={`text-xs sm:text-sm flex-1 ${
-                            milestoneErrors[i]?.durationAmount ? "border-red-500 focus-visible:ring-red-500" : ""
-                          }`}
-                        />
-                        <Select
-                          value={(m as Milestone & { durationUnit?: string }).durationUnit || ""}
-                          onValueChange={(value: "day" | "week" | "month") => {
-                            updateMilestone(i, {
-                              durationAmount: (m as Milestone & { durationAmount?: string }).durationAmount ?? "",
-                              durationUnit: value,
-                            } as Partial<Milestone>);
-                            if (milestoneErrors[i]?.durationUnit) {
-                              setMilestoneErrors(prev => ({ ...prev, [i]: { ...prev[i], durationUnit: undefined } }));
-                            }
-                            if (milestoneErrors[-1]) {
-                              setMilestoneErrors(prev => { const next = { ...prev }; delete next[-1]; return next; });
-                            }
-                          }}
-                        >
-                          <SelectTrigger className={`text-xs sm:text-sm w-[100px] ${
-                            milestoneErrors[i]?.durationUnit ? "border-red-500 focus:ring-red-500" : ""
-                          }`}>
-                            <SelectValue placeholder="Unit" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="day">Day(s)</SelectItem>
-                            <SelectItem value="week">Week(s)</SelectItem>
-                            <SelectItem value="month">Month(s)</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      {(milestoneErrors[i]?.durationAmount || milestoneErrors[i]?.durationUnit) && (
-                        <p className="text-xs text-red-600 mt-1">
-                          {milestoneErrors[i].durationAmount || milestoneErrors[i].durationUnit}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  <div>
-                    <Label className="text-xs sm:text-sm">
-                      Description <span className="text-red-500">*</span>
-                    </Label>
-                    <Textarea
-                      rows={2}
-                      value={m.description || ""}
-                      onChange={(e) => {
-                        updateMilestone(i, { description: e.target.value });
-                        if (milestoneErrors[i]?.description) {
-                          setMilestoneErrors(prev => ({
-                            ...prev,
-                            [i]: { ...prev[i], description: undefined },
-                          }));
-                        }
-                      }}
-                      className={`text-xs sm:text-sm ${
-                        milestoneErrors[i]?.description
-                          ? "border-red-500 focus-visible:ring-red-500"
-                          : ""
-                      }`}
-                    />
-                    {milestoneErrors[i]?.description && (
-                      <p className="text-xs text-red-600 mt-1">
-                        {milestoneErrors[i].description}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex justify-end">
-                    <Button
-                      variant="outline"
-                      onClick={() => removeMilestone(i)}
-                      className="text-xs sm:text-sm"
-                    >
-                      Remove
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-
-            <p className="text-xs text-gray-600 pt-2 border-t border-gray-200 mt-2">
-              If you made any updates or changes to the milestones, save changes first before approving.
-            </p>
-            <div className="flex flex-col sm:flex-row justify-between gap-2 sm:gap-3 pt-2">
-              <Button 
-                variant="outline" 
-                onClick={addMilestone} 
-                className="w-full sm:w-auto border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 text-gray-700 font-medium transition-all duration-200"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Add Milestone
-              </Button>
-              <div className="flex flex-col sm:flex-row gap-2">
-                <Button
-                  variant="outline"
-                  onClick={handleSaveMilestones}
-                  disabled={savingMilestones}
-                  className="w-full sm:w-auto border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50 text-gray-700 font-medium transition-all duration-200"
-                >
-                  {savingMilestones ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    "Save Changes"
-                  )}
-                </Button>
-                <Button 
-                  onClick={handleApproveAcceptedMilestones}
-                  disabled={
-                    JSON.stringify(normalizeSequences(milestones)) !== 
-                    JSON.stringify(normalizeSequences(originalMilestones))
-                  }
-                  className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm transition-all duration-200"
-                >
-                  <CheckCircle className="w-4 h-4 mr-2" />
-                  Approve
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter />
-        </DialogContent>
-      </Dialog>
-      <Dialog
-        open={milestoneFinalizeOpen}
-        onOpenChange={setMilestoneFinalizeOpen}
-      >
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-base sm:text-lg lg:text-xl">Milestones Submitted</DialogTitle>
-            <DialogDescription className="text-xs sm:text-sm">
-              These milestones are now awaiting final confirmation, or have been
-              locked if both sides approved.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-3 sm:space-y-4 text-xs sm:text-sm text-gray-700">
-            <div className="flex items-start gap-2.5 sm:gap-3">
-              <CheckCircle
-                className={`w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0 mt-0.5 ${
-                  milestoneApprovalState.companyApproved
-                    ? "text-green-600"
-                    : "text-gray-400"
-                }`}
-              />
-              <div className="flex-1 min-w-0">
-                <div className="font-semibold text-gray-900">
-                  Company Approved
-                </div>
-                <div className="break-words">
-                  {milestoneApprovalState.companyApproved
-                    ? "You have approved the milestone plan."
-                    : "You haven't approved yet."}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-2.5 sm:gap-3">
-              <CheckCircle
-                className={`w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0 mt-0.5 ${
-                  milestoneApprovalState.providerApproved
-                    ? "text-green-600"
-                    : "text-gray-400"
-                }`}
-              />
-              <div className="flex-1 min-w-0">
-                <div className="font-semibold text-gray-900">
-                  Provider Approved
-                </div>
-                <div className="break-words">
-                  {milestoneApprovalState.providerApproved
-                    ? "The provider approved the milestone plan."
-                    : "Waiting for provider approval."}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-2.5 sm:gap-3">
-              <CheckCircle
-                className={`w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0 mt-0.5 ${
-                  milestoneApprovalState.milestonesLocked
-                    ? "text-green-600"
-                    : "text-gray-400"
-                }`}
-              />
-              <div className="flex-1 min-w-0">
-                <div className="font-semibold text-gray-900">
-                  Locked & Ready
-                </div>
-                <div className="break-words">
-                  {milestoneApprovalState.milestonesLocked
-                    ? "Milestones are locked. Work can start and payments follow these milestones."
-                    : "Milestones are not locked yet."}
-                </div>
-                {milestoneApprovalState.milestonesApprovedAt && (
-                  <div className="text-[10px] sm:text-xs text-gray-500 mt-1">
-                    Locked at{" "}
-                    {new Date(
-                      milestoneApprovalState.milestonesApprovedAt
-                    ).toLocaleString()}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter className="pt-3 sm:pt-4">
-            <Button 
-              onClick={() => setMilestoneFinalizeOpen(false)} 
-              className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-sm transition-all duration-200"
-            >
-              Done
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </CustomerLayout>
+    </>
   );
 }

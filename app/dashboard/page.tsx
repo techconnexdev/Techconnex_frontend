@@ -1,5 +1,5 @@
 "use client";
-
+//dashboard page
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getUserFriendlyErrorMessage } from "@/lib/errors";

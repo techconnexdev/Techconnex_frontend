@@ -1,6 +1,5 @@
 // app/customer/providers/[id]/page.tsx
 import { cookies } from "next/headers";
-import { CustomerLayout } from "@/components/customer-layout";
 import ProviderDetailClient from "@/components/customer/providers/ProviderDetailClient";
 import type { Provider, Review, PortfolioItem } from "@/components/customer/providers/types";
 import { notFound } from "next/navigation";
@@ -82,9 +81,35 @@ export default async function ProviderDetailPage({
     notFound();
   }
 
+  let viewerPreferredCurrency: string | undefined;
+  if (userId && token) {
+    try {
+      const settingsRes = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/settings/${userId}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        },
+      );
+      if (settingsRes.ok) {
+        const settingsJson: { preferredCurrency?: string } =
+          await settingsRes.json();
+        const cur = settingsJson?.preferredCurrency;
+        if (typeof cur === "string" && /^[A-Z]{3}$/i.test(cur.trim())) {
+          viewerPreferredCurrency = cur.trim().toUpperCase();
+        }
+      }
+    } catch {
+      // Logged-out or settings unavailable — client shows provider currency only
+    }
+  }
+
   return (
-    <CustomerLayout>
-      <ProviderDetailClient provider={provider} portfolio={portfolio} reviews={reviews} />
-    </CustomerLayout>
+    <ProviderDetailClient
+      provider={provider}
+      portfolio={portfolio}
+      reviews={reviews}
+      viewerPreferredCurrency={viewerPreferredCurrency}
+    />
   );
 }

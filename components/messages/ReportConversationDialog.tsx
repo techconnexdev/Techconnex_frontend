@@ -15,6 +15,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Flag, Loader2, CheckCircle } from "lucide-react";
 import { API_BASE } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
+import { useI18n } from "@/contexts/I18nProvider";
+import type { MessageKey } from "@/lib/i18n/messages";
 
 export const REPORT_REASONS = [
   {
@@ -37,6 +39,13 @@ export const REPORT_REASONS = [
 
 type ReportReason = (typeof REPORT_REASONS)[number]["value"];
 
+const REPORT_REASON_I18N: Record<ReportReason, MessageKey> = {
+  OUTSOURCE_OFF_PLATFORM: "customer.messages.report.reason.OUTSOURCE_OFF_PLATFORM",
+  SPAM_IRRELEVANT: "customer.messages.report.reason.SPAM_IRRELEVANT",
+  HARASSMENT_INAPPROPRIATE: "customer.messages.report.reason.HARASSMENT_INAPPROPRIATE",
+  FRAUD_IMPERSONATION: "customer.messages.report.reason.FRAUD_IMPERSONATION",
+};
+
 type ReportConversationDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -58,6 +67,7 @@ export function ReportConversationDialog({
   const [alreadyReported, setAlreadyReported] = useState(false);
   const [checkingReport, setCheckingReport] = useState(false);
   const { toast } = useToast();
+  const { t } = useI18n();
 
   // Check if user has already reported this conversation when dialog opens
   useEffect(() => {
@@ -99,8 +109,8 @@ export function ReportConversationDialog({
     e.preventDefault();
     if (!reason) {
       toast({
-        title: "Select a reason",
-        description: "Please select a reason for reporting this conversation.",
+        title: t("customer.messages.report.toast.selectReasonTitle"),
+        description: t("customer.messages.report.toast.selectReasonDesc"),
         variant: "destructive",
       });
       return;
@@ -112,8 +122,8 @@ export function ReportConversationDialog({
         typeof window !== "undefined" ? localStorage.getItem("token") : null;
       if (!token) {
         toast({
-          title: "Not authenticated",
-          description: "Please log in to report.",
+          title: t("customer.messages.report.toast.notAuthTitle"),
+          description: t("customer.messages.report.toast.notAuthDesc"),
           variant: "destructive",
         });
         return;
@@ -136,8 +146,8 @@ export function ReportConversationDialog({
 
       if (data.success) {
         toast({
-          title: "Report submitted",
-          description: "Thank you. Our admin team is working on it.",
+          title: t("customer.messages.report.toast.submittedTitle"),
+          description: t("customer.messages.report.toast.submittedDesc"),
         });
         setReason("");
         setAdditionalDetails("");
@@ -149,16 +159,16 @@ export function ReportConversationDialog({
           setAlreadyReported(true);
         } else {
           toast({
-            title: "Failed to submit report",
-            description: data.message || "Please try again later.",
+            title: t("customer.messages.report.toast.failedTitle"),
+            description: data.message || t("customer.messages.report.toast.failedDesc"),
             variant: "destructive",
           });
         }
       }
     } catch {
       toast({
-        title: "Error",
-        description: "Failed to submit report. Please try again.",
+        title: t("customer.messages.toast.errorTitle"),
+        description: t("customer.messages.report.toast.errorDesc"),
         variant: "destructive",
       });
     } finally {
@@ -181,17 +191,13 @@ export function ReportConversationDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Flag className="h-5 w-5 text-amber-500" />
-            Report Conversation
+            {t("customer.messages.report.title")}
           </DialogTitle>
           <DialogDescription>
             {alreadyReported ? (
-              "You have already reported this conversation."
+              t("customer.messages.report.alreadyReportedShort")
             ) : (
-              <>
-                Report the conversation with <strong>{reportedUserName}</strong>{" "}
-                for suspicious or inappropriate behavior. Your report will be
-                reviewed by our team.
-              </>
+              t("customer.messages.report.description", { name: reportedUserName })
             )}
           </DialogDescription>
         </DialogHeader>
@@ -205,17 +211,18 @@ export function ReportConversationDialog({
             <div className="flex flex-col items-center gap-4 rounded-lg bg-green-50 p-6 text-center">
               <CheckCircle className="h-12 w-12 text-green-500" />
               <p className="text-sm text-gray-700">
-                You have already reported this conversation. Our admin team is
-                working on it.
+                {t("customer.messages.report.alreadyReportedLong")}
               </p>
-              <Button onClick={() => handleOpenChange(false)}>Close</Button>
+              <Button onClick={() => handleOpenChange(false)}>
+                {t("customer.messages.report.close")}
+              </Button>
             </div>
           </div>
         ) : (
           <form onSubmit={handleSubmit}>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>Reason for report</Label>
+              <Label>{t("customer.messages.report.reasonLabel")}</Label>
               <div className="space-y-2">
                 {REPORT_REASONS.map((r) => (
                   <label
@@ -230,16 +237,16 @@ export function ReportConversationDialog({
                       onChange={() => setReason(r.value as ReportReason)}
                       className="mt-1"
                     />
-                    <span className="text-sm">{r.label}</span>
+                    <span className="text-sm">{t(REPORT_REASON_I18N[r.value])}</span>
                   </label>
                 ))}
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="details">Additional details (optional)</Label>
+              <Label htmlFor="details">{t("customer.messages.report.additionalDetails")}</Label>
               <Textarea
                 id="details"
-                placeholder="Provide any additional context that might help our team..."
+                placeholder={t("customer.messages.report.detailsPlaceholder")}
                 value={additionalDetails}
                 onChange={(e) => setAdditionalDetails(e.target.value)}
                 rows={3}
@@ -254,16 +261,16 @@ export function ReportConversationDialog({
               onClick={() => handleOpenChange(false)}
               disabled={submitting}
             >
-              Cancel
+              {t("customer.messages.report.cancel")}
             </Button>
             <Button type="submit" disabled={submitting}>
               {submitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Submitting...
+                  {t("customer.messages.report.submitting")}
                 </>
               ) : (
-                "Submit Report"
+                t("customer.messages.report.submit")
               )}
             </Button>
           </DialogFooter>

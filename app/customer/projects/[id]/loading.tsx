@@ -1,9 +1,7 @@
 import { Skeleton } from "@/components/ui/skeleton"
-import { CustomerLayout } from "@/components/customer-layout"
-
 export default function ProjectDetailsLoading() {
   return (
-    <CustomerLayout>
+    
       <div className="space-y-8">
         {/* Header Skeleton */}
         <div className="flex flex-col lg:flex-row justify-between items-start gap-4">
@@ -119,6 +117,6 @@ export default function ProjectDetailsLoading() {
           </div>
         </div>
       </div>
-    </CustomerLayout>
+    
   )
 }

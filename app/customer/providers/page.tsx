@@ -1,12 +1,56 @@
 // app/customer/providers/page.tsx
-import { CustomerLayout } from "@/components/customer-layout";
+import { cookies } from "next/headers";
 import FindProvidersClient from "@/components/customer/providers/FindProvidersClient";
 import { getUserFriendlyErrorMessage } from "@/lib/errors";
+import jwt from "jsonwebtoken";
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 900;
 
 export default async function ProvidersPage() {
-  
+  const cookieStore = await cookies();
+  const token = cookieStore.get("token")?.value;
+  const userCookie = cookieStore.get("user")?.value;
+
+  let userId: string | null = null;
+  if (userCookie) {
+    try {
+      const user = JSON.parse(userCookie);
+      userId = user?.id ?? null;
+    } catch {
+      /* ignore */
+    }
+  }
+  if (!userId && token) {
+    try {
+      const decoded = jwt.decode(token) as { userId?: string } | null;
+      userId = decoded?.userId ?? null;
+    } catch {
+      /* ignore */
+    }
+  }
+
+  let viewerPreferredCurrency: string | undefined;
+  if (userId && token) {
+    try {
+      const settingsRes = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/settings/${userId}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+        },
+      );
+      if (settingsRes.ok) {
+        const settingsJson: { preferredCurrency?: string } =
+          await settingsRes.json();
+        const cur = settingsJson?.preferredCurrency;
+        if (typeof cur === "string" && /^[A-Z]{3}$/i.test(cur.trim())) {
+          viewerPreferredCurrency = cur.trim().toUpperCase();
+        }
+      }
+    } catch {
+      /* logged out or settings unavailable */
+    }
+  }
 
   let ratings = [
     { value: "all", label: "All Ratings" },
@@ -24,7 +68,7 @@ export default async function ProvidersPage() {
 
   try {
     const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/providers/filters`, {
-      cache: 'no-store'
+      next: { revalidate: 900 },
     });
     
     if (response.ok) {
@@ -38,10 +82,9 @@ export default async function ProvidersPage() {
   }
 
   return (
-    <CustomerLayout>
-      <FindProvidersClient
-        ratings={ratings}
-      />
-    </CustomerLayout>
+    <FindProvidersClient
+      ratings={ratings}
+      viewerPreferredCurrency={viewerPreferredCurrency}
+    />
   );
 }

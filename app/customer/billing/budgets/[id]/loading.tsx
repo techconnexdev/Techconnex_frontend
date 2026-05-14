@@ -1,10 +1,9 @@
-import { CustomerLayout } from "@/components/customer-layout"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 
 export default function BudgetDetailLoading() {
   return (
-    <CustomerLayout>
+    
       <div className="space-y-8">
         {/* Header Skeleton */}
         <div className="flex items-center justify-between">
@@ -91,6 +90,6 @@ export default function BudgetDetailLoading() {
           </Card>
         </div>
       </div>
-    </CustomerLayout>
+    
   )
 }

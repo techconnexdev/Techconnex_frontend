@@ -24,7 +24,6 @@ import {
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { CustomerLayout } from "@/components/customer-layout";
 import {
   Building,
   MapPin,
@@ -38,7 +37,6 @@ import {
   Briefcase,
   CheckCircle2,
   DollarSign,
-  FileCheck,
   Sparkles,
 } from "lucide-react";
 import {
@@ -50,13 +48,32 @@ import {
 } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { getUserFriendlyErrorMessage } from "@/lib/errors";
+import { useI18n } from "@/contexts/I18nProvider";
+import type { MessageKey } from "@/lib/i18n/messages";
+import {
+  ONBOARDING_CONTRACT,
+  ONBOARDING_FUNDING,
+  ONBOARDING_HIRING_FREQ,
+  ONBOARDING_REMOTE,
+  ONBOARDING_STATE,
+  formatOnboardingIndustry,
+  profileStoredLabel,
+} from "@/lib/i18n/customerOnboardingMaps";
+import {
+  PROFILE_CORE_VALUE,
+  PROFILE_HIRE_CATEGORY,
+} from "@/lib/i18n/customerProfileOptionMaps";
 
 const ONBOARDING_MAX_COMPLETION = 60;
 
-const STEPS = [
-  { id: 1, title: "Company Profile", icon: Building },
-  { id: 2, title: "Company Details", icon: Briefcase },
-  { id: 3, title: "Review & Submit", icon: CheckCircle2 },
+const STEP_META: {
+  id: number;
+  titleKey: MessageKey;
+  icon: typeof Building;
+}[] = [
+  { id: 1, titleKey: "customer.onboarding.steps.profile", icon: Building },
+  { id: 2, titleKey: "customer.onboarding.steps.details", icon: Briefcase },
+  { id: 3, titleKey: "customer.onboarding.steps.review", icon: CheckCircle2 },
 ];
 
 const MALAYSIAN_STATES = [
@@ -150,23 +167,24 @@ const COMPANY_VALUES = [
   "Social Responsibility",
 ];
 
-const INDUSTRIES: { value: string; label: string }[] = [
-  { value: "technology", label: "Technology" },
-  { value: "finance", label: "Finance & Banking" },
-  { value: "healthcare", label: "Healthcare" },
-  { value: "education", label: "Education" },
-  { value: "retail", label: "Retail & E-commerce" },
-  { value: "manufacturing", label: "Manufacturing" },
-  { value: "consulting", label: "Consulting" },
-  { value: "media", label: "Media & Entertainment" },
-  { value: "government", label: "Government" },
-  { value: "nonprofit", label: "Non-profit" },
-  { value: "other", label: "Other" },
-];
+const INDUSTRY_VALUES = [
+  "technology",
+  "finance",
+  "healthcare",
+  "education",
+  "retail",
+  "manufacturing",
+  "consulting",
+  "media",
+  "government",
+  "nonprofit",
+  "other",
+] as const;
 
 export default function CustomerOnboardingPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const { t } = useI18n();
   const [completion, setCompletion] = useState(0);
   const [completionLoading, setCompletionLoading] = useState(true);
   const [step, setStep] = useState(1);
@@ -246,7 +264,13 @@ export default function CustomerOnboardingPage() {
               !!(p.location as string) &&
                 !MALAYSIAN_STATES.includes((p.location as string) || ""),
             );
-            setIndustry((p.industry as string) || "");
+            const rawInd = String(p.industry ?? "").trim();
+            const indLower = rawInd.toLowerCase();
+            setIndustry(
+              (INDUSTRY_VALUES as readonly string[]).includes(indLower)
+                ? indLower
+                : rawInd,
+            );
             setCompanySize(String(p.companySize ?? ""));
             setWebsite((p.website as string) || "");
             setSocialLinks(
@@ -346,10 +370,11 @@ export default function CustomerOnboardingPage() {
 
   const validateStep1 = (): Record<string, string> => {
     const errs: Record<string, string> = {};
-    if (!companyName?.trim()) errs.companyName = "Company name is required.";
+    if (!companyName?.trim())
+      errs.companyName = t("customer.onboarding.error.companyName");
     const loc = locationIsOther ? location : location;
-    if (!loc?.trim()) errs.location = "Location (State) is required.";
-    if (!industry?.trim()) errs.industry = "Industry is required.";
+    if (!loc?.trim()) errs.location = t("customer.onboarding.error.location");
+    if (!industry?.trim()) errs.industry = t("customer.onboarding.error.industry");
     setFieldErrors(errs);
     return errs;
   };
@@ -357,13 +382,13 @@ export default function CustomerOnboardingPage() {
   const validateStep2 = (): Record<string, string> => {
     const errs: Record<string, string> = {};
     if (!description?.trim() || description.trim().length < 10)
-      errs.description = "Description must be at least 10 characters.";
+      errs.description = t("customer.onboarding.error.description");
     if (!employeeCount?.trim())
-      errs.employeeCount = "Employee count is required.";
+      errs.employeeCount = t("customer.onboarding.error.employeeCount");
     if (!establishedYear?.trim())
-      errs.establishedYear = "Established year is required.";
-    if (!mission?.trim()) errs.mission = "Company mission is required.";
-    if (!values.length) errs.values = "Select at least one company value.";
+      errs.establishedYear = t("customer.onboarding.error.establishedYear");
+    if (!mission?.trim()) errs.mission = t("customer.onboarding.error.mission");
+    if (!values.length) errs.values = t("customer.onboarding.error.values");
     setFieldErrors(errs);
     return errs;
   };
@@ -371,7 +396,7 @@ export default function CustomerOnboardingPage() {
   const saveStep1 = async () => {
     if (!validateStep(1)) {
       validateStep1();
-      setError("Please fill in all required fields before proceeding.");
+      setError(t("customer.onboarding.error.fillRequired"));
       return;
     }
     setError("");
@@ -397,7 +422,7 @@ export default function CustomerOnboardingPage() {
   const saveStep2 = async () => {
     if (!validateStep(2)) {
       validateStep2();
-      setError("Please fill in all required fields before proceeding.");
+      setError(t("customer.onboarding.error.fillRequired"));
       return;
     }
     setError("");
@@ -525,7 +550,10 @@ export default function CustomerOnboardingPage() {
       if (kycFile) {
         await uploadKyc([kycFile], "COMPANY_REG");
       }
-      toast({ title: "Success", description: "Company profile saved." });
+      toast({
+        title: t("customer.onboarding.toast.successTitle"),
+        description: t("customer.onboarding.toast.successDesc"),
+      });
       router.push("/customer/dashboard");
     } catch (err) {
       const message = getUserFriendlyErrorMessage(
@@ -534,7 +562,7 @@ export default function CustomerOnboardingPage() {
       );
       setError(message);
       toast({
-        title: "Error",
+        title: t("customer.onboarding.toast.errorTitle"),
         description: message,
         variant: "destructive",
       });
@@ -543,62 +571,62 @@ export default function CustomerOnboardingPage() {
     }
   };
 
-  const progress = (step / STEPS.length) * 100;
-  const currentStep = STEPS[step - 1];
+  const progress = (step / STEP_META.length) * 100;
+  const currentStep = STEP_META[step - 1];
   const StepIcon = currentStep.icon;
 
   // While completion is loading, show spinner to avoid flashing the form then the gate
   if (completionLoading) {
     return (
-      <CustomerLayout>
+      
         <div className="flex items-center justify-center min-h-[400px]">
           <Loader2 className="w-10 h-10 animate-spin text-gray-400" />
         </div>
-      </CustomerLayout>
+      
     );
   }
 
   // Profile already > 60% complete — onboarding form not needed; direct to profile to edit
   if (completion > ONBOARDING_MAX_COMPLETION) {
     return (
-      <CustomerLayout>
+      
         <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50 flex items-center justify-center p-6">
           <div className="w-full max-w-lg">
             <Card className="bg-white/80 backdrop-blur-sm border-white/20 shadow-xl">
               <CardHeader>
                 <CardTitle className="text-xl font-bold text-gray-900 flex items-center gap-2">
                   <CheckCircle2 className="w-6 h-6 text-green-600" />
-                  Onboarding no longer available
+                  {t("customer.onboarding.gate.title")}
                 </CardTitle>
                 <CardDescription className="text-gray-600">
-                  Your profile is almost ready. This onboarding flow is for new users with minimal profile data.
+                  {t("customer.onboarding.gate.desc")}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className="text-sm text-gray-700">
-                  Go to your profile page to modify or add missing fields.
+                  {t("customer.onboarding.gate.body")}
                 </p>
                 <Button
                   onClick={() => router.push("/customer/profile/company")}
                   className="w-full bg-blue-600 hover:bg-blue-700"
                 >
-                  Go to profile page
+                  {t("customer.onboarding.gate.ctaProfile")}
                 </Button>
                 <div className="text-center">
                   <Link href="/customer/dashboard" className="text-sm text-gray-600 hover:text-gray-900">
-                    Back to dashboard
+                    {t("customer.onboarding.backDashboard")}
                   </Link>
                 </div>
               </CardContent>
             </Card>
           </div>
         </div>
-      </CustomerLayout>
+      
     );
   }
 
   return (
-    <CustomerLayout>
+    <>
       {loading ? (
         <div className="flex items-center justify-center min-h-[400px]">
           <Loader2 className="w-10 h-10 animate-spin text-gray-400" />
@@ -630,7 +658,7 @@ export default function CustomerOnboardingPage() {
                 className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 text-sm"
               >
                 <ChevronLeft className="w-4 h-4" />
-                Back to dashboard
+                {t("customer.onboarding.backDashboard")}
               </Link>
             </div>
 
@@ -638,27 +666,31 @@ export default function CustomerOnboardingPage() {
               <CardHeader className="text-center">
                 <CardTitle className="text-2xl font-bold text-gray-900 flex items-center justify-center gap-2">
                   <Sparkles className="w-6 h-6 text-blue-600" />
-                  Complete your company profile
+                  {t("customer.onboarding.title")}
                 </CardTitle>
                 <CardDescription className="text-gray-600">
-                  Add your company details so providers can find you — about
-                  5–10 minutes
+                  {t("customer.onboarding.subtitle")}
                 </CardDescription>
 
                 <div className="mt-6">
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-sm font-medium text-gray-700">
-                      Step {step} of {STEPS.length}
+                      {t("customer.onboarding.stepProgress", {
+                        current: step,
+                        total: STEP_META.length,
+                      })}
                     </span>
                     <span className="text-sm text-gray-500">
-                      {Math.round(progress)}% Complete
+                      {t("customer.onboarding.percentComplete", {
+                        n: Math.round(progress),
+                      })}
                     </span>
                   </div>
                   <Progress value={progress} className="h-2" />
                 </div>
 
                 <div className="flex justify-between mt-4 text-xs">
-                  {STEPS.map((s) => (
+                  {STEP_META.map((s) => (
                     <div
                       key={s.id}
                       className={`flex flex-col items-center ${step >= s.id ? "text-blue-600" : "text-gray-400"}`}
@@ -679,7 +711,7 @@ export default function CustomerOnboardingPage() {
                         )}
                       </div>
                       <span className="hidden sm:block text-center max-w-[72px] leading-tight">
-                        {s.title}
+                        {t(s.titleKey)}
                       </span>
                     </div>
                   ))}
@@ -699,19 +731,21 @@ export default function CustomerOnboardingPage() {
                     <div className="flex items-center gap-2 text-gray-700 mb-2">
                       <StepIcon className="w-5 h-5 text-blue-600" />
                       <h3 className="font-semibold text-lg">
-                        {currentStep.title}
+                        {t(currentStep.titleKey)}
                       </h3>
                     </div>
                     {step === 1 && (
                       <>
                         <div className="space-y-4">
                           <div className="space-y-2">
-                            <Label htmlFor="companyName">Company Name *</Label>
+                            <Label htmlFor="companyName">
+                              {t("customer.onboarding.companyName")}
+                            </Label>
                             <div className="relative">
                               <Building className="absolute left-3 top-3 h-4 w-4 text-gray-400 z-10" />
                               <Input
                                 id="companyName"
-                                placeholder="e.g. Acme Solutions Sdn Bhd"
+                                placeholder={t("customer.onboarding.ph.companyName")}
                                 className={`pl-10 bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500 ${fieldErrors.companyName ? "border-red-500" : ""}`}
                                 value={companyName}
                                 onChange={(e) => {
@@ -732,7 +766,9 @@ export default function CustomerOnboardingPage() {
                           </div>
 
                           <div className="space-y-2">
-                            <Label htmlFor="location">Location (State) *</Label>
+                            <Label htmlFor="location">
+                              {t("customer.onboarding.location")}
+                            </Label>
                             <div className="relative">
                               <MapPin className="absolute left-3 top-3 h-4 w-4 text-gray-400 z-10" />
                               <Select
@@ -761,16 +797,18 @@ export default function CustomerOnboardingPage() {
                                 <SelectTrigger
                                   className={`pl-10 bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500 ${fieldErrors.location ? "border-red-500" : ""}`}
                                 >
-                                  <SelectValue placeholder="Select your state" />
+                                  <SelectValue
+                                    placeholder={t("customer.onboarding.ph.state")}
+                                  />
                                 </SelectTrigger>
                                 <SelectContent>
                                   {MALAYSIAN_STATES.map((s) => (
                                     <SelectItem key={s} value={s}>
-                                      {s}
+                                      {profileStoredLabel(ONBOARDING_STATE, s, t)}
                                     </SelectItem>
                                   ))}
                                   <SelectItem value={LOCATION_OTHER}>
-                                    {LOCATION_OTHER}
+                                    {t("customer.onboarding.location.other")}
                                   </SelectItem>
                                 </SelectContent>
                               </Select>
@@ -779,7 +817,9 @@ export default function CustomerOnboardingPage() {
                               <div className="relative mt-2">
                                 <MapPin className="absolute left-3 top-3 h-4 w-4 text-gray-400 pointer-events-none" />
                                 <Input
-                                  placeholder="Specify your location (e.g. city or country)"
+                                  placeholder={t(
+                                    "customer.onboarding.ph.locationOther",
+                                  )}
                                   className="pl-10 bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                                   value={location}
                                   onChange={(e) => {
@@ -801,7 +841,9 @@ export default function CustomerOnboardingPage() {
                           </div>
 
                           <div className="space-y-2">
-                            <Label htmlFor="industry">Industry *</Label>
+                            <Label htmlFor="industry">
+                              {t("customer.onboarding.industry")}
+                            </Label>
                             <Select
                               value={industry}
                               onValueChange={(v) => {
@@ -813,12 +855,16 @@ export default function CustomerOnboardingPage() {
                               <SelectTrigger
                                 className={`bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500 ${fieldErrors.industry ? "border-red-500" : ""}`}
                               >
-                                <SelectValue placeholder="Select your industry" />
+                                <SelectValue
+                                  placeholder={t("customer.onboarding.ph.industry")}
+                                />
                               </SelectTrigger>
                               <SelectContent>
-                                {INDUSTRIES.map((i) => (
-                                  <SelectItem key={i.value} value={i.value}>
-                                    {i.label}
+                                {INDUSTRY_VALUES.map((v) => (
+                                  <SelectItem key={v} value={v}>
+                                    {t(
+                                      `customer.onboarding.industryOption.${v}` as MessageKey,
+                                    )}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
@@ -832,12 +878,12 @@ export default function CustomerOnboardingPage() {
 
                           <div className="space-y-2">
                             <Label htmlFor="companySize">
-                              Company Size (number of employees)
+                              {t("customer.onboarding.companySize")}
                             </Label>
                             <Input
                               id="companySize"
                               type="number"
-                              placeholder="e.g. 150"
+                              placeholder={t("customer.onboarding.ph.companySize")}
                               className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                               value={companySize}
                               onChange={(e) => setCompanySize(e.target.value)}
@@ -846,13 +892,15 @@ export default function CustomerOnboardingPage() {
                           </div>
 
                           <div className="space-y-2">
-                            <Label htmlFor="website">Company Website</Label>
+                            <Label htmlFor="website">
+                              {t("customer.onboarding.website")}
+                            </Label>
                             <div className="relative">
                               <Globe className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                               <Input
                                 id="website"
                                 type="url"
-                                placeholder="https://your-company.com"
+                                placeholder={t("customer.onboarding.ph.website")}
                                 className="pl-10 bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                                 value={website}
                                 onChange={(e) => setWebsite(e.target.value)}
@@ -861,10 +909,9 @@ export default function CustomerOnboardingPage() {
                           </div>
 
                           <div className="space-y-4">
-                            <Label>Socials URLs</Label>
+                            <Label>{t("customer.onboarding.socials")}</Label>
                             <p className="text-sm text-gray-600">
-                              Add links LinkedIn, Twitter, or other social media
-                              profiles
+                              {t("customer.onboarding.socialsHint")}
                             </p>
                             <div className="flex gap-2">
                               <Input
@@ -872,7 +919,7 @@ export default function CustomerOnboardingPage() {
                                 onChange={(e) =>
                                   setNewSocialUrl(e.target.value)
                                 }
-                                placeholder="https://linkedin.com/yourusername"
+                                placeholder={t("customer.onboarding.ph.social")}
                                 className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                                 type="url"
                               />
@@ -887,7 +934,9 @@ export default function CustomerOnboardingPage() {
                             {socialLinks.length > 0 && (
                               <div className="space-y-2">
                                 <Label className="text-sm font-medium">
-                                  Social Links ({socialLinks.length})
+                                  {t("customer.onboarding.socialsCount", {
+                                    n: socialLinks.length,
+                                  })}
                                 </Label>
                                 <div className="space-y-2">
                                   {socialLinks.map((url) => (
@@ -920,9 +969,9 @@ export default function CustomerOnboardingPage() {
                             {socialLinks.length === 0 && (
                               <div className="text-center py-8 text-gray-500 border-2 border-dashed border-gray-200 rounded-lg">
                                 <Globe className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                                <p>No links added yet</p>
+                                <p>{t("customer.onboarding.socialsEmpty")}</p>
                                 <p className="text-sm">
-                                  Add links to your professional profiles
+                                  {t("customer.onboarding.socialsEmptyHint")}
                                 </p>
                               </div>
                             )}
@@ -931,26 +980,23 @@ export default function CustomerOnboardingPage() {
 
                         <div className="space-y-4 mt-8 p-4 border rounded-lg bg-white/50">
                           <h3 className="text-lg font-semibold text-gray-900">
-                            KYC Verification (Company) — optional
+                            {t("customer.onboarding.kyc.title")}
                           </h3>
                           {hasExistingKyc ? (
                             <div className="flex items-center gap-2 rounded-lg bg-green-50 border border-green-200 p-3">
                               <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />
                               <p className="text-sm text-green-800 font-medium">
-                                Company registration document already uploaded.
-                                No need to re-upload.
+                                {t("customer.onboarding.kyc.uploaded")}
                               </p>
                             </div>
                           ) : (
                             <>
                               <p className="text-sm text-gray-600">
-                                Upload your{" "}
-                                <strong>Company Registration</strong> document
-                                (PDF or image).
+                                {t("customer.onboarding.kyc.desc")}
                               </p>
                               <div className="space-y-2">
                                 <Label htmlFor="kycFileCompany">
-                                  Company Registration Paper (optional)
+                                  {t("customer.onboarding.kyc.fileLabel")}
                                 </Label>
                                 <Input
                                   id="kycFileCompany"
@@ -965,10 +1011,9 @@ export default function CustomerOnboardingPage() {
                                 />
                                 {kycFile && (
                                   <p className="text-xs text-green-700">
-                                    Selected:{" "}
-                                    <span className="font-medium">
-                                      {kycFile.name}
-                                    </span>
+                                    {t("customer.onboarding.kyc.selected", {
+                                      name: kycFile.name,
+                                    })}
                                   </p>
                                 )}
                                 {fieldErrors.kyc && (
@@ -989,13 +1034,15 @@ export default function CustomerOnboardingPage() {
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="space-y-2 col-span-1 md:col-span-2">
                               <Label htmlFor="companyDescription">
-                                Company Description *
+                                {t("customer.onboarding.description")}
                               </Label>
                               <div className="relative">
                                 <Building className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                                 <Textarea
                                   id="companyDescription"
-                                  placeholder="Enter your company description"
+                                  placeholder={t(
+                                    "customer.onboarding.ph.description",
+                                  )}
                                   className={`pl-10 pt-3 pb-3 bg-white/50 border w-full rounded-md text-sm resize-none focus:border-blue-500 focus:ring-blue-500 ${fieldErrors.description ? "border-red-500" : "border-gray-200"}`}
                                   value={description}
                                   onChange={(e) => {
@@ -1018,12 +1065,12 @@ export default function CustomerOnboardingPage() {
 
                             <div className="space-y-2">
                               <Label htmlFor="employeeCount">
-                                Employee Count *
+                                {t("customer.onboarding.employeeCount")}
                               </Label>
                               <Input
                                 id="employeeCount"
                                 type="number"
-                                placeholder="e.g. 150"
+                                placeholder={t("customer.onboarding.ph.companySize")}
                                 className={`bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500 ${fieldErrors.employeeCount ? "border-red-500" : ""}`}
                                 value={employeeCount}
                                 onChange={(e) => {
@@ -1044,12 +1091,12 @@ export default function CustomerOnboardingPage() {
                             </div>
                             <div className="space-y-2">
                               <Label htmlFor="establishedYear">
-                                Established Year *
+                                {t("customer.onboarding.establishedYear")}
                               </Label>
                               <Input
                                 id="establishedYear"
                                 type="number"
-                                placeholder="e.g. 2020"
+                                placeholder={t("customer.onboarding.ph.year")}
                                 className={`bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500 ${fieldErrors.establishedYear ? "border-red-500" : ""}`}
                                 value={establishedYear}
                                 onChange={(e) => {
@@ -1071,14 +1118,14 @@ export default function CustomerOnboardingPage() {
                             </div>
                             <div className="space-y-2">
                               <Label htmlFor="annualRevenue">
-                                Annual Revenue (RM)
+                                {t("customer.onboarding.annualRevenue")}
                               </Label>
                               <div className="relative">
                                 <DollarSign className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                                 <Input
                                   id="annualRevenue"
                                   type="number"
-                                  placeholder="e.g. 5000000"
+                                  placeholder={t("customer.onboarding.ph.revenue")}
                                   className="pl-10 bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                                   value={annualRevenue}
                                   onChange={(e) =>
@@ -1090,19 +1137,21 @@ export default function CustomerOnboardingPage() {
                             </div>
                             <div className="space-y-2">
                               <Label htmlFor="fundingStage">
-                                Funding Stage
+                                {t("customer.onboarding.fundingStage")}
                               </Label>
                               <Select
                                 value={fundingStage}
                                 onValueChange={setFundingStage}
                               >
                                 <SelectTrigger className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500">
-                                  <SelectValue placeholder="Select funding stage" />
+                                  <SelectValue
+                                    placeholder={t("customer.onboarding.ph.funding")}
+                                  />
                                 </SelectTrigger>
                                 <SelectContent>
                                   {FUNDING_STAGES.map((f) => (
                                     <SelectItem key={f} value={f}>
-                                      {f}
+                                      {profileStoredLabel(ONBOARDING_FUNDING, f, t)}
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
@@ -1112,36 +1161,47 @@ export default function CustomerOnboardingPage() {
 
                           <div className="space-y-4">
                             <h3 className="text-lg font-semibold text-gray-900">
-                              Hiring Preferences
+                              {t("customer.onboarding.hiring.title")}
                             </h3>
                             <div className="space-y-2">
-                              <Label>Preferred Contract Types</Label>
+                              <Label>
+                                {t("customer.onboarding.contractTypes")}
+                              </Label>
                               <div className="flex flex-wrap gap-2 p-3 border rounded-lg bg-white/50">
-                                {CONTRACT_TYPES.map((t) => (
+                                {CONTRACT_TYPES.map((contractType) => (
                                   <Badge
-                                    key={t}
+                                    key={contractType}
                                     variant={
-                                      preferredContractTypes.includes(t)
+                                      preferredContractTypes.includes(
+                                        contractType,
+                                      )
                                         ? "default"
                                         : "outline"
                                     }
-                                    className={`cursor-pointer ${preferredContractTypes.includes(t) ? "bg-blue-600 text-white" : "hover:bg-blue-50 hover:border-blue-300"}`}
+                                    className={`cursor-pointer ${preferredContractTypes.includes(contractType) ? "bg-blue-600 text-white" : "hover:bg-blue-50 hover:border-blue-300"}`}
                                     onClick={() =>
-                                      toggleArray("preferredContractTypes", t)
+                                      toggleArray(
+                                        "preferredContractTypes",
+                                        contractType,
+                                      )
                                     }
                                   >
-                                    {t}
+                                    {profileStoredLabel(
+                                      ONBOARDING_CONTRACT,
+                                      contractType,
+                                      t,
+                                    )}
                                   </Badge>
                                 ))}
                               </div>
                             </div>
                             <div className="space-y-2">
                               <Label htmlFor="averageBudgetRange">
-                                Average Budget Range (RM)
+                                {t("customer.onboarding.avgBudget")}
                               </Label>
                               <Input
                                 id="averageBudgetRange"
-                                placeholder="e.g. 10,000 - 50,000"
+                                placeholder={t("customer.onboarding.ph.budget")}
                                 className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                                 value={averageBudgetRange}
                                 onChange={(e) =>
@@ -1151,19 +1211,21 @@ export default function CustomerOnboardingPage() {
                             </div>
                             <div className="space-y-2">
                               <Label htmlFor="remotePolicy">
-                                Remote Work Policy
+                                {t("customer.onboarding.remotePolicy")}
                               </Label>
                               <Select
                                 value={remotePolicy}
                                 onValueChange={setRemotePolicy}
                               >
                                 <SelectTrigger className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500">
-                                  <SelectValue placeholder="Select remote policy" />
+                                  <SelectValue
+                                    placeholder={t("customer.onboarding.ph.remote")}
+                                  />
                                 </SelectTrigger>
                                 <SelectContent>
                                   {REMOTE_POLICIES.map((r) => (
                                     <SelectItem key={r} value={r}>
-                                      {r}
+                                      {profileStoredLabel(ONBOARDING_REMOTE, r, t)}
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
@@ -1171,19 +1233,27 @@ export default function CustomerOnboardingPage() {
                             </div>
                             <div className="space-y-2">
                               <Label htmlFor="hiringFrequency">
-                                Hiring Frequency
+                                {t("customer.onboarding.hiringFrequency")}
                               </Label>
                               <Select
                                 value={hiringFrequency}
                                 onValueChange={setHiringFrequency}
                               >
                                 <SelectTrigger className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500">
-                                  <SelectValue placeholder="Select hiring frequency" />
+                                  <SelectValue
+                                    placeholder={t(
+                                      "customer.onboarding.ph.hiringFreq",
+                                    )}
+                                  />
                                 </SelectTrigger>
                                 <SelectContent>
                                   {HIRING_FREQUENCIES.map((h) => (
                                     <SelectItem key={h} value={h}>
-                                      {h}
+                                      {profileStoredLabel(
+                                        ONBOARDING_HIRING_FREQ,
+                                        h,
+                                        t,
+                                      )}
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
@@ -1192,9 +1262,9 @@ export default function CustomerOnboardingPage() {
                           </div>
 
                           <div className="space-y-4">
-                            <Label>Categories Hiring For</Label>
+                            <Label>{t("customer.onboarding.categories")}</Label>
                             <p className="text-sm text-gray-600">
-                              Select the types of roles you typically hire for
+                              {t("customer.onboarding.categoriesHint")}
                             </p>
                             <div className="flex gap-2">
                               <Input
@@ -1202,7 +1272,7 @@ export default function CustomerOnboardingPage() {
                                 onChange={(e) =>
                                   setCustomCategory(e.target.value)
                                 }
-                                placeholder="Type a category and press Add"
+                                placeholder={t("customer.onboarding.ph.category")}
                                 className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                                 onKeyDown={(e) =>
                                   e.key === "Enter" &&
@@ -1221,8 +1291,9 @@ export default function CustomerOnboardingPage() {
                             {categoriesHiringFor.length > 0 && (
                               <div className="space-y-2">
                                 <Label className="text-sm font-medium">
-                                  Selected Categories (
-                                  {categoriesHiringFor.length})
+                                  {t("customer.onboarding.selectedCategories", {
+                                    n: categoriesHiringFor.length,
+                                  })}
                                 </Label>
                                 <div className="flex flex-wrap gap-2 p-3 border rounded-lg bg-white/50">
                                   {categoriesHiringFor.map((c) => (
@@ -1230,7 +1301,11 @@ export default function CustomerOnboardingPage() {
                                       key={c}
                                       className="bg-green-600 hover:bg-green-700 text-white pr-1"
                                     >
-                                      {c}
+                                      {profileStoredLabel(
+                                        PROFILE_HIRE_CATEGORY,
+                                        c,
+                                        t,
+                                      )}
                                       <button
                                         type="button"
                                         onClick={() =>
@@ -1247,7 +1322,7 @@ export default function CustomerOnboardingPage() {
                             )}
                             <div className="space-y-2">
                               <Label className="text-sm font-medium">
-                                Popular Categories (click to add)
+                                {t("customer.onboarding.popularCategories")}
                               </Label>
                               <div className="flex flex-wrap gap-2 p-3 border rounded-lg bg-white/50">
                                 {POPULAR_HIRING_CATEGORIES.filter(
@@ -1261,7 +1336,11 @@ export default function CustomerOnboardingPage() {
                                       toggleArray("categoriesHiringFor", c)
                                     }
                                   >
-                                    {c}
+                                    {profileStoredLabel(
+                                      PROFILE_HIRE_CATEGORY,
+                                      c,
+                                      t,
+                                    )}
                                   </Badge>
                                 ))}
                               </div>
@@ -1270,13 +1349,15 @@ export default function CustomerOnboardingPage() {
 
                           <div className="space-y-4">
                             <h3 className="text-lg font-semibold text-gray-900">
-                              Company Culture
+                              {t("customer.onboarding.culture.title")}
                             </h3>
                             <div className="space-y-2">
-                              <Label htmlFor="mission">Company Mission *</Label>
+                              <Label htmlFor="mission">
+                                {t("customer.onboarding.mission")}
+                              </Label>
                               <Textarea
                                 id="mission"
-                                placeholder="Describe your company's mission and purpose..."
+                                placeholder={t("customer.onboarding.ph.mission")}
                                 className={`bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500 min-h-[100px] ${fieldErrors.mission ? "border-red-500" : ""}`}
                                 value={mission}
                                 onChange={(e) => {
@@ -1295,10 +1376,9 @@ export default function CustomerOnboardingPage() {
                               )}
                             </div>
                             <div className="space-y-2">
-                              <Label>Company Values *</Label>
+                              <Label>{t("customer.onboarding.values")}</Label>
                               <p className="text-sm text-gray-600">
-                                Select at least one value that represents your
-                                company culture
+                                {t("customer.onboarding.valuesHint")}
                               </p>
                               <div className="flex gap-2">
                                 <Input
@@ -1306,7 +1386,7 @@ export default function CustomerOnboardingPage() {
                                   onChange={(e) =>
                                     setCustomValue(e.target.value)
                                   }
-                                  placeholder="Type a value and press Add"
+                                  placeholder={t("customer.onboarding.ph.value")}
                                   className="bg-white/50 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
                                   onKeyDown={(e) =>
                                     e.key === "Enter" &&
@@ -1324,7 +1404,9 @@ export default function CustomerOnboardingPage() {
                               {values.length > 0 && (
                                 <div className="space-y-2">
                                   <Label className="text-sm font-medium">
-                                    Selected Values ({values.length})
+                                    {t("customer.onboarding.selectedValues", {
+                                      n: values.length,
+                                    })}
                                   </Label>
                                   <div className="flex flex-wrap gap-2 p-3 border rounded-lg bg-white/50">
                                     {values.map((v) => (
@@ -1333,7 +1415,11 @@ export default function CustomerOnboardingPage() {
                                         className="bg-purple-600 hover:bg-purple-700 text-white pr-1"
                                       >
                                         <Heart className="w-3 h-3 mr-1" />
-                                        {v}
+                                        {profileStoredLabel(
+                                          PROFILE_CORE_VALUE,
+                                          v,
+                                          t,
+                                        )}
                                         <button
                                           type="button"
                                           onClick={() =>
@@ -1350,7 +1436,7 @@ export default function CustomerOnboardingPage() {
                               )}
                               <div className="space-y-2">
                                 <Label className="text-sm font-medium">
-                                  Common Values (click to add)
+                                  {t("customer.onboarding.commonValues")}
                                 </Label>
                                 <div className="flex flex-wrap gap-2 p-3 border rounded-lg bg-white/50">
                                   {COMPANY_VALUES.filter(
@@ -1363,7 +1449,11 @@ export default function CustomerOnboardingPage() {
                                       onClick={() => toggleArray("values", v)}
                                     >
                                       <Heart className="w-3 h-3 mr-1" />
-                                      {v}
+                                      {profileStoredLabel(
+                                        PROFILE_CORE_VALUE,
+                                        v,
+                                        t,
+                                      )}
                                     </Badge>
                                   ))}
                                 </div>
@@ -1385,32 +1475,46 @@ export default function CustomerOnboardingPage() {
                           <div className="p-4 border rounded-lg bg-white/50">
                             <h3 className="font-medium text-gray-900 mb-3 flex items-center">
                               <Building className="w-5 h-5 mr-2" />
-                              Company Information
+                              {t("customer.onboarding.review.companyInfo")}
                             </h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                               <div>
                                 <span className="text-gray-600">
-                                  Company Name:
+                                  {t("customer.onboarding.review.companyName")}
                                 </span>
                                 <span className="ml-2 font-medium">
-                                  {companyName || "—"}
-                                </span>
-                              </div>
-                              <div>
-                                <span className="text-gray-600">Industry:</span>
-                                <span className="ml-2 font-medium">
-                                  {industry || "—"}
+                                  {companyName ||
+                                    t("customer.onboarding.review.dash")}
                                 </span>
                               </div>
                               <div>
-                                <span className="text-gray-600">Location:</span>
+                                <span className="text-gray-600">
+                                  {t("customer.onboarding.review.industry")}
+                                </span>
                                 <span className="ml-2 font-medium">
-                                  {location || "—"}
+                                  {formatOnboardingIndustry(industry, t) ||
+                                    t("customer.onboarding.review.dash")}
+                                </span>
+                              </div>
+                              <div>
+                                <span className="text-gray-600">
+                                  {t("customer.onboarding.review.location")}
+                                </span>
+                                <span className="ml-2 font-medium">
+                                  {location
+                                    ? profileStoredLabel(
+                                        ONBOARDING_STATE,
+                                        location,
+                                        t,
+                                      )
+                                    : t("customer.onboarding.review.dash")}
                                 </span>
                               </div>
                               {companySize && (
                                 <div>
-                                  <span className="text-gray-600">Size:</span>
+                                  <span className="text-gray-600">
+                                    {t("customer.onboarding.review.size")}
+                                  </span>
                                   <span className="ml-2 font-medium">
                                     {companySize}
                                   </span>
@@ -1419,7 +1523,7 @@ export default function CustomerOnboardingPage() {
                               {website && (
                                 <div>
                                   <span className="text-gray-600">
-                                    Website:
+                                    {t("customer.onboarding.review.website")}
                                   </span>
                                   <a
                                     href={website}
@@ -1434,12 +1538,14 @@ export default function CustomerOnboardingPage() {
                               {(kycFile || hasExistingKyc) && (
                                 <div>
                                   <span className="text-gray-600">
-                                    Company registration:
+                                    {t("customer.onboarding.review.companyReg")}
                                   </span>
                                   <span className="ml-2 font-medium">
                                     {kycFile
                                       ? kycFile.name
-                                      : "Already uploaded"}
+                                      : t(
+                                          "customer.onboarding.review.alreadyUploaded",
+                                        )}
                                   </span>
                                 </div>
                               )}
@@ -1449,13 +1555,15 @@ export default function CustomerOnboardingPage() {
                           <div className="p-4 border rounded-lg bg-white/50">
                             <h3 className="font-medium text-gray-900 mb-3 flex items-center">
                               <Briefcase className="w-5 h-5 mr-2" />
-                              Company Details
+                              {t("customer.onboarding.review.companyDetails")}
                             </h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                               {employeeCount && (
                                 <div>
                                   <span className="text-gray-600">
-                                    Employee Count:
+                                    {t(
+                                      "customer.onboarding.review.employeeCount",
+                                    )}
                                   </span>
                                   <span className="ml-2 font-medium">
                                     {employeeCount}
@@ -1465,7 +1573,9 @@ export default function CustomerOnboardingPage() {
                               {establishedYear && (
                                 <div>
                                   <span className="text-gray-600">
-                                    Established Year:
+                                    {t(
+                                      "customer.onboarding.review.establishedYear",
+                                    )}
                                   </span>
                                   <span className="ml-2 font-medium">
                                     {establishedYear}
@@ -1475,27 +1585,39 @@ export default function CustomerOnboardingPage() {
                               {annualRevenue && (
                                 <div>
                                   <span className="text-gray-600">
-                                    Annual Revenue:
+                                    {t(
+                                      "customer.onboarding.review.annualRevenue",
+                                    )}
                                   </span>
                                   <span className="ml-2 font-medium">
-                                    RM {annualRevenue}
+                                    {t("customer.onboarding.review.rmAmount", {
+                                      amount: annualRevenue,
+                                    })}
                                   </span>
                                 </div>
                               )}
                               {fundingStage && (
                                 <div>
                                   <span className="text-gray-600">
-                                    Funding Stage:
+                                    {t(
+                                      "customer.onboarding.review.fundingStage",
+                                    )}
                                   </span>
                                   <span className="ml-2 font-medium">
-                                    {fundingStage}
+                                    {profileStoredLabel(
+                                      ONBOARDING_FUNDING,
+                                      fundingStage,
+                                      t,
+                                    )}
                                   </span>
                                 </div>
                               )}
                               {averageBudgetRange && (
                                 <div>
                                   <span className="text-gray-600">
-                                    Average Budget:
+                                    {t(
+                                      "customer.onboarding.review.averageBudget",
+                                    )}
                                   </span>
                                   <span className="ml-2 font-medium">
                                     {averageBudgetRange}
@@ -1505,47 +1627,79 @@ export default function CustomerOnboardingPage() {
                               {remotePolicy && (
                                 <div>
                                   <span className="text-gray-600">
-                                    Remote Policy:
+                                    {t(
+                                      "customer.onboarding.review.remotePolicy",
+                                    )}
                                   </span>
                                   <span className="ml-2 font-medium">
-                                    {remotePolicy}
+                                    {profileStoredLabel(
+                                      ONBOARDING_REMOTE,
+                                      remotePolicy,
+                                      t,
+                                    )}
                                   </span>
                                 </div>
                               )}
                               {hiringFrequency && (
                                 <div>
                                   <span className="text-gray-600">
-                                    Hiring Frequency:
+                                    {t(
+                                      "customer.onboarding.review.hiringFrequency",
+                                    )}
                                   </span>
                                   <span className="ml-2 font-medium">
-                                    {hiringFrequency}
+                                    {profileStoredLabel(
+                                      ONBOARDING_HIRING_FREQ,
+                                      hiringFrequency,
+                                      t,
+                                    )}
                                   </span>
                                 </div>
                               )}
                               {preferredContractTypes.length > 0 && (
                                 <div className="md:col-span-2">
                                   <span className="text-gray-600">
-                                    Preferred Contract Types:
+                                    {t(
+                                      "customer.onboarding.review.contractTypes",
+                                    )}
                                   </span>
                                   <span className="ml-2 font-medium">
-                                    {preferredContractTypes.join(", ")}
+                                    {preferredContractTypes
+                                      .map((ct) =>
+                                        profileStoredLabel(
+                                          ONBOARDING_CONTRACT,
+                                          ct,
+                                          t,
+                                        ),
+                                      )
+                                      .join(", ")}
                                   </span>
                                 </div>
                               )}
                               {categoriesHiringFor.length > 0 && (
                                 <div className="md:col-span-2">
                                   <span className="text-gray-600">
-                                    Categories Hiring For:
+                                    {t(
+                                      "customer.onboarding.review.categoriesHiring",
+                                    )}
                                   </span>
                                   <span className="ml-2 font-medium">
-                                    {categoriesHiringFor.join(", ")}
+                                    {categoriesHiringFor
+                                      .map((c) =>
+                                        profileStoredLabel(
+                                          PROFILE_HIRE_CATEGORY,
+                                          c,
+                                          t,
+                                        ),
+                                      )
+                                      .join(", ")}
                                   </span>
                                 </div>
                               )}
                               {mission && (
                                 <div className="md:col-span-2">
                                   <span className="text-gray-600">
-                                    Mission:
+                                    {t("customer.onboarding.review.mission")}
                                   </span>
                                   <p className="ml-2 font-medium mt-1">
                                     {mission}
@@ -1554,9 +1708,19 @@ export default function CustomerOnboardingPage() {
                               )}
                               {values.length > 0 && (
                                 <div className="md:col-span-2">
-                                  <span className="text-gray-600">Values:</span>
+                                  <span className="text-gray-600">
+                                    {t("customer.onboarding.review.values")}
+                                  </span>
                                   <span className="ml-2 font-medium">
-                                    {values.join(", ")}
+                                    {values
+                                      .map((v) =>
+                                        profileStoredLabel(
+                                          PROFILE_CORE_VALUE,
+                                          v,
+                                          t,
+                                        ),
+                                      )
+                                      .join(", ")}
                                   </span>
                                 </div>
                               )}
@@ -1585,9 +1749,9 @@ export default function CustomerOnboardingPage() {
                     className="bg-transparent"
                   >
                     <ChevronLeft className="w-4 h-4 mr-2" />
-                    Previous
+                    {t("customer.onboarding.nav.previous")}
                   </Button>
-                  {step < STEPS.length ? (
+                  {step < STEP_META.length ? (
                     <Button
                       type="button"
                       onClick={() => {
@@ -1608,7 +1772,7 @@ export default function CustomerOnboardingPage() {
                           className="w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"
                         />
                       ) : null}
-                      Next
+                      {t("customer.onboarding.nav.next")}
                       <ChevronRight className="w-4 h-4 ml-2" />
                     </Button>
                   ) : (
@@ -1631,7 +1795,9 @@ export default function CustomerOnboardingPage() {
                       ) : (
                         <CheckCircle2 className="w-4 h-4 mr-2" />
                       )}
-                      {saving ? "Saving…" : "Save & go to dashboard"}
+                      {saving
+                        ? t("customer.onboarding.nav.saving")
+                        : t("customer.onboarding.nav.saveDashboard")}
                     </Button>
                   )}
                 </div>
@@ -1642,9 +1808,9 @@ export default function CustomerOnboardingPage() {
                       href="/customer/profile/company"
                       className="text-blue-600 hover:text-blue-700 font-medium"
                     >
-                      Edit full profile
+                      {t("customer.onboarding.footer.editFull")}
                     </Link>{" "}
-                    anytime
+                    {t("customer.onboarding.footer.anytime")}
                   </p>
                 </div>
               </CardContent>
@@ -1652,6 +1818,6 @@ export default function CustomerOnboardingPage() {
           </motion.div>
         </div>
       )}
-    </CustomerLayout>
+    </>
   );
 }

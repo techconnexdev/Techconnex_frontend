@@ -45,11 +45,9 @@ import {
   MessageSquare,
   Calendar,
   Clock,
-  Loader2,
   AlertTriangle,
 } from "lucide-react";
 import Link from "next/link";
-import { CustomerLayout } from "@/components/customer-layout";
 import { CustomerProjectsTour } from "@/components/customer/CustomerProjectsTour";
 import { useRouter } from "next/navigation";
 import {
@@ -63,6 +61,9 @@ import { Download } from "lucide-react";
 import { POST_PROJECT_REQUIRED } from "@/contexts/CustomerCompletionContext";
 import { getUserFriendlyErrorMessage } from "@/lib/errors";
 import { FriendlyErrorState } from "@/components/FriendlyErrorState";
+import { useI18n } from "@/contexts/I18nProvider";
+import type { MessageKey } from "@/lib/i18n/messages";
+import { CustomerProjectsPageSkeleton } from "@/components/customer/CustomerPageSkeletons";
 
 type ProjectProvider = {
   id?: string;
@@ -83,6 +84,7 @@ type CustomerProject = {
   timeline?: string;
   budgetMin?: number;
   budgetMax?: number;
+  currencyCode?: string;
   approvedPrice?: number;
   progress?: number;
   completedMilestones?: number;
@@ -107,6 +109,7 @@ function getProjectDueDate(project: CustomerProject): string | null {
 }
 
 export default function CustomerProjectsPage() {
+  const { t, locale } = useI18n();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
@@ -224,32 +227,57 @@ export default function CustomerProjectsPage() {
   };
 
   const getStatusText = (status: string, type: string) => {
-    // ServiceRequest statuses
     if (type === "ServiceRequest") {
-      switch (status) {
-        case "OPEN":
-          return "Open";
-        case "CLOSED":
-          return "Closed";
-        default:
-          return status;
-      }
+      if (status === "OPEN") return t("customer.dashboard.status.open");
+      if (status === "CLOSED") return t("customer.dashboard.status.closed");
+      return status;
     }
-
-    // Project statuses
-    switch (status) {
-      case "COMPLETED":
-        return "Completed";
-      case "IN_PROGRESS":
-        return "In Progress";
-      case "DISPUTED":
-        return "Disputed";
-      case "CANCELLED":
-        return "Cancelled";
-      default:
-        return status;
-    }
+    const map: Record<string, MessageKey> = {
+      COMPLETED: "customer.dashboard.status.completed",
+      IN_PROGRESS: "customer.dashboard.status.inProgress",
+      DISPUTED: "customer.dashboard.status.disputed",
+      CANCELLED: "customer.dashboard.status.cancelled",
+    };
+    const key = map[status];
+    return key ? t(key) : status;
   };
+
+  const projectTypeLabel = (type: string) => {
+    if (type === "ServiceRequest")
+      return t("customer.projects.type.ServiceRequest");
+    if (type === "Project") return t("customer.projects.type.Project");
+    return type;
+  };
+
+  const priorityLabel = (priority?: string) => {
+    if (!priority) return "";
+    const p = priority.toLowerCase();
+    if (p === "high") return t("customer.projects.list.priority.high");
+    if (p === "medium") return t("customer.projects.list.priority.medium");
+    if (p === "low") return t("customer.projects.list.priority.low");
+    return priority;
+  };
+
+  const categoryLabel = (category: string) => {
+    const map: Record<string, MessageKey> = {
+      WEB_DEVELOPMENT: "customer.projects.list.cat.web",
+      MOBILE_APP_DEVELOPMENT: "customer.projects.list.cat.mobile",
+      DATA_ANALYTICS: "customer.projects.list.cat.data",
+      CLOUD_SERVICES: "customer.projects.list.cat.cloud",
+      UI_UX_DESIGN: "customer.projects.list.cat.uiux",
+    };
+    const key = map[category];
+    return key ? t(key) : category;
+  };
+
+  const dateLocale =
+    locale === "ar" ? "ar" : locale === "id" ? "id-ID" : "en-MY";
+  const formatMoney = (amount: number, currencyCode?: string) =>
+    new Intl.NumberFormat("en-MY", {
+      style: "currency",
+      currency: currencyCode || "MYR",
+      maximumFractionDigits: 0,
+    }).format(amount || 0);
 
   const getPriorityColor = (priority?: string) => {
     if (!priority) return "bg-gray-100 text-gray-800";
@@ -365,14 +393,14 @@ export default function CustomerProjectsPage() {
       );
 
       toast({
-        title: "Project Updated",
-        description: "Changes saved successfully.",
+        title: t("customer.projects.list.updateSuccessTitle"),
+        description: t("customer.projects.list.updateSuccessDesc"),
       });
       setIsEditDialogOpen(false);
       setEditingProject(null);
     } catch (err) {
       toast({
-        title: "Update failed",
+        title: t("customer.projects.list.updateFailedTitle"),
         description: getUserFriendlyErrorMessage(
           err,
           "customer projects update",
@@ -392,22 +420,18 @@ export default function CustomerProjectsPage() {
 
   if (loading) {
     return (
-      <CustomerLayout>
-        <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
-          <div className="flex items-center justify-center py-8 sm:py-12">
-            <div className="flex items-center space-x-2">
-              <Loader2 className="w-5 h-5 sm:w-6 sm:h-6 animate-spin" />
-              <span className="text-sm sm:text-base">Loading projects...</span>
-            </div>
-          </div>
-        </div>
-      </CustomerLayout>
+      <>
+        <CustomerProjectsTour />
+        <CustomerProjectsPageSkeleton
+          loadingLabel={t("customer.projects.list.loading")}
+        />
+      </>
     );
   }
 
   if (error) {
     return (
-      <CustomerLayout>
+      
         <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
           <div className="flex items-center justify-center py-8 sm:py-12">
             <FriendlyErrorState
@@ -417,12 +441,12 @@ export default function CustomerProjectsPage() {
             />
           </div>
         </div>
-      </CustomerLayout>
+      
     );
   }
 
   return (
-    <CustomerLayout>
+    <>
       <CustomerProjectsTour />
       <div className="space-y-4 sm:space-y-6 lg:space-y-8 px-4 sm:px-6 lg:px-0">
         {/* Header */}
@@ -432,10 +456,10 @@ export default function CustomerProjectsPage() {
         >
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-              My Projects
+              {t("customer.projects.list.title")}
             </h1>
             <p className="text-sm sm:text-base text-gray-600 mt-1">
-              Manage and track all your ICT projects
+              {t("customer.projects.list.subtitle")}
             </p>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
@@ -456,12 +480,12 @@ export default function CustomerProjectsPage() {
                   document.body.removeChild(link);
                   URL.revokeObjectURL(url);
                   toast({
-                    title: "Export successful",
-                    description: "Projects exported as PDF",
+                    title: t("customer.projects.list.exportSuccessTitle"),
+                    description: t("customer.projects.list.exportSuccessDesc"),
                   });
                 } catch (err) {
                   toast({
-                    title: "Export failed",
+                    title: t("customer.projects.list.exportFailedTitle"),
                     description: getUserFriendlyErrorMessage(
                       err,
                       "customer projects export",
@@ -473,7 +497,7 @@ export default function CustomerProjectsPage() {
               className="w-full sm:w-auto"
             >
               <Download className="w-4 h-4 mr-2" />
-              Export
+              {t("customer.projects.list.export")}
             </Button>
             <Button
               className="w-full sm:w-auto"
@@ -482,7 +506,9 @@ export default function CustomerProjectsPage() {
               onClick={handleNewProjectClick}
             >
               <Plus className="w-4 h-4 mr-2" />
-              {newProjectChecking ? "Checking…" : "New Project"}
+              {newProjectChecking
+                ? t("customer.projects.list.checking")
+                : t("customer.projects.list.newProject")}
             </Button>
           </div>
         </div>
@@ -497,7 +523,7 @@ export default function CustomerProjectsPage() {
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
                   <p className="text-xs sm:text-sm text-gray-500">
-                    Total Projects
+                    {t("customer.projects.list.stats.total")}
                   </p>
                   <p className="text-xl sm:text-2xl font-bold mt-1">
                     {stats.total}
@@ -513,7 +539,9 @@ export default function CustomerProjectsPage() {
             <CardContent className="p-3 sm:p-4 lg:p-6">
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs sm:text-sm text-gray-500">Active</p>
+                  <p className="text-xs sm:text-sm text-gray-500">
+                    {t("customer.projects.list.stats.active")}
+                  </p>
                   <p className="text-xl sm:text-2xl font-bold text-blue-600 mt-1">
                     {stats.active}
                   </p>
@@ -528,7 +556,9 @@ export default function CustomerProjectsPage() {
             <CardContent className="p-3 sm:p-4 lg:p-6">
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs sm:text-sm text-gray-500">Completed</p>
+                  <p className="text-xs sm:text-sm text-gray-500">
+                    {t("customer.projects.list.stats.completed")}
+                  </p>
                   <p className="text-xl sm:text-2xl font-bold text-green-600 mt-1">
                     {stats.completed}
                   </p>
@@ -543,7 +573,9 @@ export default function CustomerProjectsPage() {
             <CardContent className="p-3 sm:p-4 lg:p-6">
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs sm:text-sm text-gray-500">Pending</p>
+                  <p className="text-xs sm:text-sm text-gray-500">
+                    {t("customer.projects.list.stats.pending")}
+                  </p>
                   <p className="text-xl sm:text-2xl font-bold text-yellow-600 mt-1">
                     {stats.pending}
                   </p>
@@ -558,7 +590,9 @@ export default function CustomerProjectsPage() {
             <CardContent className="p-3 sm:p-4 lg:p-6">
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs sm:text-sm text-gray-500">Disputed</p>
+                  <p className="text-xs sm:text-sm text-gray-500">
+                    {t("customer.projects.list.stats.disputed")}
+                  </p>
                   <p className="text-xl sm:text-2xl font-bold text-red-600 mt-1">
                     {stats.disputed}
                   </p>
@@ -579,7 +613,7 @@ export default function CustomerProjectsPage() {
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                   <Input
-                    placeholder="Search projects..."
+                    placeholder={t("customer.projects.list.searchPlaceholder")}
                     className="pl-10 text-sm sm:text-base"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -588,31 +622,53 @@ export default function CustomerProjectsPage() {
               </div>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="w-full sm:w-48 text-sm sm:text-base">
-                  <SelectValue placeholder="Filter by status" />
+                  <SelectValue
+                    placeholder={t("customer.projects.list.filterStatus")}
+                  />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="in_progress">In Progress</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
-                  <SelectItem value="disputed">Disputed</SelectItem>
+                  <SelectItem value="all">
+                    {t("customer.projects.list.filter.all")}
+                  </SelectItem>
+                  <SelectItem value="pending">
+                    {t("customer.projects.list.filter.pending")}
+                  </SelectItem>
+                  <SelectItem value="in_progress">
+                    {t("customer.projects.list.filter.inProgress")}
+                  </SelectItem>
+                  <SelectItem value="completed">
+                    {t("customer.projects.list.filter.completed")}
+                  </SelectItem>
+                  <SelectItem value="disputed">
+                    {t("customer.projects.list.filter.disputed")}
+                  </SelectItem>
                 </SelectContent>
               </Select>
               <Select value={sortBy} onValueChange={setSortBy}>
                 <SelectTrigger className="w-full sm:w-48 text-sm sm:text-base">
-                  <SelectValue placeholder="Sort by" />
+                  <SelectValue
+                    placeholder={t("customer.projects.list.sortBy")}
+                  />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="newest">Newest First</SelectItem>
-                  <SelectItem value="oldest">Oldest First</SelectItem>
+                  <SelectItem value="newest">
+                    {t("customer.projects.list.sort.newest")}
+                  </SelectItem>
+                  <SelectItem value="oldest">
+                    {t("customer.projects.list.sort.oldest")}
+                  </SelectItem>
                   <SelectItem value="budget-high">
-                    Budget: High to Low
+                    {t("customer.projects.list.sort.budgetHigh")}
                   </SelectItem>
                   <SelectItem value="budget-low">
-                    Budget: Low to High
+                    {t("customer.projects.list.sort.budgetLow")}
                   </SelectItem>
-                  <SelectItem value="deadline">Deadline</SelectItem>
-                  <SelectItem value="progress">Progress</SelectItem>
+                  <SelectItem value="deadline">
+                    {t("customer.projects.list.sort.deadline")}
+                  </SelectItem>
+                  <SelectItem value="progress">
+                    {t("customer.projects.list.sort.progress")}
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -624,7 +680,7 @@ export default function CustomerProjectsPage() {
                   onClick={() => setViewMode("grid")}
                   className="text-xs sm:text-sm"
                 >
-                  Grid
+                  {t("customer.projects.list.viewGrid")}
                 </Button>
                 <Button
                   variant={viewMode === "list" ? "default" : "outline"}
@@ -632,7 +688,7 @@ export default function CustomerProjectsPage() {
                   onClick={() => setViewMode("list")}
                   className="text-xs sm:text-sm"
                 >
-                  List
+                  {t("customer.projects.list.viewList")}
                 </Button>
               </div>
             </div>
@@ -670,7 +726,7 @@ export default function CustomerProjectsPage() {
                                 {getStatusText(project.status, project.type)}
                               </Badge>
                               <Badge variant="outline" className="text-xs">
-                                {project.type}
+                                {projectTypeLabel(project.type)}
                               </Badge>
                               <Badge
                                 className={`${getPriorityColor(
@@ -678,7 +734,7 @@ export default function CustomerProjectsPage() {
                                 )} text-xs`}
                                 variant="outline"
                               >
-                                {project.priority}
+                                {priorityLabel(project.priority)}
                               </Badge>
                               {(project.priority === "High" ||
                                 project.priority === "high") && (
@@ -686,7 +742,7 @@ export default function CustomerProjectsPage() {
                                   variant="destructive"
                                   className="text-xs"
                                 >
-                                  Urgent
+                                  {t("customer.projects.list.priority.urgent")}
                                 </Badge>
                               )}
                             </div>
@@ -722,11 +778,12 @@ export default function CustomerProjectsPage() {
                             </Link>
                           ) : (
                             <p className="text-xs sm:text-sm font-medium truncate">
-                              {project.provider?.name || "No Provider Assigned"}
+                              {project.provider?.name ||
+                                t("customer.projects.list.noProviderAssigned")}
                             </p>
                           )}
                           <p className="text-xs text-gray-500 truncate">
-                            {project.category}
+                            {categoryLabel(project.category)}
                           </p>
                         </div>
                       </div>
@@ -735,10 +792,18 @@ export default function CustomerProjectsPage() {
                         project.status === "IN_PROGRESS" && (
                           <div>
                             <div className="flex justify-between text-xs sm:text-sm mb-1 flex-wrap gap-1">
-                              <span>Progress: {project.progress || 0}%</span>
+                              <span>
+                                {t("customer.projects.list.progress", {
+                                  percent: String(project.progress || 0),
+                                })}
+                              </span>
                               <span className="text-xs">
-                                {project.completedMilestones || 0}/
-                                {project.totalMilestones || 0} milestones
+                                {t("customer.projects.list.milestonesCount", {
+                                  done: String(
+                                    project.completedMilestones || 0,
+                                  ),
+                                  total: String(project.totalMilestones || 0),
+                                })}
                               </span>
                             </div>
                             <Progress
@@ -755,26 +820,34 @@ export default function CustomerProjectsPage() {
                             (project.status === "IN_PROGRESS" ||
                               project.status === "COMPLETED") &&
                             project.approvedPrice
-                              ? "Approved Price"
-                              : "Budget"}
+                              ? t("customer.projects.list.approvedPrice")
+                              : t("customer.projects.list.budget")}
                           </p>
                           <p className="font-semibold truncate">
                             {project.type === "Project" &&
                             (project.status === "IN_PROGRESS" ||
                               project.status === "COMPLETED") &&
                             project.approvedPrice
-                              ? `RM${project.approvedPrice.toLocaleString()}`
-                              : `RM${
-                                  project.budgetMin?.toLocaleString() || 0
-                                } - RM${
-                                  project.budgetMax?.toLocaleString() || 0
-                                }`}
+                              ? formatMoney(
+                                  project.approvedPrice,
+                                  project.currencyCode,
+                                )
+                              : `${formatMoney(
+                                  project.budgetMin || 0,
+                                  project.currencyCode,
+                                )} - ${formatMoney(
+                                  project.budgetMax || 0,
+                                  project.currencyCode,
+                                )}`}
                           </p>
                         </div>
                         <div className="min-w-0">
-                          <p className="text-gray-500 truncate">Timeline</p>
+                          <p className="text-gray-500 truncate">
+                            {t("customer.projects.list.timeline")}
+                          </p>
                           <p className="font-semibold truncate">
-                            {project.timeline || "Not specified"}
+                            {project.timeline ||
+                              t("customer.projects.list.timelineNotSpecified")}
                           </p>
                         </div>
                       </div>
@@ -783,18 +856,22 @@ export default function CustomerProjectsPage() {
                         <div className="flex items-center">
                           <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1 flex-shrink-0" />
                           <span className="truncate">
-                            Due:{" "}
+                            {t("customer.projects.list.due")}:{" "}
                             {getProjectDueDate(project)
                               ? new Date(
                                   getProjectDueDate(project)!,
-                                ).toLocaleDateString()
-                              : "—"}
+                                ).toLocaleDateString(dateLocale)
+                              : t("customer.projects.list.dueDash")}
                           </span>
                         </div>
                         {project.type === "Project" && (
                           <span className="text-xs">
-                            {project.completedMilestones || 0}/
-                            {project.totalMilestones || 0} milestones
+                            {t("customer.projects.list.milestonesCount", {
+                              done: String(
+                                project.completedMilestones || 0,
+                              ),
+                              total: String(project.totalMilestones || 0),
+                            })}
                           </span>
                         )}
                       </div>
@@ -803,10 +880,10 @@ export default function CustomerProjectsPage() {
                         project.status === "COMPLETED" && (
                           <div className="flex items-center gap-1 flex-wrap">
                             <span className="text-xs sm:text-sm text-gray-500">
-                              Status:
+                              {t("customer.projects.list.statusLabel")}
                             </span>
                             <Badge className="bg-green-100 text-green-800 text-xs">
-                              Completed
+                              {t("customer.projects.list.completedBadge")}
                             </Badge>
                           </div>
                         )}
@@ -820,7 +897,7 @@ export default function CustomerProjectsPage() {
                           }
                         >
                           <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                          View
+                          {t("customer.projects.list.view")}
                         </Button>
                         <TooltipProvider>
                           <Tooltip>
@@ -846,8 +923,8 @@ export default function CustomerProjectsPage() {
                             </TooltipTrigger>
                             <TooltipContent>
                               {project.provider?.id && project.provider?.name
-                                ? "Contact provider"
-                                : "There is no provider yet for this project"}
+                                ? t("customer.projects.list.contactProvider")
+                                : t("customer.projects.list.noProviderYet")}
                             </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
@@ -896,7 +973,7 @@ export default function CustomerProjectsPage() {
                                   {getStatusText(project.status, project.type)}
                                 </Badge>
                                 <Badge variant="outline" className="text-xs">
-                                  {project.type}
+                                  {projectTypeLabel(project.type)}
                                 </Badge>
                                 <Badge
                                   className={`${getPriorityColor(
@@ -904,7 +981,7 @@ export default function CustomerProjectsPage() {
                                   )} text-xs`}
                                   variant="outline"
                                 >
-                                  {project.priority}
+                                  {priorityLabel(project.priority)}
                                 </Badge>
                                 {(project.priority === "High" ||
                                   project.priority === "high") && (
@@ -912,7 +989,7 @@ export default function CustomerProjectsPage() {
                                     variant="destructive"
                                     className="text-xs"
                                   >
-                                    Urgent
+                                    {t("customer.projects.list.priority.urgent")}
                                   </Badge>
                                 )}
                               </div>
@@ -930,27 +1007,29 @@ export default function CustomerProjectsPage() {
                                   </Link>
                                 ) : (
                                   <span className="truncate">
-                                    {project.provider?.name || "No Provider"}
+                                    {project.provider?.name ||
+                                      t("customer.projects.list.noProvider")}
                                   </span>
                                 )}
                                 <span className="hidden sm:inline">•</span>
                                 <span className="truncate">
-                                  {project.category}
+                                  {categoryLabel(project.category)}
                                 </span>
                                 <span className="hidden sm:inline">•</span>
                                 <span className="truncate">
-                                  Due:{" "}
+                                  {t("customer.projects.list.due")}:{" "}
                                   {getProjectDueDate(project)
                                     ? new Date(
                                         getProjectDueDate(project)!,
-                                      ).toLocaleDateString()
-                                    : "—"}
+                                      ).toLocaleDateString(dateLocale)
+                                    : t("customer.projects.list.dueDash")}
                                 </span>
                                 {project.timeline && (
                                   <>
                                     <span className="hidden sm:inline">•</span>
                                     <span className="truncate">
-                                      Timeline: {project.timeline}
+                                      {t("customer.projects.list.timeline")}:{" "}
+                                      {project.timeline}
                                     </span>
                                   </>
                                 )}
@@ -964,20 +1043,25 @@ export default function CustomerProjectsPage() {
                                 (project.status === "IN_PROGRESS" ||
                                   project.status === "COMPLETED") &&
                                 project.approvedPrice
-                                  ? "Approved Price"
-                                  : "Budget"}
+                                  ? t("customer.projects.list.approvedPrice")
+                                  : t("customer.projects.list.budget")}
                               </p>
                               <p className="font-semibold text-sm sm:text-base">
                                 {project.type === "Project" &&
                                 (project.status === "IN_PROGRESS" ||
                                   project.status === "COMPLETED") &&
                                 project.approvedPrice
-                                  ? `RM${project.approvedPrice.toLocaleString()}`
-                                  : `RM${
-                                      project.budgetMin?.toLocaleString() || 0
-                                    } - RM${
-                                      project.budgetMax?.toLocaleString() || 0
-                                    }`}
+                                  ? formatMoney(
+                                      project.approvedPrice,
+                                      project.currencyCode,
+                                    )
+                                  : `${formatMoney(
+                                      project.budgetMin || 0,
+                                      project.currencyCode,
+                                    )} - ${formatMoney(
+                                      project.budgetMax || 0,
+                                      project.currencyCode,
+                                    )}`}
                               </p>
                             </div>
                             {project.type === "Project" &&
@@ -985,11 +1069,21 @@ export default function CustomerProjectsPage() {
                                 <div className="w-full sm:w-24">
                                   <div className="flex justify-between text-xs mb-1 flex-wrap gap-1">
                                     <span>
-                                      Progress: {project.progress || 0}%
+                                      {t("customer.projects.list.progress", {
+                                        percent: String(
+                                          project.progress || 0,
+                                        ),
+                                      })}
                                     </span>
                                     <span>
-                                      {project.completedMilestones || 0}/
-                                      {project.totalMilestones || 0}
+                                      {t("customer.projects.list.milestonesCount", {
+                                        done: String(
+                                          project.completedMilestones || 0,
+                                        ),
+                                        total: String(
+                                          project.totalMilestones || 0,
+                                        ),
+                                      })}
                                     </span>
                                   </div>
                                   <Progress
@@ -1009,7 +1103,7 @@ export default function CustomerProjectsPage() {
                                 }
                               >
                                 <Eye className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-1.5 sm:mr-2" />
-                                View
+                                {t("customer.projects.list.view")}
                               </Button>
                               <TooltipProvider>
                                 <Tooltip>
@@ -1036,8 +1130,8 @@ export default function CustomerProjectsPage() {
                                   </TooltipTrigger>
                                   <TooltipContent>
                                     {project.provider?.id && project.provider?.name
-                                      ? "Contact provider"
-                                      : "There is no provider yet for this project"}
+                                      ? t("customer.projects.list.contactProvider")
+                                      : t("customer.projects.list.noProviderYet")}
                                   </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
@@ -1058,17 +1152,17 @@ export default function CustomerProjectsPage() {
           <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="text-lg sm:text-xl">
-                Edit Project
+                {t("customer.projects.list.editTitle")}
               </DialogTitle>
               <DialogDescription className="text-sm sm:text-base">
-                Update your project details
+                {t("customer.projects.list.editDescription")}
               </DialogDescription>
             </DialogHeader>
             {editingProject && (
               <div className="space-y-3 sm:space-y-4">
                 <div>
                   <Label htmlFor="edit-title" className="text-sm sm:text-base">
-                    Project Title
+                    {t("customer.projects.list.field.title")}
                   </Label>
                   <Input
                     id="edit-title"
@@ -1087,7 +1181,7 @@ export default function CustomerProjectsPage() {
                     htmlFor="edit-description"
                     className="text-sm sm:text-base"
                   >
-                    Description
+                    {t("customer.projects.list.field.description")}
                   </Label>
                   <Textarea
                     id="edit-description"
@@ -1108,7 +1202,7 @@ export default function CustomerProjectsPage() {
                       htmlFor="edit-budget"
                       className="text-sm sm:text-base"
                     >
-                      Budget (RM)
+                      {t("customer.projects.list.field.budgetRm")}
                     </Label>
                     <Input
                       id="edit-budget"
@@ -1130,7 +1224,7 @@ export default function CustomerProjectsPage() {
                       htmlFor="edit-deadline"
                       className="text-sm sm:text-base"
                     >
-                      Deadline
+                      {t("customer.projects.list.field.deadline")}
                     </Label>
                     <Input
                       id="edit-deadline"
@@ -1152,7 +1246,7 @@ export default function CustomerProjectsPage() {
                       htmlFor="edit-priority"
                       className="text-sm sm:text-base"
                     >
-                      Priority
+                      {t("customer.projects.list.field.priority")}
                     </Label>
                     <Select
                       value={editingProject.priority ?? ""}
@@ -1167,9 +1261,15 @@ export default function CustomerProjectsPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="low">Low</SelectItem>
-                        <SelectItem value="medium">Medium</SelectItem>
-                        <SelectItem value="high">High</SelectItem>
+                        <SelectItem value="low">
+                          {t("customer.projects.list.priority.low")}
+                        </SelectItem>
+                        <SelectItem value="medium">
+                          {t("customer.projects.list.priority.medium")}
+                        </SelectItem>
+                        <SelectItem value="high">
+                          {t("customer.projects.list.priority.high")}
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1178,7 +1278,7 @@ export default function CustomerProjectsPage() {
                       htmlFor="edit-category"
                       className="text-sm sm:text-base"
                     >
-                      Category
+                      {t("customer.projects.list.field.category")}
                     </Label>
                     <Select
                       value={editingProject.category ?? ""}
@@ -1194,19 +1294,19 @@ export default function CustomerProjectsPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="WEB_DEVELOPMENT">
-                          Web Development
+                          {t("customer.projects.list.cat.web")}
                         </SelectItem>
                         <SelectItem value="MOBILE_APP_DEVELOPMENT">
-                          Mobile Development
+                          {t("customer.projects.list.cat.mobile")}
                         </SelectItem>
                         <SelectItem value="DATA_ANALYTICS">
-                          Data Analytics
+                          {t("customer.projects.list.cat.data")}
                         </SelectItem>
                         <SelectItem value="CLOUD_SERVICES">
-                          Cloud Services
+                          {t("customer.projects.list.cat.cloud")}
                         </SelectItem>
                         <SelectItem value="UI_UX_DESIGN">
-                          UI/UX Design
+                          {t("customer.projects.list.cat.uiux")}
                         </SelectItem>
                       </SelectContent>
                     </Select>
@@ -1226,7 +1326,7 @@ export default function CustomerProjectsPage() {
                     className="rounded"
                   />
                   <Label htmlFor="edit-urgent" className="text-sm sm:text-base">
-                    Mark as urgent
+                    {t("customer.projects.list.markUrgent")}
                   </Label>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2 pt-3 sm:pt-4">
@@ -1234,14 +1334,14 @@ export default function CustomerProjectsPage() {
                     onClick={handleSaveProject}
                     className="flex-1 sm:flex-initial text-sm sm:text-base"
                   >
-                    Save Changes
+                    {t("customer.projects.list.saveChanges")}
                   </Button>
                   <Button
                     variant="outline"
                     onClick={() => setIsEditDialogOpen(false)}
                     className="text-sm sm:text-base"
                   >
-                    Cancel
+                    {t("customer.projects.list.cancel")}
                   </Button>
                 </div>
               </div>
@@ -1255,12 +1355,12 @@ export default function CustomerProjectsPage() {
             <CardContent className="p-8 sm:p-10 lg:p-12 text-center">
               <Calendar className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-3 sm:mb-4" />
               <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-2">
-                No projects found
+                {t("customer.projects.list.empty.title")}
               </h3>
               <p className="text-sm sm:text-base text-gray-600 mb-4">
                 {searchQuery || statusFilter !== "all"
-                  ? "Try adjusting your search or filter criteria."
-                  : "You haven't created any projects yet."}
+                  ? t("customer.projects.list.empty.filtered")
+                  : t("customer.projects.list.empty.none")}
               </p>
 
               {!searchQuery && statusFilter === "all" && (
@@ -1271,8 +1371,8 @@ export default function CustomerProjectsPage() {
                 >
                   <Plus className="w-4 h-4 mr-2" />
                   {newProjectChecking
-                    ? "Checking…"
-                    : "Create Your First Project"}
+                    ? t("customer.projects.list.checking")
+                    : t("customer.projects.list.empty.cta")}
                 </Button>
               )}
             </CardContent>
@@ -1284,15 +1384,16 @@ export default function CustomerProjectsPage() {
       <Dialog open={gateModalOpen} onOpenChange={setGateModalOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Complete your profile</DialogTitle>
+            <DialogTitle>{t("customer.projects.list.gate.title")}</DialogTitle>
             <DialogDescription>
-              Complete your profile to at least {POST_PROJECT_REQUIRED}% to
-              create projects.
+              {t("customer.projects.list.gate.description", {
+                percent: String(POST_PROJECT_REQUIRED),
+              })}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex gap-2 sm:gap-0">
             <Button variant="outline" onClick={() => setGateModalOpen(false)}>
-              Cancel
+              {t("customer.projects.list.gate.cancel")}
             </Button>
             <Button
               onClick={() => {
@@ -1301,11 +1402,11 @@ export default function CustomerProjectsPage() {
               }}
               className="bg-blue-600 hover:bg-blue-700"
             >
-              👉 Complete Now
+              {t("customer.projects.list.gate.completeNow")}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </CustomerLayout>
+    </>
   );
 }

@@ -1,13 +1,44 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Globe, FileText, ExternalLink } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Globe, FileText, ExternalLink, Calendar, User } from "lucide-react";
 import type { PortfolioItem } from "../types";
 import { getProfileImageUrl } from "@/lib/api";
 
 export default function PortfolioGrid({ items }: { items: PortfolioItem[] }) {
+  const [selectedItem, setSelectedItem] = useState<PortfolioItem | null>(null);
+
+  const normalizeUrl = (url: string | undefined): string | null => {
+    if (!url || url === "#") return null;
+    if (/^https?:\/\//i.test(url)) return url;
+    if (url.startsWith("//")) return `https:${url}`;
+    return `https://${url}`;
+  };
+
+  const getAttachment = (item: PortfolioItem) => {
+    const imageSource =
+      (item as { imageUrl?: string; cover?: string }).imageUrl || item.cover;
+    const normalized = imageSource?.replace(/\\/g, "/") || "";
+    if (!normalized) return null;
+    const resolved = getProfileImageUrl(normalized);
+    const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(normalized);
+    return {
+      url: resolved,
+      fileName: normalized.split("/").pop() || "Attachment",
+      isImage,
+    };
+  };
+
   if (!items?.length) {
     return (
       <div className="text-center py-8 sm:py-12">
@@ -25,47 +56,37 @@ export default function PortfolioGrid({ items }: { items: PortfolioItem[] }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 lg:gap-6">
       {items.map((item) => {
-        // Handle both cover and imageUrl fields (cover is legacy, imageUrl is new)
-        const imageSource = (item as { imageUrl?: string; cover?: string }).imageUrl || item.cover;
-        const normalizedImage = imageSource?.replace(/\\/g, "/") || "";
-        const imageUrl = normalizedImage ? getProfileImageUrl(normalizedImage) : null;
-        const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(normalizedImage);
-        
-        // Handle both url and externalUrl fields
-        const rawExternalUrl = (item as { externalUrl?: string; url?: string }).externalUrl || item.url;
-        // Normalize URL to ensure it has a protocol
-        const normalizeUrl = (url: string | undefined): string | null => {
-          if (!url || url === "#") return null;
-          // If URL already has a protocol, return as is
-          if (/^https?:\/\//i.test(url)) {
-            return url;
-          }
-          // If URL starts with //, add https:
-          if (url.startsWith("//")) {
-            return `https:${url}`;
-          }
-          // Otherwise, add https:// prefix
-          return `https://${url}`;
-        };
+        const attachment = getAttachment(item);
+        const imageUrl = attachment?.url ?? null;
+        const isImage = attachment?.isImage ?? false;
+        const rawExternalUrl =
+          (item as { externalUrl?: string; url?: string }).externalUrl ||
+          item.url;
         const externalUrl = normalizeUrl(rawExternalUrl);
         const hasExternalLink = externalUrl !== null;
-        
-        // Handle both tags and techStack fields
-        const techStack = (item as { techStack?: string[]; tags?: string[] }).techStack || item.tags || [];
-        
-        const fileViewUrl = imageUrl; // Resolved URL to open image/file in new tab
+        const techStack =
+          (item as { techStack?: string[]; tags?: string[] }).techStack ||
+          item.tags ||
+          [];
+        const fileViewUrl = imageUrl;
 
         return (
-          <Card key={item.id} className="hover:shadow-lg transition-shadow">
+          <Card
+            key={item.id}
+            className="cursor-pointer hover:shadow-lg transition-shadow"
+            role="button"
+            tabIndex={0}
+            onClick={() => setSelectedItem(item)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setSelectedItem(item);
+              }
+            }}
+          >
             {imageUrl ? (
               <div className="relative h-48 overflow-hidden rounded-t-lg bg-gray-100">
-                <a
-                  href={imageUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block w-full h-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset rounded-t-lg"
-                  title={isImage ? "View image" : "View file"}
-                >
+                <div className="block w-full h-full rounded-t-lg">
                   {isImage ? (
                     <Image
                       src={imageUrl}
@@ -76,19 +97,19 @@ export default function PortfolioGrid({ items }: { items: PortfolioItem[] }) {
                       unoptimized
                     />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-gray-100 hover:bg-gray-50 transition-colors">
+                    <div className="w-full h-full flex items-center justify-center bg-gray-100 transition-colors">
                       <div className="text-center p-4">
                         <div className="w-16 h-16 bg-gray-200 rounded-lg flex items-center justify-center mx-auto mb-2">
                           <FileText className="w-8 h-8 text-gray-400" />
                         </div>
                         <p className="text-xs text-gray-500 truncate max-w-[200px]">
-                          {normalizedImage.split("/").pop() || "File"}
+                          {imageUrl.split("/").pop() || "File"}
                         </p>
                         <p className="text-xs text-blue-600 mt-1">Click to open</p>
                       </div>
                     </div>
                   )}
-                </a>
+                </div>
               </div>
             ) : (
               <div className="relative bg-gradient-to-br from-green-50 to-teal-50 h-48 flex items-center justify-center rounded-t-lg">
@@ -144,6 +165,7 @@ export default function PortfolioGrid({ items }: { items: PortfolioItem[] }) {
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-sm text-blue-600 hover:underline flex items-center gap-1"
+                    onClick={(e) => e.stopPropagation()}
                   >
                     {isImage ? "View image" : "View file"}
                     <ExternalLink className="w-3 h-3" />
@@ -155,6 +177,7 @@ export default function PortfolioGrid({ items }: { items: PortfolioItem[] }) {
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-sm text-blue-600 hover:underline flex items-center gap-1"
+                    onClick={(e) => e.stopPropagation()}
                   >
                     View Project
                     <ExternalLink className="w-3 h-3" />
@@ -165,6 +188,124 @@ export default function PortfolioGrid({ items }: { items: PortfolioItem[] }) {
           </Card>
         );
       })}
+
+      <Dialog
+        open={Boolean(selectedItem)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedItem(null);
+        }}
+      >
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          {selectedItem && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-xl">{selectedItem.title}</DialogTitle>
+                <DialogDescription>
+                  Full portfolio item details and attachments
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4">
+                {(() => {
+                  const attachment = getAttachment(selectedItem);
+                  if (!attachment) return null;
+
+                  return attachment.isImage ? (
+                    <div className="overflow-hidden rounded-lg border bg-muted">
+                      <Image
+                        src={attachment.url}
+                        alt={selectedItem.title || "Portfolio attachment"}
+                        width={1200}
+                        height={700}
+                        className="w-full max-h-[420px] object-contain"
+                        unoptimized
+                      />
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border p-4">
+                      <div className="flex items-center gap-3">
+                        <FileText className="w-5 h-5 text-muted-foreground" />
+                        <p className="text-sm font-medium break-all">
+                          {attachment.fileName}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <div className="rounded-lg border p-4 space-y-3">
+                  <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
+                    {selectedItem.client && (
+                      <span className="inline-flex items-center gap-1.5">
+                        <User className="w-4 h-4" />
+                        {selectedItem.client}
+                      </span>
+                    )}
+                    {selectedItem.date && (
+                      <span className="inline-flex items-center gap-1.5">
+                        <Calendar className="w-4 h-4" />
+                        {new Date(selectedItem.date).toLocaleDateString()}
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="text-sm leading-6 text-gray-700 whitespace-pre-wrap">
+                    {selectedItem.description || "No description provided."}
+                  </p>
+
+                  {((selectedItem.techStack && selectedItem.techStack.length > 0) ||
+                    (selectedItem.tags && selectedItem.tags.length > 0)) && (
+                    <div className="flex flex-wrap gap-2">
+                      {(selectedItem.techStack || selectedItem.tags || []).map(
+                        (tech, index) => (
+                          <Badge key={`${tech}-${index}`} variant="secondary">
+                            {tech}
+                          </Badge>
+                        ),
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+                  {(() => {
+                    const attachment = getAttachment(selectedItem);
+                    return attachment ? (
+                      <a
+                        href={attachment.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-blue-600 hover:underline inline-flex items-center gap-1"
+                      >
+                        Open attachment
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    ) : null;
+                  })()}
+                  {(() => {
+                    const projectUrl = normalizeUrl(
+                      (
+                        selectedItem as { externalUrl?: string; url?: string }
+                      ).externalUrl || selectedItem.url,
+                    );
+                    return projectUrl ? (
+                      <a
+                        href={projectUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-blue-600 hover:underline inline-flex items-center gap-1"
+                      >
+                        View external project
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    ) : null;
+                  })()}
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
